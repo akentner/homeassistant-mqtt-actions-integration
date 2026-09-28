@@ -36,6 +36,10 @@ A HACS-installable integration (`mqtt_actions`) where a Switch created in the UI
 - **D-12:** Repo: GitHub `akentner/homeassistant-mqtt-actions-integration`, MIT license, codeowner `@akentner`.
 - **D-13:** Plan 1 of the phase is a spike plus host check: verify `ActionSelector` rendering and validation inside a subentry flow, and confirm that `haos-op3050-1`, `lxc-haos-104` and `hassio-n2plus` can run HA 2026.9.0 before fixing the `hacs.json` floor. Fallback if the subentry flow does not work: an options-flow-based device editor.
 
+- **D-14 (resolves research A1):** A *retained* first message only sets the baseline. A *live* message on a device with no baseline (e.g. the first UI toggle after creation) is a real edge and runs the actions.
+- **D-15 (resolves research A6):** Removing the hub config entry publishes empty discovery for all devices of this instance. Phase 3 must redesign this as a confirmed, multi-instance-aware delete.
+- **D-16 (resolves research A10):** On explicit device delete: clear discovery first, unsubscribe, then clear the retained state topic.
+
 ### Claude's Discretion
 - Distinguishing replayed retained messages from live ones (MQTT `retain` flag on the received message) for baseline handling: implementation detail.
 - Availability topic design and MQTT QoS/retain settings for discovery and state, following the research defaults (QoS 1, retained).

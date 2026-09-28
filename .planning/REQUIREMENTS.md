@@ -110,13 +110,56 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (filled by roadmap) | | Pending |
+| FND-01 | Phase 1 | Pending |
+| FND-02 | Phase 1 | Pending |
+| FND-03 | Phase 1 | Pending |
+| FND-04 | Phase 1 | Pending |
+| FND-05 | Phase 1 | Pending |
+| DEV-01 | Phase 1 | Pending |
+| DEV-02 | Phase 1 | Pending |
+| DEV-03 | Phase 2 | Pending |
+| DEV-04 | Phase 2 | Pending |
+| DEV-05 | Phase 1 | Pending |
+| DEV-06 | Phase 2 | Pending |
+| DEV-07 | Phase 2 | Pending |
+| DEV-08 | Phase 1 | Pending |
+| STA-01 | Phase 1 | Pending |
+| STA-02 | Phase 1 | Pending |
+| STA-03 | Phase 3 | Pending |
+| STA-04 | Phase 1 | Pending |
+| STA-05 | Phase 1 | Pending |
+| STA-06 | Phase 2 | Pending |
+| STA-07 | Phase 2 | Pending |
+| DSC-01 | Phase 1 | Pending |
+| DSC-02 | Phase 1 | Pending |
+| DSC-03 | Phase 3 | Pending |
+| DSC-04 | Phase 4 | Pending |
+| SYN-01 | Phase 3 | Pending |
+| SYN-02 | Phase 3 | Pending |
+| SYN-03 | Phase 3 | Pending |
+| SYN-04 | Phase 3 | Pending |
+| SYN-05 | Phase 3 | Pending |
+| SYN-06 | Phase 3 | Pending |
+| SYN-07 | Phase 4 | Pending |
+| SYN-08 | Phase 4 | Pending |
+| SYN-09 | Phase 4 | Pending |
+| SYN-10 | Phase 4 | Pending |
+| TRU-01 | Phase 3 | Pending |
+| TRU-02 | Phase 3 | Pending |
+| TRU-03 | Phase 3 | Pending |
+| TRU-04 | Phase 3 | Pending |
+| OPS-01 | Phase 4 | Pending |
+| OPS-02 | Phase 4 | Pending |
+| OPS-03 | Phase 4 | Pending |
+| OPS-04 | Phase 4 | Pending |
+| OPS-05 | Phase 4 | Pending |
+| OPS-06 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 44 total
-- Mapped to phases: 0
-- Unmapped: 44 ⚠️
+- Mapped to phases: 44
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-09-29*
-*Last updated: 2026-09-29 after initial definition*
+*Last updated: 2026-09-29 after roadmap creation (traceability filled)*

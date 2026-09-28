@@ -2,7 +2,7 @@
 phase: "01"
 slug: walking-skeleton-installable-switch
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: "2026-09-29"
 ---

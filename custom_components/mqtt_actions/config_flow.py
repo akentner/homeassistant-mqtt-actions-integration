@@ -218,7 +218,8 @@ class SwitchSubentryFlow(_DeviceSubentryFlow):
             name = user_input[CONF_NAME].strip()
             if not name:
                 errors[CONF_NAME] = "name_required"
-            else:
+            errors.update(self._validate_settings(user_input))
+            if not errors:
                 errors, placeholders = await self._async_check_actions(
                     [(label, user_input.get(field, [])) for field, label in ACTION_FIELDS], user_input
                 )
@@ -227,7 +228,7 @@ class SwitchSubentryFlow(_DeviceSubentryFlow):
                 data: dict[str, Any] = {
                     CONF_ON_CHANGE_TO_ON: user_input.get(CONF_ON_CHANGE_TO_ON, []),
                     CONF_ON_CHANGE_TO_OFF: user_input.get(CONF_ON_CHANGE_TO_OFF, []),
-                    CONF_RUN_ON_STARTUP: user_input.get(CONF_RUN_ON_STARTUP, False),
+                    **self._coerce_settings(user_input),
                 }
                 if subentry is None:
                     device_id = str(uuid.uuid4())
@@ -249,7 +250,7 @@ class SwitchSubentryFlow(_DeviceSubentryFlow):
                 probatio.Required(CONF_NAME): str,
                 probatio.Optional(CONF_ON_CHANGE_TO_ON, default=[]): selector.ActionSelector(),
                 probatio.Optional(CONF_ON_CHANGE_TO_OFF, default=[]): selector.ActionSelector(),
-                probatio.Optional(CONF_RUN_ON_STARTUP, default=False): selector.BooleanSelector(),
+                **self._settings_fields(),
             }
         )
         suggested = user_input if user_input is not None else self._prefill(subentry)
@@ -272,6 +273,9 @@ class SwitchSubentryFlow(_DeviceSubentryFlow):
             CONF_ON_CHANGE_TO_ON: subentry.data.get(CONF_ON_CHANGE_TO_ON, []),
             CONF_ON_CHANGE_TO_OFF: subentry.data.get(CONF_ON_CHANGE_TO_OFF, []),
             CONF_RUN_ON_STARTUP: subentry.data.get(CONF_RUN_ON_STARTUP, False),
+            CONF_RUN_MODE: subentry.data.get(CONF_RUN_MODE, RUN_MODE_SERIAL),
+            CONF_BREAKER_MAX_RUNS: subentry.data.get(CONF_BREAKER_MAX_RUNS, DEFAULT_BREAKER_MAX_RUNS),
+            CONF_BREAKER_WINDOW: subentry.data.get(CONF_BREAKER_WINDOW, DEFAULT_BREAKER_WINDOW),
         }
 
 

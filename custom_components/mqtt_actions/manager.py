@@ -281,7 +281,7 @@ class Manager:
         if self.gateway.discovery_enabled():
             ir.async_delete_issue(self._hass, DOMAIN, ISSUE_DISCOVERY_DISABLED)
             return
-        LOGGER.warning("MQTT discovery is disabled, so the switch entities of MQTT Actions cannot appear")
+        LOGGER.warning("MQTT discovery is disabled, so the entities of MQTT Actions cannot appear")
         ir.async_create_issue(
             self._hass,
             DOMAIN,

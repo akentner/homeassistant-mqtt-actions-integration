@@ -37,13 +37,19 @@
             "name": "Name",
             "on_change_to_on": "Aktionen beim Einschalten",
             "on_change_to_off": "Aktionen beim Ausschalten",
-            "run_on_startup": "Aktionen beim Start ausführen"
+            "run_on_startup": "Aktionen beim Start ausführen",
+            "run_mode": "Ausführungsmodus",
+            "breaker_max_runs": "Schutzschalter: maximale Ausführungen",
+            "breaker_window": "Schutzschalter: Zeitfenster"
           },
           "data_description": {
             "name": "Name der Schalter-Entität, die erstellt wird.",
             "on_change_to_on": "Läuft auf dieser Instanz, wenn der Zustand auf ON wechselt. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen.",
             "on_change_to_off": "Läuft auf dieser Instanz, wenn der Zustand auf OFF wechselt. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen.",
-            "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die passenden Aktionen auch dann laufen, wenn sich der Zustand nicht geändert hat."
+            "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die passenden Aktionen auch dann laufen, wenn sich der Zustand nicht geändert hat.",
+            "run_mode": "Seriell reiht Ausführungen in eine Warteschlange ein und führt sie nacheinander aus. Neustart bricht die laufenden Aktionen ab, sobald eine neue Änderung eintrifft.",
+            "breaker_max_runs": "Der Schutzschalter pausiert das Gerät, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Freigeben heißt, das Gerät zu ändern oder die Integration neu zu laden. Ganze Zahl von 1 bis 100.",
+            "breaker_window": "Länge des Zeitfensters des Schutzschalters in Sekunden. Ganze Zahl von 1 bis 3600."
           }
         },
         "reconfigure": {
@@ -53,20 +59,28 @@
             "name": "Name",
             "on_change_to_on": "Aktionen beim Einschalten",
             "on_change_to_off": "Aktionen beim Ausschalten",
-            "run_on_startup": "Aktionen beim Start ausführen"
+            "run_on_startup": "Aktionen beim Start ausführen",
+            "run_mode": "Ausführungsmodus",
+            "breaker_max_runs": "Schutzschalter: maximale Ausführungen",
+            "breaker_window": "Schutzschalter: Zeitfenster"
           },
           "data_description": {
             "name": "Name der Schalter-Entität.",
             "on_change_to_on": "Läuft auf dieser Instanz, wenn der Zustand auf ON wechselt. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen.",
             "on_change_to_off": "Läuft auf dieser Instanz, wenn der Zustand auf OFF wechselt. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen.",
-            "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die passenden Aktionen auch dann laufen, wenn sich der Zustand nicht geändert hat."
+            "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die passenden Aktionen auch dann laufen, wenn sich der Zustand nicht geändert hat.",
+            "run_mode": "Seriell reiht Ausführungen in eine Warteschlange ein und führt sie nacheinander aus. Neustart bricht die laufenden Aktionen ab, sobald eine neue Änderung eintrifft.",
+            "breaker_max_runs": "Der Schutzschalter pausiert das Gerät, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Freigeben heißt, das Gerät zu ändern oder die Integration neu zu laden. Ganze Zahl von 1 bis 100.",
+            "breaker_window": "Länge des Zeitfensters des Schutzschalters in Sekunden. Ganze Zahl von 1 bis 3600."
           }
         }
       },
       "error": {
         "name_required": "Der Name darf nicht leer sein.",
         "invalid_actions": "Die Aktionen in {field} sind ungültig: {error}",
-        "device_id_warning": "Diese Geräte-IDs gibt es nur auf dieser Home-Assistant-Instanz: {device_ids}. Andere Instanzen können sie nicht auflösen, deshalb würden die Aktionen dort fehlschlagen. Sende erneut, um trotzdem zu speichern, oder wechsle auf Entitäts-, Bereichs- oder Label-Ziele."
+        "device_id_warning": "Diese Geräte-IDs gibt es nur auf dieser Home-Assistant-Instanz: {device_ids}. Andere Instanzen können sie nicht auflösen, deshalb würden die Aktionen dort fehlschlagen. Sende erneut, um trotzdem zu speichern, oder wechsle auf Entitäts-, Bereichs- oder Label-Ziele.",
+        "breaker_max_runs_range": "Gib eine ganze Zahl von 1 bis 100 ein.",
+        "breaker_window_range": "Gib eine ganze Zahl von Sekunden von 1 bis 3600 ein."
       },
       "abort": {
         "reconfigure_successful": "Das Schalter-Gerät wurde aktualisiert."
@@ -92,7 +106,7 @@
             "name": "Name der Auswahl-Entität, die erstellt wird.",
             "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die Aktionen dieser Option auch dann laufen, wenn sich der Zustand nicht geändert hat.",
             "run_mode": "Seriell reiht Ausführungen in eine Warteschlange ein und führt sie nacheinander aus. Neustart bricht die laufenden Aktionen ab, sobald eine neue Änderung eintrifft.",
-            "breaker_max_runs": "Das Gerät wird pausiert, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Ganze Zahl von 1 bis 100.",
+            "breaker_max_runs": "Der Schutzschalter pausiert das Gerät, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Freigeben heißt, das Gerät zu ändern oder die Integration neu zu laden. Ganze Zahl von 1 bis 100.",
             "breaker_window": "Länge des Zeitfensters des Schutzschalters in Sekunden. Ganze Zahl von 1 bis 3600."
           }
         },
@@ -110,7 +124,7 @@
             "name": "Name der Auswahl-Entität.",
             "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die Aktionen dieser Option auch dann laufen, wenn sich der Zustand nicht geändert hat.",
             "run_mode": "Seriell reiht Ausführungen in eine Warteschlange ein und führt sie nacheinander aus. Neustart bricht die laufenden Aktionen ab, sobald eine neue Änderung eintrifft.",
-            "breaker_max_runs": "Das Gerät wird pausiert, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Ganze Zahl von 1 bis 100.",
+            "breaker_max_runs": "Der Schutzschalter pausiert das Gerät, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Freigeben heißt, das Gerät zu ändern oder die Integration neu zu laden. Ganze Zahl von 1 bis 100.",
             "breaker_window": "Länge des Zeitfensters des Schutzschalters in Sekunden. Ganze Zahl von 1 bis 3600."
           }
         },
@@ -200,7 +214,7 @@
     },
     "mqtt_discovery_disabled": {
       "title": "MQTT Discovery ist deaktiviert",
-      "description": "MQTT Actions erstellt seine Schalter-Entitäten über MQTT Discovery, aber Discovery ist in der MQTT-Integration deaktiviert. Es erscheint keine Schalter-Entität, bis Discovery in den Optionen der MQTT-Integration wieder aktiviert wird."
+      "description": "MQTT Actions erstellt seine Entitäten über MQTT Discovery, aber Discovery ist in der MQTT-Integration deaktiviert. Es erscheint keine Entität von MQTT Actions, bis Discovery in den Optionen der MQTT-Integration wieder aktiviert wird."
     },
     "circuit_breaker_tripped": {
       "title": "Ein Gerät wurde vom Schutzschalter pausiert",

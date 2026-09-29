@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .const import (
+    BREAKER_MAX_RUNS_LIMIT,
+    BREAKER_WINDOW_LIMIT,
     CONF_ACTIONS,
     CONF_BREAKER_MAX_RUNS,
     CONF_BREAKER_WINDOW,
@@ -19,6 +21,7 @@ from .const import (
     CONF_STATE_VALUE,
     DEFAULT_BREAKER_MAX_RUNS,
     DEFAULT_BREAKER_WINDOW,
+    MAX_TEXT_LENGTH,
     PAYLOAD_OFF,
     PAYLOAD_ON,
     RUN_MODE_RESTART,
@@ -31,7 +34,7 @@ from .const import (
 from .state import SWITCH_ACCEPTED
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from homeassistant.config_entries import ConfigSubentry
 
@@ -173,3 +176,58 @@ def spec_from_data(subentry_type: str, title: str, data: Mapping[str, Any]) -> D
 def spec_from_subentry(subentry: ConfigSubentry) -> DeviceSpec:
     """Build the spec of a device from its config subentry."""
     return spec_from_data(subentry.subentry_type, subentry.title, subentry.data)
+
+
+def _invalid_text(text: str) -> bool:
+    """Return True for text the UI rejects: not printable (also catches lone surrogates) or over the length cap."""
+    return not text.isprintable() or len(text) > MAX_TEXT_LENGTH
+
+
+def validate_option(
+    state_value: str,
+    friendly_name: str,
+    others: Sequence[tuple[str, str]],
+    *,
+    editing: bool = False,
+) -> dict[str, str]:
+    """
+    Return the errors of a Select option typed in the UI as a map from field name to error key; empty when valid.
+
+    `others` holds the (StateValue, friendly name) pairs of the other options of the device. While `editing`, the
+    StateValue is locked (D-03) and not checked. The rules follow D-04 plus what core MQTT select does with the values:
+    it strips the rendered friendly name and turns the entity unknown for the name "none" (T-02-19).
+    """
+    errors: dict[str, str] = {}
+    if not editing:
+        if not state_value.strip():
+            errors[CONF_STATE_VALUE] = "state_value_required"
+        elif state_value != state_value.strip() or _invalid_text(state_value):
+            errors[CONF_STATE_VALUE] = "state_value_invalid"
+        elif state_value.lower() in {other_value.lower() for other_value, _ in others}:
+            errors[CONF_STATE_VALUE] = "state_value_duplicate"
+
+    friendly = friendly_name.strip()
+    if not friendly:
+        errors[CONF_FRIENDLY_NAME] = "friendly_name_required"
+    elif _invalid_text(friendly):
+        errors[CONF_FRIENDLY_NAME] = "friendly_name_invalid"
+    elif friendly.lower() == "none":
+        errors[CONF_FRIENDLY_NAME] = "friendly_name_reserved"
+    elif friendly.lower() in {other_name.strip().lower() for _, other_name in others}:
+        errors[CONF_FRIENDLY_NAME] = "friendly_name_duplicate"
+    return errors
+
+
+def _in_range(value: float, limit: int) -> bool:
+    """Return True for a whole number from 1 to `limit`; the number selector delivers floats."""
+    return float(value).is_integer() and 1 <= value <= limit
+
+
+def validate_breaker(max_runs: float, window: float) -> dict[str, str]:
+    """Return the range errors of the breaker settings as a map from field name to error key (T-02-21)."""
+    errors: dict[str, str] = {}
+    if not _in_range(max_runs, BREAKER_MAX_RUNS_LIMIT):
+        errors[CONF_BREAKER_MAX_RUNS] = "breaker_max_runs_range"
+    if not _in_range(window, BREAKER_WINDOW_LIMIT):
+        errors[CONF_BREAKER_WINDOW] = "breaker_window_range"
+    return errors

@@ -71,6 +71,90 @@
       "abort": {
         "reconfigure_successful": "Das Schalter-Gerät wurde aktualisiert."
       }
+    },
+    "select": {
+      "initiate_flow": {
+        "user": "Auswahl-Gerät hinzufügen"
+      },
+      "entry_type": "Auswahl-Gerät",
+      "step": {
+        "user": {
+          "title": "Auswahl-Gerät hinzufügen",
+          "description": "Ein Auswahl-Gerät bietet mehrere Optionen an. Jede Option führt ihre eigenen Aktionen aus, wenn ihr Zustandswert auf dem State-Topic eintrifft. Die Optionen fügst du auf der nächsten Seite hinzu.",
+          "data": {
+            "name": "Name",
+            "run_on_startup": "Aktionen beim Start ausführen",
+            "run_mode": "Ausführungsmodus",
+            "breaker_max_runs": "Schutzschalter: maximale Ausführungen",
+            "breaker_window": "Schutzschalter: Zeitfenster"
+          },
+          "data_description": {
+            "name": "Name der Auswahl-Entität, die erstellt wird.",
+            "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die Aktionen dieser Option auch dann laufen, wenn sich der Zustand nicht geändert hat.",
+            "run_mode": "Seriell reiht Ausführungen in eine Warteschlange ein und führt sie nacheinander aus. Neustart bricht die laufenden Aktionen ab, sobald eine neue Änderung eintrifft.",
+            "breaker_max_runs": "Das Gerät wird pausiert, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Ganze Zahl von 1 bis 100.",
+            "breaker_window": "Länge des Zeitfensters des Schutzschalters in Sekunden. Ganze Zahl von 1 bis 3600."
+          }
+        },
+        "settings": {
+          "title": "Name und Einstellungen bearbeiten",
+          "description": "Diese Einstellungen gelten für das ganze Auswahl-Gerät. Es wird erst gespeichert, wenn du im Menü Gerät speichern wählst.",
+          "data": {
+            "name": "Name",
+            "run_on_startup": "Aktionen beim Start ausführen",
+            "run_mode": "Ausführungsmodus",
+            "breaker_max_runs": "Schutzschalter: maximale Ausführungen",
+            "breaker_window": "Schutzschalter: Zeitfenster"
+          },
+          "data_description": {
+            "name": "Name der Auswahl-Entität.",
+            "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die Aktionen dieser Option auch dann laufen, wenn sich der Zustand nicht geändert hat.",
+            "run_mode": "Seriell reiht Ausführungen in eine Warteschlange ein und führt sie nacheinander aus. Neustart bricht die laufenden Aktionen ab, sobald eine neue Änderung eintrifft.",
+            "breaker_max_runs": "Das Gerät wird pausiert, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Ganze Zahl von 1 bis 100.",
+            "breaker_window": "Länge des Zeitfensters des Schutzschalters in Sekunden. Ganze Zahl von 1 bis 3600."
+          }
+        },
+        "menu": {
+          "title": "Optionen",
+          "description": "Das Auswahl-Gerät {name} hat {count} Option(en).\n\n{options}\n\nEin Auswahl-Gerät braucht mindestens zwei Optionen. Es wird erst gespeichert, wenn du Gerät speichern wählst.",
+          "menu_options": {
+            "add_option": "Option hinzufügen",
+            "settings": "Name und Einstellungen bearbeiten",
+            "done": "Gerät speichern"
+          }
+        },
+        "add_option": {
+          "title": "Option hinzufügen",
+          "description": "Der Zustandswert ist der Text, der auf dem State-Topic eintrifft. Er kann nicht mehr geändert werden, sobald die Option existiert. Der Anzeigename ist das, was die Auswahl-Entität anzeigt.",
+          "data": {
+            "state_value": "Zustandswert",
+            "friendly_name": "Anzeigename",
+            "actions": "Aktionen"
+          },
+          "data_description": {
+            "state_value": "Genauer Text der Nachricht auf dem State-Topic für diese Option, ohne Leerzeichen am Anfang oder Ende. Nachrichten werden ohne Beachtung der Groß- und Kleinschreibung verglichen.",
+            "friendly_name": "Name der Option in der Auswahl-Entität. Er muss bei jeder Option anders sein und darf nicht none lauten.",
+            "actions": "Läuft auf dieser Instanz, wenn der Zustand auf diese Option wechselt. Optional. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen."
+          }
+        }
+      },
+      "error": {
+        "name_required": "Der Name darf nicht leer sein.",
+        "invalid_actions": "Die Aktionen in {field} sind ungültig: {error}",
+        "device_id_warning": "Diese Geräte-IDs gibt es nur auf dieser Home-Assistant-Instanz: {device_ids}. Andere Instanzen können sie nicht auflösen, deshalb würden die Aktionen dort fehlschlagen. Sende erneut, um trotzdem zu speichern, oder wechsle auf Entitäts-, Bereichs- oder Label-Ziele.",
+        "state_value_required": "Der Zustandswert darf nicht leer sein.",
+        "state_value_invalid": "Der Zustandswert darf nicht mit einem Leerzeichen beginnen oder enden, darf nur druckbare Zeichen enthalten und darf höchstens 64 Zeichen lang sein.",
+        "state_value_duplicate": "Eine andere Option verwendet diesen Zustandswert bereits. Groß- und Kleinschreibung wird ignoriert.",
+        "friendly_name_required": "Der Anzeigename darf nicht leer sein.",
+        "friendly_name_invalid": "Der Anzeigename darf nur druckbare Zeichen enthalten und darf höchstens 64 Zeichen lang sein.",
+        "friendly_name_reserved": "Der Anzeigename none ist reserviert: Home Assistant zeigt dafür einen unbekannten Zustand an.",
+        "friendly_name_duplicate": "Eine andere Option verwendet diesen Anzeigenamen bereits. Groß- und Kleinschreibung sowie Leerzeichen am Anfang oder Ende werden ignoriert.",
+        "breaker_max_runs_range": "Gib eine ganze Zahl von 1 bis 100 ein.",
+        "breaker_window_range": "Gib eine ganze Zahl von Sekunden von 1 bis 3600 ein."
+      },
+      "abort": {
+        "reconfigure_successful": "Das Auswahl-Gerät wurde aktualisiert."
+      }
     }
   },
   "issues": {
@@ -85,6 +169,14 @@
     "circuit_breaker_tripped": {
       "title": "Ein Gerät wurde vom Schutzschalter pausiert",
       "description": "{device} hat seine Aktionen öfter als {max_runs} Mal innerhalb von {window} Sekunden ausgeführt. Meist ändert dann eine Aktion den Zustand ihres eigenen Geräts und löst sich dadurch immer wieder selbst aus. MQTT Actions hat deshalb die laufenden Aktionen gestoppt und das Gerät pausiert. Änderungen am Status-Topic aktualisieren die Entität weiterhin, aber es laufen keine Aktionen, bis das Gerät freigegeben wird. Ändere dazu die Einstellungen des Geräts oder lade die Integration neu. Das Speichern des Geräts ohne eine Änderung gibt es nicht frei."
+    }
+  },
+  "selector": {
+    "run_mode": {
+      "options": {
+        "serial": "Seriell (Ausführungen einreihen)",
+        "restart": "Neustart (laufende Ausführung abbrechen)"
+      }
     }
   }
 }

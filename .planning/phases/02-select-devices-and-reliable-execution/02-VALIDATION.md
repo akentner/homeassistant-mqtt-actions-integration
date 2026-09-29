@@ -36,15 +36,23 @@ created: "2026-09-29"
 
 ## Per-Task Verification Map
 
-| Req | Behavior | Test Type | Automated Command | File Exists | Status |
-|-----|----------|-----------|-------------------|-------------|--------|
-| DEV-03 | Select flow validation; discovery payload; option runs its own actions | integration | `uv run pytest tests/test_config_flow_select.py tests/test_discovery_select.py tests/test_manager_select.py -q` | ❌ W0 | ⬜ pending |
-| DEV-04 | StateValue locked; rename/action edits; add/remove option with button tombstone | integration | `uv run pytest tests/test_config_flow_select.py tests/test_manager_select.py -q` | ❌ W0 | ⬜ pending |
-| DEV-06 | serial FIFO (bound 10), restart cancels, missing run_mode = serial | integration | `uv run pytest tests/test_runner_modes.py -q` | ❌ W0 | ⬜ pending |
-| DEV-07 | Test buttons run actions without touching state/baseline/breaker | integration | `uv run pytest tests/test_test_buttons.py -q` | ❌ W0 | ⬜ pending |
-| STA-06 | Breaker window, trip, persistence, release, Repairs issue | unit + integration | `uv run pytest tests/test_breaker.py tests/test_manager_breaker.py -q` | ❌ W0 | ⬜ pending |
-| STA-07 | Unknown payload ignored and logged, entity keeps state | unit + integration | `uv run pytest tests/test_state.py tests/test_manager_select.py tests/test_discovery_select.py -q` | extend + W0 | ⬜ pending |
-| FND-04 | en/de translation parity for new keys | unit | `uv run pytest tests/test_translations.py -q` | extend | ⬜ pending |
+Refined by the planner from the requirement-level rows of 02-RESEARCH.md. Every task is TDD (RED test commit before the feature commit) and creates the test files it needs; the Wave 0 files below are therefore created inside the tasks, not by a separate wave.
+
+| Task | Req | Behavior | Test Type | Automated Command | File Exists | Status |
+|------|-----|----------|-----------|-------------------|-------------|--------|
+| 02-01-T1 | DEV-03 | Select payload runs only its option's actions; Switch path unchanged (tracer) | integration + unit | `uv run pytest tests -q && uv run pytest tests/test_manager_select.py -k tracer -q` | ❌ W0 (created in task) | ⬜ pending |
+| 02-01-T2 | DEV-03, STA-07 | Select discovery, mapping templates with hostile strings, unknown payload silent in core | integration | `uv run pytest tests/test_discovery.py tests/test_discovery_select.py tests/test_manager_select.py -q` | ❌ W0 (created in task) | ⬜ pending |
+| 02-01-T3 | DEV-03, STA-07 | Loader hardening, unknown/retained/startup/removed-value semantics, orphan and hub removal | unit + integration | `uv run pytest tests/test_model.py tests/test_manager_select.py tests/test_manager.py -q && uv run pytest tests -q` | ❌ W0 (created in task) | ⬜ pending |
+| 02-02-T1 | DEV-06 | One Script per device: restart cancels and serial orders across triggers | integration | `uv run pytest tests/test_runner_modes.py tests/test_manager.py -q && uv run pytest tests -q` | ❌ W0 (created in task) | ⬜ pending |
+| 02-02-T2 | DEV-06 | Queue bound 10, dropped and superseded runs keep the issue, unload cancels | integration | `uv run pytest tests/test_runner_modes.py tests/test_manager.py -q && uv run pytest tests -q` | extends T1 | ⬜ pending |
+| 02-03-T1 | DEV-07 | Test buttons per trigger; press runs actions locally without state, baseline or publish | integration | `uv run pytest tests/test_topics.py tests/test_test_buttons.py -q && uv run pytest tests -q` | ❌ W0 (created in task) | ⬜ pending |
+| 02-03-T2 | DEV-07, DEV-04 | Button lifecycle: add, rename, remove with tombstones, delete, unsubscribe | integration | `uv run pytest tests/test_test_buttons.py tests/test_manager.py -q && uv run pytest tests -q` | extends T1 | ⬜ pending |
+| 02-04-T1 | STA-06 | Pure breaker table; trip, pause, stop runs, Repairs issue, self-toggling loop stopped | unit + integration | `uv run pytest tests/test_breaker.py tests/test_manager_breaker.py -q && uv run pytest tests -q` | ❌ W0 (created in task) | ⬜ pending |
+| 02-04-T2 | STA-06 | Tripped state persisted as config hash; release by change or reload; cleanup | integration | `uv run pytest tests/test_manager_breaker.py tests/test_manager.py -q && uv run pytest tests -q` | extends T1 | ⬜ pending |
+| 02-04-T3 | STA-06, FND-04 | Breaker issue text in en and de, variables match, hassfest | unit | `uv run pytest tests/test_translations.py -q` plus hassfest via Docker | extends existing | ⬜ pending |
+| 02-05-T1 | DEV-03 | Select flow create path, option validation, menu visibility, en/de strings | integration + unit | `uv run pytest tests/test_config_flow_select.py tests/test_model.py tests/test_translations.py tests/test_config_flow.py -q` plus hassfest via Docker | ❌ W0 (created in task) | ⬜ pending |
+| 02-05-T2 | DEV-04 | Reconfigure: edit with locked StateValue, add, remove with confirmation | integration | `uv run pytest tests/test_config_flow_select.py tests/test_translations.py -q && uv run pytest tests -q` plus hassfest via Docker | extends T1 | ⬜ pending |
+| 02-05-T3 | DEV-06, STA-06, FND-04 | Run mode and breaker fields in the Switch flow, translation parity, README | integration + unit | `command -v mosquitto >/dev/null && uv run pytest -m broker -q && uv run pytest -q` plus ruff and hassfest via Docker | extends existing | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky. The planner refines this into per-task rows.*
 

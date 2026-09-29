@@ -1,18 +1,21 @@
 """Integration tests for the manager: edges, retained replays, run-on-startup and the persisted baseline."""
 
 import asyncio
+import json
 import logging
 import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 from homeassistant.config_entries import ConfigSubentry
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
-from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
+    CONF_INSTANCE_ID,
     CONF_ON_CHANGE_TO_OFF,
     CONF_ON_CHANGE_TO_ON,
     CONF_RUN_ON_STARTUP,
@@ -25,7 +28,7 @@ from custom_components.mqtt_actions.const import (
     STORE_VERSION,
     SUBENTRY_SWITCH,
 )
-from custom_components.mqtt_actions.topics import state_topic
+from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, state_topic
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -33,7 +36,6 @@ if TYPE_CHECKING:
     import pytest
     from homeassistant.config_entries import ConfigSubentryData
     from homeassistant.core import HomeAssistant, ServiceCall
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 ON_ACTIONS = [{"action": "test.on"}]
 OFF_ACTIONS = [{"action": "test.off"}]
@@ -627,3 +629,402 @@ async def test_issue_deleted_when_runner_unloads_removed_device(
     await entry.runtime_data.runner.async_unload(device_id, remove_issue=True)
 
     assert _issue(hass, device_id) is None
+
+
+# --- lifecycle helpers ---------------------------------------------------------------------------------------------
+
+STATE_TOPIC_BASE = "mqtt_actions"
+ORPHAN_ID = "5d9c1b0e-7c55-4c1e-8a11-0f7c3a9b2d44"
+NEW_DEVICE_ID = "0b1f6a0e-6a52-4f5b-9b0e-3a4c1c2d9e11"
+
+
+def _publishes(mqtt_mock: Any, topic: str) -> list[tuple]:
+    """Return the (payload, qos, retain) tuples published on a topic, in order."""
+    return [call.args[1:4] for call in mqtt_mock.async_publish.call_args_list if call.args[0] == topic]
+
+
+def _preload_store(
+    hass_storage: dict[str, Any], *, published: list[str], last_acted: dict[str, str] | None = None
+) -> None:
+    hass_storage[STORE_KEY] = {
+        "version": STORE_VERSION,
+        "minor_version": 1,
+        "key": STORE_KEY,
+        "data": {STORE_LAST_ACTED: last_acted or {}, STORE_PUBLISHED: published},
+    }
+
+
+def _record_events(entry: MockConfigEntry) -> list[tuple]:
+    """Record publishes and unsubscribes of the running manager in the order they happen."""
+    events: list[tuple] = []
+    gateway = entry.runtime_data.gateway
+    real_publish = gateway.async_publish
+
+    async def _publish(topic: str, payload: str, *, retain: bool, qos: int = 1) -> None:
+        events.append(("publish", topic, payload))
+        await real_publish(topic, payload, retain=retain, qos=qos)
+
+    gateway.async_publish = _publish
+    for device in entry.runtime_data.devices.values():
+        real_unsubscribe = device.unsubscribe
+
+        def _unsubscribe(real=real_unsubscribe) -> None:
+            events.append(("unsubscribe",))
+            real()
+
+        device.unsubscribe = _unsubscribe
+    return events
+
+
+def _new_subentry(
+    device_id: str, title: str = "Fresh", on: list | None = None, off: list | None = None
+) -> ConfigSubentry:
+    return ConfigSubentry(
+        data=MappingProxyType(
+            {
+                CONF_DEVICE_ID: device_id,
+                CONF_ON_CHANGE_TO_ON: on or [],
+                CONF_ON_CHANGE_TO_OFF: off or [],
+                CONF_RUN_ON_STARTUP: False,
+            }
+        ),
+        subentry_type=SUBENTRY_SWITCH,
+        title=title,
+        unique_id=device_id,
+    )
+
+
+def _only_subentry(entry: MockConfigEntry) -> ConfigSubentry:
+    (subentry,) = entry.subentries.values()
+    return subentry
+
+
+# --- reconcile: add and change (DEV-05) ----------------------------------------------------------------------------
+
+
+async def test_reconcile_add_at_runtime_publishes_and_subscribes(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """A subentry added while loaded gets discovery published, a live subscription and no startup window."""
+    on_calls = async_mock_service(hass, "test", "on")
+    entry = await _setup(hass, make_hub_entry())
+
+    hass.config_entries.async_add_subentry(entry, _new_subentry(NEW_DEVICE_ID, on=ON_ACTIONS))
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert len(_publishes(mqtt_mock, discovery_topic("homeassistant", NEW_DEVICE_ID))) == 1
+    device = entry.runtime_data.devices[NEW_DEVICE_ID]
+    assert device.unsubscribe is not None
+    assert device.tracker.startup_pending is False
+    await _fire(hass, entry, NEW_DEVICE_ID, "ON", retain=False)
+    assert len(on_calls) == 1
+
+
+async def test_reconcile_change_rebuilds_scripts_keeps_baseline(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Changing a device swaps its actions and name, keeps the subscription and baseline, republishes discovery."""
+    on_calls = async_mock_service(hass, "test", "on")
+    off_calls = async_mock_service(hass, "test", "off")
+    new_on_calls = async_mock_service(hass, "test", "on2")
+    new_off_calls = async_mock_service(hass, "test", "off2")
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    assert len(on_calls) == 1
+    unsubscribe = entry.runtime_data.devices[device_id].unsubscribe
+
+    subentry = _only_subentry(entry)
+    hass.config_entries.async_update_subentry(
+        entry,
+        subentry,
+        title="Lamp 2",
+        data={
+            **subentry.data,
+            CONF_ON_CHANGE_TO_ON: [{"action": "test.on2"}],
+            CONF_ON_CHANGE_TO_OFF: [{"action": "test.off2"}],
+        },
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    # Same subscription object, same baseline: a live ON equal to the baseline runs nothing
+    assert entry.runtime_data.devices[device_id].unsubscribe is unsubscribe
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    assert (len(on_calls), len(new_on_calls)) == (1, 0)
+    # One live message causes exactly one run of the new actions, the old ones never run again
+    await _fire(hass, entry, device_id, "OFF", retain=False)
+    assert (len(off_calls), len(new_off_calls)) == (0, 1)
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    assert (len(on_calls), len(new_on_calls)) == (1, 1)
+    # The previous Scripts are unloaded, only the two new ones stay owned by the runner
+    assert len(entry.runtime_data.runner._scripts[device_id]) == 2
+    # Discovery is republished with the new name
+    published = _publishes(mqtt_mock, discovery_topic("homeassistant", device_id))
+    assert len(published) == 2
+    assert json.loads(published[-1][0])["device"]["name"] == "Lamp 2"
+    assert entry.runtime_data.devices[device_id].name == "Lamp 2"
+
+
+async def test_reconcile_change_run_on_startup_flag_takes_effect(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """The flag changed while the startup window is still open applies to the first retained message."""
+    on_calls = async_mock_service(hass, "test", "on")
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS, run_on_startup=False)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    subentry = _only_subentry(entry)
+    hass.config_entries.async_update_subentry(entry, subentry, data={**subentry.data, CONF_RUN_ON_STARTUP: True})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _fire(hass, entry, device_id, "ON", retain=True)
+
+    assert len(on_calls) == 1
+
+
+async def test_reconcile_unchanged_device_is_left_alone(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Adding another device does not rebuild or republish the untouched one."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    on_script = entry.runtime_data.devices[device_id].on_script
+
+    hass.config_entries.async_add_subentry(entry, _new_subentry(NEW_DEVICE_ID))
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert entry.runtime_data.devices[device_id].on_script is on_script
+    assert len(_publishes(mqtt_mock, discovery_topic("homeassistant", device_id))) == 1
+
+
+async def test_reconcile_change_clears_or_reraises_setup_issue(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Reconfiguring clears the stale setup issue when the actions are valid now and re-raises it when they are not."""
+    sub = make_switch_subentry("Lamp", on=[{"not_an_action": True}], off=OFF_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    assert _issue(hass, device_id) is not None
+
+    subentry = _only_subentry(entry)
+    hass.config_entries.async_update_subentry(entry, subentry, data={**subentry.data, CONF_ON_CHANGE_TO_ON: ON_ACTIONS})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _issue(hass, device_id) is None
+    assert entry.runtime_data.devices[device_id].on_script is not None
+
+    subentry = _only_subentry(entry)
+    hass.config_entries.async_update_subentry(
+        entry, subentry, data={**subentry.data, CONF_ON_CHANGE_TO_OFF: [{"still_not_an_action": 1}]}
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    issue = _issue(hass, device_id)
+    assert issue is not None
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["trigger"] == "setup"
+    assert entry.runtime_data.devices[device_id].off_script is None
+
+
+# --- explicit delete (DSC-02, D-16) --------------------------------------------------------------------------------
+
+
+async def test_delete_device_clears_discovery_then_state(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-16: discovery is cleared first, then the subscription ends, then the retained state is cleared."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    events = _record_events(entry)
+    discovery = discovery_topic("homeassistant", device_id)
+    state = state_topic(STATE_TOPIC_BASE, device_id)
+
+    hass.config_entries.async_remove_subentry(entry, _only_subentry(entry).subentry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert events == [("publish", discovery, ""), ("unsubscribe",), ("publish", state, "")]
+    assert _publishes(mqtt_mock, discovery)[-1] == ("", 1, True)
+    assert _publishes(mqtt_mock, state)[-1] == ("", 1, True)
+    assert device_id not in entry.runtime_data.devices
+    # Core MQTT dropped the entity because of the empty discovery payload
+    assert hass.states.get("switch.lamp") is None
+
+
+async def test_delete_device_stops_actions_and_cleans_state(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """After removal nothing runs, the Scripts are gone, the Store forgets the device and its issue is deleted."""
+    on_calls = async_mock_service(hass, "test", "on")
+    _register_failing_service(hass)
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS, off=FAIL_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    await _fire(hass, entry, device_id, "OFF", retain=False)
+    assert _issue(hass, device_id) is not None
+    assert len(on_calls) == 1
+
+    hass.config_entries.async_remove_subentry(entry, _only_subentry(entry).subentry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    await _fire(hass, entry, device_id, "OFF", retain=False)
+
+    assert len(on_calls) == 1
+    assert device_id not in entry.runtime_data.runner._scripts
+    assert _issue(hass, device_id) is None
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    data = hass_storage[STORE_KEY]["data"]
+    assert device_id not in data[STORE_LAST_ACTED]
+    assert device_id not in data[STORE_PUBLISHED]
+
+
+async def test_delete_device_own_subscription_never_sees_state_clear(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    caplog: pytest.LogCaptureFixture,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """The empty state publish is not delivered to the removed device: no call, no warning, no debug line."""
+    on_calls = async_mock_service(hass, "test", "on")
+    off_calls = async_mock_service(hass, "test", "off")
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    with caplog.at_level(logging.DEBUG, logger="custom_components.mqtt_actions"):
+        caplog.clear()
+        hass.config_entries.async_remove_subentry(entry, _only_subentry(entry).subentry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert (len(on_calls), len(off_calls)) == (0, 0)
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+    assert "Ignoring empty payload" not in caplog.text
+
+
+async def test_delete_device_keeps_id_for_orphan_cleanup_when_mqtt_fails(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """A failed clear still stops the device, and its id stays published so the next start retries the cleanup."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    with patch(
+        "custom_components.mqtt_actions.mqtt_gateway.mqtt.async_publish", side_effect=HomeAssistantError("down")
+    ):
+        hass.config_entries.async_remove_subentry(entry, _only_subentry(entry).subentry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert device_id not in entry.runtime_data.devices
+    assert "down" in caplog.text
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert hass_storage[STORE_KEY]["data"][STORE_PUBLISHED] == [device_id]
+
+
+# --- orphan cleanup (DSC-02) ---------------------------------------------------------------------------------------
+
+
+async def test_orphan_discovery_is_cleared_at_start(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """A published id without a subentry (deleted while not loaded) is cleared at the next start and forgotten."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    _preload_store(hass_storage, published=[ORPHAN_ID, device_id], last_acted={ORPHAN_ID: "ON"})
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    assert _publishes(mqtt_mock, discovery_topic("homeassistant", ORPHAN_ID)) == [("", 1, True)]
+    assert _publishes(mqtt_mock, state_topic(STATE_TOPIC_BASE, ORPHAN_ID)) == [("", 1, True)]
+    (current_discovery,) = _publishes(mqtt_mock, discovery_topic("homeassistant", device_id))
+    assert current_discovery[0] != ""
+    assert _publishes(mqtt_mock, state_topic(STATE_TOPIC_BASE, device_id)) == []
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    data = hass_storage[STORE_KEY]["data"]
+    assert data[STORE_PUBLISHED] == [device_id]
+    assert ORPHAN_ID not in data[STORE_LAST_ACTED]
+
+
+# --- hub removal (D-15) --------------------------------------------------------------------------------------------
+
+
+async def test_remove_entry_clears_all_owned_topics(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-15: removing the hub clears discovery, state and availability of every published and current device."""
+    sub = make_switch_subentry("Lamp", on=[{"not_an_action": True}])
+    device_id = _device_id(sub)
+    _preload_store(hass_storage, published=[ORPHAN_ID])
+    entry = await _setup(hass, make_hub_entry([sub]))
+    instance_id = entry.data[CONF_INSTANCE_ID]
+    assert _issue(hass, device_id) is not None
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    for owned_id in (device_id, ORPHAN_ID):
+        assert _publishes(mqtt_mock, discovery_topic("homeassistant", owned_id))[-1] == ("", 1, True)
+        assert _publishes(mqtt_mock, state_topic(STATE_TOPIC_BASE, owned_id))[-1] == ("", 1, True)
+    assert _publishes(mqtt_mock, availability_topic(STATE_TOPIC_BASE, instance_id))[-1] == ("", 1, True)
+    assert STORE_KEY not in hass_storage
+    assert _issues(hass) == []
+    assert hass.states.get("switch.lamp") is None
+
+
+async def test_remove_entry_survives_unavailable_mqtt(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """T-01-14: with MQTT unavailable the removal still completes and only logs a warning."""
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+    with patch(
+        "custom_components.mqtt_actions.mqtt_gateway.mqtt.async_publish", side_effect=HomeAssistantError("down")
+    ):
+        assert await hass.config_entries.async_remove(entry.entry_id)
+
+    assert hass.config_entries.async_get_entry(entry.entry_id) is None
+    assert STORE_KEY not in hass_storage
+    assert [r for r in caplog.records if r.levelno == logging.WARNING and "MQTT" in r.getMessage()]
+
+
+async def test_remove_entry_survives_mqtt_not_loaded(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """An MQTT entry that exists but is not loaded (broker down at start) must not block the removal either."""
+    MockConfigEntry(domain="mqtt", data={"broker": "mock-broker"}).add_to_hass(hass)
+    entry = make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)])
+    entry.add_to_hass(hass)
+    _preload_store(hass_storage, published=[ORPHAN_ID])
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+
+    assert hass.config_entries.async_get_entry(entry.entry_id) is None
+    assert STORE_KEY not in hass_storage
+    assert [r for r in caplog.records if r.levelno == logging.WARNING and "MQTT" in r.getMessage()]

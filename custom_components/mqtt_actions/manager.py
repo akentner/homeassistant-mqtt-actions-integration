@@ -35,6 +35,7 @@ from .const import (
     STORE_LAST_ACTED,
     STORE_PUBLISHED,
     STORE_SAVE_DELAY,
+    STORE_TRIPPED,
     STORE_VERSION,
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
@@ -78,20 +79,37 @@ def _device_subentries(entry: ConfigEntry) -> list[ConfigSubentry]:
     return [*entry.get_subentries_of_type(SUBENTRY_SWITCH), *entry.get_subentries_of_type(SUBENTRY_SELECT)]
 
 
+def _fingerprint(title: str, data: Mapping[str, Any]) -> str:
+    """Return the stable fingerprint of a device configuration; the one place that decides what a change is."""
+    return json.dumps({"title": title, "data": dict(data)}, sort_keys=True)
+
+
 def _signature(subentry: ConfigSubentry) -> str:
     """Return a stable fingerprint of what a subentry configures, to tell a real change from an unrelated update."""
-    return json.dumps({"title": subentry.title, "data": dict(subentry.data)}, sort_keys=True)
+    return _fingerprint(subentry.title, subentry.data)
+
+
+def _hash_fingerprint(fingerprint: str) -> str:
+    return hashlib.sha256(fingerprint.encode()).hexdigest()
 
 
 def signature_hash(title: str, data: Mapping[str, Any]) -> str:
     """Return the sha256 hex digest of the fingerprint of a device configuration; persisted with a tripped breaker."""
-    return hashlib.sha256(json.dumps({"title": title, "data": dict(data)}, sort_keys=True).encode()).hexdigest()
+    return _hash_fingerprint(_fingerprint(title, data))
 
 
 def _parse_published(stored: dict[str, Any]) -> set[str]:
     """Return the published device ids from a loaded Store payload; anything malformed is dropped."""
     published = stored.get(STORE_PUBLISHED)
     return {item for item in published if isinstance(item, str)} if isinstance(published, list) else set()
+
+
+def _parse_tripped(stored: dict[str, Any]) -> dict[str, str]:
+    """Return the tripped device ids with their config hash from a loaded Store payload; malformed data is dropped."""
+    tripped = stored.get(STORE_TRIPPED)
+    if not isinstance(tripped, dict):
+        return {}
+    return {key: value for key, value in tripped.items() if isinstance(key, str) and isinstance(value, str)}
 
 
 async def _async_attempt(action: Callable[[], Awaitable[None]], description: str) -> bool:
@@ -139,7 +157,8 @@ async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> N
     registry = ir.async_get(hass)
     for domain, issue_id in list(registry.issues):
         if domain == DOMAIN and (
-            issue_id.startswith(ISSUE_ACTION_FAILED_PREFIX) or issue_id == ISSUE_DISCOVERY_DISABLED
+            issue_id.startswith((ISSUE_ACTION_FAILED_PREFIX, ISSUE_CIRCUIT_BREAKER_PREFIX))
+            or issue_id == ISSUE_DISCOVERY_DISABLED
         ):
             ir.async_delete_issue(hass, domain, issue_id)
 
@@ -161,6 +180,8 @@ class Manager:
         self._store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, STORE_KEY)
         self._stored_last_acted: dict[str, str] = {}
         self._published: set[str] = set()
+        # device id -> config hash at the time its breaker tripped; the counting window is never stored (D-17)
+        self._tripped: dict[str, str] = {}
         self._running = False
         # Replaceable so tests control the breaker window; production uses the monotonic clock
         self.clock: Callable[[], float] = time.monotonic
@@ -177,6 +198,7 @@ class Manager:
         self._stored_last_acted = {
             device_id: value for device_id, value in self._stored_last_acted.items() if device_id in current
         }
+        self._tripped = {device_id: value for device_id, value in self._tripped.items() if device_id in current}
         await self._async_orphan_cleanup()
         await self.async_reconcile(startup=True)
         await self._async_publish_availability(AvailabilityState.ONLINE)
@@ -207,7 +229,9 @@ class Manager:
 
         Nothing is deleted on the broker here: an empty payload on a discovery or state topic only happens on an
         explicit device delete or on hub removal (DSC-02). The final save comes first so a slow or failing publish
-        cannot cost the baseline.
+        cannot cost the baseline. Tripped breakers are not released here: a failed setup calls this too, and a Home
+        Assistant restart never unloads the entry, so the tripped state survives both (D-17); a user unload or reload
+        releases through release_all_breakers first (D-15).
         """
         async with self._lock:
             self._running = False
@@ -223,6 +247,14 @@ class Manager:
             await self.runner.async_unload_all()
             if self._publisher is not None:  # None when the start failed before the publisher existed
                 await self._async_publish_availability(AvailabilityState.OFFLINE)
+
+    @callback
+    def release_all_breakers(self) -> None:
+        """Release every breaker, delete its issue and forget the tripped map; a user unload or reload is a release."""
+        for device in self.devices.values():
+            device.breaker.reset()
+            self._delete_breaker_issue(device.device_id)
+        self._tripped.clear()
 
     @callback
     def _on_connection_status(self, connected: bool) -> None:  # noqa: FBT001
@@ -278,6 +310,7 @@ class Manager:
             else {}
         )
         self._published = _parse_published(stored)
+        self._tripped = _parse_tripped(stored)
 
     @callback
     def _data_to_save(self) -> dict[str, Any]:
@@ -289,6 +322,7 @@ class Manager:
                 if device.tracker.last_acted is not None
             },
             STORE_PUBLISHED: sorted(self._published),
+            STORE_TRIPPED: dict(self._tripped),
         }
 
     @callback
@@ -315,6 +349,7 @@ class Manager:
             signature=_signature(subentry),
             breaker=self._new_breaker(spec),
         )
+        self._restore_tripped(device)
         await self.runner.async_build_device(spec)
         self.devices[device_id] = device
         # Resolve the device from self.devices at message time: binding the object would break after a rebuild
@@ -356,6 +391,8 @@ class Manager:
         # A changed configuration releases a tripped device with a fresh window (D-15)
         device.breaker = self._new_breaker(spec)
         self._delete_breaker_issue(device.device_id)
+        if self._tripped.pop(device.device_id, None) is not None:
+            self._schedule_save()
         await self._async_publish_discovery(device)
 
     async def _async_remove_device(self, device_id: str) -> None:
@@ -381,6 +418,7 @@ class Manager:
         self._delete_breaker_issue(device_id)
         del self.devices[device_id]
         self._stored_last_acted.pop(device_id, None)
+        self._tripped.pop(device_id, None)
         if cleared and state_cleared:
             self._published.discard(device_id)
         self._schedule_save()
@@ -470,9 +508,33 @@ class Manager:
             device.spec.breaker_window,
         )
         self._create_breaker_issue(device)
+        self._tripped[device.device_id] = _hash_fingerprint(device.signature)
+        self._schedule_save()
         self._entry.async_create_background_task(
             self._hass, self.runner.async_stop_runs(device.device_id), name=f"{DOMAIN} stop {device.name}"
         )
+
+    @callback
+    def _restore_tripped(self, device: Device) -> None:
+        """
+        Pause a device that was tripped before the restart, as long as its configuration is unchanged (D-17).
+
+        Issues are not persistent, so the issue is created again at every start. A stored hash that no longer matches
+        means the configuration changed while the entry was not loaded, which is a release (D-15).
+        """
+        if (stored := self._tripped.get(device.device_id)) is None:
+            return
+        if stored != _hash_fingerprint(device.signature):
+            del self._tripped[device.device_id]
+            self._schedule_save()
+            return
+        device.breaker.trip()
+        LOGGER.warning(
+            "Circuit breaker of device %s is still tripped: it stays paused until its settings change or the "
+            "integration is reloaded",
+            device.name,
+        )
+        self._create_breaker_issue(device)
 
     @callback
     def _create_breaker_issue(self, device: Device) -> None:

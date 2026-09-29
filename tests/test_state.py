@@ -96,3 +96,47 @@ def test_tracker_live_duplicate_keeps_baseline() -> None:
     assert tracker.handle(False, "ON").act is True
     assert tracker.handle(False, "ON").act is False
     assert tracker.handle(False, "OFF").act is True
+
+
+SELECT_ACCEPTED = {"a": "A", "b": "B", "mixed case": "Mixed Case"}
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # Columns: retain, payload, last_acted, startup_pending, run_on_startup, act, value, baseline, ignored
+        (False, "a", None, False, False, True, "A", "A", False),
+        (False, " B\n", "A", False, False, True, "B", "B", False),
+        # A retained value only moves the baseline
+        (True, "b", "A", False, False, False, "B", "B", False),
+        # The canonical StateValue is returned regardless of the payload casing
+        (False, "Mixed CASE", None, False, False, True, "Mixed Case", "Mixed Case", False),
+        # A live duplicate never acts
+        (False, "B", "B", False, False, False, "B", "B", False),
+        # Unknown payloads are ignored and leave the baseline untouched
+        (False, "c", "A", False, False, False, None, "A", True),
+        (False, "", "A", False, False, False, None, "A", True),
+        # A retained unknown payload with the startup window open neither acts nor sets a baseline
+        (True, "c", None, True, True, False, None, None, True),
+    ],
+)
+def test_decide_select_table(
+    case: tuple[bool, str, str | None, bool, bool, bool, str | None, str | None, bool],
+) -> None:
+    """The accepted-values map drives the decision: canonical value out, unknown payloads ignored (D-06, D-09)."""
+    retain, payload, last_acted, startup_pending, run_on_startup, act, value, baseline, ignored = case
+    decision = state.decide(retain, payload, last_acted, startup_pending, run_on_startup, accepted=SELECT_ACCEPTED)
+    assert decision.act is act
+    assert decision.value == value
+    assert decision.baseline == baseline
+    assert decision.ignored is ignored
+
+
+def test_tracker_uses_its_accepted_map() -> None:
+    """A tracker built with an accepted map handles option payloads and keeps the baseline as the StateValue."""
+    tracker = state.StateTracker(accepted=SELECT_ACCEPTED)
+    assert tracker.handle(False, "mixed case").act is True
+    assert tracker.last_acted == "Mixed Case"
+    assert tracker.handle(False, "MIXED CASE").act is False
+    assert tracker.handle(False, "on").ignored is True
+    assert tracker.last_acted == "Mixed Case"

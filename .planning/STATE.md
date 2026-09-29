@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 01
-current_phase_name: Walking Skeleton - Installable Switch
-status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-09-29T09:05:38.475Z"
+current_phase: 02
+current_phase_name: Select Devices and Reliable Execution
+status: verifying
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-09-29T18:50:20.880Z"
 last_activity: 2026-09-29
-last_activity_desc: Phase 01 execution started
-state_head: 507585fa79b7f0044e5517225185b8e7b60307e5
+last_activity_desc: Phase 02 execution started
+state_head: 7042144f92ea5f5d9d43ae94992e05de8d94b706
 progress:
   total_phases: 4
-  completed_phases: 0
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  completed_phases: 1
+  total_plans: 11
+  completed_plans: 11
+  percent: 25
 ---
 
 # Project State
@@ -23,21 +23,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-28)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 01 — Walking Skeleton - Installable Switch
+**Current focus:** Phase 02 — Select Devices and Reliable Execution
 
 ## Current Position
 
-Phase: 01 (Walking Skeleton - Installable Switch) — EXECUTING
-Plan: 6 of 6 (all plans executed)
-Status: Phase 01 plans complete — ready for end-of-phase verification (manual UAT in 01-06-SUMMARY.md) and /gsd-ship
-Last activity: 2026-09-29 — Plan 01-06 complete (Validate and CI green for head 0f6ae60)
+Phase: 02 (Select Devices and Reliable Execution) — EXECUTING
+Plan: 5 of 5
+Status: Phase complete — ready for verification
+Last activity: 2026-09-29 — Phase 02 execution started
 
-Progress: [██████████] 100% of Phase 01 plans
+Progress: [███░░░░░░░] 25% of Phase 01 plans
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
+- Total plans completed: 6
 - Average duration: - min
 - Total execution time: 0.0 hours
 
@@ -45,7 +45,7 @@ Progress: [██████████] 100% of Phase 01 plans
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01 | 6 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -57,6 +57,11 @@ Progress: [██████████] 100% of Phase 01 plans
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P06 | multi-session | 3 tasks | 8 files |
+| Phase 02 P01 | 10 min | 3 tasks | 13 files |
+| Phase 02 P02 | 5 min | 2 tasks | 4 files |
+| Phase 02 P03 | 6 min | 2 tasks | 9 files |
+| Phase 02 P04 | 48 min | 3 tasks | 11 files |
+| Phase 02 P05 | 12 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -70,6 +75,19 @@ Recent decisions affecting current work:
 - [Roadmap]: Startup policy = baseline only (opt-in run-on-startup flag); command topic equals state topic; domain `mqtt_actions`; min HA 2026.9.0
 - [Roadmap]: OPS-06 test tiers are built incrementally per phase (TDD on) and closed in Phase 4 when the multi-instance tier exists
 - [Phase 01]: [01-06] hacs.json floor 2026.9.0; HACS license check reads the default branch, so LICENSE was added to main (c02d5fe, developer-approved)
+- [Phase 02]: device_id stays the only device identity; triggers are keyed by trigger_key = sha256(lowercased StateValue)[:12], derived and never stored
+- [Phase 02]: A stored baseline that is not a StateValue of its device is sanitized to no baseline at add and change time (A11)
+- [Phase 02]: Renaming or removing the selected Select option leaves the HA entity at unknown until the next valid payload; no republish (open question 1)
+- [Phase 02]: Select payload normalization is str.strip().lower() in tracker and Jinja (trim | lower), never casefold
+- [Phase 02]: Run mode maps to Script mode one to one (serial=queued, restart=restart) with max_runs=SERIAL_QUEUE_LIMIT; one Script per device dispatches on the hashed trigger_key — Native FIFO, race-free restart and logged overflow drops across all triggers of a device (DEV-06, D-10 to D-12)
+- [Phase 02]: A run clears the failure issue only when the Script returned a result and it is the device's latest enqueue — Dropped, cancelled or superseded runs must not fake success (T-02-06, A10)
+- [Phase 02]: Test buttons run a trigger's actions through a per-device non-retained test topic and never touch tracker, baseline or state topic; retained test messages are ignored (DEV-07, D-13, T-02-08, T-02-09) — A Discovery button only publishes the exact StateValue, so the manager executes the press itself
+- [Phase 02]: Removed options retire their button with a platform-button tombstone kept in memory for every republish while running; button unique_id is device_id + _test_ + trigger_key (D-13, pitfall 4, T-02-11) — Core MQTT discovery never removes an omitted component; identity derives from the immutable StateValue hash so renames keep entity ids
+- [Phase 02]: Per-device sliding-window breaker: exactly max_runs runs per window, the next change trips and does not run; a trip pauses the device (baseline only), stops running and queued runs, warns once and raises Repairs issue circuit_breaker_<device id> (STA-06, D-14 to D-16) — A self-toggling action would otherwise loop forever and the queue bound only limits a burst; the tripping change must not run
+- [Phase 02]: Tripped state persists as a per-device config hash in the additive store key tripped (no version bump, no window stored); async_unload_entry releases via release_all_breakers before the final save while Manager.async_stop never releases (D-15, D-17, A12) — A failed setup also calls async_stop and a Home Assistant restart never unloads, so a restart keeps the pause and a user reload or a real config change releases it; an unchanged save is a no-op and releases nothing
+- [Phase 02]: Select flow is a menu loop over a deep-copied draft committed once on Done; a menu cannot show errors so Done, Remove and Add are hidden instead of failing (D-01, D-04, T-02-24)
+- [Phase 02]: Breaker number selectors carry no min and max so out-of-range input returns a translated field error; validate_breaker owns 1..100 and 1..3600 and rejects non-integral values (A7, T-02-21)
+- [Phase 02]: Edit step has no StateValue field, removal needs a confirmation menu and is hidden at two options; Done in reconfigure replaces stored data and re-injects the device id (D-02, D-03, D-05)
 
 ### Pending Todos
 
@@ -93,6 +111,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T09:05:38.440Z
-Stopped at: Completed 01-06-PLAN.md
+Last session: 2026-09-29T18:50:20.829Z
+Stopped at: Completed 02-05-PLAN.md
 Resume file: None

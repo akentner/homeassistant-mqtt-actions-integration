@@ -37,13 +37,19 @@
             "name": "Name",
             "on_change_to_on": "Actions when switched on",
             "on_change_to_off": "Actions when switched off",
-            "run_on_startup": "Run actions on startup"
+            "run_on_startup": "Run actions on startup",
+            "run_mode": "Run mode",
+            "breaker_max_runs": "Circuit breaker: maximum runs",
+            "breaker_window": "Circuit breaker: window"
           },
           "data_description": {
             "name": "Name of the switch entity that is created.",
             "on_change_to_on": "Runs on this instance when the state changes to ON. Prefer entity, area or label targets: device IDs differ between Home Assistant instances.",
             "on_change_to_off": "Runs on this instance when the state changes to OFF. Prefer entity, area or label targets: device IDs differ between Home Assistant instances.",
-            "run_on_startup": "When enabled, the retained state is treated as a change once after Home Assistant starts or the integration reloads, so the matching actions run even if the state has not changed."
+            "run_on_startup": "When enabled, the retained state is treated as a change once after Home Assistant starts or the integration reloads, so the matching actions run even if the state has not changed.",
+            "run_mode": "Serial queues runs and executes them one after another. Restart cancels the running actions when a new change arrives.",
+            "breaker_max_runs": "The circuit breaker pauses the device when it would run its actions more often than this within the window. Releasing means changing the device or reloading the integration. Whole number from 1 to 100.",
+            "breaker_window": "Length of the circuit breaker window in seconds. Whole number from 1 to 3600."
           }
         },
         "reconfigure": {
@@ -53,23 +59,151 @@
             "name": "Name",
             "on_change_to_on": "Actions when switched on",
             "on_change_to_off": "Actions when switched off",
-            "run_on_startup": "Run actions on startup"
+            "run_on_startup": "Run actions on startup",
+            "run_mode": "Run mode",
+            "breaker_max_runs": "Circuit breaker: maximum runs",
+            "breaker_window": "Circuit breaker: window"
           },
           "data_description": {
             "name": "Name of the switch entity.",
             "on_change_to_on": "Runs on this instance when the state changes to ON. Prefer entity, area or label targets: device IDs differ between Home Assistant instances.",
             "on_change_to_off": "Runs on this instance when the state changes to OFF. Prefer entity, area or label targets: device IDs differ between Home Assistant instances.",
-            "run_on_startup": "When enabled, the retained state is treated as a change once after Home Assistant starts or the integration reloads, so the matching actions run even if the state has not changed."
+            "run_on_startup": "When enabled, the retained state is treated as a change once after Home Assistant starts or the integration reloads, so the matching actions run even if the state has not changed.",
+            "run_mode": "Serial queues runs and executes them one after another. Restart cancels the running actions when a new change arrives.",
+            "breaker_max_runs": "The circuit breaker pauses the device when it would run its actions more often than this within the window. Releasing means changing the device or reloading the integration. Whole number from 1 to 100.",
+            "breaker_window": "Length of the circuit breaker window in seconds. Whole number from 1 to 3600."
           }
         }
       },
       "error": {
         "name_required": "The name must not be empty.",
         "invalid_actions": "The actions are invalid in {field}: {error}",
-        "device_id_warning": "These device IDs exist only on this Home Assistant instance: {device_ids}. Other instances cannot resolve them, so the actions would fail there. Submit again to save anyway, or switch to entity, area or label targets."
+        "device_id_warning": "These device IDs exist only on this Home Assistant instance: {device_ids}. Other instances cannot resolve them, so the actions would fail there. Submit again to save anyway, or switch to entity, area or label targets.",
+        "breaker_max_runs_range": "Enter a whole number from 1 to 100.",
+        "breaker_window_range": "Enter a whole number of seconds from 1 to 3600."
       },
       "abort": {
         "reconfigure_successful": "The switch device was updated."
+      }
+    },
+    "select": {
+      "initiate_flow": {
+        "user": "Add select device"
+      },
+      "entry_type": "Select device",
+      "step": {
+        "user": {
+          "title": "Add select device",
+          "description": "A select device offers several options. Each option runs its own actions when its state value arrives on the state topic. You add the options on the next page.",
+          "data": {
+            "name": "Name",
+            "run_on_startup": "Run actions on startup",
+            "run_mode": "Run mode",
+            "breaker_max_runs": "Circuit breaker: maximum runs",
+            "breaker_window": "Circuit breaker: window"
+          },
+          "data_description": {
+            "name": "Name of the select entity that is created.",
+            "run_on_startup": "When enabled, the retained state is treated as a change once after Home Assistant starts or the integration reloads, so the actions of that option run even if the state has not changed.",
+            "run_mode": "Serial queues runs and executes them one after another. Restart cancels the running actions when a new change arrives.",
+            "breaker_max_runs": "The circuit breaker pauses the device when it would run its actions more often than this within the window. Releasing means changing the device or reloading the integration. Whole number from 1 to 100.",
+            "breaker_window": "Length of the circuit breaker window in seconds. Whole number from 1 to 3600."
+          }
+        },
+        "settings": {
+          "title": "Edit name and settings",
+          "description": "These settings apply to the whole select device. Nothing is saved until you choose Save the device in the menu.",
+          "data": {
+            "name": "Name",
+            "run_on_startup": "Run actions on startup",
+            "run_mode": "Run mode",
+            "breaker_max_runs": "Circuit breaker: maximum runs",
+            "breaker_window": "Circuit breaker: window"
+          },
+          "data_description": {
+            "name": "Name of the select entity.",
+            "run_on_startup": "When enabled, the retained state is treated as a change once after Home Assistant starts or the integration reloads, so the actions of that option run even if the state has not changed.",
+            "run_mode": "Serial queues runs and executes them one after another. Restart cancels the running actions when a new change arrives.",
+            "breaker_max_runs": "The circuit breaker pauses the device when it would run its actions more often than this within the window. Releasing means changing the device or reloading the integration. Whole number from 1 to 100.",
+            "breaker_window": "Length of the circuit breaker window in seconds. Whole number from 1 to 3600."
+          }
+        },
+        "menu": {
+          "title": "Options",
+          "description": "Select device {name} has {count} option(s).\n\n{options}\n\nA select device needs at least two options. Nothing is saved until you choose Save the device.",
+          "menu_options": {
+            "add_option": "Add an option",
+            "edit_option": "Edit an option",
+            "remove_option": "Remove an option",
+            "settings": "Edit name and settings",
+            "done": "Save the device"
+          }
+        },
+        "add_option": {
+          "title": "Add option",
+          "description": "The state value is the text that arrives on the state topic. It cannot be changed after the option exists. The friendly name is what the select entity shows.",
+          "data": {
+            "state_value": "State value",
+            "friendly_name": "Friendly name",
+            "actions": "Actions"
+          },
+          "data_description": {
+            "state_value": "Exact text of the state topic payload for this option, without spaces at the start or end. Payloads are matched ignoring case.",
+            "friendly_name": "Name of the option in the select entity. It must be different for every option and cannot be none.",
+            "actions": "Runs on this instance when the state changes to this option. Optional. Prefer entity, area or label targets: device IDs differ between Home Assistant instances."
+          }
+        },
+        "edit_option": {
+          "title": "Edit an option",
+          "description": "Choose the option to edit. Its state value cannot be changed.",
+          "data": {
+            "option": "Option"
+          }
+        },
+        "edit_option_details": {
+          "title": "Edit option",
+          "description": "State value: {state_value}. The state value cannot be changed. If this option is the one currently selected, the entity shows unknown after you rename it, until the next valid state message arrives.",
+          "data": {
+            "friendly_name": "Friendly name",
+            "actions": "Actions"
+          },
+          "data_description": {
+            "friendly_name": "Name of the option in the select entity. It must be different for every option and cannot be none.",
+            "actions": "Runs on this instance when the state changes to this option. Optional. Prefer entity, area or label targets: device IDs differ between Home Assistant instances."
+          }
+        },
+        "remove_option": {
+          "title": "Remove an option",
+          "description": "Choose the option to remove. You confirm the removal on the next page.",
+          "data": {
+            "option": "Option"
+          }
+        },
+        "remove_confirm": {
+          "title": "Remove the option?",
+          "description": "Remove the option {friendly_name} with the state value {state_value}? Messages with this state value are ignored and logged afterwards. If this option is currently selected, the entity shows unknown until the next valid state message arrives. The change is saved when you choose Save the device.",
+          "menu_options": {
+            "remove_confirmed": "Yes, remove the option",
+            "keep_option": "No, keep the option"
+          }
+        }
+      },
+      "error": {
+        "name_required": "The name must not be empty.",
+        "invalid_actions": "The actions are invalid in {field}: {error}",
+        "device_id_warning": "These device IDs exist only on this Home Assistant instance: {device_ids}. Other instances cannot resolve them, so the actions would fail there. Submit again to save anyway, or switch to entity, area or label targets.",
+        "state_value_required": "The state value must not be empty.",
+        "state_value_invalid": "The state value must not start or end with a space, must contain only printable characters and must be at most 64 characters long.",
+        "state_value_duplicate": "Another option already uses this state value. Case is ignored.",
+        "friendly_name_required": "The friendly name must not be empty.",
+        "friendly_name_invalid": "The friendly name must contain only printable characters and must be at most 64 characters long.",
+        "friendly_name_reserved": "The friendly name none is reserved: Home Assistant shows an unknown state for it.",
+        "friendly_name_duplicate": "Another option already uses this friendly name. Case and spaces at the start or end are ignored.",
+        "breaker_max_runs_range": "Enter a whole number from 1 to 100.",
+        "breaker_window_range": "Enter a whole number of seconds from 1 to 3600."
+      },
+      "abort": {
+        "reconfigure_successful": "The select device was updated."
       }
     }
   },
@@ -80,7 +214,19 @@
     },
     "mqtt_discovery_disabled": {
       "title": "MQTT discovery is disabled",
-      "description": "MQTT Actions creates its switch entities through MQTT discovery, but discovery is disabled in the MQTT integration. No switch entity appears until discovery is enabled again in the MQTT integration options."
+      "description": "MQTT Actions creates its entities through MQTT discovery, but discovery is disabled in the MQTT integration. No entity of MQTT Actions appears until discovery is enabled again in the MQTT integration options."
+    },
+    "circuit_breaker_tripped": {
+      "title": "A device was paused by the circuit breaker",
+      "description": "{device} ran its actions more than {max_runs} times within {window} seconds. This usually means an action changes the state of its own device and keeps triggering itself, so MQTT Actions stopped the running actions and paused the device. Changes on the state topic still update the entity, but no actions run until the device is released. To release it, change the settings of the device or reload the integration. Saving the device without changing anything does not release it."
+    }
+  },
+  "selector": {
+    "run_mode": {
+      "options": {
+        "serial": "Serial (queue runs)",
+        "restart": "Restart (cancel the running run)"
+      }
     }
   }
 }

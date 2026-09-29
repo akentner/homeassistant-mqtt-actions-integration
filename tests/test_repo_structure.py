@@ -104,6 +104,14 @@ def test_readme_documents_install_limits_and_trust() -> None:
         assert any(heading.startswith(section) for heading in headings), f"README has no {section} section"
 
 
+def test_readme_documents_phase2_behavior() -> None:
+    lowered = (ROOT / "README.md").read_text(encoding="utf-8").lower()
+    for phrase in ("select device", "run mode", "circuit breaker", "test button", "/test"):
+        assert phrase in lowered, f"README never mentions {phrase}"
+    assert "5 runs in 10 seconds" in lowered
+    assert "only switch and select devices exist" in lowered
+
+
 @workflow_files
 def test_workflows_have_empty_permissions(filename: str) -> None:
     workflow = _load_workflow(filename)

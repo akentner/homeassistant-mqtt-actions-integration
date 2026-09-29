@@ -1,5 +1,5 @@
 """
-Turns switch subentries into subscriptions, scripts and discovery.
+Turns device subentries (Switch and Select) into subscriptions, scripts and discovery.
 
 Known limitation: the MQTT client is shared with Home Assistant and offers this integration no Last Will, so a hard
 crash leaves a stale retained "online" availability on the broker. Heartbeat-based availability (deferred requirement
@@ -7,8 +7,10 @@ AVL-01) addresses it.
 """
 
 import asyncio
+import hashlib
 import json
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
@@ -18,68 +20,96 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 
-from .actions import ActionsInvalid
+from .breaker import CircuitBreaker
 from .const import (
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
-    CONF_ON_CHANGE_TO_OFF,
-    CONF_ON_CHANGE_TO_ON,
-    CONF_RUN_ON_STARTUP,
     DOMAIN,
     ISSUE_ACTION_FAILED_PREFIX,
+    ISSUE_CIRCUIT_BREAKER_PREFIX,
     ISSUE_DISCOVERY_DISABLED,
     LOGGER,
-    MAX_ISSUE_ERROR_LENGTH,
     MAX_LOGGED_PAYLOAD_LENGTH,
-    PAYLOAD_OFF,
-    PAYLOAD_ON,
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_PUBLISHED,
     STORE_SAVE_DELAY,
+    STORE_TRIPPED,
     STORE_VERSION,
+    SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
-    TRIGGER_OFF,
-    TRIGGER_ON,
-    TRIGGER_SETUP,
 )
-from .discovery import AvailabilityState, DiscoveryPublisher
+from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
+from .model import DeviceSpec, spec_from_subentry, trigger_key
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .runner import ActionRunner
 from .state import StateTracker
-from .topics import state_topic
+from .topics import state_topic, test_topic
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping
 
     from homeassistant.config_entries import ConfigEntry, ConfigSubentry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
-    from homeassistant.helpers.script import Script
 
 
 @dataclass
 class Device:
-    """Runtime state of one switch device."""
+    """Runtime state of one device (Switch or Select)."""
 
     device_id: str
-    name: str
+    spec: DeviceSpec
     tracker: StateTracker
-    on_script: Script | None
-    off_script: Script | None
     signature: str
+    breaker: CircuitBreaker
     unsubscribe: CALLBACK_TYPE | None = None
+    unsubscribe_test: CALLBACK_TYPE | None = None
+    # Button component keys of removed triggers; kept in memory so every republish carries their tombstone
+    retired_components: set[str] = field(default_factory=set)
+
+    @property
+    def name(self) -> str:
+        """Return the display name of the device."""
+        return self.spec.name
+
+
+def _device_subentries(entry: ConfigEntry) -> list[ConfigSubentry]:
+    """Return the device subentries of the hub entry: the Switch subentries followed by the Select subentries."""
+    return [*entry.get_subentries_of_type(SUBENTRY_SWITCH), *entry.get_subentries_of_type(SUBENTRY_SELECT)]
+
+
+def _fingerprint(title: str, data: Mapping[str, Any]) -> str:
+    """Return the stable fingerprint of a device configuration; the one place that decides what a change is."""
+    return json.dumps({"title": title, "data": dict(data)}, sort_keys=True)
 
 
 def _signature(subentry: ConfigSubentry) -> str:
     """Return a stable fingerprint of what a subentry configures, to tell a real change from an unrelated update."""
-    return json.dumps({"title": subentry.title, "data": dict(subentry.data)}, sort_keys=True)
+    return _fingerprint(subentry.title, subentry.data)
+
+
+def _hash_fingerprint(fingerprint: str) -> str:
+    return hashlib.sha256(fingerprint.encode()).hexdigest()
+
+
+def signature_hash(title: str, data: Mapping[str, Any]) -> str:
+    """Return the sha256 hex digest of the fingerprint of a device configuration; persisted with a tripped breaker."""
+    return _hash_fingerprint(_fingerprint(title, data))
 
 
 def _parse_published(stored: dict[str, Any]) -> set[str]:
     """Return the published device ids from a loaded Store payload; anything malformed is dropped."""
     published = stored.get(STORE_PUBLISHED)
     return {item for item in published if isinstance(item, str)} if isinstance(published, list) else set()
+
+
+def _parse_tripped(stored: dict[str, Any]) -> dict[str, str]:
+    """Return the tripped device ids with their config hash from a loaded Store payload; malformed data is dropped."""
+    tripped = stored.get(STORE_TRIPPED)
+    if not isinstance(tripped, dict):
+        return {}
+    return {key: value for key, value in tripped.items() if isinstance(key, str) and isinstance(value, str)}
 
 
 async def _async_attempt(action: Callable[[], Awaitable[None]], description: str) -> bool:
@@ -114,9 +144,7 @@ async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> N
     """
     store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, STORE_KEY)
     stored = await store.async_load() or {}
-    device_ids = _parse_published(stored) | {
-        subentry.data[CONF_DEVICE_ID] for subentry in entry.get_subentries_of_type(SUBENTRY_SWITCH)
-    }
+    device_ids = _parse_published(stored) | {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(entry)}
     integration = await async_get_integration(hass, DOMAIN)
     publisher = DiscoveryPublisher(MqttGateway(hass), entry.data[CONF_BASE_TOPIC], str(integration.version))
     for device_id in sorted(device_ids):
@@ -129,13 +157,14 @@ async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> N
     registry = ir.async_get(hass)
     for domain, issue_id in list(registry.issues):
         if domain == DOMAIN and (
-            issue_id.startswith(ISSUE_ACTION_FAILED_PREFIX) or issue_id == ISSUE_DISCOVERY_DISABLED
+            issue_id.startswith((ISSUE_ACTION_FAILED_PREFIX, ISSUE_CIRCUIT_BREAKER_PREFIX))
+            or issue_id == ISSUE_DISCOVERY_DISABLED
         ):
             ir.async_delete_issue(hass, domain, issue_id)
 
 
 class Manager:
-    """Keeps the running devices in line with the switch subentries of the hub entry."""
+    """Keeps the running devices in line with the device subentries of the hub entry."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the manager."""
@@ -151,7 +180,11 @@ class Manager:
         self._store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, STORE_KEY)
         self._stored_last_acted: dict[str, str] = {}
         self._published: set[str] = set()
+        # device id -> config hash at the time its breaker tripped; the counting window is never stored (D-17)
+        self._tripped: dict[str, str] = {}
         self._running = False
+        # Replaceable so tests control the breaker window; production uses the monotonic clock
+        self.clock: Callable[[], float] = time.monotonic
 
     async def async_start(self) -> None:
         """Load the persisted state, clear orphans, start every configured device and publish availability online."""
@@ -161,13 +194,18 @@ class Manager:
         self._running = True
         self._check_discovery_enabled()
         self._entry.async_on_unload(self.gateway.async_subscribe_connection_status(self._on_connection_status))
+        current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
+        self._stored_last_acted = {
+            device_id: value for device_id, value in self._stored_last_acted.items() if device_id in current
+        }
+        self._tripped = {device_id: value for device_id, value in self._tripped.items() if device_id in current}
         await self._async_orphan_cleanup()
         await self.async_reconcile(startup=True)
         await self._async_publish_availability(AvailabilityState.ONLINE)
 
     async def async_reconcile(self, *, startup: bool = False) -> None:
         """
-        Bring the running devices in line with the switch subentries: remove, change and add.
+        Bring the running devices in line with the device subentries: remove, change and add.
 
         Only devices built while the manager starts (HA start or entry reload) get the startup window; a device the
         user creates later is not a start (D-05).
@@ -176,10 +214,7 @@ class Manager:
             # A late update-listener call after async_stop must not revive a manager nobody will ever unsubscribe
             if not self._running:
                 return
-            subentries = {
-                subentry.data[CONF_DEVICE_ID]: subentry
-                for subentry in self._entry.get_subentries_of_type(SUBENTRY_SWITCH)
-            }
+            subentries = {subentry.data[CONF_DEVICE_ID]: subentry for subentry in _device_subentries(self._entry)}
             for device_id in [device_id for device_id in self.devices if device_id not in subentries]:
                 await self._async_remove_device(device_id)
             for device_id, subentry in subentries.items():
@@ -194,7 +229,9 @@ class Manager:
 
         Nothing is deleted on the broker here: an empty payload on a discovery or state topic only happens on an
         explicit device delete or on hub removal (DSC-02). The final save comes first so a slow or failing publish
-        cannot cost the baseline.
+        cannot cost the baseline. Tripped breakers are not released here: a failed setup calls this too, and a Home
+        Assistant restart never unloads the entry, so the tripped state survives both (D-17); a user unload or reload
+        releases through release_all_breakers first (D-15).
         """
         async with self._lock:
             self._running = False
@@ -202,12 +239,22 @@ class Manager:
             for device in self.devices.values():
                 if device.unsubscribe is not None:
                     device.unsubscribe()
+                if device.unsubscribe_test is not None:
+                    device.unsubscribe_test()
                 await self.runner.async_unload(device.device_id)
             self.devices.clear()
             # Scripts of a device whose start failed halfway are not in self.devices yet
             await self.runner.async_unload_all()
             if self._publisher is not None:  # None when the start failed before the publisher existed
                 await self._async_publish_availability(AvailabilityState.OFFLINE)
+
+    @callback
+    def release_all_breakers(self) -> None:
+        """Release every breaker, delete its issue and forget the tripped map; a user unload or reload is a release."""
+        for device in self.devices.values():
+            device.breaker.reset()
+            self._delete_breaker_issue(device.device_id)
+        self._tripped.clear()
 
     @callback
     def _on_connection_status(self, connected: bool) -> None:  # noqa: FBT001
@@ -234,7 +281,7 @@ class Manager:
         if self.gateway.discovery_enabled():
             ir.async_delete_issue(self._hass, DOMAIN, ISSUE_DISCOVERY_DISABLED)
             return
-        LOGGER.warning("MQTT discovery is disabled, so the switch entities of MQTT Actions cannot appear")
+        LOGGER.warning("MQTT discovery is disabled, so the entities of MQTT Actions cannot appear")
         ir.async_create_issue(
             self._hass,
             DOMAIN,
@@ -256,17 +303,14 @@ class Manager:
         """Load the persisted baseline and published ids; anything malformed is dropped."""
         stored = await self._store.async_load() or {}
         last_acted = stored.get(STORE_LAST_ACTED)
+        # Any string is kept here; a device sanitizes its baseline against its own StateValues when it is added (A11)
         self._stored_last_acted = (
-            {
-                key: value
-                for key, value in last_acted.items()
-                # The isinstance checks come first: an unhashable value would make the set membership raise
-                if isinstance(key, str) and isinstance(value, str) and value in {PAYLOAD_ON, PAYLOAD_OFF}
-            }
+            {key: value for key, value in last_acted.items() if isinstance(key, str) and isinstance(value, str)}
             if isinstance(last_acted, dict)
             else {}
         )
         self._published = _parse_published(stored)
+        self._tripped = _parse_tripped(stored)
 
     @callback
     def _data_to_save(self) -> dict[str, Any]:
@@ -278,6 +322,7 @@ class Manager:
                 if device.tracker.last_acted is not None
             },
             STORE_PUBLISHED: sorted(self._published),
+            STORE_TRIPPED: dict(self._tripped),
         }
 
     @callback
@@ -289,23 +334,32 @@ class Manager:
         """Build scripts, subscribe to the state topic and publish discovery for one device."""
         assert self._publisher is not None  # noqa: S101
         device_id: str = subentry.data[CONF_DEVICE_ID]
+        spec = spec_from_subentry(subentry)
+        stored = self._stored_last_acted.get(device_id)
         device = Device(
             device_id=device_id,
-            name=subentry.title,
+            spec=spec,
+            # A stored baseline that is no longer a StateValue of the device is unknown (A11)
             tracker=StateTracker(
-                last_acted=self._stored_last_acted.get(device_id),
-                run_on_startup=subentry.data[CONF_RUN_ON_STARTUP],
+                last_acted=stored if stored in spec.accepted.values() else None,
+                run_on_startup=spec.run_on_startup,
                 startup_pending=startup,
+                accepted=spec.accepted,
             ),
-            on_script=await self._async_build(subentry, CONF_ON_CHANGE_TO_ON),
-            off_script=await self._async_build(subentry, CONF_ON_CHANGE_TO_OFF),
             signature=_signature(subentry),
+            breaker=self._new_breaker(spec),
         )
+        self._restore_tripped(device)
+        await self.runner.async_build_device(spec)
         self.devices[device_id] = device
         # Resolve the device from self.devices at message time: binding the object would break after a rebuild
         device.unsubscribe = await self.gateway.async_subscribe(
             state_topic(self._base_topic, device_id),
             partial(self._on_message, device_id),
+        )
+        device.unsubscribe_test = await self.gateway.async_subscribe(
+            test_topic(self._base_topic, device_id),
+            partial(self._on_test_message, device_id),
         )
         await self._async_publish_discovery(device)
         self._published.add(device_id)
@@ -316,17 +370,29 @@ class Manager:
         Apply a reconfigured subentry: new Scripts, name and flag; the subscription and the baseline stay.
 
         The Repairs issue is cleared first so a stale setup problem does not outlive the change; invalid new actions
-        raise it again while the Scripts are rebuilt. The previous Scripts are unloaded after the new ones exist.
+        raise it again while the Scripts are rebuilt. The previous Scripts are unloaded after the new ones exist. A
+        baseline that is no longer a StateValue of the device (a removed option) becomes unknown (D-02).
         """
         self.runner.clear_issue(device.device_id)
-        device.on_script = await self._async_build(subentry, CONF_ON_CHANGE_TO_ON)
-        device.off_script = await self._async_build(subentry, CONF_ON_CHANGE_TO_OFF)
-        await self.runner.async_retire_scripts(
-            device.device_id, keep=[script for script in (device.on_script, device.off_script) if script is not None]
-        )
-        device.name = subentry.title
-        device.tracker.run_on_startup = subentry.data[CONF_RUN_ON_STARTUP]
+        spec = spec_from_subentry(subentry)
+        await self.runner.async_build_device(spec)
+        # A removed option retires its button; a re-added StateValue derives the same key, so its tombstone goes
+        current_keys = {button_component_key(key) for key in spec.triggers}
+        previous_keys = {button_component_key(key) for key in device.spec.triggers}
+        device.retired_components |= previous_keys - current_keys
+        device.retired_components -= current_keys
+        device.spec = spec
+        device.tracker.run_on_startup = spec.run_on_startup
+        device.tracker.accepted = spec.accepted
+        if device.tracker.last_acted is not None and device.tracker.last_acted not in spec.accepted.values():
+            device.tracker.last_acted = None
+            self._schedule_save()
         device.signature = _signature(subentry)
+        # A changed configuration releases a tripped device with a fresh window (D-15)
+        device.breaker = self._new_breaker(spec)
+        self._delete_breaker_issue(device.device_id)
+        if self._tripped.pop(device.device_id, None) is not None:
+            self._schedule_save()
         await self._async_publish_discovery(device)
 
     async def _async_remove_device(self, device_id: str) -> None:
@@ -343,12 +409,16 @@ class Manager:
         )
         if device.unsubscribe is not None:
             device.unsubscribe()
+        if device.unsubscribe_test is not None:
+            device.unsubscribe_test()
         state_cleared = await _async_attempt(
             partial(self._publisher.async_clear_state, device_id), f"clear the retained state of device {device.name}"
         )
         await self.runner.async_unload(device_id, remove_issue=True)
+        self._delete_breaker_issue(device_id)
         del self.devices[device_id]
         self._stored_last_acted.pop(device_id, None)
+        self._tripped.pop(device_id, None)
         if cleared and state_cleared:
             self._published.discard(device_id)
         self._schedule_save()
@@ -360,7 +430,7 @@ class Manager:
         No update listener existed then, so the persisted published set is compared with the current subentries.
         """
         assert self._publisher is not None  # noqa: S101
-        current = {subentry.data[CONF_DEVICE_ID] for subentry in self._entry.get_subentries_of_type(SUBENTRY_SWITCH)}
+        current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
         for device_id in sorted(self._published - current):
             if await _async_clear_topics(self._publisher, device_id):
                 self._published.discard(device_id)
@@ -373,28 +443,12 @@ class Manager:
         await _async_attempt(
             partial(
                 self._publisher.async_publish_device,
-                device_id=device.device_id,
-                name=device.name,
+                spec=device.spec,
                 instance_id=self._instance_id,
+                retired=frozenset(device.retired_components),
             ),
             f"publish the discovery of device {device.name}",
         )
-
-    async def _async_build(self, subentry: ConfigSubentry, key: str) -> Script | None:
-        """
-        Build the script for one trigger.
-
-        Invalid stored actions are logged and shown in Repairs (trigger setup); that transition then has no script while
-        the other one and the baseline tracking keep working. Reconfiguring the device rebuilds it.
-        """
-        device_id: str = subentry.data[CONF_DEVICE_ID]
-        try:
-            return await self.runner.async_build_script(device_id, f"{subentry.title} {key}", subentry.data[key])
-        except ActionsInvalid as err:
-            error = str(err)[:MAX_ISSUE_ERROR_LENGTH]
-            LOGGER.error("Invalid actions for %s of device %s: %s", key, subentry.title, error)
-            self.runner.report_failure(device_id, subentry.title, TRIGGER_SETUP, error)
-            return None
 
     @callback
     def _on_message(self, device_id: str, msg: IncomingMessage) -> None:
@@ -410,17 +464,125 @@ class Manager:
             self._schedule_save()
         if not decision.act:
             return
-        is_on = decision.value == PAYLOAD_ON
-        script = device.on_script if is_on else device.off_script
-        if script is None:
+        assert decision.value is not None  # noqa: S101
+        trigger = device.spec.triggers.get(trigger_key(decision.value))
+        if trigger is None or not self.runner.can_run(device_id, trigger.key):
             return
-        # Only the device id and the normalised value reach templates, never the raw payload
+        # Only a real change that would run counts; a paused device tracks its baseline and runs nothing (D-15)
+        if device.breaker.tripped:
+            LOGGER.debug("Device %s is paused by its circuit breaker, its change runs no actions", device.name)
+            return
+        if not device.breaker.record():
+            self._trip(device)
+            return
+        # Only the device id and the canonical value reach templates, never the raw payload
         self.runner.enqueue(
             device_id,
             device.name,
-            TRIGGER_ON if is_on else TRIGGER_OFF,
-            script,
+            trigger.label,
+            trigger.key,
             {"device_id": device_id, "state": decision.value},
+        )
+
+    def _new_breaker(self, spec: DeviceSpec) -> CircuitBreaker:
+        """Build the breaker of a device from its configured limits (D-14)."""
+        return CircuitBreaker(spec.breaker_max_runs, float(spec.breaker_window), clock=self._breaker_clock)
+
+    def _breaker_clock(self) -> float:
+        """Read the manager clock at call time so a replaced clock reaches breakers that already exist."""
+        return self.clock()
+
+    @callback
+    def _trip(self, device: Device) -> None:
+        """
+        Pause a device whose breaker just tripped: warn, raise the Repairs issue and stop its runs (D-15, D-16).
+
+        The log line and the issue carry only the device name and the two limits, never action data (T-02-18). Stopping
+        the running and queued runs is what actually ends a loop: otherwise sequences already in flight would still
+        publish state changes (A3).
+        """
+        LOGGER.warning(
+            "Circuit breaker tripped for device %s: more than %d runs within %d seconds, so the device is paused",
+            device.name,
+            device.breaker.max_runs,
+            device.spec.breaker_window,
+        )
+        self._create_breaker_issue(device)
+        self._tripped[device.device_id] = _hash_fingerprint(device.signature)
+        self._schedule_save()
+        self._entry.async_create_background_task(
+            self._hass, self.runner.async_stop_runs(device.device_id), name=f"{DOMAIN} stop {device.name}"
+        )
+
+    @callback
+    def _restore_tripped(self, device: Device) -> None:
+        """
+        Pause a device that was tripped before the restart, as long as its configuration is unchanged (D-17).
+
+        Issues are not persistent, so the issue is created again at every start. A stored hash that no longer matches
+        means the configuration changed while the entry was not loaded, which is a release (D-15).
+        """
+        if (stored := self._tripped.get(device.device_id)) is None:
+            return
+        if stored != _hash_fingerprint(device.signature):
+            del self._tripped[device.device_id]
+            self._schedule_save()
+            return
+        device.breaker.trip()
+        LOGGER.warning(
+            "Circuit breaker of device %s is still tripped: it stays paused until its settings change or the "
+            "integration is reloaded",
+            device.name,
+        )
+        self._create_breaker_issue(device)
+
+    @callback
+    def _create_breaker_issue(self, device: Device) -> None:
+        """Show the Repairs issue of a paused device; it names the device and the limits only."""
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            f"{ISSUE_CIRCUIT_BREAKER_PREFIX}{device.device_id}",
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="circuit_breaker_tripped",
+            translation_placeholders={
+                "device": device.name,
+                "max_runs": str(device.spec.breaker_max_runs),
+                "window": str(device.spec.breaker_window),
+            },
+        )
+
+    @callback
+    def _delete_breaker_issue(self, device_id: str) -> None:
+        """Delete the circuit breaker issue of a device."""
+        ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_CIRCUIT_BREAKER_PREFIX}{device_id}")
+
+    @callback
+    def _on_test_message(self, device_id: str, msg: IncomingMessage) -> None:
+        """
+        Run the actions of the trigger whose test button was pressed (D-13).
+
+        The press never touches the tracker, the baseline or the state topic, and nothing is published. A retained
+        message is a replay, never a press, so it must not run actions (T-02-09). Only a payload that equals a
+        StateValue of the device runs anything (T-02-08).
+        """
+        if msg.retain or (device := self.devices.get(device_id)) is None:
+            return
+        value = device.spec.accepted.get(msg.payload.strip().lower())
+        if value is None:
+            self._log_ignored(device, msg.payload)
+            return
+        trigger = device.spec.triggers.get(trigger_key(value))
+        if trigger is None or not self.runner.can_run(device_id, trigger.key):
+            return
+        self.runner.enqueue(
+            device_id,
+            device.name,
+            trigger.label,
+            trigger.key,
+            {"device_id": device_id, "state": value},
+            test=True,
         )
 
     @staticmethod

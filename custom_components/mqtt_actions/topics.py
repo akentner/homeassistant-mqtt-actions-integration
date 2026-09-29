@@ -37,6 +37,11 @@ def state_topic(base: str, device_id: str) -> str:
     return f"{base}/{TOPIC_VERSION}/devices/{device_id}/state"
 
 
+def test_topic(base: str, device_id: str) -> str:
+    """Return the non-retained topic the test buttons of a device publish to; it never carries device state (D-13)."""
+    return f"{base}/{TOPIC_VERSION}/devices/{device_id}/test"
+
+
 def availability_topic(base: str, instance_id: str) -> str:
     """Return the availability topic of this instance."""
     return f"{base}/{TOPIC_VERSION}/instances/{instance_id}/availability"

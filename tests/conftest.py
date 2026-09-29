@@ -8,15 +8,23 @@ from homeassistant.config_entries import ConfigSubentryData
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mqtt_actions.const import (
+    CONF_ACTIONS,
     CONF_BASE_TOPIC,
+    CONF_BREAKER_MAX_RUNS,
+    CONF_BREAKER_WINDOW,
     CONF_DEVICE_ID,
+    CONF_FRIENDLY_NAME,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
     CONF_ON_CHANGE_TO_OFF,
     CONF_ON_CHANGE_TO_ON,
+    CONF_OPTIONS,
+    CONF_RUN_MODE,
     CONF_RUN_ON_STARTUP,
+    CONF_STATE_VALUE,
     DEFAULT_BASE_TOPIC,
     DOMAIN,
+    SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
 
@@ -35,6 +43,20 @@ def expected_lingering_timers() -> bool:
     return True
 
 
+def _optional_settings(
+    run_mode: str | None, breaker_max_runs: int | None, breaker_window: int | None
+) -> dict[str, Any]:
+    """Return the run mode and breaker keys that were given; omitted keys exercise the stored-data default path."""
+    settings: dict[str, Any] = {}
+    if run_mode is not None:
+        settings[CONF_RUN_MODE] = run_mode
+    if breaker_max_runs is not None:
+        settings[CONF_BREAKER_MAX_RUNS] = breaker_max_runs
+    if breaker_window is not None:
+        settings[CONF_BREAKER_WINDOW] = breaker_window
+    return settings
+
+
 @pytest.fixture
 def make_switch_subentry() -> Callable[..., ConfigSubentryData]:
     """Return a factory for a switch subentry (title = name, unique_id = device_id)."""
@@ -45,6 +67,10 @@ def make_switch_subentry() -> Callable[..., ConfigSubentryData]:
         off: list[dict[str, Any]] | None = None,
         run_on_startup: bool = False,
         device_id: str | None = None,
+        *,
+        run_mode: str | None = None,
+        breaker_max_runs: int | None = None,
+        breaker_window: int | None = None,
     ) -> ConfigSubentryData:
         device_id = device_id or str(uuid.uuid4())
         return ConfigSubentryData(
@@ -53,8 +79,42 @@ def make_switch_subentry() -> Callable[..., ConfigSubentryData]:
                 CONF_ON_CHANGE_TO_ON: on or [],
                 CONF_ON_CHANGE_TO_OFF: off or [],
                 CONF_RUN_ON_STARTUP: run_on_startup,
+                **_optional_settings(run_mode, breaker_max_runs, breaker_window),
             },
             subentry_type=SUBENTRY_SWITCH,
+            title=name,
+            unique_id=device_id,
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_select_subentry() -> Callable[..., ConfigSubentryData]:
+    """Return a factory for a select subentry; options are (state_value, friendly_name, actions) tuples."""
+
+    def _make(
+        name: str,
+        options: Sequence[tuple[str, str, list[dict[str, Any]]]],
+        *,
+        run_on_startup: bool = False,
+        run_mode: str | None = None,
+        breaker_max_runs: int | None = None,
+        breaker_window: int | None = None,
+        device_id: str | None = None,
+    ) -> ConfigSubentryData:
+        device_id = device_id or str(uuid.uuid4())
+        return ConfigSubentryData(
+            data={
+                CONF_DEVICE_ID: device_id,
+                CONF_OPTIONS: [
+                    {CONF_STATE_VALUE: value, CONF_FRIENDLY_NAME: friendly, CONF_ACTIONS: actions}
+                    for value, friendly, actions in options
+                ],
+                CONF_RUN_ON_STARTUP: run_on_startup,
+                **_optional_settings(run_mode, breaker_max_runs, breaker_window),
+            },
+            subentry_type=SUBENTRY_SELECT,
             title=name,
             unique_id=device_id,
         )

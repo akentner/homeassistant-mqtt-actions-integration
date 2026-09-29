@@ -11,7 +11,8 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 
 from custom_components.mqtt_actions import discovery
-from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN
+from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN, SUBENTRY_SWITCH
+from custom_components.mqtt_actions.model import spec_from_data
 from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
 from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, state_topic
 
@@ -55,19 +56,17 @@ def _published_discovery(mqtt_mock: Any, device_id: str, prefix: str = "homeassi
 # --- payload (DSC-01, D-01, D-03) ----------------------------------------------------------------------------------
 
 
-def test_discovery_payload_full_keys() -> None:
-    """The builder output holds every key core MQTT discovery needs and is JSON-serialisable."""
-    payload = discovery.build_switch_discovery(
-        base_topic="mqtt_actions",
-        device_id="dev-1",
-        instance_id="inst-1",
-        name="Lamp",
-        sw_version="1.2.3",
-    )
+def test_build_discovery_switch_payload_unchanged() -> None:
+    """The Switch spec yields the same device, origin, availability and switch component as in Phase 1, plus buttons."""
+    spec = spec_from_data(SUBENTRY_SWITCH, "Lamp", {CONF_DEVICE_ID: "dev-1"})
+    payload = discovery.build_discovery(spec=spec, base_topic="mqtt_actions", instance_id="inst-1", sw_version="1.2.3")
 
     assert payload["device"] == {"identifiers": ["mqtt_actions_dev-1"], "name": "Lamp"}
     assert payload["origin"] == {"name": "MQTT Actions", "sw_version": "1.2.3"}
     topic = "mqtt_actions/v1/devices/dev-1/state"
+    # The test buttons (D-13) come after the switch; their shape is pinned in tests/test_test_buttons.py
+    assert next(iter(payload["components"])) == "switch"
+    assert len(payload["components"]) == 3
     assert payload["components"]["switch"] == {
         "platform": "switch",
         "unique_id": "dev-1",

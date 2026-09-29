@@ -14,7 +14,7 @@ Ordering rationale: startup semantics, the single trigger source and the Select 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Walking Skeleton - Installable Switch** - HACS-installable integration where a Switch created in the UI runs its actions on MQTT state changes, safely across restarts
+- [x] **Phase 1: Walking Skeleton - Installable Switch** - HACS-installable integration where a Switch created in the UI runs its actions on MQTT state changes, safely across restarts (completed 2026-09-29)
 - [ ] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection
 - [ ] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely
 - [ ] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation
@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. The Switch appears in HA through MQTT Discovery (UUID `unique_id`, availability, device info); toggling it in the HA UI or publishing to its retained state topic runs the matching actions locally on each real change, and a failing action is visible in the log and as a Repairs issue instead of being swallowed.
   5. After an HA restart, integration reload or broker reconnect, the integration starts cleanly even if MQTT is not ready yet, retained state only sets the baseline (no actions run unless the device's "run on startup" flag is on), only real state changes trigger actions, and the entity stays until the user explicitly deletes the device.
 
-**Plans:** 6/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**
@@ -70,7 +70,24 @@ Plans:
   4. User can choose per device whether rapid state changes run their actions as a serial queue (default) or as restart, and can press a test button that runs a device's actions locally without changing its state.
   5. An action that toggles its own device is stopped by a per-device circuit breaker instead of looping forever, and the user is told why.
 
-**Plans**: TBD
+**Plans:** 5/5 plans executed
+
+Plans:
+**Wave 1**
+- [x] 02-01-PLAN.md — Tracer: Select device runtime (DeviceSpec, accepted-values decision, select discovery with mapping templates, unknown-payload semantics) (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 02-02-PLAN.md — One Script per device: serial and restart run modes, queue bound, dropped and superseded run handling (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 02-03-PLAN.md — Test buttons per trigger on a non-retained test topic, button lifecycle with tombstones (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 02-04-PLAN.md — Per-device circuit breaker: trip, pause, Repairs issue, persisted tripped state, release paths (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 02-05-PLAN.md — Select option editor flow, run mode and breaker fields in the Switch and Select flows, en/de strings, README (wave 5)
+
 **UI hint**: yes
 
 ### Phase 3: Trust, Central Config and Ownership
@@ -111,7 +128,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Walking Skeleton - Installable Switch | 6/6 | In Progress|  |
-| 2. Select Devices and Reliable Execution | 0/0 | Not started | - |
+| 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
+| 2. Select Devices and Reliable Execution | 5/5 | In Progress|  |
 | 3. Trust, Central Config and Ownership | 0/0 | Not started | - |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |

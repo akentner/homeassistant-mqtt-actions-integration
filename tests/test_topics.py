@@ -44,3 +44,9 @@ def test_invalid_base_topic_is_rejected(topic: str) -> None:
 
 def test_invalid_base_topic_is_a_value_error() -> None:
     assert issubclass(topics.InvalidBaseTopic, ValueError)
+
+
+def test_test_topic_shape() -> None:
+    """D-13: the test button topic is per device, versioned, and never the state topic."""
+    assert topics.test_topic("mqtt_actions", "dev-1") == "mqtt_actions/v1/devices/dev-1/test"
+    assert topics.test_topic("mqtt_actions", "dev-1") != topics.state_topic("mqtt_actions", "dev-1")

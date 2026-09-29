@@ -43,7 +43,8 @@ async def _async_entry_updated(hass: HomeAssistant, entry: MqttActionsConfigEntr
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) -> bool:  # noqa: ARG001
-    """Unload a config entry."""
+    """Unload a config entry; a user unload or reload releases tripped breakers before the final save (D-15)."""
+    entry.runtime_data.release_all_breakers()
     await entry.runtime_data.async_stop()
     return True
 

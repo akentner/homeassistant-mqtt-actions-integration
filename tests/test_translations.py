@@ -15,7 +15,31 @@ VARIABLE = re.compile(r"\{(\w+)\}")
 # hassfest rejects a placeholder that sits inside single quotes
 VARIABLE_IN_SINGLE_QUOTES = re.compile(r"'[^']*\{\w+\}[^']*'")
 
-SWITCH_FORM_FIELDS = ("name", "on_change_to_on", "on_change_to_off", "run_on_startup")
+SWITCH_FORM_FIELDS = (
+    "name",
+    "on_change_to_on",
+    "on_change_to_off",
+    "run_on_startup",
+    "run_mode",
+    "breaker_max_runs",
+    "breaker_window",
+)
+
+SELECT_SETTINGS_FIELDS = ("name", "run_on_startup", "run_mode", "breaker_max_runs", "breaker_window")
+SELECT_ERROR_KEYS = (
+    "name_required",
+    "invalid_actions",
+    "device_id_warning",
+    "state_value_required",
+    "state_value_invalid",
+    "state_value_duplicate",
+    "friendly_name_required",
+    "friendly_name_invalid",
+    "friendly_name_reserved",
+    "friendly_name_duplicate",
+    "breaker_max_runs_range",
+    "breaker_window_range",
+)
 
 REQUIRED_KEYS = (
     "config.step.user.title",
@@ -40,10 +64,55 @@ REQUIRED_KEYS = (
     "issues.action_failed.description",
     "issues.mqtt_discovery_disabled.title",
     "issues.mqtt_discovery_disabled.description",
+    "issues.circuit_breaker_tripped.title",
+    "issues.circuit_breaker_tripped.description",
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
         for step in ("user", "reconfigure")
         for field in SWITCH_FORM_FIELDS
+    ),
+    "config_subentries.switch.error.breaker_max_runs_range",
+    "config_subentries.switch.error.breaker_window_range",
+    *(
+        f"config_subentries.switch.step.{step}.data_description.{field}"
+        for step in ("user", "reconfigure")
+        for field in SWITCH_FORM_FIELDS
+    ),
+    "config_subentries.select.initiate_flow.user",
+    "config_subentries.select.entry_type",
+    "config_subentries.select.abort.reconfigure_successful",
+    "selector.run_mode.options.serial",
+    "selector.run_mode.options.restart",
+    *(f"config_subentries.select.step.{step}.title" for step in ("user", "settings", "menu", "add_option")),
+    *(f"config_subentries.select.step.menu.menu_options.{option}" for option in ("add_option", "settings", "done")),
+    *(
+        f"config_subentries.select.step.{step}.data.{field}"
+        for step in ("user", "settings")
+        for field in SELECT_SETTINGS_FIELDS
+    ),
+    *(
+        f"config_subentries.select.step.add_option.data.{field}"
+        for field in ("state_value", "friendly_name", "actions")
+    ),
+    *(f"config_subentries.select.error.{key}" for key in SELECT_ERROR_KEYS),
+    *(f"config_subentries.select.step.menu.menu_options.{option}" for option in ("edit_option", "remove_option")),
+    *(
+        f"config_subentries.select.step.{step}.title"
+        for step in ("edit_option", "edit_option_details", "remove_option")
+    ),
+    "config_subentries.select.step.remove_confirm.title",
+    "config_subentries.select.step.remove_confirm.description",
+    "config_subentries.select.step.edit_option.description",
+    "config_subentries.select.step.edit_option.data.option",
+    "config_subentries.select.step.remove_option.description",
+    "config_subentries.select.step.remove_option.data.option",
+    "config_subentries.select.step.remove_confirm.menu_options.remove_confirmed",
+    "config_subentries.select.step.remove_confirm.menu_options.keep_option",
+    "config_subentries.select.step.edit_option_details.description",
+    *(
+        f"config_subentries.select.step.edit_option_details.{group}.{field}"
+        for group in ("data", "data_description")
+        for field in ("friendly_name", "actions")
     ),
 )
 
@@ -95,12 +164,33 @@ def test_required_keys_present(language: str) -> None:
 def test_issue_strings_use_expected_variables(language: str) -> None:
     flat = _load(language)
     assert _variables(flat["issues.action_failed.description"]) == {"device", "trigger", "time", "error"}
+    assert _variables(flat["issues.circuit_breaker_tripped.description"]) == {"device", "max_runs", "window"}
 
 
 def test_error_placeholders_are_the_ones_the_flow_supplies() -> None:
     en = _load("en")
     assert _variables(en["config_subentries.switch.error.invalid_actions"]) == {"field", "error"}
     assert _variables(en["config_subentries.switch.error.device_id_warning"]) == {"device_ids"}
+
+
+def test_select_placeholders_are_the_ones_the_flow_supplies() -> None:
+    en = _load("en")
+    assert _variables(en["config_subentries.select.step.menu.description"]) == {"name", "count", "options"}
+    assert _variables(en["config_subentries.select.error.invalid_actions"]) == {"field", "error"}
+    assert _variables(en["config_subentries.select.error.device_id_warning"]) == {"device_ids"}
+    assert _variables(en["config_subentries.select.step.edit_option_details.description"]) == {"state_value"}
+    assert _variables(en["config_subentries.select.step.remove_confirm.description"]) == {
+        "friendly_name",
+        "state_value",
+    }
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_discovery_issue_speaks_of_entities_not_switch_entities(language: str) -> None:
+    """Select and button entities need discovery too, so the Repairs text must not name only switches."""
+    flat = _load(language)
+    assert "switch" not in flat["issues.mqtt_discovery_disabled.description"].lower()
+    assert "schalter" not in flat["issues.mqtt_discovery_disabled.description"].lower()
 
 
 def test_no_strings_json_exists() -> None:

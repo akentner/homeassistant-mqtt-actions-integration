@@ -31,6 +31,7 @@ from custom_components.mqtt_actions.const import (
     STORE_VERSION,
     SUBENTRY_SWITCH,
 )
+from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY
 from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, state_topic
 
 if TYPE_CHECKING:
@@ -556,8 +557,9 @@ async def test_issue_for_invalid_stored_actions_at_setup(
     assert issue.translation_placeholders["device"] == "Lamp"
     assert len(issue.translation_placeholders["error"]) <= MAX_ISSUE_ERROR_LENGTH
     device = entry.runtime_data.devices[device_id]
-    assert device.on_script is None
-    assert device.off_script is not None
+    runner = entry.runtime_data.runner
+    assert runner.can_run(device_id, SWITCH_ON_KEY) is False
+    assert runner.can_run(device_id, SWITCH_OFF_KEY) is True
 
     await _fire(hass, entry, device_id, "ON", retain=False)
     assert device.tracker.last_acted == "ON"
@@ -608,8 +610,9 @@ async def test_empty_action_list_runs_nothing(
     device_id = _device_id(sub)
     entry = await _setup(hass, make_hub_entry([sub]))
     device = entry.runtime_data.devices[device_id]
-    assert device.on_script is None
-    assert device.off_script is None
+    runner = entry.runtime_data.runner
+    assert runner.can_run(device_id, SWITCH_ON_KEY) is False
+    assert runner.can_run(device_id, SWITCH_OFF_KEY) is False
 
     await _fire(hass, entry, device_id, "ON", retain=False)
 
@@ -779,8 +782,8 @@ async def test_reconcile_change_rebuilds_scripts_keeps_baseline(
     assert (len(off_calls), len(new_off_calls)) == (0, 1)
     await _fire(hass, entry, device_id, "ON", retain=False)
     assert (len(on_calls), len(new_on_calls)) == (1, 1)
-    # The previous Scripts are unloaded, only the two new ones stay owned by the runner
-    assert len(entry.runtime_data.runner._scripts[device_id]) == 2
+    # The previous Script is unloaded, only the one new Script of the device stays owned by the runner
+    assert entry.runtime_data.runner.script_count(device_id) == 1
     # Discovery is republished with the new name
     published = _publishes(mqtt_mock, discovery_topic("homeassistant", device_id))
     assert len(published) == 2
@@ -812,12 +815,12 @@ async def test_reconcile_unchanged_device_is_left_alone(
     sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
     device_id = _device_id(sub)
     entry = await _setup(hass, make_hub_entry([sub]))
-    on_script = entry.runtime_data.devices[device_id].on_script
+    on_script = entry.runtime_data.runner.script_for(device_id, SWITCH_ON_KEY)
 
     hass.config_entries.async_add_subentry(entry, _new_subentry(NEW_DEVICE_ID))
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    assert entry.runtime_data.devices[device_id].on_script is on_script
+    assert entry.runtime_data.runner.script_for(device_id, SWITCH_ON_KEY) is on_script
     assert len(_publishes(mqtt_mock, discovery_topic("homeassistant", device_id))) == 1
 
 
@@ -834,7 +837,7 @@ async def test_reconcile_change_clears_or_reraises_setup_issue(
     hass.config_entries.async_update_subentry(entry, subentry, data={**subentry.data, CONF_ON_CHANGE_TO_ON: ON_ACTIONS})
     await hass.async_block_till_done(wait_background_tasks=True)
     assert _issue(hass, device_id) is None
-    assert entry.runtime_data.devices[device_id].on_script is not None
+    assert entry.runtime_data.runner.can_run(device_id, SWITCH_ON_KEY) is True
 
     subentry = _only_subentry(entry)
     hass.config_entries.async_update_subentry(
@@ -845,7 +848,7 @@ async def test_reconcile_change_clears_or_reraises_setup_issue(
     assert issue is not None
     assert issue.translation_placeholders is not None
     assert issue.translation_placeholders["trigger"] == "setup"
-    assert entry.runtime_data.devices[device_id].off_script is None
+    assert entry.runtime_data.runner.can_run(device_id, SWITCH_OFF_KEY) is False
 
 
 # --- explicit delete (DSC-02, D-16) --------------------------------------------------------------------------------
@@ -900,7 +903,7 @@ async def test_delete_device_stops_actions_and_cleans_state(
     await _fire(hass, entry, device_id, "OFF", retain=False)
 
     assert len(on_calls) == 1
-    assert device_id not in entry.runtime_data.runner._scripts
+    assert entry.runtime_data.runner.script_count(device_id) == 0
     assert _issue(hass, device_id) is None
     assert await hass.config_entries.async_unload(entry.entry_id)
     data = hass_storage[STORE_KEY]["data"]
@@ -1138,7 +1141,7 @@ async def test_unload_publishes_offline_and_never_clears_discovery(
     # No empty payload on any topic, in particular none on a config or state topic
     assert _empty_publishes(mqtt_mock) == []
     # Scripts are unloaded and the subscription is gone: a later live message runs nothing
-    assert runner._scripts == {}
+    assert runner.script_count(device_id) == 0
     await _fire(hass, entry, device_id, "OFF", retain=False)
     assert len(on_calls) == 1
     # The baseline was saved on the way out

@@ -15,7 +15,15 @@ VARIABLE = re.compile(r"\{(\w+)\}")
 # hassfest rejects a placeholder that sits inside single quotes
 VARIABLE_IN_SINGLE_QUOTES = re.compile(r"'[^']*\{\w+\}[^']*'")
 
-SWITCH_FORM_FIELDS = ("name", "on_change_to_on", "on_change_to_off", "run_on_startup")
+SWITCH_FORM_FIELDS = (
+    "name",
+    "on_change_to_on",
+    "on_change_to_off",
+    "run_on_startup",
+    "run_mode",
+    "breaker_max_runs",
+    "breaker_window",
+)
 
 SELECT_SETTINGS_FIELDS = ("name", "run_on_startup", "run_mode", "breaker_max_runs", "breaker_window")
 SELECT_ERROR_KEYS = (
@@ -60,6 +68,13 @@ REQUIRED_KEYS = (
     "issues.circuit_breaker_tripped.description",
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
+        for step in ("user", "reconfigure")
+        for field in SWITCH_FORM_FIELDS
+    ),
+    "config_subentries.switch.error.breaker_max_runs_range",
+    "config_subentries.switch.error.breaker_window_range",
+    *(
+        f"config_subentries.switch.step.{step}.data_description.{field}"
         for step in ("user", "reconfigure")
         for field in SWITCH_FORM_FIELDS
     ),
@@ -168,6 +183,14 @@ def test_select_placeholders_are_the_ones_the_flow_supplies() -> None:
         "friendly_name",
         "state_value",
     }
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_discovery_issue_speaks_of_entities_not_switch_entities(language: str) -> None:
+    """Select and button entities need discovery too, so the Repairs text must not name only switches."""
+    flat = _load(language)
+    assert "switch" not in flat["issues.mqtt_discovery_disabled.description"].lower()
+    assert "schalter" not in flat["issues.mqtt_discovery_disabled.description"].lower()
 
 
 def test_no_strings_json_exists() -> None:

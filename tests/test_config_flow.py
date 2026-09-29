@@ -13,11 +13,14 @@ from homeassistant.helpers import config_validation as cv
 from custom_components.mqtt_actions.config_flow import MqttActionsConfigFlow
 from custom_components.mqtt_actions.const import (
     CONF_BASE_TOPIC,
+    CONF_BREAKER_MAX_RUNS,
+    CONF_BREAKER_WINDOW,
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
     CONF_ON_CHANGE_TO_OFF,
     CONF_ON_CHANGE_TO_ON,
+    CONF_RUN_MODE,
     CONF_RUN_ON_STARTUP,
     DEFAULT_BASE_TOPIC,
     DOMAIN,
@@ -323,3 +326,104 @@ async def test_switch_reconfigure_applies_validation_and_warning(hass: HomeAssis
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert entry.subentries[subentry.subentry_id].data[CONF_ON_CHANGE_TO_ON] == DEVICE_ACTIONS
+
+
+# ------------------------------------------------------- run mode and breaker (DEV-06, STA-06, D-10, D-14)
+
+
+async def test_switch_flow_stores_run_mode_and_breaker_settings(hass: HomeAssistant, hub) -> None:
+    """The schema defaults apply when the fields are omitted; explicit values are stored as ints, not floats."""
+    result = await _start_switch_flow(hass, hub)
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], _switch_input())
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done(wait_background_tasks=True)
+    (subentry,) = hub.subentries.values()
+    assert subentry.data[CONF_RUN_MODE] == "serial"
+    assert (subentry.data[CONF_BREAKER_MAX_RUNS], subentry.data[CONF_BREAKER_WINDOW]) == (5, 10)
+    assert isinstance(subentry.data[CONF_BREAKER_MAX_RUNS], int)
+    assert isinstance(subentry.data[CONF_BREAKER_WINDOW], int)
+
+    result = await _start_switch_flow(hass, hub)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        _switch_input(name="Other", run_mode="restart", breaker_max_runs=3.0, breaker_window=30.0),
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done(wait_background_tasks=True)
+    other = next(subentry for subentry in hub.subentries.values() if subentry.title == "Other")
+    assert other.data[CONF_RUN_MODE] == "restart"
+    assert (other.data[CONF_BREAKER_MAX_RUNS], other.data[CONF_BREAKER_WINDOW]) == (3, 30)
+    assert isinstance(other.data[CONF_BREAKER_MAX_RUNS], int)
+    assert isinstance(other.data[CONF_BREAKER_WINDOW], int)
+    json.dumps(dict(other.data))
+
+
+@pytest.mark.parametrize(
+    ("runs", "window", "errors"),
+    [
+        (0, 10, {"breaker_max_runs": "breaker_max_runs_range"}),
+        (101, 10, {"breaker_max_runs": "breaker_max_runs_range"}),
+        (5, 0, {"breaker_window": "breaker_window_range"}),
+        (5, 3601, {"breaker_window": "breaker_window_range"}),
+        (0, 3601, {"breaker_max_runs": "breaker_max_runs_range", "breaker_window": "breaker_window_range"}),
+    ],
+)
+async def test_switch_flow_rejects_out_of_range_breaker_values(
+    hass: HomeAssistant, hub, runs: int, window: int, errors: dict[str, str]
+) -> None:
+    result = await _start_switch_flow(hass, hub)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], _switch_input(breaker_max_runs=runs, breaker_window=window)
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == errors
+    assert _suggested_values(result)["name"] == "Lamp"
+    assert len(hub.subentries) == 0
+
+
+async def test_switch_reconfigure_prefills_defaults_for_old_data(hass: HomeAssistant, hub_with_switch) -> None:
+    """A Phase 1 switch has no run mode or breaker keys: the form shows the defaults and saving stores them."""
+    entry = hub_with_switch
+    (subentry,) = entry.subentries.values()
+    assert CONF_RUN_MODE not in subentry.data
+
+    result = await _reconfigure_flow(hass, entry, subentry)
+    prefill = _suggested_values(result)
+    assert prefill[CONF_RUN_MODE] == "serial"
+    assert (prefill[CONF_BREAKER_MAX_RUNS], prefill[CONF_BREAKER_WINDOW]) == (5, 10)
+
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], {"name": "Lamp"})
+    assert result["reason"] == "reconfigure_successful"
+    (updated,) = entry.subentries.values()
+    assert updated.data[CONF_RUN_MODE] == "serial"
+    assert (updated.data[CONF_BREAKER_MAX_RUNS], updated.data[CONF_BREAKER_WINDOW]) == (5, 10)
+    assert isinstance(updated.data[CONF_BREAKER_MAX_RUNS], int)
+
+
+async def test_switch_reconfigure_stores_restart_and_breaker(hass: HomeAssistant, hub_with_switch) -> None:
+    entry = hub_with_switch
+    (subentry,) = entry.subentries.values()
+    result = await _reconfigure_flow(hass, entry, subentry)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"name": "Lamp", "run_mode": "restart", "breaker_max_runs": 2.0, "breaker_window": 60.0}
+    )
+    assert result["reason"] == "reconfigure_successful"
+    (updated,) = entry.subentries.values()
+    assert updated.data[CONF_RUN_MODE] == "restart"
+    assert (updated.data[CONF_BREAKER_MAX_RUNS], updated.data[CONF_BREAKER_WINDOW]) == (2, 60)
+
+
+async def test_switch_flow_schema_serializes_new_selectors(hass: HomeAssistant, hub) -> None:
+    result = await _start_switch_flow(hass, hub)
+    fields = {
+        field["name"]: field
+        for field in probatio.to_field_list(result["data_schema"], custom_serializer=cv.custom_serializer)
+    }
+    run_mode = fields[CONF_RUN_MODE]
+    assert run_mode["default"] == "serial"
+    assert run_mode["selector"]["select"]["mode"] == "dropdown"
+    assert run_mode["selector"]["select"]["translation_key"] == "run_mode"
+    assert "number" in fields[CONF_BREAKER_MAX_RUNS]["selector"]
+    assert fields[CONF_BREAKER_MAX_RUNS]["default"] == 5
+    assert fields[CONF_BREAKER_WINDOW]["selector"]["number"]["unit_of_measurement"] == "s"
+    assert fields[CONF_BREAKER_WINDOW]["default"] == 10

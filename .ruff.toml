@@ -1,0 +1,42 @@
+# Based on https://github.com/ludeeus/integration_blueprint/blob/main/.ruff.toml
+
+target-version = "py314"
+line-length = 120
+# Planning docs and agent worktrees are not source code; ruff 0.16 would otherwise reformat Markdown there
+extend-exclude = [".planning", ".claude"]
+
+[lint]
+select = [
+    "ALL",
+]
+
+ignore = [
+    "ANN401", # Dynamically typed expressions (typing.Any) are disallowed
+    "CPY001", # Missing copyright notice at top of file
+    "D203", # no-blank-line-before-class (incompatible with formatter)
+    "D212", # multi-line-summary-first-line (incompatible with formatter)
+    "COM812", # incompatible with formatter
+    "ISC001", # incompatible with formatter
+]
+
+[lint.per-file-ignores]
+"tests/**" = [
+    "S101", # assert is the pytest idiom
+    "ANN", # no annotations required in tests
+    "D", # no docstrings required in tests
+    "ARG", # fixtures are requested for side effects
+    "PLR2004", # magic values are fine in assertions
+    "PLC0415", # local imports are fine in tests
+    "SLF001", # tests may touch private members
+    "PT018", # composite assertions are fine
+    "FBT", # boolean fixture values are fine
+]
+
+[lint.flake8-pytest-style]
+fixture-parentheses = false
+
+[lint.pyupgrade]
+keep-runtime-typing = true
+
+[lint.mccabe]
+max-complexity = 25

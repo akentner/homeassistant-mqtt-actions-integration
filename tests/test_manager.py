@@ -1,10 +1,14 @@
 """Integration tests for the manager: edges, retained replays, run-on-startup and the persisted baseline."""
 
+import asyncio
 import logging
+import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigSubentry
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions.const import (
@@ -12,6 +16,9 @@ from custom_components.mqtt_actions.const import (
     CONF_ON_CHANGE_TO_OFF,
     CONF_ON_CHANGE_TO_ON,
     CONF_RUN_ON_STARTUP,
+    DOMAIN,
+    ISSUE_ACTION_FAILED_PREFIX,
+    MAX_ISSUE_ERROR_LENGTH,
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_PUBLISHED,
@@ -25,7 +32,7 @@ if TYPE_CHECKING:
 
     import pytest
     from homeassistant.config_entries import ConfigSubentryData
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import HomeAssistant, ServiceCall
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 ON_ACTIONS = [{"action": "test.on"}]
@@ -378,3 +385,243 @@ async def test_baseline_store_records_published_ids(
     assert await hass.config_entries.async_unload(entry.entry_id)
 
     assert hass_storage[STORE_KEY]["data"][STORE_PUBLISHED] == [_device_id(sub)]
+
+
+# --- failure surfacing (DEV-08, D-08, D-09) ------------------------------------------------------------------------
+
+FAIL_ACTIONS = [{"action": "test.fail"}]
+ISSUE_TIME_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+
+
+def _register_failing_service(hass: HomeAssistant, message: str = "boom") -> dict[str, Any]:
+    """Register test.fail; it raises HomeAssistantError with the current message while control['fail'] is True."""
+    control: dict[str, Any] = {"fail": True, "message": message}
+
+    async def _handler(call: ServiceCall) -> None:
+        if control["fail"]:
+            raise HomeAssistantError(control["message"])
+
+    hass.services.async_register("test", "fail", _handler)
+    return control
+
+
+def _issues(hass: HomeAssistant) -> list[ir.IssueEntry]:
+    return [issue for issue in ir.async_get(hass).issues.values() if issue.domain == DOMAIN]
+
+
+def _issue(hass: HomeAssistant, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{ISSUE_ACTION_FAILED_PREFIX}{device_id}")
+
+
+async def test_issue_created_when_action_fails(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    caplog: pytest.LogCaptureFixture,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """A raising service is logged with the exception and shown as exactly one non-fixable Repairs issue."""
+    _register_failing_service(hass, "boom")
+    sub = make_switch_subentry("Lamp", on=FAIL_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    await _fire(hass, entry, _device_id(sub), "ON", retain=False)
+
+    (issue,) = _issues(hass)
+    assert issue.issue_id == f"action_failed_{_device_id(sub)}"
+    assert issue.is_fixable is False
+    assert issue.severity is ir.IssueSeverity.ERROR
+    assert issue.translation_key == "action_failed"
+    placeholders = issue.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["device"] == "Lamp"
+    assert placeholders["trigger"] == "onChangeToOn"
+    assert ISSUE_TIME_PATTERN.match(placeholders["time"])
+    assert "boom" in placeholders["error"]
+    failures = [r for r in caplog.records if r.levelno == logging.ERROR and "Lamp" in r.getMessage()]
+    assert failures
+    assert failures[0].exc_info is not None
+
+
+async def test_issue_updated_in_place_on_repeated_failure(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A second failure leaves one issue and updates its text (D-08)."""
+    control = _register_failing_service(hass, "first failure")
+    sub = make_switch_subentry("Lamp", on=FAIL_ACTIONS, off=FAIL_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    await _fire(hass, entry, _device_id(sub), "ON", retain=False)
+    control["message"] = "second failure"
+    await _fire(hass, entry, _device_id(sub), "OFF", retain=False)
+
+    (issue,) = _issues(hass)
+    assert issue.translation_placeholders is not None
+    assert "second failure" in issue.translation_placeholders["error"]
+    assert issue.translation_placeholders["trigger"] == "onChangeToOff"
+
+
+async def test_issue_cleared_after_next_success(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: a successful run deletes the issue."""
+    control = _register_failing_service(hass)
+    sub = make_switch_subentry("Lamp", on=FAIL_ACTIONS, off=FAIL_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    await _fire(hass, entry, _device_id(sub), "ON", retain=False)
+    assert _issue(hass, _device_id(sub)) is not None
+
+    control["fail"] = False
+    await _fire(hass, entry, _device_id(sub), "OFF", retain=False)
+
+    assert _issues(hass) == []
+
+
+async def test_issue_dismissed_stays_dismissed_while_failing(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A dismissed issue stays dismissed while failures continue; a success deletes it entirely."""
+    control = _register_failing_service(hass)
+    sub = make_switch_subentry("Lamp", on=FAIL_ACTIONS, off=FAIL_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    ir.async_ignore_issue(hass, DOMAIN, f"{ISSUE_ACTION_FAILED_PREFIX}{device_id}", True)
+    assert (issue := _issue(hass, device_id)) is not None
+    assert issue.dismissed_version is not None
+
+    await _fire(hass, entry, device_id, "OFF", retain=False)
+    assert (issue := _issue(hass, device_id)) is not None
+    assert issue.dismissed_version is not None
+
+    control["fail"] = False
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    assert _issue(hass, device_id) is None
+
+
+async def test_issue_error_text_is_truncated(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A 2000 character error yields a placeholder no longer than MAX_ISSUE_ERROR_LENGTH."""
+    _register_failing_service(hass, "x" * 2000)
+    sub = make_switch_subentry("Lamp", on=FAIL_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    await _fire(hass, entry, _device_id(sub), "ON", retain=False)
+
+    (issue,) = _issues(hass)
+    assert issue.translation_placeholders is not None
+    assert 0 < len(issue.translation_placeholders["error"]) <= MAX_ISSUE_ERROR_LENGTH
+
+
+async def test_issue_and_log_do_not_leak_action_data(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    caplog: pytest.LogCaptureFixture,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """T-01-10: a canary in the action data reaches neither the log nor the issue variables."""
+    canary = "CANARY-7f3a91-secret"
+    _register_failing_service(hass, "boom")
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.fail", "data": {"message": canary}}])
+    with caplog.at_level(logging.DEBUG, logger="custom_components.mqtt_actions"):
+        entry = await _setup(hass, make_hub_entry([sub]))
+        await _fire(hass, entry, _device_id(sub), "ON", retain=False)
+
+    (issue,) = _issues(hass)
+    assert canary not in caplog.text
+    assert canary not in repr(issue.translation_placeholders)
+
+
+async def test_issue_for_invalid_stored_actions_at_setup(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Invalid stored actions raise the issue with trigger setup; baseline tracking and the other transition work."""
+    off_calls = async_mock_service(hass, "test", "off")
+    sub = make_switch_subentry("Lamp", on=[{"not_an_action": True}], off=OFF_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    issue = _issue(hass, device_id)
+    assert issue is not None
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["trigger"] == "setup"
+    assert issue.translation_placeholders["device"] == "Lamp"
+    assert len(issue.translation_placeholders["error"]) <= MAX_ISSUE_ERROR_LENGTH
+    device = entry.runtime_data.devices[device_id]
+    assert device.on_script is None
+    assert device.off_script is not None
+
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    assert device.tracker.last_acted == "ON"
+
+    await _fire(hass, entry, device_id, "OFF", retain=False)
+    assert len(off_calls) == 1
+
+
+async def test_actions_run_serially_in_order(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Changes arriving while a run is blocked run first-in first-out and none is dropped."""
+    order: list[str] = []
+    release = asyncio.Event()
+
+    async def _on(call: ServiceCall) -> None:
+        order.append("on:start")
+        await release.wait()
+        order.append("on:end")
+
+    async def _off(call: ServiceCall) -> None:
+        order.append("off")
+
+    hass.services.async_register("test", "on", _on)
+    hass.services.async_register("test", "off", _off)
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    for payload in ("ON", "OFF", "ON"):
+        async_fire_mqtt_message(hass, state_topic(entry.data["base_topic"], device_id), payload, retain=False)
+        await asyncio.sleep(0)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert order == ["on:start"]
+
+    release.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert order == ["on:start", "on:end", "off", "on:start", "on:end"]
+
+
+async def test_empty_action_list_runs_nothing(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """An empty list builds no Script, runs nothing and creates no issue."""
+    sub = make_switch_subentry("Lamp")
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    device = entry.runtime_data.devices[device_id]
+    assert device.on_script is None
+    assert device.off_script is None
+
+    await _fire(hass, entry, device_id, "ON", retain=False)
+
+    assert device.tracker.last_acted == "ON"
+    assert _issues(hass) == []
+
+
+async def test_issue_deleted_when_runner_unloads_removed_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Removing a device unloads its scripts and deletes its issue (wired up by plan 01-05)."""
+    _register_failing_service(hass)
+    sub = make_switch_subentry("Lamp", on=FAIL_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    assert _issue(hass, device_id) is not None
+
+    await entry.runtime_data.runner.async_unload(device_id, remove_issue=True)
+
+    assert _issue(hass, device_id) is None

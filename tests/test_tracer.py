@@ -84,6 +84,9 @@ async def test_switch_end_to_end(hass: HomeAssistant, mqtt_mock) -> None:
     assert switch["command_topic"] == state_topic
     assert _publishes(mqtt_mock, f"mqtt_actions/v1/instances/{instance_id}/availability")[-1] == ("online", 1, True)
 
+    # Core MQTT turns the retained discovery into a switch entity (no state yet, D-07)
+    assert hass.states.get("switch.lamp") is not None
+
     # Behavior 4: a live ON message runs the ON actions once
     async_fire_mqtt_message(hass, state_topic, "ON", retain=False)
     await hass.async_block_till_done(wait_background_tasks=True)

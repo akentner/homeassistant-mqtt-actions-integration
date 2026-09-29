@@ -40,6 +40,8 @@ REQUIRED_KEYS = (
     "issues.action_failed.description",
     "issues.mqtt_discovery_disabled.title",
     "issues.mqtt_discovery_disabled.description",
+    "issues.circuit_breaker_tripped.title",
+    "issues.circuit_breaker_tripped.description",
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
         for step in ("user", "reconfigure")
@@ -95,6 +97,7 @@ def test_required_keys_present(language: str) -> None:
 def test_issue_strings_use_expected_variables(language: str) -> None:
     flat = _load(language)
     assert _variables(flat["issues.action_failed.description"]) == {"device", "trigger", "time", "error"}
+    assert _variables(flat["issues.circuit_breaker_tripped.description"]) == {"device", "max_runs", "window"}
 
 
 def test_error_placeholders_are_the_ones_the_flow_supplies() -> None:

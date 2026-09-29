@@ -9,35 +9,35 @@
 
 - [x] **FND-01**: User can install the integration via HACS (`hacs.json`, `manifest.json`, local brand icon, domain `mqtt_actions`, minimum HA 2026.9.0)
 - [x] **FND-02**: Every push runs hassfest, HACS validation, Ruff and pytest in CI
-- [ ] **FND-03**: User can set up the integration via Config Flow (one hub per instance, requires MQTT); a persistent random instance ID is generated
-- [ ] **FND-04**: All UI strings are available in English and German
-- [ ] **FND-05**: Integration waits for the MQTT client at startup and resumes cleanly after broker reconnects
+- [x] **FND-03**: User can set up the integration via Config Flow (one hub per instance, requires MQTT); a persistent random instance ID is generated
+- [x] **FND-04**: All UI strings are available in English and German
+- [x] **FND-05**: Integration waits for the MQTT client at startup and resumes cleanly after broker reconnects
 
 ### Devices
 
-- [ ] **DEV-01**: User can create a Switch device via the UI with a name
-- [ ] **DEV-02**: User can configure `onChangeToOn` and `onChangeToOff` actions of a Switch with the HA action selector
+- [x] **DEV-01**: User can create a Switch device via the UI with a name
+- [x] **DEV-02**: User can configure `onChangeToOn` and `onChangeToOff` actions of a Switch with the HA action selector
 - [ ] **DEV-03**: User can create a Select device with multiple options, each with StateValue, StateFriendlyName and actions
 - [ ] **DEV-04**: User can edit StateFriendlyName and actions of an option; StateValue is immutable after creation
-- [ ] **DEV-05**: Configured actions are validated on input; actions targeting instance-local `device_id`s produce a warning
+- [x] **DEV-05**: Configured actions are validated on input; actions targeting instance-local `device_id`s produce a warning
 - [ ] **DEV-06**: User can choose per device how actions run on rapid state changes (serial queue by default, or restart)
 - [ ] **DEV-07**: User can run a device's actions locally via a test button without changing its state
-- [ ] **DEV-08**: Action failures are surfaced to the user (log and Repairs issue), not silently swallowed
+- [x] **DEV-08**: Action failures are surfaced to the user (log and Repairs issue), not silently swallowed
 
 ### State & Actions
 
-- [ ] **STA-01**: Switching a device in the HA UI on any instance publishes to the shared retained state topic (command topic equals state topic)
-- [ ] **STA-02**: An external MQTT message on the state topic triggers the same actions as a UI change
+- [x] **STA-01**: Switching a device in the HA UI on any instance publishes to the shared retained state topic (command topic equals state topic)
+- [x] **STA-02**: An external MQTT message on the state topic triggers the same actions as a UI change
 - [ ] **STA-03**: On a real state change, the actions run locally on every participating instance
-- [ ] **STA-04**: Retained state received at startup or reconnect only sets the baseline and runs no actions (optional per-device "run on startup" flag)
-- [ ] **STA-05**: The last processed state per device is persisted; only real edges trigger actions
+- [x] **STA-04**: Retained state received at startup or reconnect only sets the baseline and runs no actions (optional per-device "run on startup" flag)
+- [x] **STA-05**: The last processed state per device is persisted; only real edges trigger actions
 - [ ] **STA-06**: A per-device circuit breaker stops action loops caused by actions that toggle their own device
 - [ ] **STA-07**: A Select payload that matches no configured StateValue is ignored and logged
 
 ### Discovery
 
-- [ ] **DSC-01**: The owner publishes MQTT Discovery for every entity (UUID `unique_id`, availability, device info)
-- [ ] **DSC-02**: Discovery is removed only on explicit user deletion, never on unload or shutdown
+- [x] **DSC-01**: The owner publishes MQTT Discovery for every entity (UUID `unique_id`, availability, device info)
+- [x] **DSC-02**: Discovery is removed only on explicit user deletion, never on unload or shutdown
 - [ ] **DSC-03**: The owner republishes discovery if it was removed by a follower deleting the entity
 - [ ] **DSC-04**: User can trigger a manual resync that republishes config and discovery of all owned devices
 
@@ -112,26 +112,26 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | FND-01 | Phase 1 | Complete |
 | FND-02 | Phase 1 | Complete |
-| FND-03 | Phase 1 | Pending |
-| FND-04 | Phase 1 | Pending |
-| FND-05 | Phase 1 | Pending |
-| DEV-01 | Phase 1 | Pending |
-| DEV-02 | Phase 1 | Pending |
+| FND-03 | Phase 1 | Complete |
+| FND-04 | Phase 1 | Complete |
+| FND-05 | Phase 1 | Complete |
+| DEV-01 | Phase 1 | Complete |
+| DEV-02 | Phase 1 | Complete |
 | DEV-03 | Phase 2 | Pending |
 | DEV-04 | Phase 2 | Pending |
-| DEV-05 | Phase 1 | Pending |
+| DEV-05 | Phase 1 | Complete |
 | DEV-06 | Phase 2 | Pending |
 | DEV-07 | Phase 2 | Pending |
-| DEV-08 | Phase 1 | Pending |
-| STA-01 | Phase 1 | Pending |
-| STA-02 | Phase 1 | Pending |
+| DEV-08 | Phase 1 | Complete |
+| STA-01 | Phase 1 | Complete |
+| STA-02 | Phase 1 | Complete |
 | STA-03 | Phase 3 | Pending |
-| STA-04 | Phase 1 | Pending |
-| STA-05 | Phase 1 | Pending |
+| STA-04 | Phase 1 | Complete |
+| STA-05 | Phase 1 | Complete |
 | STA-06 | Phase 2 | Pending |
 | STA-07 | Phase 2 | Pending |
-| DSC-01 | Phase 1 | Pending |
-| DSC-02 | Phase 1 | Pending |
+| DSC-01 | Phase 1 | Complete |
+| DSC-02 | Phase 1 | Complete |
 | DSC-03 | Phase 3 | Pending |
 | DSC-04 | Phase 4 | Pending |
 | SYN-01 | Phase 3 | Pending |

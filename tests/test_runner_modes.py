@@ -277,6 +277,8 @@ async def test_serial_queue_is_bounded_and_overflow_is_dropped_with_warning(
         "Lamp",
         on=[{"action": "test.rec", "data": {"trigger": "on"}}],
         off=[{"action": "test.rec", "data": {"trigger": "off"}}],
+        # The default breaker (5 runs in 10 seconds) would stop this burst before the queue bound is reached
+        breaker_max_runs=100,
     )
     device_id = _device_id(sub)
     entry = await _setup(hass, make_hub_entry([sub]))

@@ -207,6 +207,11 @@ class ActionRunner:
         """Delete the Repairs issue of a device, for example because its actions were just reconfigured."""
         ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_ACTION_FAILED_PREFIX}{device_id}")
 
+    async def async_stop_runs(self, device_id: str) -> None:
+        """Stop the running and queued runs of a device; its Script stays usable for later runs."""
+        if (script := self._scripts.get(device_id)) is not None:
+            await script.async_stop()
+
     async def async_unload_all(self) -> None:
         """Unload every Script that is still registered, including those of a device that never finished starting."""
         for device_id in list(self._scripts):

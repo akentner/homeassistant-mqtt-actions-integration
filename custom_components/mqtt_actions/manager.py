@@ -8,6 +8,7 @@ AVL-01) addresses it.
 
 import asyncio
 import json
+import time
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any
@@ -18,12 +19,14 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 
+from .breaker import CircuitBreaker
 from .const import (
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     DOMAIN,
     ISSUE_ACTION_FAILED_PREFIX,
+    ISSUE_CIRCUIT_BREAKER_PREFIX,
     ISSUE_DISCOVERY_DISABLED,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
@@ -57,6 +60,7 @@ class Device:
     spec: DeviceSpec
     tracker: StateTracker
     signature: str
+    breaker: CircuitBreaker
     unsubscribe: CALLBACK_TYPE | None = None
     unsubscribe_test: CALLBACK_TYPE | None = None
     # Button component keys of removed triggers; kept in memory so every republish carries their tombstone
@@ -152,6 +156,8 @@ class Manager:
         self._stored_last_acted: dict[str, str] = {}
         self._published: set[str] = set()
         self._running = False
+        # Replaceable so tests control the breaker window; production uses the monotonic clock
+        self.clock: Callable[[], float] = time.monotonic
 
     async def async_start(self) -> None:
         """Load the persisted state, clear orphans, start every configured device and publish availability online."""
@@ -301,6 +307,7 @@ class Manager:
                 accepted=spec.accepted,
             ),
             signature=_signature(subentry),
+            breaker=self._new_breaker(spec),
         )
         await self.runner.async_build_device(spec)
         self.devices[device_id] = device
@@ -340,6 +347,9 @@ class Manager:
             device.tracker.last_acted = None
             self._schedule_save()
         device.signature = _signature(subentry)
+        # A changed configuration releases a tripped device with a fresh window (D-15)
+        device.breaker = self._new_breaker(spec)
+        self._delete_breaker_issue(device.device_id)
         await self._async_publish_discovery(device)
 
     async def _async_remove_device(self, device_id: str) -> None:
@@ -362,6 +372,7 @@ class Manager:
             partial(self._publisher.async_clear_state, device_id), f"clear the retained state of device {device.name}"
         )
         await self.runner.async_unload(device_id, remove_issue=True)
+        self._delete_breaker_issue(device_id)
         del self.devices[device_id]
         self._stored_last_acted.pop(device_id, None)
         if cleared and state_cleared:
@@ -413,6 +424,13 @@ class Manager:
         trigger = device.spec.triggers.get(trigger_key(decision.value))
         if trigger is None or not self.runner.can_run(device_id, trigger.key):
             return
+        # Only a real change that would run counts; a paused device tracks its baseline and runs nothing (D-15)
+        if device.breaker.tripped:
+            LOGGER.debug("Device %s is paused by its circuit breaker, its change runs no actions", device.name)
+            return
+        if not device.breaker.record():
+            self._trip(device)
+            return
         # Only the device id and the canonical value reach templates, never the raw payload
         self.runner.enqueue(
             device_id,
@@ -421,6 +439,56 @@ class Manager:
             trigger.key,
             {"device_id": device_id, "state": decision.value},
         )
+
+    def _new_breaker(self, spec: DeviceSpec) -> CircuitBreaker:
+        """Build the breaker of a device from its configured limits (D-14)."""
+        return CircuitBreaker(spec.breaker_max_runs, float(spec.breaker_window), clock=self._breaker_clock)
+
+    def _breaker_clock(self) -> float:
+        """Read the manager clock at call time so a replaced clock reaches breakers that already exist."""
+        return self.clock()
+
+    @callback
+    def _trip(self, device: Device) -> None:
+        """
+        Pause a device whose breaker just tripped: warn, raise the Repairs issue and stop its runs (D-15, D-16).
+
+        The log line and the issue carry only the device name and the two limits, never action data (T-02-18). Stopping
+        the running and queued runs is what actually ends a loop: otherwise sequences already in flight would still
+        publish state changes (A3).
+        """
+        LOGGER.warning(
+            "Circuit breaker tripped for device %s: more than %d runs within %d seconds, so the device is paused",
+            device.name,
+            device.breaker.max_runs,
+            device.spec.breaker_window,
+        )
+        self._create_breaker_issue(device)
+        self._entry.async_create_background_task(
+            self._hass, self.runner.async_stop_runs(device.device_id), name=f"{DOMAIN} stop {device.name}"
+        )
+
+    @callback
+    def _create_breaker_issue(self, device: Device) -> None:
+        """Show the Repairs issue of a paused device; it names the device and the limits only."""
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            f"{ISSUE_CIRCUIT_BREAKER_PREFIX}{device.device_id}",
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="circuit_breaker_tripped",
+            translation_placeholders={
+                "device": device.name,
+                "max_runs": str(device.spec.breaker_max_runs),
+                "window": str(device.spec.breaker_window),
+            },
+        )
+
+    @callback
+    def _delete_breaker_issue(self, device_id: str) -> None:
+        """Delete the circuit breaker issue of a device."""
+        ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_CIRCUIT_BREAKER_PREFIX}{device_id}")
 
     @callback
     def _on_test_message(self, device_id: str, msg: IncomingMessage) -> None:

@@ -8,9 +8,12 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
-from homeassistant.config_entries import ConfigSubentry
+import pytest
+from homeassistant.components import mqtt
+from homeassistant.config_entries import ConfigEntryState, ConfigSubentry
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions.const import (
@@ -33,7 +36,6 @@ from custom_components.mqtt_actions.topics import availability_topic, discovery_
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    import pytest
     from homeassistant.config_entries import ConfigSubentryData
     from homeassistant.core import HomeAssistant, ServiceCall
 
@@ -1034,3 +1036,187 @@ async def test_remove_entry_survives_mqtt_not_loaded(
     assert hass.config_entries.async_get_entry(entry.entry_id) is None
     assert STORE_KEY not in hass_storage
     assert [r for r in caplog.records if r.levelno == logging.WARNING and "MQTT" in r.getMessage()]
+
+
+# --- startup readiness, reconnect, reload and unload (FND-05, DSC-02) -----------------------------------------------
+
+
+def _empty_publishes(mqtt_mock: Any) -> list[str]:
+    """Return the topics that received an empty payload (a delete) in the recorded publishes."""
+    return [call.args[0] for call in mqtt_mock.async_publish.call_args_list if call.args[1] in {"", b""}]
+
+
+async def test_setup_retry_without_mqtt(hass: HomeAssistant, make_hub_entry: Callable) -> None:
+    """Without a ready MQTT client the entry retries instead of failing."""
+    entry = make_hub_entry()
+    entry.add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_setup_publishes_online_availability_and_discovery(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """After setup the instance availability is retained online and every device's discovery is published."""
+    subs = [make_switch_subentry("Lamp"), make_switch_subentry("Fan")]
+    entry = await _setup(hass, make_hub_entry(subs))
+
+    availability = availability_topic(STATE_TOPIC_BASE, entry.data[CONF_INSTANCE_ID])
+    assert _publishes(mqtt_mock, availability) == [("online", 1, True)]
+    for sub in subs:
+        (payload, qos, retain) = _publishes(mqtt_mock, discovery_topic("homeassistant", _device_id(sub)))[-1]
+        assert payload != ""
+        assert (qos, retain) == (1, True)
+
+
+async def test_reconnect_republishes_availability_and_discovery(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A broker reconnect republishes availability and discovery retained; a disconnect changes nothing."""
+    subs = [make_switch_subentry("Lamp"), make_switch_subentry("Fan")]
+    entry = await _setup(hass, make_hub_entry(subs))
+    availability = availability_topic(STATE_TOPIC_BASE, entry.data[CONF_INSTANCE_ID])
+    mqtt_mock.async_publish.reset_mock()
+
+    async_dispatcher_send(hass, mqtt.MQTT_CONNECTION_STATE, False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert mqtt_mock.async_publish.call_args_list == []
+
+    async_dispatcher_send(hass, mqtt.MQTT_CONNECTION_STATE, True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _publishes(mqtt_mock, availability) == [("online", 1, True)]
+    for sub in subs:
+        published = _publishes(mqtt_mock, discovery_topic("homeassistant", _device_id(sub)))
+        assert len(published) == 1
+        assert published[0][0] != ""
+        assert published[0][1:] == (1, True)
+
+
+async def test_unload_publishes_offline_and_never_clears_discovery(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """DSC-02: unload publishes a retained offline availability and deletes nothing on the broker."""
+    on_calls = async_mock_service(hass, "test", "on")
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    await _fire(hass, entry, device_id, "ON", retain=False)
+    availability = availability_topic(STATE_TOPIC_BASE, entry.data[CONF_INSTANCE_ID])
+    mqtt_mock.async_publish.reset_mock()
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+    assert _publishes(mqtt_mock, availability) == [("offline", 1, True)]
+    # No empty payload on any topic, in particular none on a config or state topic
+    assert _empty_publishes(mqtt_mock) == []
+    # Scripts are unloaded and the subscription is gone: a later live message runs nothing
+    assert entry.runtime_data.runner._scripts == {}
+    await _fire(hass, entry, device_id, "OFF", retain=False)
+    assert len(on_calls) == 1
+    # The baseline was saved on the way out
+    assert hass_storage[STORE_KEY]["data"][STORE_LAST_ACTED][device_id] == "ON"
+    assert hass_storage[STORE_KEY]["data"][STORE_PUBLISHED] == [device_id]
+
+
+async def test_unload_survives_unavailable_mqtt(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """A failing offline publish is logged and never blocks the unload or the final save."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    with patch(
+        "custom_components.mqtt_actions.mqtt_gateway.mqtt.async_publish", side_effect=HomeAssistantError("down")
+    ):
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+    assert "down" in caplog.text
+    assert hass_storage[STORE_KEY]["data"][STORE_PUBLISHED] == [_device_id(sub)]
+
+
+async def test_reload_keeps_single_subscription(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """FND-05: after a reload one live message runs its action once."""
+    on_calls = async_mock_service(hass, "test", "on")
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _fire(hass, entry, _device_id(sub), "ON", retain=False)
+
+    assert len(on_calls) == 1
+
+
+async def test_unload_then_setup_republishes_without_clearing(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Discovery is published again by the second setup and no empty payload appeared in between."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    discovery = discovery_topic("homeassistant", device_id)
+    assert len(_publishes(mqtt_mock, discovery)) == 1
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert len(_publishes(mqtt_mock, discovery)) == 2
+    assert _empty_publishes(mqtt_mock) == []
+    availability = availability_topic(STATE_TOPIC_BASE, entry.data[CONF_INSTANCE_ID])
+    assert _publishes(mqtt_mock, availability) == [("online", 1, True), ("offline", 1, True), ("online", 1, True)]
+
+
+@pytest.mark.parametrize("mqtt_config_entry_options", [{mqtt.CONF_BIRTH_MESSAGE: {}, mqtt.CONF_DISCOVERY: False}])
+async def test_discovery_disabled_creates_issue(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    caplog: pytest.LogCaptureFixture,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """With MQTT discovery disabled the setup warns and raises a non-fixable warning issue."""
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, "mqtt_discovery_disabled")
+    assert issue is not None
+    assert issue.is_fixable is False
+    assert issue.severity is ir.IssueSeverity.WARNING
+    assert issue.translation_key == "mqtt_discovery_disabled"
+    assert [r for r in caplog.records if r.levelno == logging.WARNING and "discovery" in r.getMessage().lower()]
+
+    # Removing the hub takes the issue with it
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    assert ir.async_get(hass).async_get_issue(DOMAIN, "mqtt_discovery_disabled") is None
+
+
+async def test_discovery_enabled_deletes_stale_issue(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """With discovery enabled no issue exists; a stale one from an earlier setup is deleted."""
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        "mqtt_discovery_disabled",
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="mqtt_discovery_disabled",
+    )
+
+    await _setup(hass, make_hub_entry())
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, "mqtt_discovery_disabled") is None

@@ -847,7 +847,10 @@ async def test_delete_device_clears_discovery_then_state(
     assert _publishes(mqtt_mock, discovery)[-1] == ("", 1, True)
     assert _publishes(mqtt_mock, state)[-1] == ("", 1, True)
     assert device_id not in entry.runtime_data.devices
-    # Core MQTT dropped the entity because of the empty discovery payload
+    # The mocked client skips a second retained message per topic and subscription, a real broker forwards the
+    # cleared topic live; deliver it that way and check that core MQTT drops the entity
+    async_fire_mqtt_message(hass, discovery, "", retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert hass.states.get("switch.lamp") is None
 
 
@@ -985,6 +988,9 @@ async def test_remove_entry_clears_all_owned_topics(
     assert _publishes(mqtt_mock, availability_topic(STATE_TOPIC_BASE, instance_id))[-1] == ("", 1, True)
     assert STORE_KEY not in hass_storage
     assert _issues(hass) == []
+    # Deliver the cleared discovery topic live, as a real broker does (see the delete test)
+    async_fire_mqtt_message(hass, discovery_topic("homeassistant", device_id), "", retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert hass.states.get("switch.lamp") is None
 
 

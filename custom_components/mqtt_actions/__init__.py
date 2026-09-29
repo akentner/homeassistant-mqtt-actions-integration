@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .manager import Manager
+from .manager import Manager, async_remove_all_devices
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -34,3 +34,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry)
     """Unload a config entry."""
     await entry.runtime_data.async_stop()
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) -> None:
+    """
+    Clean up the broker and the local state when the hub entry is removed (D-15).
+
+    Phase 3 must redesign this as a confirmed, multi-instance-aware delete; see async_remove_all_devices.
+    """
+    await async_remove_all_devices(hass, entry)

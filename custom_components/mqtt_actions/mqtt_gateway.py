@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import mqtt
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -48,8 +49,13 @@ class MqttGateway:
         return await mqtt.async_subscribe(self._hass, topic, _forward, qos)
 
     async def async_publish(self, topic: str, payload: str, *, retain: bool, qos: int = 1) -> None:
-        """Publish a message with explicit qos and retain values."""
-        await mqtt.async_publish(self._hass, topic, payload, int(qos), bool(retain))
+        """Publish a message with explicit qos and retain values; raises HomeAssistantError when MQTT is unavailable."""
+        try:
+            await mqtt.async_publish(self._hass, topic, payload, int(qos), bool(retain))
+        except KeyError as err:
+            # An MQTT entry that exists but is not loaded (broker down at start) has no runtime data yet
+            msg = "The MQTT integration is not loaded"
+            raise HomeAssistantError(msg) from err
 
     def _mqtt_conf(self) -> dict[str, Any]:
         """Return the MQTT entry configuration the way core merges it: options over data (D-04)."""

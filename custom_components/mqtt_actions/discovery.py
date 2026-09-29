@@ -1,5 +1,6 @@
 """MQTT Discovery payloads and their publisher."""
 
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.json import json_dumps
@@ -9,6 +10,14 @@ from .topics import availability_topic, discovery_topic, state_topic
 
 if TYPE_CHECKING:
     from .mqtt_gateway import MqttGateway
+
+
+class AvailabilityState(StrEnum):
+    """Payload of the retained instance availability topic; the empty payload removes the topic."""
+
+    ONLINE = "online"
+    OFFLINE = "offline"
+    CLEARED = ""
 
 
 def build_switch_discovery(
@@ -68,10 +77,14 @@ class DiscoveryPublisher:
             retain=True,
         )
 
-    async def async_publish_availability(self, instance_id: str, *, online: bool) -> None:
-        """Publish the retained availability of this instance."""
-        await self._gateway.async_publish(
-            availability_topic(self._base_topic, instance_id),
-            "online" if online else "offline",
-            retain=True,
-        )
+    async def async_clear_device(self, device_id: str) -> None:
+        """Remove the device: an empty retained discovery payload makes core MQTT drop the entity (DSC-02)."""
+        await self._gateway.async_publish(discovery_topic(self._gateway.discovery_prefix(), device_id), "", retain=True)
+
+    async def async_clear_state(self, device_id: str) -> None:
+        """Clear the retained state of a deleted device so no stale ON or OFF stays on the broker."""
+        await self._gateway.async_publish(state_topic(self._base_topic, device_id), "", retain=True)
+
+    async def async_publish_availability(self, instance_id: str, state: AvailabilityState) -> None:
+        """Publish the retained availability of this instance: online, offline or cleared."""
+        await self._gateway.async_publish(availability_topic(self._base_topic, instance_id), str(state), retain=True)

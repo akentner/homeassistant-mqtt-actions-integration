@@ -94,10 +94,24 @@ class ActionRunner:
             },
         )
 
+    def clear_issue(self, device_id: str) -> None:
+        """Delete the Repairs issue of a device, for example because its actions were just reconfigured."""
+        ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_ACTION_FAILED_PREFIX}{device_id}")
+
+    async def async_retire_scripts(self, device_id: str, *, keep: list[Script]) -> None:
+        """Unload the Scripts of a device that are not in keep; queued runs of a retired Script are skipped."""
+        retained: list[Script] = []
+        for script in self._scripts.get(device_id, []):
+            if script in keep:
+                retained.append(script)
+            else:
+                await script.async_unload()
+        self._scripts[device_id] = retained
+
     async def async_unload(self, device_id: str, *, remove_issue: bool = False) -> None:
         """Unload the scripts of a device; a removed device also loses its Repairs issue."""
         for script in self._scripts.pop(device_id, []):
             await script.async_unload()
         self._locks.pop(device_id, None)
         if remove_issue:
-            ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_ACTION_FAILED_PREFIX}{device_id}")
+            self.clear_issue(device_id)

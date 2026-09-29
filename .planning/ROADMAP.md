@@ -22,6 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Walking Skeleton - Installable Switch
+
 **Goal:** As a Home Assistant user, I want to create a Switch device whose MQTT state changes run my configured actions, so that I need no YAML automation.
 **Mode:** mvp
 **Depends on**: Nothing (first phase)
@@ -32,10 +33,32 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can create a Switch device with a name and set its `onChangeToOn` and `onChangeToOff` actions with the HA action selector; invalid actions are rejected on input and actions targeting instance-local `device_id`s show a warning.
   4. The Switch appears in HA through MQTT Discovery (UUID `unique_id`, availability, device info); toggling it in the HA UI or publishing to its retained state topic runs the matching actions locally on each real change, and a failing action is visible in the log and as a Repairs issue instead of being swallowed.
   5. After an HA restart, integration reload or broker reconnect, the integration starts cleanly even if MQTT is not ready yet, retained state only sets the baseline (no actions run unless the device's "run on startup" flag is on), only real state changes trigger actions, and the entity stays until the user explicitly deletes the device.
-**Plans**: TBD
+
+**Plans:** 6/6 plans executed
+
+Plans:
+**Wave 1**
+- [x] 01-01-PLAN.md — Package-legitimacy gate and uv/Ruff/PHACC tooling scaffold (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 01-02-PLAN.md — Tracer: one Switch end to end, one-way identifier freeze, D-13 spike gate (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 01-03-PLAN.md — Hub and Switch subentry flows with validation, device_id warning, en/de translations (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 01-04-PLAN.md — Trigger path: decision function, persisted baseline, failure surfacing, real-broker retain test (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 01-05-PLAN.md — Discovery contract and lifecycle: change, delete, orphan, hub removal, reconnect, unload (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 01-06-PLAN.md — HACS metadata, SHA-pinned CI, public repo gate, CI green and manual UAT list (wave 6)
+
 **UI hint**: yes
 
 ### Phase 2: Select Devices and Reliable Execution
+
 **Goal:** As a Home Assistant user, I want to create Select devices whose options each run their own actions, so that multi-state MQTT devices drive my setup predictably.
 **Mode:** mvp
 **Depends on**: Phase 1
@@ -46,10 +69,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A Select payload that matches no configured StateValue is ignored and logged: no actions run and the entity keeps its state.
   4. User can choose per device whether rapid state changes run their actions as a serial queue (default) or as restart, and can press a test button that runs a device's actions locally without changing its state.
   5. An action that toggles its own device is stopped by a per-device circuit breaker instead of looping forever, and the user is told why.
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 3: Trust, Central Config and Ownership
+
 **Goal:** As a user with several HA instances, I want devices created on one instance to appear on the others once I approve them, so that every instance runs the actions locally.
 **Mode:** mvp
 **Depends on**: Phase 2
@@ -60,10 +85,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. After approval, a real state change (from the HA UI on any instance or from an external MQTT message) runs the device's actions locally on every participating instance.
   4. Only a device's owner can edit or delete it; followers pin the owner and raise a Repairs issue on conflicting ownership claims, and if a follower removes the discovered entity the owner republishes its discovery.
   5. Deleting a device requires an explicit confirmation stating that it is removed on all connected instances, after which its central config and discovery are unpublished and the device disappears everywhere.
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 4: Operations, Recovery and Release
+
 **Goal:** As a user running several HA instances, I want to re-trigger actions, see who is connected and recover devices, so that I can operate the setup with confidence.
 **Mode:** mvp
 **Depends on**: Phase 3
@@ -74,6 +101,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can run a manual resync that republishes config and discovery of all owned devices, export devices to JSON and import them, and transfer ownership of a device or adopt an orphaned one.
   4. User can set per instance and device whether actions run, are only observed, or are disabled, and can download diagnostics with sensitive data redacted.
   5. README and docs cover setup, trust model and limitations; a tagged release is built automatically with the manifest version matching the tag; CI runs the unit, real-Mosquitto and multi-instance fake-broker test tiers.
+
 **Plans**: TBD
 
 ## Progress
@@ -83,7 +111,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Walking Skeleton - Installable Switch | 0/0 | Not started | - |
+| 1. Walking Skeleton - Installable Switch | 6/6 | In Progress|  |
 | 2. Select Devices and Reliable Execution | 0/0 | Not started | - |
 | 3. Trust, Central Config and Ownership | 0/0 | Not started | - |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |

@@ -7,8 +7,8 @@
 
 ### Foundation
 
-- [ ] **FND-01**: User can install the integration via HACS (`hacs.json`, `manifest.json`, local brand icon, domain `mqtt_actions`, minimum HA 2026.9.0)
-- [ ] **FND-02**: Every push runs hassfest, HACS validation, Ruff and pytest in CI
+- [x] **FND-01**: User can install the integration via HACS (`hacs.json`, `manifest.json`, local brand icon, domain `mqtt_actions`, minimum HA 2026.9.0)
+- [x] **FND-02**: Every push runs hassfest, HACS validation, Ruff and pytest in CI
 - [ ] **FND-03**: User can set up the integration via Config Flow (one hub per instance, requires MQTT); a persistent random instance ID is generated
 - [ ] **FND-04**: All UI strings are available in English and German
 - [ ] **FND-05**: Integration waits for the MQTT client at startup and resumes cleanly after broker reconnects
@@ -110,8 +110,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FND-01 | Phase 1 | Pending |
-| FND-02 | Phase 1 | Pending |
+| FND-01 | Phase 1 | Complete |
+| FND-02 | Phase 1 | Complete |
 | FND-03 | Phase 1 | Pending |
 | FND-04 | Phase 1 | Pending |
 | FND-05 | Phase 1 | Pending |

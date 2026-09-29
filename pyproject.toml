@@ -1,0 +1,19 @@
+[project]
+name = "homeassistant-mqtt-actions-integration"
+version = "0.0.0"
+requires-python = ">=3.14.2"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = ["broker: needs a real mosquitto broker on PATH (skipped when it is not installed)"]
+
+[dependency-groups]
+dev = [
+    "pytest-homeassistant-custom-component==0.13.367",
+    "ruff==0.16.9",
+]

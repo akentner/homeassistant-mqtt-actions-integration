@@ -17,10 +17,24 @@ TOPIC_VERSION: Final = "v1"
 
 # Subentry types and subentry data keys (D-03)
 SUBENTRY_SWITCH: Final = "switch"
+SUBENTRY_SELECT: Final = "select"
 CONF_DEVICE_ID: Final = "device_id"
 CONF_ON_CHANGE_TO_ON: Final = "on_change_to_on"
 CONF_ON_CHANGE_TO_OFF: Final = "on_change_to_off"
 CONF_RUN_ON_STARTUP: Final = "run_on_startup"
+CONF_OPTIONS: Final = "options"
+CONF_STATE_VALUE: Final = "state_value"
+CONF_FRIENDLY_NAME: Final = "friendly_name"
+CONF_ACTIONS: Final = "actions"
+
+# Run mode and circuit breaker settings of a device (D-10, D-14); missing keys in stored data mean the defaults
+CONF_RUN_MODE: Final = "run_mode"
+RUN_MODE_SERIAL: Final = "serial"
+RUN_MODE_RESTART: Final = "restart"
+CONF_BREAKER_MAX_RUNS: Final = "breaker_max_runs"
+CONF_BREAKER_WINDOW: Final = "breaker_window"
+DEFAULT_BREAKER_MAX_RUNS: Final = 5
+DEFAULT_BREAKER_WINDOW: Final = 10
 
 # Switch payload contract (D-02)
 PAYLOAD_ON: Final = "ON"

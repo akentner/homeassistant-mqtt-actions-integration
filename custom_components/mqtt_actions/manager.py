@@ -7,6 +7,7 @@ AVL-01) addresses it.
 """
 
 import asyncio
+import hashlib
 import json
 import time
 from dataclasses import dataclass, field
@@ -46,7 +47,7 @@ from .state import StateTracker
 from .topics import state_topic, test_topic
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping
 
     from homeassistant.config_entries import ConfigEntry, ConfigSubentry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
@@ -80,6 +81,11 @@ def _device_subentries(entry: ConfigEntry) -> list[ConfigSubentry]:
 def _signature(subentry: ConfigSubentry) -> str:
     """Return a stable fingerprint of what a subentry configures, to tell a real change from an unrelated update."""
     return json.dumps({"title": subentry.title, "data": dict(subentry.data)}, sort_keys=True)
+
+
+def signature_hash(title: str, data: Mapping[str, Any]) -> str:
+    """Return the sha256 hex digest of the fingerprint of a device configuration; persisted with a tripped breaker."""
+    return hashlib.sha256(json.dumps({"title": title, "data": dict(data)}, sort_keys=True).encode()).hexdigest()
 
 
 def _parse_published(stored: dict[str, Any]) -> set[str]:

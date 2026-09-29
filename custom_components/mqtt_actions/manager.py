@@ -1,5 +1,5 @@
 """
-Turns switch subentries into subscriptions, scripts and discovery.
+Turns device subentries (Switch and Select) into subscriptions, scripts and discovery.
 
 Known limitation: the MQTT client is shared with Home Assistant and offers this integration no Last Will, so a hard
 crash leaves a stale retained "online" availability on the broker. Heartbeat-based availability (deferred requirement
@@ -18,19 +18,14 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 
-from .actions import ActionsInvalid
 from .const import (
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
-    CONF_ON_CHANGE_TO_OFF,
-    CONF_ON_CHANGE_TO_ON,
-    CONF_RUN_ON_STARTUP,
     DOMAIN,
     ISSUE_ACTION_FAILED_PREFIX,
     ISSUE_DISCOVERY_DISABLED,
     LOGGER,
-    MAX_ISSUE_ERROR_LENGTH,
     MAX_LOGGED_PAYLOAD_LENGTH,
     PAYLOAD_OFF,
     PAYLOAD_ON,
@@ -39,12 +34,11 @@ from .const import (
     STORE_PUBLISHED,
     STORE_SAVE_DELAY,
     STORE_VERSION,
+    SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
-    TRIGGER_OFF,
-    TRIGGER_ON,
-    TRIGGER_SETUP,
 )
 from .discovery import AvailabilityState, DiscoveryPublisher
+from .model import DeviceSpec, spec_from_subentry, trigger_key
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .runner import ActionRunner
 from .state import StateTracker
@@ -55,20 +49,27 @@ if TYPE_CHECKING:
 
     from homeassistant.config_entries import ConfigEntry, ConfigSubentry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
-    from homeassistant.helpers.script import Script
 
 
 @dataclass
 class Device:
-    """Runtime state of one switch device."""
+    """Runtime state of one device (Switch or Select)."""
 
     device_id: str
-    name: str
+    spec: DeviceSpec
     tracker: StateTracker
-    on_script: Script | None
-    off_script: Script | None
     signature: str
     unsubscribe: CALLBACK_TYPE | None = None
+
+    @property
+    def name(self) -> str:
+        """Return the display name of the device."""
+        return self.spec.name
+
+
+def _device_subentries(entry: ConfigEntry) -> list[ConfigSubentry]:
+    """Return the device subentries of the hub entry: the Switch subentries followed by the Select subentries."""
+    return [*entry.get_subentries_of_type(SUBENTRY_SWITCH), *entry.get_subentries_of_type(SUBENTRY_SELECT)]
 
 
 def _signature(subentry: ConfigSubentry) -> str:
@@ -114,9 +115,7 @@ async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> N
     """
     store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, STORE_KEY)
     stored = await store.async_load() or {}
-    device_ids = _parse_published(stored) | {
-        subentry.data[CONF_DEVICE_ID] for subentry in entry.get_subentries_of_type(SUBENTRY_SWITCH)
-    }
+    device_ids = _parse_published(stored) | {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(entry)}
     integration = await async_get_integration(hass, DOMAIN)
     publisher = DiscoveryPublisher(MqttGateway(hass), entry.data[CONF_BASE_TOPIC], str(integration.version))
     for device_id in sorted(device_ids):
@@ -135,7 +134,7 @@ async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> N
 
 
 class Manager:
-    """Keeps the running devices in line with the switch subentries of the hub entry."""
+    """Keeps the running devices in line with the device subentries of the hub entry."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the manager."""
@@ -167,7 +166,7 @@ class Manager:
 
     async def async_reconcile(self, *, startup: bool = False) -> None:
         """
-        Bring the running devices in line with the switch subentries: remove, change and add.
+        Bring the running devices in line with the device subentries: remove, change and add.
 
         Only devices built while the manager starts (HA start or entry reload) get the startup window; a device the
         user creates later is not a start (D-05).
@@ -176,10 +175,7 @@ class Manager:
             # A late update-listener call after async_stop must not revive a manager nobody will ever unsubscribe
             if not self._running:
                 return
-            subentries = {
-                subentry.data[CONF_DEVICE_ID]: subentry
-                for subentry in self._entry.get_subentries_of_type(SUBENTRY_SWITCH)
-            }
+            subentries = {subentry.data[CONF_DEVICE_ID]: subentry for subentry in _device_subentries(self._entry)}
             for device_id in [device_id for device_id in self.devices if device_id not in subentries]:
                 await self._async_remove_device(device_id)
             for device_id, subentry in subentries.items():
@@ -289,18 +285,21 @@ class Manager:
         """Build scripts, subscribe to the state topic and publish discovery for one device."""
         assert self._publisher is not None  # noqa: S101
         device_id: str = subentry.data[CONF_DEVICE_ID]
+        spec = spec_from_subentry(subentry)
+        stored = self._stored_last_acted.get(device_id)
         device = Device(
             device_id=device_id,
-            name=subentry.title,
+            spec=spec,
+            # A stored baseline that is no longer a StateValue of the device is unknown (A11)
             tracker=StateTracker(
-                last_acted=self._stored_last_acted.get(device_id),
-                run_on_startup=subentry.data[CONF_RUN_ON_STARTUP],
+                last_acted=stored if stored in spec.accepted.values() else None,
+                run_on_startup=spec.run_on_startup,
                 startup_pending=startup,
+                accepted=spec.accepted,
             ),
-            on_script=await self._async_build(subentry, CONF_ON_CHANGE_TO_ON),
-            off_script=await self._async_build(subentry, CONF_ON_CHANGE_TO_OFF),
             signature=_signature(subentry),
         )
+        await self.runner.async_build_device(spec)
         self.devices[device_id] = device
         # Resolve the device from self.devices at message time: binding the object would break after a rebuild
         device.unsubscribe = await self.gateway.async_subscribe(
@@ -316,16 +315,18 @@ class Manager:
         Apply a reconfigured subentry: new Scripts, name and flag; the subscription and the baseline stay.
 
         The Repairs issue is cleared first so a stale setup problem does not outlive the change; invalid new actions
-        raise it again while the Scripts are rebuilt. The previous Scripts are unloaded after the new ones exist.
+        raise it again while the Scripts are rebuilt. The previous Scripts are unloaded after the new ones exist. A
+        baseline that is no longer a StateValue of the device (a removed option) becomes unknown (D-02).
         """
         self.runner.clear_issue(device.device_id)
-        device.on_script = await self._async_build(subentry, CONF_ON_CHANGE_TO_ON)
-        device.off_script = await self._async_build(subentry, CONF_ON_CHANGE_TO_OFF)
-        await self.runner.async_retire_scripts(
-            device.device_id, keep=[script for script in (device.on_script, device.off_script) if script is not None]
-        )
-        device.name = subentry.title
-        device.tracker.run_on_startup = subentry.data[CONF_RUN_ON_STARTUP]
+        spec = spec_from_subentry(subentry)
+        await self.runner.async_build_device(spec)
+        device.spec = spec
+        device.tracker.run_on_startup = spec.run_on_startup
+        device.tracker.accepted = spec.accepted
+        if device.tracker.last_acted is not None and device.tracker.last_acted not in spec.accepted.values():
+            device.tracker.last_acted = None
+            self._schedule_save()
         device.signature = _signature(subentry)
         await self._async_publish_discovery(device)
 
@@ -360,7 +361,7 @@ class Manager:
         No update listener existed then, so the persisted published set is compared with the current subentries.
         """
         assert self._publisher is not None  # noqa: S101
-        current = {subentry.data[CONF_DEVICE_ID] for subentry in self._entry.get_subentries_of_type(SUBENTRY_SWITCH)}
+        current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
         for device_id in sorted(self._published - current):
             if await _async_clear_topics(self._publisher, device_id):
                 self._published.discard(device_id)
@@ -370,6 +371,8 @@ class Manager:
     async def _async_publish_discovery(self, device: Device) -> None:
         """Publish the retained discovery of a device; an unavailable MQTT client is logged, the next start retries."""
         assert self._publisher is not None  # noqa: S101
+        if device.spec.kind != SUBENTRY_SWITCH:
+            return  # The Select payload arrives with its discovery builder
         await _async_attempt(
             partial(
                 self._publisher.async_publish_device,
@@ -379,22 +382,6 @@ class Manager:
             ),
             f"publish the discovery of device {device.name}",
         )
-
-    async def _async_build(self, subentry: ConfigSubentry, key: str) -> Script | None:
-        """
-        Build the script for one trigger.
-
-        Invalid stored actions are logged and shown in Repairs (trigger setup); that transition then has no script while
-        the other one and the baseline tracking keep working. Reconfiguring the device rebuilds it.
-        """
-        device_id: str = subentry.data[CONF_DEVICE_ID]
-        try:
-            return await self.runner.async_build_script(device_id, f"{subentry.title} {key}", subentry.data[key])
-        except ActionsInvalid as err:
-            error = str(err)[:MAX_ISSUE_ERROR_LENGTH]
-            LOGGER.error("Invalid actions for %s of device %s: %s", key, subentry.title, error)
-            self.runner.report_failure(device_id, subentry.title, TRIGGER_SETUP, error)
-            return None
 
     @callback
     def _on_message(self, device_id: str, msg: IncomingMessage) -> None:
@@ -410,16 +397,16 @@ class Manager:
             self._schedule_save()
         if not decision.act:
             return
-        is_on = decision.value == PAYLOAD_ON
-        script = device.on_script if is_on else device.off_script
-        if script is None:
+        assert decision.value is not None  # noqa: S101
+        trigger = device.spec.triggers.get(trigger_key(decision.value))
+        if trigger is None or not self.runner.can_run(device_id, trigger.key):
             return
-        # Only the device id and the normalised value reach templates, never the raw payload
+        # Only the device id and the canonical value reach templates, never the raw payload
         self.runner.enqueue(
             device_id,
             device.name,
-            TRIGGER_ON if is_on else TRIGGER_OFF,
-            script,
+            trigger.label,
+            trigger.key,
             {"device_id": device_id, "state": decision.value},
         )
 

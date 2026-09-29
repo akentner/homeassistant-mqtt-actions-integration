@@ -8,53 +8,97 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.script import Script
 from homeassistant.util import dt as dt_util
 
-from .actions import async_validate_actions
-from .const import DOMAIN, ISSUE_ACTION_FAILED_PREFIX, LOGGER, MAX_ISSUE_ERROR_LENGTH
+from .actions import ActionsInvalid, async_validate_actions
+from .const import DOMAIN, ISSUE_ACTION_FAILED_PREFIX, LOGGER, MAX_ISSUE_ERROR_LENGTH, TRIGGER_SETUP
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
+    from .model import DeviceSpec
+
 
 class ActionRunner:
-    """Builds Scripts from raw action lists and runs them first-in first-out per device in background tasks."""
+    """Builds Scripts from device specs and runs them first-in first-out per device in background tasks."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the runner."""
         self._hass = hass
         self._entry = entry
         self._locks: dict[str, asyncio.Lock] = {}
-        self._scripts: dict[str, list[Script]] = {}
+        # device id -> trigger key -> Script; a trigger without actions or with invalid actions has no entry
+        self._scripts: dict[str, dict[str, Script]] = {}
 
-    async def async_build_script(self, device_id: str, name: str, raw: list[dict[str, Any]]) -> Script | None:
-        """Validate a raw action list and build a Script owned by the device; an empty list yields None."""
-        if not raw:
-            return None
-        sequence = await async_validate_actions(self._hass, raw)
-        script = Script(self._hass, sequence, name, DOMAIN, script_mode="single", logger=LOGGER)
-        self._scripts.setdefault(device_id, []).append(script)
-        return script
+    async def async_build_device(self, spec: DeviceSpec) -> None:
+        """
+        Build one Script per trigger with actions and replace the Scripts of the device.
+
+        Invalid stored actions are logged and shown in Repairs (trigger setup); that trigger then has no Script while
+        the others and the baseline tracking keep working. Reconfiguring the device rebuilds it. The previous Scripts
+        are unloaded only after the new ones exist, and queued runs of a retired Script are skipped.
+        """
+        scripts: dict[str, Script] = {}
+        for trigger in spec.triggers.values():
+            if not trigger.actions:
+                continue
+            try:
+                sequence = await async_validate_actions(self._hass, trigger.actions)
+            except ActionsInvalid as err:
+                error = str(err)[:MAX_ISSUE_ERROR_LENGTH]
+                LOGGER.error("Invalid actions for %s of device %s: %s", trigger.label, spec.name, error)
+                self.report_failure(spec.device_id, spec.name, TRIGGER_SETUP, error)
+                continue
+            scripts[trigger.key] = Script(
+                self._hass, sequence, f"{spec.name} {trigger.label}", DOMAIN, script_mode="single", logger=LOGGER
+            )
+        previous = self._scripts.get(spec.device_id, {})
+        self._scripts[spec.device_id] = scripts
+        for script in previous.values():
+            await script.async_unload()
+
+    def can_run(self, device_id: str, key: str) -> bool:
+        """Return True when the trigger of the device has a Script to run."""
+        return key in self._scripts.get(device_id, {})
+
+    def script_for(self, device_id: str, key: str) -> Script | None:
+        """Return the Script of a trigger, or None when the trigger has none."""
+        return self._scripts.get(device_id, {}).get(key)
+
+    def script_count(self, device_id: str) -> int:
+        """Return the number of Scripts the runner owns for a device."""
+        return len(self._scripts.get(device_id, {}))
 
     def enqueue(
         self,
         device_id: str,
         device_name: str,
-        trigger: str,
-        script: Script,
+        trigger_label: str,
+        trigger_key: str,
         run_variables: dict[str, Any],
     ) -> None:
-        """Queue a run in a background task tied to the config entry lifecycle."""
+        """Queue a run of the trigger's Script in a background task tied to the config entry lifecycle."""
+        if (script := self.script_for(device_id, trigger_key)) is None:
+            return
         self._entry.async_create_background_task(
             self._hass,
-            self._async_run(device_id, device_name, trigger, script, run_variables),
+            self._async_run(
+                device_id,
+                device_name,
+                trigger_label,
+                trigger_key=trigger_key,
+                script=script,
+                run_variables=run_variables,
+            ),
             name=f"{DOMAIN} {script.name}",
         )
 
-    async def _async_run(
+    async def _async_run(  # noqa: PLR0913
         self,
         device_id: str,
         device_name: str,
-        trigger: str,
+        trigger_label: str,
+        *,
+        trigger_key: str,
         script: Script,
         run_variables: dict[str, Any],
     ) -> None:
@@ -66,14 +110,14 @@ class ActionRunner:
         """
         lock = self._locks.setdefault(device_id, asyncio.Lock())
         async with lock:
-            if script not in self._scripts.get(device_id, ()):
-                return  # The device was unloaded while this run was queued
+            if self.script_for(device_id, trigger_key) is not script:
+                return  # The device was unloaded or rebuilt while this run was queued
             try:
                 await script.async_run(run_variables, Context())
             except Exception as err:  # noqa: BLE001
                 # Only device and trigger names are logged, never the action data (T-01-10)
-                LOGGER.exception("Actions for %s of device %s failed", trigger, device_name)
-                self.report_failure(device_id, device_name, trigger, str(err))
+                LOGGER.exception("Actions for %s of device %s failed", trigger_label, device_name)
+                self.report_failure(device_id, device_name, trigger_label, str(err))
             else:
                 ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_ACTION_FAILED_PREFIX}{device_id}")
 
@@ -98,16 +142,6 @@ class ActionRunner:
         """Delete the Repairs issue of a device, for example because its actions were just reconfigured."""
         ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_ACTION_FAILED_PREFIX}{device_id}")
 
-    async def async_retire_scripts(self, device_id: str, *, keep: list[Script]) -> None:
-        """Unload the Scripts of a device that are not in keep; queued runs of a retired Script are skipped."""
-        retained: list[Script] = []
-        for script in self._scripts.get(device_id, []):
-            if script in keep:
-                retained.append(script)
-            else:
-                await script.async_unload()
-        self._scripts[device_id] = retained
-
     async def async_unload_all(self) -> None:
         """Unload every Script that is still registered, including those of a device that never finished starting."""
         for device_id in list(self._scripts):
@@ -115,7 +149,7 @@ class ActionRunner:
 
     async def async_unload(self, device_id: str, *, remove_issue: bool = False) -> None:
         """Unload the scripts of a device; a removed device also loses its Repairs issue."""
-        for script in self._scripts.pop(device_id, []):
+        for script in self._scripts.pop(device_id, {}).values():
             await script.async_unload()
         self._locks.pop(device_id, None)
         if remove_issue:

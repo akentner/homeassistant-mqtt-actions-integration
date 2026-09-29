@@ -62,5 +62,6 @@ TRIGGER_SETUP: Final = "setup"
 
 # Repairs issues
 ISSUE_ACTION_FAILED_PREFIX: Final = "action_failed_"
+ISSUE_CIRCUIT_BREAKER_PREFIX: Final = "circuit_breaker_"
 ISSUE_DISCOVERY_DISABLED: Final = "mqtt_discovery_disabled"
 MAX_ISSUE_ERROR_LENGTH: Final = 500

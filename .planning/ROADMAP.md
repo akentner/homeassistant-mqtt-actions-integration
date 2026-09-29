@@ -70,14 +70,14 @@ Plans:
   4. User can choose per device whether rapid state changes run their actions as a serial queue (default) or as restart, and can press a test button that runs a device's actions locally without changing its state.
   5. An action that toggles its own device is stopped by a per-device circuit breaker instead of looping forever, and the user is told why.
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
 - [x] 02-01-PLAN.md — Tracer: Select device runtime (DeviceSpec, accepted-values decision, select discovery with mapping templates, unknown-payload semantics) (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 02-02-PLAN.md — One Script per device: serial and restart run modes, queue bound, dropped and superseded run handling (wave 2)
+- [x] 02-02-PLAN.md — One Script per device: serial and restart run modes, queue bound, dropped and superseded run handling (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 02-03-PLAN.md — Test buttons per trigger on a non-retained test topic, button lifecycle with tombstones (wave 3)
@@ -129,6 +129,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
-| 2. Select Devices and Reliable Execution | 1/5 | In Progress|  |
+| 2. Select Devices and Reliable Execution | 2/5 | In Progress|  |
 | 3. Trust, Central Config and Ownership | 0/0 | Not started | - |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |

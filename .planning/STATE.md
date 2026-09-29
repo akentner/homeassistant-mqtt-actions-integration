@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Select Devices and Reliable Execution
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-09-29T17:30:37.062Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-09-29T17:37:37.160Z"
 last_activity: 2026-09-29
 last_activity_desc: Phase 02 execution started
-state_head: 0e40f93c637c2a94d03aa946b8e3c70745b3e374
+state_head: 50ea51748311abcce52537cd44a4c64ce0954185
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 11
-  completed_plans: 7
+  completed_plans: 8
   percent: 25
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 02 (Select Devices and Reliable Execution) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-09-29 — Phase 02 execution started
 
@@ -58,6 +58,7 @@ Progress: [███░░░░░░░] 25% of Phase 01 plans
 |------|----------|-------|-------|
 | Phase 01 P06 | multi-session | 3 tasks | 8 files |
 | Phase 02 P01 | 10 min | 3 tasks | 13 files |
+| Phase 02 P02 | 5 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Recent decisions affecting current work:
 - [Phase 02]: A stored baseline that is not a StateValue of its device is sanitized to no baseline at add and change time (A11)
 - [Phase 02]: Renaming or removing the selected Select option leaves the HA entity at unknown until the next valid payload; no republish (open question 1)
 - [Phase 02]: Select payload normalization is str.strip().lower() in tracker and Jinja (trim | lower), never casefold
+- [Phase 02]: Run mode maps to Script mode one to one (serial=queued, restart=restart) with max_runs=SERIAL_QUEUE_LIMIT; one Script per device dispatches on the hashed trigger_key — Native FIFO, race-free restart and logged overflow drops across all triggers of a device (DEV-06, D-10 to D-12)
+- [Phase 02]: A run clears the failure issue only when the Script returned a result and it is the device's latest enqueue — Dropped, cancelled or superseded runs must not fake success (T-02-06, A10)
 
 ### Pending Todos
 
@@ -98,6 +101,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T17:30:37.017Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-09-29T17:37:37.116Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

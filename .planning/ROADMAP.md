@@ -70,7 +70,7 @@ Plans:
   4. User can choose per device whether rapid state changes run their actions as a serial queue (default) or as restart, and can press a test button that runs a device's actions locally without changing its state.
   5. An action that toggles its own device is stopped by a per-device circuit breaker instead of looping forever, and the user is told why.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -86,7 +86,7 @@ Plans:
 - [x] 02-04-PLAN.md — Per-device circuit breaker: trip, pause, Repairs issue, persisted tripped state, release paths (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 02-05-PLAN.md — Select option editor flow, run mode and breaker fields in the Switch and Select flows, en/de strings, README (wave 5)
+- [x] 02-05-PLAN.md — Select option editor flow, run mode and breaker fields in the Switch and Select flows, en/de strings, README (wave 5)
 
 **UI hint**: yes
 
@@ -129,6 +129,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
-| 2. Select Devices and Reliable Execution | 4/5 | In Progress|  |
+| 2. Select Devices and Reliable Execution | 5/5 | In Progress|  |
 | 3. Trust, Central Config and Ownership | 0/0 | Not started | - |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |

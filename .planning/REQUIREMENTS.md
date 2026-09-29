@@ -17,10 +17,10 @@
 
 - [x] **DEV-01**: User can create a Switch device via the UI with a name
 - [x] **DEV-02**: User can configure `onChangeToOn` and `onChangeToOff` actions of a Switch with the HA action selector
-- [ ] **DEV-03**: User can create a Select device with multiple options, each with StateValue, StateFriendlyName and actions
-- [ ] **DEV-04**: User can edit StateFriendlyName and actions of an option; StateValue is immutable after creation
+- [x] **DEV-03**: User can create a Select device with multiple options, each with StateValue, StateFriendlyName and actions
+- [x] **DEV-04**: User can edit StateFriendlyName and actions of an option; StateValue is immutable after creation
 - [x] **DEV-05**: Configured actions are validated on input; actions targeting instance-local `device_id`s produce a warning
-- [ ] **DEV-06**: User can choose per device how actions run on rapid state changes (serial queue by default, or restart)
+- [x] **DEV-06**: User can choose per device how actions run on rapid state changes (serial queue by default, or restart)
 - [x] **DEV-07**: User can run a device's actions locally via a test button without changing its state
 - [x] **DEV-08**: Action failures are surfaced to the user (log and Repairs issue), not silently swallowed
 
@@ -31,7 +31,7 @@
 - [ ] **STA-03**: On a real state change, the actions run locally on every participating instance
 - [x] **STA-04**: Retained state received at startup or reconnect only sets the baseline and runs no actions (optional per-device "run on startup" flag)
 - [x] **STA-05**: The last processed state per device is persisted; only real edges trigger actions
-- [ ] **STA-06**: A per-device circuit breaker stops action loops caused by actions that toggle their own device
+- [x] **STA-06**: A per-device circuit breaker stops action loops caused by actions that toggle their own device
 - [x] **STA-07**: A Select payload that matches no configured StateValue is ignored and logged
 
 ### Discovery
@@ -117,10 +117,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FND-05 | Phase 1 | Complete |
 | DEV-01 | Phase 1 | Complete |
 | DEV-02 | Phase 1 | Complete |
-| DEV-03 | Phase 2 | Pending |
-| DEV-04 | Phase 2 | Pending |
+| DEV-03 | Phase 2 | Complete |
+| DEV-04 | Phase 2 | Complete |
 | DEV-05 | Phase 1 | Complete |
-| DEV-06 | Phase 2 | Pending |
+| DEV-06 | Phase 2 | Complete |
 | DEV-07 | Phase 2 | Complete |
 | DEV-08 | Phase 1 | Complete |
 | STA-01 | Phase 1 | Complete |
@@ -128,7 +128,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STA-03 | Phase 3 | Pending |
 | STA-04 | Phase 1 | Complete |
 | STA-05 | Phase 1 | Complete |
-| STA-06 | Phase 2 | Pending |
+| STA-06 | Phase 2 | Complete |
 | STA-07 | Phase 2 | Complete |
 | DSC-01 | Phase 1 | Complete |
 | DSC-02 | Phase 1 | Complete |

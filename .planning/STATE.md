@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Select Devices and Reliable Execution
-status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-09-29T18:37:06.717Z"
+status: verifying
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-09-29T18:50:20.880Z"
 last_activity: 2026-09-29
 last_activity_desc: Phase 02 execution started
-state_head: 132f9cd193ffe23f83f5f91c21f11091fb880d20
+state_head: 7042144f92ea5f5d9d43ae94992e05de8d94b706
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 
 Phase: 02 (Select Devices and Reliable Execution) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-29 — Phase 02 execution started
 
 Progress: [███░░░░░░░] 25% of Phase 01 plans
@@ -61,6 +61,7 @@ Progress: [███░░░░░░░] 25% of Phase 01 plans
 | Phase 02 P02 | 5 min | 2 tasks | 4 files |
 | Phase 02 P03 | 6 min | 2 tasks | 9 files |
 | Phase 02 P04 | 48 min | 3 tasks | 11 files |
+| Phase 02 P05 | 12 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Removed options retire their button with a platform-button tombstone kept in memory for every republish while running; button unique_id is device_id + _test_ + trigger_key (D-13, pitfall 4, T-02-11) — Core MQTT discovery never removes an omitted component; identity derives from the immutable StateValue hash so renames keep entity ids
 - [Phase 02]: Per-device sliding-window breaker: exactly max_runs runs per window, the next change trips and does not run; a trip pauses the device (baseline only), stops running and queued runs, warns once and raises Repairs issue circuit_breaker_<device id> (STA-06, D-14 to D-16) — A self-toggling action would otherwise loop forever and the queue bound only limits a burst; the tripping change must not run
 - [Phase 02]: Tripped state persists as a per-device config hash in the additive store key tripped (no version bump, no window stored); async_unload_entry releases via release_all_breakers before the final save while Manager.async_stop never releases (D-15, D-17, A12) — A failed setup also calls async_stop and a Home Assistant restart never unloads, so a restart keeps the pause and a user reload or a real config change releases it; an unchanged save is a no-op and releases nothing
+- [Phase 02]: Select flow is a menu loop over a deep-copied draft committed once on Done; a menu cannot show errors so Done, Remove and Add are hidden instead of failing (D-01, D-04, T-02-24)
+- [Phase 02]: Breaker number selectors carry no min and max so out-of-range input returns a translated field error; validate_breaker owns 1..100 and 1..3600 and rejects non-integral values (A7, T-02-21)
+- [Phase 02]: Edit step has no StateValue field, removal needs a confirmation menu and is hidden at two options; Done in reconfigure replaces stored data and re-injects the device id (D-02, D-03, D-05)
 
 ### Pending Todos
 
@@ -107,6 +111,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T18:37:06.670Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-09-29T18:50:20.829Z
+Stopped at: Completed 02-05-PLAN.md
 Resume file: None

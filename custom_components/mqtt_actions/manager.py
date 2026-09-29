@@ -257,7 +257,12 @@ class Manager:
         stored = await self._store.async_load() or {}
         last_acted = stored.get(STORE_LAST_ACTED)
         self._stored_last_acted = (
-            {key: value for key, value in last_acted.items() if value in {PAYLOAD_ON, PAYLOAD_OFF}}
+            {
+                key: value
+                for key, value in last_acted.items()
+                # The isinstance checks come first: an unhashable value would make the set membership raise
+                if isinstance(key, str) and isinstance(value, str) and value in {PAYLOAD_ON, PAYLOAD_OFF}
+            }
             if isinstance(last_acted, dict)
             else {}
         )

@@ -1277,3 +1277,29 @@ async def test_failed_start_releases_subscriptions_and_retries_cleanly(
     await hass.async_block_till_done(wait_background_tasks=True)
     await _fire(hass, entry, _device_id(first), "ON", retain=False)
     assert len(on_calls) == 1
+
+
+async def test_malformed_store_last_acted_is_dropped_and_setup_succeeds(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """WR-04: unhashable or wrongly typed baseline values are dropped; only the valid one survives."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    _preload_store(hass_storage, published=[device_id])
+    hass_storage[STORE_KEY]["data"][STORE_LAST_ACTED] = {
+        device_id: "ON",
+        "list-valued": [],
+        "dict-valued": {"a": 1},
+        "int-valued": 1,
+        "unknown": "MAYBE",
+    }
+
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.runtime_data.devices[device_id].tracker.last_acted == "ON"
+    assert entry.runtime_data._stored_last_acted == {device_id: "ON"}

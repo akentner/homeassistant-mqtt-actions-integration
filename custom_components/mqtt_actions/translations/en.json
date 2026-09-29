@@ -9,10 +9,14 @@
           "instance_name": "Instance name"
         },
         "data_description": {
-          "base_topic": "Root of all topics used by MQTT Actions. It cannot be changed later.",
+          "base_topic": "Root of all topics used by MQTT Actions, for example mqtt_actions. It is written into retained messages on the broker and cannot be changed later. To use another base topic, remove this integration and set it up again.",
           "instance_name": "Name of this Home Assistant instance."
         }
       }
+    },
+    "error": {
+      "invalid_base_topic": "The base topic must not be empty, must not contain # or +, must not start or end with a slash, must not contain empty levels, and must not start with $.",
+      "instance_name_required": "The instance name must not be empty."
     },
     "abort": {
       "mqtt_required": "The MQTT integration must be set up first.",
@@ -32,10 +36,51 @@
           "data": {
             "name": "Name",
             "on_change_to_on": "Actions when switched on",
-            "on_change_to_off": "Actions when switched off"
+            "on_change_to_off": "Actions when switched off",
+            "run_on_startup": "Run actions on startup"
+          },
+          "data_description": {
+            "name": "Name of the switch entity that is created.",
+            "on_change_to_on": "Runs on this instance when the state changes to ON. Prefer entity, area or label targets: device IDs differ between Home Assistant instances.",
+            "on_change_to_off": "Runs on this instance when the state changes to OFF. Prefer entity, area or label targets: device IDs differ between Home Assistant instances.",
+            "run_on_startup": "When enabled, the retained state is treated as a change once after Home Assistant starts or the integration reloads, so the matching actions run even if the state has not changed."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit switch device",
+          "description": "Changing the actions replaces the old ones. The device itself and its topics stay the same.",
+          "data": {
+            "name": "Name",
+            "on_change_to_on": "Actions when switched on",
+            "on_change_to_off": "Actions when switched off",
+            "run_on_startup": "Run actions on startup"
+          },
+          "data_description": {
+            "name": "Name of the switch entity.",
+            "on_change_to_on": "Runs on this instance when the state changes to ON. Prefer entity, area or label targets: device IDs differ between Home Assistant instances.",
+            "on_change_to_off": "Runs on this instance when the state changes to OFF. Prefer entity, area or label targets: device IDs differ between Home Assistant instances.",
+            "run_on_startup": "When enabled, the retained state is treated as a change once after Home Assistant starts or the integration reloads, so the matching actions run even if the state has not changed."
           }
         }
+      },
+      "error": {
+        "name_required": "The name must not be empty.",
+        "invalid_actions": "The actions are invalid in {field}: {error}",
+        "device_id_warning": "These device IDs exist only on this Home Assistant instance: {device_ids}. Other instances cannot resolve them, so the actions would fail there. Submit again to save anyway, or switch to entity, area or label targets."
+      },
+      "abort": {
+        "reconfigure_successful": "The switch device was updated."
       }
+    }
+  },
+  "issues": {
+    "action_failed": {
+      "title": "An action failed",
+      "description": "The actions for {trigger} of {device} failed at {time}: {error}"
+    },
+    "mqtt_discovery_disabled": {
+      "title": "MQTT discovery is disabled",
+      "description": "MQTT Actions creates its switch entities through MQTT discovery, but discovery is disabled in the MQTT integration. No switch entity appears until discovery is enabled again in the MQTT integration options."
     }
   }
 }

@@ -1,0 +1,86 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MQTT Actions",
+        "description": "Richte MQTT Actions für diese Home-Assistant-Instanz ein. Alle Instanzen, die Geräte teilen, müssen dasselbe Basis-Topic verwenden.",
+        "data": {
+          "base_topic": "Basis-Topic",
+          "instance_name": "Instanzname"
+        },
+        "data_description": {
+          "base_topic": "Wurzel aller von MQTT Actions verwendeten Topics, zum Beispiel mqtt_actions. Es wird in retained Nachrichten auf dem Broker geschrieben und kann später nicht mehr geändert werden. Um ein anderes Basis-Topic zu verwenden, entferne diese Integration und richte sie neu ein.",
+          "instance_name": "Name dieser Home-Assistant-Instanz."
+        }
+      }
+    },
+    "error": {
+      "invalid_base_topic": "Das Basis-Topic darf nicht leer sein, kein # oder + enthalten, nicht mit einem Schrägstrich beginnen oder enden, keine leeren Ebenen enthalten und nicht mit $ beginnen.",
+      "instance_name_required": "Der Instanzname darf nicht leer sein."
+    },
+    "abort": {
+      "mqtt_required": "Die MQTT-Integration muss zuerst eingerichtet werden.",
+      "single_instance_allowed": "MQTT Actions ist bereits eingerichtet. Pro Home-Assistant-Instanz ist nur ein Hub erlaubt."
+    }
+  },
+  "config_subentries": {
+    "switch": {
+      "initiate_flow": {
+        "user": "Schalter-Gerät hinzufügen"
+      },
+      "entry_type": "Schalter-Gerät",
+      "step": {
+        "user": {
+          "title": "Schalter-Gerät hinzufügen",
+          "description": "Die Aktionen laufen, wenn das State-Topic dieses Geräts auf ON oder OFF wechselt.",
+          "data": {
+            "name": "Name",
+            "on_change_to_on": "Aktionen beim Einschalten",
+            "on_change_to_off": "Aktionen beim Ausschalten",
+            "run_on_startup": "Aktionen beim Start ausführen"
+          },
+          "data_description": {
+            "name": "Name der Schalter-Entität, die erstellt wird.",
+            "on_change_to_on": "Läuft auf dieser Instanz, wenn der Zustand auf ON wechselt. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen.",
+            "on_change_to_off": "Läuft auf dieser Instanz, wenn der Zustand auf OFF wechselt. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen.",
+            "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die passenden Aktionen auch dann laufen, wenn sich der Zustand nicht geändert hat."
+          }
+        },
+        "reconfigure": {
+          "title": "Schalter-Gerät bearbeiten",
+          "description": "Geänderte Aktionen ersetzen die alten. Das Gerät selbst und seine Topics bleiben gleich.",
+          "data": {
+            "name": "Name",
+            "on_change_to_on": "Aktionen beim Einschalten",
+            "on_change_to_off": "Aktionen beim Ausschalten",
+            "run_on_startup": "Aktionen beim Start ausführen"
+          },
+          "data_description": {
+            "name": "Name der Schalter-Entität.",
+            "on_change_to_on": "Läuft auf dieser Instanz, wenn der Zustand auf ON wechselt. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen.",
+            "on_change_to_off": "Läuft auf dieser Instanz, wenn der Zustand auf OFF wechselt. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen.",
+            "run_on_startup": "Wenn aktiviert, wird der retained Zustand nach dem Start von Home Assistant oder dem Neuladen der Integration einmal als Änderung behandelt, sodass die passenden Aktionen auch dann laufen, wenn sich der Zustand nicht geändert hat."
+          }
+        }
+      },
+      "error": {
+        "name_required": "Der Name darf nicht leer sein.",
+        "invalid_actions": "Die Aktionen in {field} sind ungültig: {error}",
+        "device_id_warning": "Diese Geräte-IDs gibt es nur auf dieser Home-Assistant-Instanz: {device_ids}. Andere Instanzen können sie nicht auflösen, deshalb würden die Aktionen dort fehlschlagen. Sende erneut, um trotzdem zu speichern, oder wechsle auf Entitäts-, Bereichs- oder Label-Ziele."
+      },
+      "abort": {
+        "reconfigure_successful": "Das Schalter-Gerät wurde aktualisiert."
+      }
+    }
+  },
+  "issues": {
+    "action_failed": {
+      "title": "Eine Aktion ist fehlgeschlagen",
+      "description": "Die Aktionen für {trigger} von {device} sind um {time} fehlgeschlagen: {error}"
+    },
+    "mqtt_discovery_disabled": {
+      "title": "MQTT Discovery ist deaktiviert",
+      "description": "MQTT Actions erstellt seine Schalter-Entitäten über MQTT Discovery, aber Discovery ist in der MQTT-Integration deaktiviert. Es erscheint keine Schalter-Entität, bis Discovery in den Optionen der MQTT-Integration wieder aktiviert wird."
+    }
+  }
+}

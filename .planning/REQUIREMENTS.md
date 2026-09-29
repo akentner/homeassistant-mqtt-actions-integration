@@ -21,7 +21,7 @@
 - [ ] **DEV-04**: User can edit StateFriendlyName and actions of an option; StateValue is immutable after creation
 - [x] **DEV-05**: Configured actions are validated on input; actions targeting instance-local `device_id`s produce a warning
 - [ ] **DEV-06**: User can choose per device how actions run on rapid state changes (serial queue by default, or restart)
-- [ ] **DEV-07**: User can run a device's actions locally via a test button without changing its state
+- [x] **DEV-07**: User can run a device's actions locally via a test button without changing its state
 - [x] **DEV-08**: Action failures are surfaced to the user (log and Repairs issue), not silently swallowed
 
 ### State & Actions
@@ -121,7 +121,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEV-04 | Phase 2 | Pending |
 | DEV-05 | Phase 1 | Complete |
 | DEV-06 | Phase 2 | Pending |
-| DEV-07 | Phase 2 | Pending |
+| DEV-07 | Phase 2 | Complete |
 | DEV-08 | Phase 1 | Complete |
 | STA-01 | Phase 1 | Complete |
 | STA-02 | Phase 1 | Complete |

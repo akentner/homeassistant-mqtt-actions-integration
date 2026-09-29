@@ -183,7 +183,7 @@ status: complete
 - `custom_components/mqtt_actions/discovery.py` - `button_component_key`, button components, tombstones, publisher `retired` keyword
 - `custom_components/mqtt_actions/runner.py` - `test` run variable and `enqueue(test=...)`
 - `custom_components/mqtt_actions/manager.py` - test subscription, `_on_test_message`, `Device.unsubscribe_test`, `Device.retired_components`
-- `tests/test_test_buttons.py` - 25 test cases across payload shape, press handling and lifecycle
+- `tests/test_test_buttons.py` - 18 test cases across payload shape, press handling and lifecycle
 - `tests/test_topics.py`, `tests/test_discovery.py`, `tests/test_discovery_select.py` - topic shape, updated payload-shape assertions, omit-versus-tombstone characterization
 
 ## Decisions Made

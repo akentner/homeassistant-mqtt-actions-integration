@@ -1,13 +1,15 @@
 """Select subentry flow: creation, option validation, menu visibility and the never-stored-before-done rule."""
 
+import copy
 import json
+import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
 import probatio
 import pytest
-from homeassistant.config_entries import SOURCE_USER
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER
+from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from homeassistant.helpers import config_validation as cv
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
@@ -369,3 +371,371 @@ async def test_nothing_is_stored_before_done(hass: HomeAssistant, hub) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done(wait_background_tasks=True)
     assert len(hub.subentries) == 1
+
+
+# =============================================================================================== reconfigure
+
+ABC_OPTIONS = [
+    ("a", "Alpha", ACTIONS_A),
+    ("b", "Bravo", ACTIONS_B),
+    ("c", "Charlie", [{"action": "test.c"}]),
+]
+
+
+@pytest.fixture
+async def hub_with_select(hass: HomeAssistant, mqtt_mock, make_hub_entry, make_select_subentry):
+    """Return a set-up hub entry that owns one three-option Select device with every setting stored."""
+    entry = make_hub_entry(
+        subentries=[
+            make_select_subentry(
+                "Mode", ABC_OPTIONS, run_mode="serial", breaker_max_runs=5, breaker_window=10, run_on_startup=False
+            )
+        ]
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    return entry
+
+
+async def _reconfigure(hass: HomeAssistant, entry) -> dict[str, Any]:
+    (subentry,) = entry.subentries.values()
+    return await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_SELECT),
+        context={"source": SOURCE_RECONFIGURE, "subentry_id": subentry.subentry_id},
+    )
+
+
+async def _open_edit(hass: HomeAssistant, result: dict[str, Any], value: str) -> dict[str, Any]:
+    chooser = await _menu(hass, result, "edit_option")
+    assert chooser["type"] is FlowResultType.FORM
+    assert chooser["step_id"] == "edit_option"
+    return await _configure(hass, chooser, {"option": value})
+
+
+async def _finish(hass: HomeAssistant, result: dict[str, Any]) -> dict[str, Any]:
+    result = await _menu(hass, result, "done")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    return result
+
+
+def _last_discovery(mqtt_mock: Any, device_id: str) -> dict[str, Any]:
+    published = [
+        call.args[1]
+        for call in mqtt_mock.async_publish.call_args_list
+        if call.args[0] == discovery_topic("homeassistant", device_id)
+    ]
+    return json.loads(published[-1])
+
+
+async def test_reconfigure_starts_at_the_menu_with_edit_and_remove(hass: HomeAssistant, hub_with_select) -> None:
+    result = await _reconfigure(hass, hub_with_select)
+    assert result["type"] is FlowResultType.MENU
+    assert result["step_id"] == "menu"
+    assert result["menu_options"] == ["add_option", "edit_option", "remove_option", "settings", "done"]
+    assert result["description_placeholders"]["count"] == "3"
+    assert result["description_placeholders"]["name"] == "Mode"
+
+
+async def test_edit_option_form_has_no_state_value_field(hass: HomeAssistant, hub_with_select) -> None:
+    """D-03, DEV-04: the chooser lists the options; the detail form holds only friendly_name and actions."""
+    result = await _reconfigure(hass, hub_with_select)
+    chooser = await _menu(hass, result, "edit_option")
+    options = _fields(chooser)["option"]["selector"]["select"]["options"]
+    assert options == [
+        {"value": "a", "label": "Alpha"},
+        {"value": "b", "label": "Bravo"},
+        {"value": "c", "label": "Charlie"},
+    ]
+
+    details = await _configure(hass, chooser, {"option": "b"})
+    assert details["type"] is FlowResultType.FORM
+    assert details["step_id"] == "edit_option_details"
+    assert set(_fields(details)) == {CONF_FRIENDLY_NAME, CONF_ACTIONS}
+    assert _fields(details)[CONF_ACTIONS]["selector"] == {"action": {}}
+    assert details["description_placeholders"]["state_value"] == "b"
+    prefill = _suggested_values(details)
+    assert prefill == {CONF_FRIENDLY_NAME: "Bravo", CONF_ACTIONS: ACTIONS_B}
+
+    with pytest.raises(InvalidData):
+        await _configure(hass, details, {CONF_STATE_VALUE: "z", CONF_FRIENDLY_NAME: "Bravo", CONF_ACTIONS: []})
+
+
+async def test_edit_option_changes_friendly_name_and_actions_only(
+    hass: HomeAssistant, hub_with_select, mqtt_mock
+) -> None:
+    """D-03, D-05, D-07: StateValue and position stay; only the entity option list changes on the broker."""
+    entry = hub_with_select
+    (subentry,) = entry.subentries.values()
+    device_id = subentry.data[CONF_DEVICE_ID]
+    unique_id = subentry.unique_id
+    calls = async_mock_service(hass, "test", "b2")
+    before = _last_discovery(mqtt_mock, device_id)
+
+    result = await _reconfigure(hass, entry)
+    details = await _open_edit(hass, result, "b")
+    result = await _configure(
+        hass, details, {CONF_FRIENDLY_NAME: "  Bravo renamed ", CONF_ACTIONS: [{"action": "test.b2"}]}
+    )
+    assert result["type"] is FlowResultType.MENU
+    mqtt_mock.async_publish.reset_mock()
+    result = await _finish(hass, result)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+
+    (updated,) = entry.subentries.values()
+    assert updated.subentry_id == subentry.subentry_id
+    assert updated.unique_id == unique_id
+    assert updated.data[CONF_DEVICE_ID] == device_id
+    assert updated.data[CONF_OPTIONS] == [
+        _option("a", "Alpha", ACTIONS_A),
+        _option("b", "Bravo renamed", [{"action": "test.b2"}]),
+        _option("c", "Charlie", [{"action": "test.c"}]),
+    ]
+
+    after = _last_discovery(mqtt_mock, device_id)
+    select = after["components"]["select"]
+    assert select["options"] == ["Alpha", "Bravo renamed", "Charlie"]
+    assert select["state_topic"] == before["components"]["select"]["state_topic"]
+    assert '"b": "Bravo renamed"' in select["value_template"]
+    assert '"Bravo renamed": "b"' in select["command_template"]
+
+    async_fire_mqtt_message(hass, state_topic("mqtt_actions", device_id), "b")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(calls) == 1
+
+
+async def test_edit_option_validation(hass: HomeAssistant, hub_with_select) -> None:
+    result = await _reconfigure(hass, hub_with_select)
+    details = await _open_edit(hass, result, "b")
+
+    for friendly, error in (
+        ("alpha", "friendly_name_duplicate"),
+        ("  CHARLIE ", "friendly_name_duplicate"),
+        ("None", "friendly_name_reserved"),
+        ("", "friendly_name_required"),
+        ("x" * (MAX_TEXT_LENGTH + 1), "friendly_name_invalid"),
+    ):
+        rejected = await _configure(hass, details, {CONF_FRIENDLY_NAME: friendly, CONF_ACTIONS: ACTIONS_B})
+        assert rejected["type"] is FlowResultType.FORM
+        assert rejected["step_id"] == "edit_option_details"
+        assert rejected["errors"] == {CONF_FRIENDLY_NAME: error}
+        assert rejected["description_placeholders"]["state_value"] == "b"
+
+    invalid = await _configure(hass, details, {CONF_FRIENDLY_NAME: "Bravo", CONF_ACTIONS: [{"bogus": 1}]})
+    assert invalid["errors"] == {"base": "invalid_actions"}
+    assert invalid["description_placeholders"]["field"] == "Bravo"
+
+    warned_input = {CONF_FRIENDLY_NAME: "Bravo", CONF_ACTIONS: DEVICE_ACTIONS}
+    warning = await _configure(hass, details, warned_input)
+    assert warning["errors"] == {"base": "device_id_warning"}
+    assert warning["description_placeholders"]["device_ids"] == "abc123"
+    saved = await _configure(hass, warning, warned_input)
+    assert saved["type"] is FlowResultType.MENU
+
+    # Keeping the option's own name is accepted
+    again = await _open_edit(hass, saved, "b")
+    kept = await _configure(hass, again, {CONF_FRIENDLY_NAME: "Bravo", CONF_ACTIONS: ACTIONS_B})
+    assert kept["type"] is FlowResultType.MENU
+
+
+async def test_add_option_in_reconfigure_appends_at_the_end(hass: HomeAssistant, hub_with_select, mqtt_mock) -> None:
+    """D-05: a new option goes last, also in the discovery options list; its actions run after the reconcile."""
+    entry = hub_with_select
+    (subentry,) = entry.subentries.values()
+    device_id = subentry.data[CONF_DEVICE_ID]
+    calls = async_mock_service(hass, "test", "d")
+
+    result = await _reconfigure(hass, entry)
+    result = await _add(hass, result, _option("d", "Delta", [{"action": "test.d"}]))
+    assert result["type"] is FlowResultType.MENU
+    assert result["description_placeholders"]["count"] == "4"
+    mqtt_mock.async_publish.reset_mock()
+    result = await _finish(hass, result)
+    assert result["reason"] == "reconfigure_successful"
+
+    (updated,) = entry.subentries.values()
+    assert [option[CONF_STATE_VALUE] for option in updated.data[CONF_OPTIONS]] == ["a", "b", "c", "d"]
+    assert _last_discovery(mqtt_mock, device_id)["components"]["select"]["options"] == [
+        "Alpha",
+        "Bravo",
+        "Charlie",
+        "Delta",
+    ]
+    async_fire_mqtt_message(hass, state_topic("mqtt_actions", device_id), "d")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(calls) == 1
+
+
+async def test_added_option_cannot_reuse_an_existing_value(hass: HomeAssistant, hub_with_select) -> None:
+    result = await _reconfigure(hass, hub_with_select)
+    form = await _menu(hass, result, "add_option")
+    rejected = await _configure(hass, form, _option("B", "Another"))
+    assert rejected["errors"] == {CONF_STATE_VALUE: "state_value_duplicate"}
+
+
+async def test_remove_option_needs_confirmation(hass: HomeAssistant, hub_with_select) -> None:
+    """D-02: the chooser leads to a confirmation menu; keep leaves the draft alone, confirm removes the option."""
+    entry = hub_with_select
+    result = await _reconfigure(hass, entry)
+
+    chooser = await _menu(hass, result, "remove_option")
+    assert chooser["type"] is FlowResultType.FORM
+    assert chooser["step_id"] == "remove_option"
+    confirm = await _configure(hass, chooser, {"option": "c"})
+    assert confirm["type"] is FlowResultType.MENU
+    assert confirm["step_id"] == "remove_confirm"
+    assert confirm["menu_options"] == ["remove_confirmed", "keep_option"]
+    assert confirm["description_placeholders"] == {"friendly_name": "Charlie", "state_value": "c"}
+
+    kept = await _menu(hass, confirm, "keep_option")
+    assert kept["type"] is FlowResultType.MENU
+    assert kept["step_id"] == "menu"
+    assert kept["description_placeholders"]["count"] == "3"
+
+    chooser = await _menu(hass, kept, "remove_option")
+    confirm = await _configure(hass, chooser, {"option": "c"})
+    removed = await _menu(hass, confirm, "remove_confirmed")
+    assert removed["type"] is FlowResultType.MENU
+    assert removed["description_placeholders"]["count"] == "2"
+    # Two options remain: removal is no longer offered (D-04)
+    assert "remove_option" not in removed["menu_options"]
+    assert "edit_option" in removed["menu_options"]
+    assert "done" in removed["menu_options"]
+
+    result = await _finish(hass, removed)
+    assert result["reason"] == "reconfigure_successful"
+    (updated,) = entry.subentries.values()
+    assert [option[CONF_STATE_VALUE] for option in updated.data[CONF_OPTIONS]] == ["a", "b"]
+
+
+async def test_removed_option_payload_is_unknown_afterwards(
+    hass: HomeAssistant, hub_with_select, caplog: pytest.LogCaptureFixture
+) -> None:
+    """D-02, STA-07: a payload of the removed StateValue is ignored and logged; the other options keep working."""
+    entry = hub_with_select
+    (subentry,) = entry.subentries.values()
+    device_id = subentry.data[CONF_DEVICE_ID]
+    calls = {name: async_mock_service(hass, "test", name) for name in ("a", "b", "c")}
+
+    result = await _reconfigure(hass, entry)
+    chooser = await _menu(hass, result, "remove_option")
+    confirm = await _configure(hass, chooser, {"option": "c"})
+    removed = await _menu(hass, confirm, "remove_confirmed")
+    await _finish(hass, removed)
+
+    with caplog.at_level(logging.WARNING, logger="custom_components.mqtt_actions"):
+        async_fire_mqtt_message(hass, state_topic("mqtt_actions", device_id), "c")
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(calls["c"]) == 0
+    assert any("'c'" in record.getMessage() for record in caplog.records)
+
+    async_fire_mqtt_message(hass, state_topic("mqtt_actions", device_id), "a")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(calls["a"]) == 1
+
+
+async def test_reconfigure_without_changes_aborts_successfully(hass: HomeAssistant, hub_with_select) -> None:
+    entry = hub_with_select
+    (subentry,) = entry.subentries.values()
+    original = copy.deepcopy(dict(subentry.data))
+
+    result = await _reconfigure(hass, entry)
+    result = await _finish(hass, result)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert dict(entry.subentries[subentry.subentry_id].data) == original
+
+
+async def test_reconfigure_replaces_data_and_keeps_device_id(hass: HomeAssistant, hub_with_select) -> None:
+    entry = hub_with_select
+    (subentry,) = entry.subentries.values()
+    device_id = subentry.data[CONF_DEVICE_ID]
+
+    result = await _reconfigure(hass, entry)
+    form = await _menu(hass, result, "settings")
+    result = await _configure(hass, form, _settings(name="  Renamed  "))
+    result = await _finish(hass, result)
+    assert result["reason"] == "reconfigure_successful"
+
+    (updated,) = entry.subentries.values()
+    assert updated.title == "Renamed"
+    assert updated.unique_id == subentry.unique_id
+    assert set(updated.data) == {
+        CONF_DEVICE_ID,
+        CONF_RUN_ON_STARTUP,
+        CONF_RUN_MODE,
+        CONF_BREAKER_MAX_RUNS,
+        CONF_BREAKER_WINDOW,
+        CONF_OPTIONS,
+    }
+    assert updated.data[CONF_DEVICE_ID] == device_id
+    assert updated.data[CONF_OPTIONS] == [_option(v, f, a) for v, f, a in ABC_OPTIONS]
+
+
+async def test_reconfigure_prefills_defaults_for_a_select_without_settings(
+    hass: HomeAssistant, mqtt_mock, make_hub_entry, make_select_subentry
+) -> None:
+    """D-10, D-14: a stored Select without the newer keys shows the defaults and saves them."""
+    entry = make_hub_entry(subentries=[make_select_subentry("Plain", ABC_OPTIONS)])
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    result = await _reconfigure(hass, entry)
+    form = await _menu(hass, result, "settings")
+    prefill = _suggested_values(form)
+    assert (prefill[CONF_RUN_MODE], prefill[CONF_BREAKER_MAX_RUNS], prefill[CONF_BREAKER_WINDOW]) == ("serial", 5, 10)
+    result = await _configure(hass, form, _settings(name="Plain"))
+    result = await _finish(hass, result)
+    (updated,) = entry.subentries.values()
+    assert (updated.data[CONF_RUN_MODE], updated.data[CONF_BREAKER_MAX_RUNS]) == ("serial", 5)
+    assert updated.data[CONF_BREAKER_WINDOW] == 10
+
+
+async def test_flow_never_mutates_stored_data_before_done(hass: HomeAssistant, hub_with_select) -> None:
+    """T-02-24: edits, additions, removals and settings changes work on a copy until Done."""
+    entry = hub_with_select
+    (subentry,) = entry.subentries.values()
+    original = copy.deepcopy(dict(subentry.data))
+    original_title = subentry.title
+
+    def untouched() -> bool:
+        current = entry.subentries[subentry.subentry_id]
+        return dict(current.data) == original and current.title == original_title
+
+    result = await _reconfigure(hass, entry)
+    details = await _open_edit(hass, result, "a")
+    result = await _configure(hass, details, {CONF_FRIENDLY_NAME: "Changed", CONF_ACTIONS: []})
+    assert untouched()
+    result = await _add(hass, result, _option("d", "Delta"))
+    assert untouched()
+    chooser = await _menu(hass, result, "remove_option")
+    confirm = await _configure(hass, chooser, {"option": "c"})
+    result = await _menu(hass, confirm, "remove_confirmed")
+    assert untouched()
+    form = await _menu(hass, result, "settings")
+    result = await _configure(hass, form, _settings(name="Other", run_mode="restart", breaker_max_runs=2))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert untouched()
+
+    result = await _finish(hass, result)
+    assert result["reason"] == "reconfigure_successful"
+    assert not untouched()
+
+
+async def test_settings_from_the_menu_update_run_mode_and_breaker(hass: HomeAssistant, hub_with_select) -> None:
+    """DEV-06, STA-06: run mode and breaker limits change through the menu and are stored as ints."""
+    entry = hub_with_select
+    result = await _reconfigure(hass, entry)
+    form = await _menu(hass, result, "settings")
+    result = await _configure(hass, form, _settings(run_mode="restart", breaker_max_runs=3.0, breaker_window=30.0))
+    result = await _finish(hass, result)
+    assert result["reason"] == "reconfigure_successful"
+
+    (updated,) = entry.subentries.values()
+    assert updated.data[CONF_RUN_MODE] == "restart"
+    assert updated.data[CONF_BREAKER_MAX_RUNS] == 3
+    assert updated.data[CONF_BREAKER_WINDOW] == 30
+    assert type(updated.data[CONF_BREAKER_MAX_RUNS]) is int
+    assert type(updated.data[CONF_BREAKER_WINDOW]) is int

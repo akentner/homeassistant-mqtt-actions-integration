@@ -80,6 +80,28 @@ REQUIRED_KEYS = (
         for field in ("state_value", "friendly_name", "actions")
     ),
     *(f"config_subentries.select.error.{key}" for key in SELECT_ERROR_KEYS),
+    *(
+        f"config_subentries.select.step.menu.menu_options.{option}"
+        for option in ("edit_option", "remove_option", "remove_confirmed", "keep_option")
+    ),
+    *(
+        f"config_subentries.select.step.{step}.title"
+        for step in ("edit_option", "edit_option_details", "remove_option")
+    ),
+    "config_subentries.select.step.remove_confirm.title",
+    "config_subentries.select.step.remove_confirm.description",
+    "config_subentries.select.step.edit_option.description",
+    "config_subentries.select.step.edit_option.data.option",
+    "config_subentries.select.step.remove_option.description",
+    "config_subentries.select.step.remove_option.data.option",
+    "config_subentries.select.step.remove_confirm.menu_options.remove_confirmed",
+    "config_subentries.select.step.remove_confirm.menu_options.keep_option",
+    "config_subentries.select.step.edit_option_details.description",
+    *(
+        f"config_subentries.select.step.edit_option_details.{group}.{field}"
+        for group in ("data", "data_description")
+        for field in ("friendly_name", "actions")
+    ),
 )
 
 
@@ -144,6 +166,11 @@ def test_select_placeholders_are_the_ones_the_flow_supplies() -> None:
     assert _variables(en["config_subentries.select.step.menu.description"]) == {"name", "count", "options"}
     assert _variables(en["config_subentries.select.error.invalid_actions"]) == {"field", "error"}
     assert _variables(en["config_subentries.select.error.device_id_warning"]) == {"device_ids"}
+    assert _variables(en["config_subentries.select.step.edit_option_details.description"]) == {"state_value"}
+    assert _variables(en["config_subentries.select.step.remove_confirm.description"]) == {
+        "friendly_name",
+        "state_value",
+    }
 
 
 def test_no_strings_json_exists() -> None:

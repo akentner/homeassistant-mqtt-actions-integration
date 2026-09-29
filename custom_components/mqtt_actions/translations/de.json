@@ -119,6 +119,8 @@
           "description": "Das Auswahl-Gerät {name} hat {count} Option(en).\n\n{options}\n\nEin Auswahl-Gerät braucht mindestens zwei Optionen. Es wird erst gespeichert, wenn du Gerät speichern wählst.",
           "menu_options": {
             "add_option": "Option hinzufügen",
+            "edit_option": "Option bearbeiten",
+            "remove_option": "Option entfernen",
             "settings": "Name und Einstellungen bearbeiten",
             "done": "Gerät speichern"
           }
@@ -135,6 +137,40 @@
             "state_value": "Genauer Text der Nachricht auf dem State-Topic für diese Option, ohne Leerzeichen am Anfang oder Ende. Nachrichten werden ohne Beachtung der Groß- und Kleinschreibung verglichen.",
             "friendly_name": "Name der Option in der Auswahl-Entität. Er muss bei jeder Option anders sein und darf nicht none lauten.",
             "actions": "Läuft auf dieser Instanz, wenn der Zustand auf diese Option wechselt. Optional. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen."
+          }
+        },
+        "edit_option": {
+          "title": "Option bearbeiten",
+          "description": "Wähle die Option, die du bearbeiten willst. Ihr Zustandswert kann nicht geändert werden.",
+          "data": {
+            "option": "Option"
+          }
+        },
+        "edit_option_details": {
+          "title": "Option bearbeiten",
+          "description": "Zustandswert: {state_value}. Der Zustandswert kann nicht geändert werden. Wenn diese Option gerade ausgewählt ist, zeigt die Entität nach dem Umbenennen unbekannt an, bis die nächste gültige Zustandsnachricht eintrifft.",
+          "data": {
+            "friendly_name": "Anzeigename",
+            "actions": "Aktionen"
+          },
+          "data_description": {
+            "friendly_name": "Name der Option in der Auswahl-Entität. Er muss bei jeder Option anders sein und darf nicht none lauten.",
+            "actions": "Läuft auf dieser Instanz, wenn der Zustand auf diese Option wechselt. Optional. Bevorzuge Entitäts-, Bereichs- oder Label-Ziele: Geräte-IDs unterscheiden sich zwischen Home-Assistant-Instanzen."
+          }
+        },
+        "remove_option": {
+          "title": "Option entfernen",
+          "description": "Wähle die Option, die du entfernen willst. Das Entfernen bestätigst du auf der nächsten Seite.",
+          "data": {
+            "option": "Option"
+          }
+        },
+        "remove_confirm": {
+          "title": "Option entfernen?",
+          "description": "Die Option {friendly_name} mit dem Zustandswert {state_value} entfernen? Nachrichten mit diesem Zustandswert werden danach ignoriert und protokolliert. Wenn diese Option gerade ausgewählt ist, zeigt die Entität unbekannt an, bis die nächste gültige Zustandsnachricht eintrifft. Die Änderung wird gespeichert, wenn du Gerät speichern wählst.",
+          "menu_options": {
+            "remove_confirmed": "Ja, Option entfernen",
+            "keep_option": "Nein, Option behalten"
           }
         }
       },

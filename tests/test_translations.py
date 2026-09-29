@@ -80,10 +80,7 @@ REQUIRED_KEYS = (
         for field in ("state_value", "friendly_name", "actions")
     ),
     *(f"config_subentries.select.error.{key}" for key in SELECT_ERROR_KEYS),
-    *(
-        f"config_subentries.select.step.menu.menu_options.{option}"
-        for option in ("edit_option", "remove_option", "remove_confirmed", "keep_option")
-    ),
+    *(f"config_subentries.select.step.menu.menu_options.{option}" for option in ("edit_option", "remove_option")),
     *(
         f"config_subentries.select.step.{step}.title"
         for step in ("edit_option", "edit_option_details", "remove_option")

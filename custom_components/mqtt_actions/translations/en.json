@@ -119,6 +119,8 @@
           "description": "Select device {name} has {count} option(s).\n\n{options}\n\nA select device needs at least two options. Nothing is saved until you choose Save the device.",
           "menu_options": {
             "add_option": "Add an option",
+            "edit_option": "Edit an option",
+            "remove_option": "Remove an option",
             "settings": "Edit name and settings",
             "done": "Save the device"
           }
@@ -135,6 +137,40 @@
             "state_value": "Exact text of the state topic payload for this option, without spaces at the start or end. Payloads are matched ignoring case.",
             "friendly_name": "Name of the option in the select entity. It must be different for every option and cannot be none.",
             "actions": "Runs on this instance when the state changes to this option. Optional. Prefer entity, area or label targets: device IDs differ between Home Assistant instances."
+          }
+        },
+        "edit_option": {
+          "title": "Edit an option",
+          "description": "Choose the option to edit. Its state value cannot be changed.",
+          "data": {
+            "option": "Option"
+          }
+        },
+        "edit_option_details": {
+          "title": "Edit option",
+          "description": "State value: {state_value}. The state value cannot be changed. If this option is the one currently selected, the entity shows unknown after you rename it, until the next valid state message arrives.",
+          "data": {
+            "friendly_name": "Friendly name",
+            "actions": "Actions"
+          },
+          "data_description": {
+            "friendly_name": "Name of the option in the select entity. It must be different for every option and cannot be none.",
+            "actions": "Runs on this instance when the state changes to this option. Optional. Prefer entity, area or label targets: device IDs differ between Home Assistant instances."
+          }
+        },
+        "remove_option": {
+          "title": "Remove an option",
+          "description": "Choose the option to remove. You confirm the removal on the next page.",
+          "data": {
+            "option": "Option"
+          }
+        },
+        "remove_confirm": {
+          "title": "Remove the option?",
+          "description": "Remove the option {friendly_name} with the state value {state_value}? Messages with this state value are ignored and logged afterwards. If this option is currently selected, the entity shows unknown until the next valid state message arrives. The change is saved when you choose Save the device.",
+          "menu_options": {
+            "remove_confirmed": "Yes, remove the option",
+            "keep_option": "No, keep the option"
           }
         }
       },

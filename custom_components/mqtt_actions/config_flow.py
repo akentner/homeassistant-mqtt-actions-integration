@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import probatio
 from homeassistant.config_entries import (
+    SOURCE_RECONFIGURE,
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
@@ -54,6 +55,9 @@ CONF_NAME = "name"
 
 # Validation error text shown in the form is capped; the submitted action data is never echoed (T-01-09)
 MAX_FLOW_ERROR_LENGTH = 200
+
+# Field of the option chooser steps
+CONF_OPTION = "option"
 
 # Settings every device stores, in the order they are read back from a draft
 SETTINGS_KEYS: tuple[str, ...] = (CONF_RUN_ON_STARTUP, CONF_RUN_MODE, CONF_BREAKER_MAX_RUNS, CONF_BREAKER_WINDOW)
@@ -283,6 +287,27 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
         """Start with an empty draft; the settings step fills the name and the shared settings."""
         super().__init__()
         self._draft: dict[str, Any] = {CONF_OPTIONS: []}
+        # StateValue of the option the edit or remove steps work on; the StateValue is the option's identity (D-03)
+        self._selected: str | None = None
+
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """
+        Load the stored device into a private draft and open the menu.
+
+        The presence of this step is what makes Home Assistant offer reconfigure. The draft is a deep copy: stored data
+        is never mutated, which would change configuration without an update listener call (T-02-24).
+        """
+        subentry = self._get_reconfigure_subentry()
+        data = subentry.data
+        self._draft = {
+            CONF_NAME: subentry.title,
+            CONF_RUN_ON_STARTUP: data.get(CONF_RUN_ON_STARTUP, False),
+            CONF_RUN_MODE: data.get(CONF_RUN_MODE, RUN_MODE_SERIAL),
+            CONF_BREAKER_MAX_RUNS: data.get(CONF_BREAKER_MAX_RUNS, DEFAULT_BREAKER_MAX_RUNS),
+            CONF_BREAKER_WINDOW: data.get(CONF_BREAKER_WINDOW, DEFAULT_BREAKER_WINDOW),
+            CONF_OPTIONS: copy.deepcopy(list(data.get(CONF_OPTIONS, []))),
+        }
+        return await self.async_step_menu()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         """Ask for the name and the settings of the device, then open the menu."""
@@ -322,6 +347,10 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
         menu_options: list[str] = []
         if len(options) < MAX_OPTIONS:
             menu_options.append("add_option")
+        if options:
+            menu_options.append("edit_option")
+        if len(options) > MIN_OPTIONS:
+            menu_options.append("remove_option")
         menu_options.append("settings")
         if len(options) >= MIN_OPTIONS:
             menu_options.append("done")
@@ -344,11 +373,7 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
         options: list[dict[str, Any]] = self._draft[CONF_OPTIONS]
 
         if user_input is not None:
-            errors = validate_option(
-                user_input[CONF_STATE_VALUE],
-                user_input[CONF_FRIENDLY_NAME],
-                [(option[CONF_STATE_VALUE], option[CONF_FRIENDLY_NAME]) for option in options],
-            )
+            errors = validate_option(user_input[CONF_STATE_VALUE], user_input[CONF_FRIENDLY_NAME], self._others())
             if not errors:
                 friendly_name = user_input[CONF_FRIENDLY_NAME].strip()
                 errors, placeholders = await self._async_check_actions(
@@ -378,10 +403,136 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
             step_id="add_option", data_schema=schema, errors=errors, description_placeholders=placeholders
         )
 
+    def _others(self, *, skip: str | None = None) -> list[tuple[str, str]]:
+        """Return the (StateValue, friendly name) pairs of the draft's options, leaving out the option `skip`."""
+        return [
+            (option[CONF_STATE_VALUE], option[CONF_FRIENDLY_NAME])
+            for option in self._draft[CONF_OPTIONS]
+            if option[CONF_STATE_VALUE] != skip
+        ]
+
+    def _selected_option(self) -> dict[str, Any] | None:
+        """Return the draft option the edit or remove steps work on, or None when it is gone."""
+        return next(
+            (option for option in self._draft[CONF_OPTIONS] if option[CONF_STATE_VALUE] == self._selected), None
+        )
+
+    def _chooser_schema(self) -> probatio.Schema:
+        """Return the schema of the option chooser: the value is the StateValue, the label the friendly name."""
+        return probatio.Schema(
+            {
+                probatio.Required(CONF_OPTION): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value=option[CONF_STATE_VALUE], label=option[CONF_FRIENDLY_NAME])
+                            for option in self._draft[CONF_OPTIONS]
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                )
+            }
+        )
+
+    async def async_step_edit_option(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Choose the option to edit."""
+        if user_input is None:
+            return self.async_show_form(step_id="edit_option", data_schema=self._chooser_schema())
+        self._selected = user_input[CONF_OPTION]
+        return await self.async_step_edit_option_details()
+
+    async def async_step_edit_option_details(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Edit the friendly name and the actions of the chosen option; the StateValue is locked (D-03)."""
+        option = self._selected_option()
+        if option is None:
+            return await self.async_step_menu()
+
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
+        if user_input is not None:
+            errors = validate_option(
+                option[CONF_STATE_VALUE],
+                user_input[CONF_FRIENDLY_NAME],
+                self._others(skip=option[CONF_STATE_VALUE]),
+                editing=True,
+            )
+            if not errors:
+                friendly_name = user_input[CONF_FRIENDLY_NAME].strip()
+                errors, placeholders = await self._async_check_actions(
+                    [(friendly_name, user_input.get(CONF_ACTIONS, []))], user_input
+                )
+            if not errors:
+                option[CONF_FRIENDLY_NAME] = friendly_name
+                option[CONF_ACTIONS] = user_input.get(CONF_ACTIONS, [])
+                return await self.async_step_menu()
+
+        # There is deliberately no StateValue field in this schema
+        schema = probatio.Schema(
+            {
+                probatio.Required(CONF_FRIENDLY_NAME): str,
+                probatio.Optional(CONF_ACTIONS, default=[]): selector.ActionSelector(),
+            }
+        )
+        suggested = (
+            user_input
+            if user_input is not None
+            else {CONF_FRIENDLY_NAME: option[CONF_FRIENDLY_NAME], CONF_ACTIONS: option[CONF_ACTIONS]}
+        )
+        return self.async_show_form(
+            step_id="edit_option_details",
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            errors=errors,
+            description_placeholders={**placeholders, "state_value": option[CONF_STATE_VALUE]},
+        )
+
+    async def async_step_remove_option(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Choose the option to remove; the removal itself needs a confirmation (D-02)."""
+        if len(self._draft[CONF_OPTIONS]) <= MIN_OPTIONS:
+            return await self.async_step_menu()
+        if user_input is None:
+            return self.async_show_form(step_id="remove_option", data_schema=self._chooser_schema())
+        self._selected = user_input[CONF_OPTION]
+        return await self.async_step_remove_confirm()
+
+    async def async_step_remove_confirm(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """Ask whether the chosen option really goes."""
+        option = self._selected_option()
+        if option is None:
+            return await self.async_step_menu()
+        return self.async_show_menu(
+            step_id="remove_confirm",
+            menu_options=["remove_confirmed", "keep_option"],
+            description_placeholders={
+                "friendly_name": option[CONF_FRIENDLY_NAME],
+                "state_value": option[CONF_STATE_VALUE],
+            },
+        )
+
+    async def async_step_remove_confirmed(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """Remove the confirmed option from the draft, unless that would leave fewer than the minimum."""
+        option = self._selected_option()
+        if option is not None and len(self._draft[CONF_OPTIONS]) > MIN_OPTIONS:
+            self._draft[CONF_OPTIONS].remove(option)
+        self._selected = None
+        return await self.async_step_menu()
+
+    async def async_step_keep_option(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """Leave the option alone and go back to the menu."""
+        self._selected = None
+        return await self.async_step_menu()
+
     async def async_step_done(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
-        """Store the device once; the device id is a fresh uuid4 that never changes (D-03)."""
+        """Store the device once: create it with a fresh uuid4 device id, or replace the stored data (D-03)."""
         if len(self._draft[CONF_OPTIONS]) < MIN_OPTIONS:
             return await self.async_step_menu(user_input)
+        if self.source == SOURCE_RECONFIGURE:
+            subentry = self._get_reconfigure_subentry()
+            # Replace, do not merge; re-inject the immutable device id
+            return self.async_update_and_abort(
+                self._get_entry(),
+                subentry,
+                title=self._draft[CONF_NAME],
+                data={**self._device_data(), CONF_DEVICE_ID: subentry.data[CONF_DEVICE_ID]},
+            )
         device_id = str(uuid.uuid4())
         return self.async_create_entry(
             title=self._draft[CONF_NAME],

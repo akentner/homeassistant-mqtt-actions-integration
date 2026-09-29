@@ -32,7 +32,7 @@
 - [x] **STA-04**: Retained state received at startup or reconnect only sets the baseline and runs no actions (optional per-device "run on startup" flag)
 - [x] **STA-05**: The last processed state per device is persisted; only real edges trigger actions
 - [ ] **STA-06**: A per-device circuit breaker stops action loops caused by actions that toggle their own device
-- [ ] **STA-07**: A Select payload that matches no configured StateValue is ignored and logged
+- [x] **STA-07**: A Select payload that matches no configured StateValue is ignored and logged
 
 ### Discovery
 
@@ -129,7 +129,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STA-04 | Phase 1 | Complete |
 | STA-05 | Phase 1 | Complete |
 | STA-06 | Phase 2 | Pending |
-| STA-07 | Phase 2 | Pending |
+| STA-07 | Phase 2 | Complete |
 | DSC-01 | Phase 1 | Complete |
 | DSC-02 | Phase 1 | Complete |
 | DSC-03 | Phase 3 | Pending |

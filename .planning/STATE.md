@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 2
+current_phase: 02
 current_phase_name: Select Devices and Reliable Execution
-status: planning
-stopped_at: Phase 2 context gathered
-last_updated: "2026-09-29T15:26:07.103Z"
+status: executing
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-09-29T17:30:37.062Z"
 last_activity: 2026-09-29
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: 470c1754185c33a88244b1ab8e21daef55b0f9ab
+last_activity_desc: Phase 02 execution started
+state_head: 0e40f93c637c2a94d03aa946b8e3c70745b3e374
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 11
+  completed_plans: 7
   percent: 25
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-28)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 01 — Walking Skeleton - Installable Switch
+**Current focus:** Phase 02 — Select Devices and Reliable Execution
 
 ## Current Position
 
-Phase: 2 — Select Devices and Reliable Execution
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-09-29 — Phase 01 complete, transitioned to Phase 2
+Phase: 02 (Select Devices and Reliable Execution) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-09-29 — Phase 02 execution started
 
 Progress: [███░░░░░░░] 25% of Phase 01 plans
 
@@ -57,6 +57,7 @@ Progress: [███░░░░░░░] 25% of Phase 01 plans
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P06 | multi-session | 3 tasks | 8 files |
+| Phase 02 P01 | 10 min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,10 @@ Recent decisions affecting current work:
 - [Roadmap]: Startup policy = baseline only (opt-in run-on-startup flag); command topic equals state topic; domain `mqtt_actions`; min HA 2026.9.0
 - [Roadmap]: OPS-06 test tiers are built incrementally per phase (TDD on) and closed in Phase 4 when the multi-instance tier exists
 - [Phase 01]: [01-06] hacs.json floor 2026.9.0; HACS license check reads the default branch, so LICENSE was added to main (c02d5fe, developer-approved)
+- [Phase 02]: device_id stays the only device identity; triggers are keyed by trigger_key = sha256(lowercased StateValue)[:12], derived and never stored
+- [Phase 02]: A stored baseline that is not a StateValue of its device is sanitized to no baseline at add and change time (A11)
+- [Phase 02]: Renaming or removing the selected Select option leaves the HA entity at unknown until the next valid payload; no republish (open question 1)
+- [Phase 02]: Select payload normalization is str.strip().lower() in tracker and Jinja (trim | lower), never casefold
 
 ### Pending Todos
 
@@ -93,6 +98,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T15:26:07.057Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-select-devices-and-reliable-execution/02-CONTEXT.md
+Last session: 2026-09-29T17:30:37.017Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None

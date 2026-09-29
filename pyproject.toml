@@ -10,6 +10,7 @@ package = false
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["broker: needs a real mosquitto broker on PATH (skipped when it is not installed)"]
 
 [dependency-groups]
 dev = [

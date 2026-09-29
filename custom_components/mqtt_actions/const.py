@@ -31,6 +31,15 @@ STORE_KEY: Final = f"{DOMAIN}.state"
 STORE_VERSION: Final = 1
 STORE_LAST_ACTED: Final = "last_acted"
 STORE_PUBLISHED: Final = "published"
+STORE_SAVE_DELAY: Final = 5.0
+
+# Logging: unknown payloads are logged as a truncated repr so a payload cannot grow or forge a log line
+MAX_LOGGED_PAYLOAD_LENGTH: Final = 40
+
+# Trigger names shown in Repairs issues (same labels as the action fields of the subentry dialog)
+TRIGGER_ON: Final = "onChangeToOn"
+TRIGGER_OFF: Final = "onChangeToOff"
+TRIGGER_SETUP: Final = "setup"
 
 # Repairs issues
 ISSUE_ACTION_FAILED_PREFIX: Final = "action_failed_"

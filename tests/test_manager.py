@@ -782,8 +782,8 @@ async def test_reconcile_change_rebuilds_scripts_keeps_baseline(
     assert (len(off_calls), len(new_off_calls)) == (0, 1)
     await _fire(hass, entry, device_id, "ON", retain=False)
     assert (len(on_calls), len(new_on_calls)) == (1, 1)
-    # The previous Scripts are unloaded, only the two new ones stay owned by the runner
-    assert entry.runtime_data.runner.script_count(device_id) == 2
+    # The previous Script is unloaded, only the one new Script of the device stays owned by the runner
+    assert entry.runtime_data.runner.script_count(device_id) == 1
     # Discovery is republished with the new name
     published = _publishes(mqtt_mock, discovery_topic("homeassistant", device_id))
     assert len(published) == 2

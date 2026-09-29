@@ -35,6 +35,8 @@ CONF_BREAKER_MAX_RUNS: Final = "breaker_max_runs"
 CONF_BREAKER_WINDOW: Final = "breaker_window"
 DEFAULT_BREAKER_MAX_RUNS: Final = 5
 DEFAULT_BREAKER_WINDOW: Final = 10
+# Serial runs queue up to this many per device; more are dropped and logged. Fixed, not user-configurable (D-12)
+SERIAL_QUEUE_LIMIT: Final = 10
 
 # Switch payload contract (D-02)
 PAYLOAD_ON: Final = "ON"

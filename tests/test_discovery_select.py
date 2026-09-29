@@ -95,7 +95,9 @@ def test_build_discovery_select_component() -> None:
 
     payload = _payload(spec)
 
-    assert list(payload["components"]) == ["select"]
+    # One test button per option follows the select (D-13); their shape is pinned in tests/test_test_buttons.py
+    assert next(iter(payload["components"])) == "select"
+    assert len(payload["components"]) == 4
     select = payload["components"]["select"]
     assert select["platform"] == "select"
     assert select["unique_id"] == DEVICE_ID
@@ -223,7 +225,8 @@ async def test_select_device_publishes_select_discovery_through_manager(
     ((payload, qos, retain),) = _publishes(mqtt_mock, discovery_topic("homeassistant", device_id))
 
     components = json.loads(payload)["components"]
-    assert list(components) == ["select"]
+    assert [key for key, component in components.items() if component["platform"] == "select"] == ["select"]
+    assert [component["platform"] for component in components.values()].count("switch") == 0
     assert components["select"]["options"] == ["Alpha", "Bravo"]
     assert (qos, retain) == (1, True)
     assert hass.states.get("select.mode") is not None

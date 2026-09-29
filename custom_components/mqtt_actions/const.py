@@ -38,6 +38,9 @@ DEFAULT_BREAKER_WINDOW: Final = 10
 # Serial runs queue up to this many per device; more are dropped and logged. Fixed, not user-configurable (D-12)
 SERIAL_QUEUE_LIMIT: Final = 10
 
+# Component key prefix of the test button of a trigger; the key of the trigger follows (D-13)
+BUTTON_KEY_PREFIX: Final = "test_"
+
 # Switch payload contract (D-02)
 PAYLOAD_ON: Final = "ON"
 PAYLOAD_OFF: Final = "OFF"

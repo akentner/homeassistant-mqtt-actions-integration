@@ -40,7 +40,7 @@ from .model import DeviceSpec, spec_from_subentry, trigger_key
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .runner import ActionRunner
 from .state import StateTracker
-from .topics import state_topic
+from .topics import state_topic, test_topic
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -58,6 +58,7 @@ class Device:
     tracker: StateTracker
     signature: str
     unsubscribe: CALLBACK_TYPE | None = None
+    unsubscribe_test: CALLBACK_TYPE | None = None
 
     @property
     def name(self) -> str:
@@ -200,6 +201,8 @@ class Manager:
             for device in self.devices.values():
                 if device.unsubscribe is not None:
                     device.unsubscribe()
+                if device.unsubscribe_test is not None:
+                    device.unsubscribe_test()
                 await self.runner.async_unload(device.device_id)
             self.devices.clear()
             # Scripts of a device whose start failed halfway are not in self.devices yet
@@ -304,6 +307,10 @@ class Manager:
             state_topic(self._base_topic, device_id),
             partial(self._on_message, device_id),
         )
+        device.unsubscribe_test = await self.gateway.async_subscribe(
+            test_topic(self._base_topic, device_id),
+            partial(self._on_test_message, device_id),
+        )
         await self._async_publish_discovery(device)
         self._published.add(device_id)
         self._schedule_save()
@@ -342,6 +349,8 @@ class Manager:
         )
         if device.unsubscribe is not None:
             device.unsubscribe()
+        if device.unsubscribe_test is not None:
+            device.unsubscribe_test()
         state_cleared = await _async_attempt(
             partial(self._publisher.async_clear_state, device_id), f"clear the retained state of device {device.name}"
         )
@@ -399,6 +408,33 @@ class Manager:
             trigger.label,
             trigger.key,
             {"device_id": device_id, "state": decision.value},
+        )
+
+    @callback
+    def _on_test_message(self, device_id: str, msg: IncomingMessage) -> None:
+        """
+        Run the actions of the trigger whose test button was pressed (D-13).
+
+        The press never touches the tracker, the baseline or the state topic, and nothing is published. A retained
+        message is a replay, never a press, so it must not run actions (T-02-09). Only a payload that equals a
+        StateValue of the device runs anything (T-02-08).
+        """
+        if msg.retain or (device := self.devices.get(device_id)) is None:
+            return
+        value = device.spec.accepted.get(msg.payload.strip().lower())
+        if value is None:
+            self._log_ignored(device, msg.payload)
+            return
+        trigger = device.spec.triggers.get(trigger_key(value))
+        if trigger is None or not self.runner.can_run(device_id, trigger.key):
+            return
+        self.runner.enqueue(
+            device_id,
+            device.name,
+            trigger.label,
+            trigger.key,
+            {"device_id": device_id, "state": value},
+            test=True,
         )
 
     @staticmethod

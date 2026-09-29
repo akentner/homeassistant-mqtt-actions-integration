@@ -119,16 +119,20 @@ class ActionRunner:
         """Return the number of Scripts the runner owns for a device: 1 or 0."""
         return 1 if device_id in self._scripts else 0
 
-    def enqueue(
+    def enqueue(  # noqa: PLR0913
         self,
         device_id: str,
         device_name: str,
         trigger_label: str,
         trigger_key: str,
         run_variables: dict[str, Any],
+        *,
+        test: bool = False,
     ) -> None:
         """
         Start a run of the device's Script in a background task tied to the config entry lifecycle.
+
+        Every run gets the run variables `trigger_key` and `test`; `test` is True for a run started by a test button.
 
         A change of a trigger without actions never reaches this method, so it cannot cancel a running restart run
         (A5). Reconfiguring a device unloads its previous Script, which stops the in-flight run of that Script; that
@@ -146,7 +150,7 @@ class ActionRunner:
                 trigger_label,
                 script=script,
                 generation=generation,
-                run_variables={**run_variables, "trigger_key": trigger_key},
+                run_variables={**run_variables, "trigger_key": trigger_key, "test": test},
             ),
             name=f"{DOMAIN} {script.name}",
         )

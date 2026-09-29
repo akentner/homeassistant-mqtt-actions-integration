@@ -57,14 +57,16 @@ def _published_discovery(mqtt_mock: Any, device_id: str, prefix: str = "homeassi
 
 
 def test_build_discovery_switch_payload_unchanged() -> None:
-    """The Switch spec yields the same device, origin, availability and switch component as in Phase 1."""
+    """The Switch spec yields the same device, origin, availability and switch component as in Phase 1, plus buttons."""
     spec = spec_from_data(SUBENTRY_SWITCH, "Lamp", {CONF_DEVICE_ID: "dev-1"})
     payload = discovery.build_discovery(spec=spec, base_topic="mqtt_actions", instance_id="inst-1", sw_version="1.2.3")
 
     assert payload["device"] == {"identifiers": ["mqtt_actions_dev-1"], "name": "Lamp"}
     assert payload["origin"] == {"name": "MQTT Actions", "sw_version": "1.2.3"}
     topic = "mqtt_actions/v1/devices/dev-1/state"
-    assert list(payload["components"]) == ["switch"]
+    # The test buttons (D-13) come after the switch; their shape is pinned in tests/test_test_buttons.py
+    assert next(iter(payload["components"])) == "switch"
+    assert len(payload["components"]) == 3
     assert payload["components"]["switch"] == {
         "platform": "switch",
         "unique_id": "dev-1",

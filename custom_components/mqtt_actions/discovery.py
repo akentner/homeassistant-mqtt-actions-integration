@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.json import json_dumps
 
-from .const import DOMAIN, PAYLOAD_OFF, PAYLOAD_ON, SUBENTRY_SELECT
-from .topics import availability_topic, discovery_topic, state_topic
+from .const import BUTTON_KEY_PREFIX, DOMAIN, PAYLOAD_OFF, PAYLOAD_ON, SUBENTRY_SELECT
+from .topics import availability_topic, discovery_topic, state_topic, test_topic
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from .model import DeviceSpec
+    from .model import DeviceSpec, TriggerSpec
     from .mqtt_gateway import MqttGateway
 
 
@@ -85,18 +85,46 @@ def _select_component(topic: str, spec: DeviceSpec) -> dict[str, Any]:
     }
 
 
+def button_component_key(key: str) -> str:
+    """Return the component key of a trigger's test button; it contains no spaces, core splits ids on one."""
+    return BUTTON_KEY_PREFIX + key
+
+
+def _button_component(topic: str, device_id: str, trigger: TriggerSpec) -> dict[str, Any]:
+    """
+    Return the test button of a trigger.
+
+    The button carries no logic: it publishes the exact StateValue, not retained, to the test topic and the manager
+    runs that trigger's actions itself. The unique id derives from the immutable StateValue, so it survives renames.
+    """
+    return {
+        "platform": "button",
+        "unique_id": f"{device_id}_test_{trigger.key}",
+        "name": f"Test {trigger.friendly_name}",
+        "command_topic": topic,
+        "payload_press": trigger.value,
+        "retain": False,
+        "qos": 1,
+        # Keeps the buttons off auto-generated dashboards and lists them under Configuration (A4)
+        "entity_category": "config",
+    }
+
+
 def build_discovery(*, spec: DeviceSpec, base_topic: str, instance_id: str, sw_version: str) -> dict[str, Any]:
     """Build the device-based discovery payload of a Switch or Select device (D-01, D-03, D-05)."""
     topic = state_topic(base_topic, spec.device_id)
-    component = (
+    components: dict[str, Any] = (
         {"select": _select_component(topic, spec)}
         if spec.kind == SUBENTRY_SELECT
         else {"switch": _switch_component(topic, spec.device_id)}
     )
+    button_topic = test_topic(base_topic, spec.device_id)
+    for trigger in spec.triggers.values():
+        components[button_component_key(trigger.key)] = _button_component(button_topic, spec.device_id, trigger)
     return {
         "device": {"identifiers": [f"{DOMAIN}_{spec.device_id}"], "name": spec.name},
         "origin": {"name": "MQTT Actions", "sw_version": sw_version},
-        "components": component,
+        "components": components,
         "availability": [{"topic": availability_topic(base_topic, instance_id)}],
     }
 

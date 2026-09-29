@@ -19,6 +19,7 @@ from .const import (
     CONF_RUN_ON_STARTUP,
     DOMAIN,
     LOGGER,
+    MAX_ISSUE_ERROR_LENGTH,
     MAX_LOGGED_PAYLOAD_LENGTH,
     PAYLOAD_OFF,
     PAYLOAD_ON,
@@ -28,6 +29,9 @@ from .const import (
     STORE_SAVE_DELAY,
     STORE_VERSION,
     SUBENTRY_SWITCH,
+    TRIGGER_OFF,
+    TRIGGER_ON,
+    TRIGGER_SETUP,
 )
 from .discovery import DiscoveryPublisher
 from .mqtt_gateway import IncomingMessage, MqttGateway
@@ -98,9 +102,7 @@ class Manager:
             for device in self.devices.values():
                 if device.unsubscribe is not None:
                     device.unsubscribe()
-                for script in (device.on_script, device.off_script):
-                    if script is not None:
-                        await script.async_unload()
+                await self.runner.async_unload(device.device_id)
             self.devices.clear()
 
     async def _async_load_store(self) -> None:
@@ -160,11 +162,19 @@ class Manager:
         self._schedule_save()
 
     async def _async_build(self, subentry: ConfigSubentry, key: str) -> Script | None:
-        """Build the script for one trigger; invalid stored actions are logged and skipped."""
+        """
+        Build the script for one trigger.
+
+        Invalid stored actions are logged and shown in Repairs (trigger setup); that transition then has no script while
+        the other one and the baseline tracking keep working. Reconfiguring the device rebuilds it.
+        """
+        device_id: str = subentry.data[CONF_DEVICE_ID]
         try:
-            return await self.runner.async_build_script(f"{subentry.title} {key}", subentry.data[key])
-        except ActionsInvalid:
-            LOGGER.exception("Invalid actions for %s of device %s", key, subentry.title)
+            return await self.runner.async_build_script(device_id, f"{subentry.title} {key}", subentry.data[key])
+        except ActionsInvalid as err:
+            error = str(err)[:MAX_ISSUE_ERROR_LENGTH]
+            LOGGER.error("Invalid actions for %s of device %s: %s", key, subentry.title, error)
+            self.runner.report_failure(device_id, subentry.title, TRIGGER_SETUP, error)
             return None
 
     @callback
@@ -181,11 +191,18 @@ class Manager:
             self._schedule_save()
         if not decision.act:
             return
-        script = device.on_script if decision.value == PAYLOAD_ON else device.off_script
+        is_on = decision.value == PAYLOAD_ON
+        script = device.on_script if is_on else device.off_script
         if script is None:
             return
         # Only the device id and the normalised value reach templates, never the raw payload
-        self.runner.enqueue(script, {"device_id": device_id, "state": decision.value})
+        self.runner.enqueue(
+            device_id,
+            device.name,
+            TRIGGER_ON if is_on else TRIGGER_OFF,
+            script,
+            {"device_id": device_id, "state": decision.value},
+        )
 
     @staticmethod
     def _log_ignored(device: Device, payload: str) -> None:

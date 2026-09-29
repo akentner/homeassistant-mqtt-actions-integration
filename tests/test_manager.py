@@ -438,9 +438,11 @@ async def test_issue_created_when_action_fails(
     assert placeholders["trigger"] == "onChangeToOn"
     assert ISSUE_TIME_PATTERN.match(placeholders["time"])
     assert "boom" in placeholders["error"]
-    failures = [r for r in caplog.records if r.levelno == logging.ERROR and "Lamp" in r.getMessage()]
-    assert failures
-    assert failures[0].exc_info is not None
+    # Home Assistant's Script logs its own line without a traceback; the runner adds the one with the exception
+    with_exception = [r for r in caplog.records if r.levelno == logging.ERROR and r.exc_info is not None]
+    assert len(with_exception) == 1
+    assert "Lamp" in with_exception[0].getMessage()
+    assert "onChangeToOn" in with_exception[0].getMessage()
 
 
 async def test_issue_updated_in_place_on_repeated_failure(

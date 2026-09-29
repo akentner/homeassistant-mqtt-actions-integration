@@ -6,6 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .manager import Manager, async_remove_all_devices
+from .mqtt_gateway import MqttGateway
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -15,10 +16,11 @@ type MqttActionsConfigEntry = ConfigEntry[Manager]
 
 async def async_setup_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) -> bool:
     """Set up MQTT Actions from a config entry."""
-    manager = Manager(hass, entry)
-    if not await manager.gateway.async_wait_ready():
+    # Nothing else runs before this check: without a ready MQTT client the entry retries later
+    if not await MqttGateway(hass).async_wait_ready():
         msg = "MQTT is not available"
         raise ConfigEntryNotReady(msg)
+    manager = Manager(hass, entry)
     entry.runtime_data = manager
     await manager.async_start()
     entry.async_on_unload(entry.add_update_listener(_async_entry_updated))

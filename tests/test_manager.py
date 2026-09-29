@@ -1110,6 +1110,7 @@ async def test_unload_publishes_offline_and_never_clears_discovery(
     await _fire(hass, entry, device_id, "ON", retain=False)
     availability = availability_topic(STATE_TOPIC_BASE, entry.data[CONF_INSTANCE_ID])
     mqtt_mock.async_publish.reset_mock()
+    runner = entry.runtime_data.runner
 
     assert await hass.config_entries.async_unload(entry.entry_id)
 
@@ -1117,7 +1118,7 @@ async def test_unload_publishes_offline_and_never_clears_discovery(
     # No empty payload on any topic, in particular none on a config or state topic
     assert _empty_publishes(mqtt_mock) == []
     # Scripts are unloaded and the subscription is gone: a later live message runs nothing
-    assert entry.runtime_data.runner._scripts == {}
+    assert runner._scripts == {}
     await _fire(hass, entry, device_id, "OFF", retain=False)
     assert len(on_calls) == 1
     # The baseline was saved on the way out

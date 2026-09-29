@@ -1,4 +1,10 @@
-"""Turns switch subentries into subscriptions, scripts and discovery."""
+"""
+Turns switch subentries into subscriptions, scripts and discovery.
+
+Known limitation: the MQTT client is shared with Home Assistant and offers this integration no Last Will, so a hard
+crash leaves a stale retained "online" availability on the broker. Heartbeat-based availability (deferred requirement
+AVL-01) addresses it.
+"""
 
 import asyncio
 import json
@@ -22,6 +28,7 @@ from .const import (
     CONF_RUN_ON_STARTUP,
     DOMAIN,
     ISSUE_ACTION_FAILED_PREFIX,
+    ISSUE_DISCOVERY_DISABLED,
     LOGGER,
     MAX_ISSUE_ERROR_LENGTH,
     MAX_LOGGED_PAYLOAD_LENGTH,
@@ -121,7 +128,9 @@ async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> N
     await store.async_remove()
     registry = ir.async_get(hass)
     for domain, issue_id in list(registry.issues):
-        if domain == DOMAIN and issue_id.startswith(ISSUE_ACTION_FAILED_PREFIX):
+        if domain == DOMAIN and (
+            issue_id.startswith(ISSUE_ACTION_FAILED_PREFIX) or issue_id == ISSUE_DISCOVERY_DISABLED
+        ):
             ir.async_delete_issue(hass, domain, issue_id)
 
 
@@ -142,15 +151,19 @@ class Manager:
         self._store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, STORE_KEY)
         self._stored_last_acted: dict[str, str] = {}
         self._published: set[str] = set()
+        self._running = False
 
     async def async_start(self) -> None:
-        """Load the persisted state, publish availability and start every configured device."""
+        """Load the persisted state, clear orphans, start every configured device and publish availability online."""
         await self._async_load_store()
         integration = await async_get_integration(self._hass, DOMAIN)
         self._publisher = DiscoveryPublisher(self.gateway, self._base_topic, str(integration.version))
-        await self._publisher.async_publish_availability(self._instance_id, AvailabilityState.ONLINE)
+        self._running = True
+        self._check_discovery_enabled()
+        self._entry.async_on_unload(self.gateway.async_subscribe_connection_status(self._on_connection_status))
         await self._async_orphan_cleanup()
         await self.async_reconcile(startup=True)
+        await self._async_publish_availability(AvailabilityState.ONLINE)
 
     async def async_reconcile(self, *, startup: bool = False) -> None:
         """
@@ -173,14 +186,65 @@ class Manager:
                     await self._async_change_device(device, subentry)
 
     async def async_stop(self) -> None:
-        """Persist the baseline, unsubscribe and unload scripts. Discovery is never cleared here."""
+        """
+        Persist the baseline, unsubscribe, unload scripts and publish availability offline.
+
+        Nothing is deleted on the broker here: an empty payload on a discovery or state topic only happens on an
+        explicit device delete or on hub removal (DSC-02). The final save comes first so a slow or failing publish
+        cannot cost the baseline.
+        """
         async with self._lock:
+            self._running = False
             await self._store.async_save(self._data_to_save())
             for device in self.devices.values():
                 if device.unsubscribe is not None:
                     device.unsubscribe()
                 await self.runner.async_unload(device.device_id)
             self.devices.clear()
+            await self._async_publish_availability(AvailabilityState.OFFLINE)
+
+    @callback
+    def _on_connection_status(self, connected: bool) -> None:  # noqa: FBT001
+        """Republish after a broker reconnect; the publishes cannot run inside the dispatcher callback."""
+        if connected and self._running:
+            self._entry.async_create_background_task(self._hass, self._async_republish(), name=f"{DOMAIN} republish")
+
+    async def _async_republish(self) -> None:
+        """
+        Publish discovery and online availability again (FND-05).
+
+        Idempotent: core MQTT ignores an unchanged retained discovery payload, and a broker that lost its retained
+        messages gets them back.
+        """
+        async with self._lock:
+            if not self._running:
+                return
+            for device in self.devices.values():
+                await self._async_publish_discovery(device)
+            await self._async_publish_availability(AvailabilityState.ONLINE)
+
+    def _check_discovery_enabled(self) -> None:
+        """Warn and raise a Repairs issue when MQTT discovery is disabled, because then no entity ever appears."""
+        if self.gateway.discovery_enabled():
+            ir.async_delete_issue(self._hass, DOMAIN, ISSUE_DISCOVERY_DISABLED)
+            return
+        LOGGER.warning("MQTT discovery is disabled, so the switch entities of MQTT Actions cannot appear")
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            ISSUE_DISCOVERY_DISABLED,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_DISCOVERY_DISABLED,
+        )
+
+    async def _async_publish_availability(self, state: AvailabilityState) -> None:
+        """Publish the retained instance availability; an unavailable MQTT client is logged, never raised."""
+        assert self._publisher is not None  # noqa: S101
+        await _async_attempt(
+            partial(self._publisher.async_publish_availability, self._instance_id, state),
+            f"publish the {state.value} availability",
+        )
 
     async def _async_load_store(self) -> None:
         """Load the persisted baseline and published ids; anything malformed is dropped."""

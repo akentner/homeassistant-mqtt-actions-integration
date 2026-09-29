@@ -48,6 +48,16 @@ class MqttGateway:
 
         return await mqtt.async_subscribe(self._hass, topic, _forward, qos)
 
+    def async_subscribe_connection_status(self, connection_callback: Callable[[bool], None]) -> CALLBACK_TYPE:
+        """Call the callback with True after every (re)connect and False after a disconnect; returns the unsubscribe."""
+
+        # Must be a @callback for the same reason as in async_subscribe
+        @callback
+        def _forward(connected: bool) -> None:  # noqa: FBT001
+            connection_callback(connected)
+
+        return mqtt.async_subscribe_connection_status(self._hass, _forward)
+
     async def async_publish(self, topic: str, payload: str, *, retain: bool, qos: int = 1) -> None:
         """Publish a message with explicit qos and retain values; raises HomeAssistantError when MQTT is unavailable."""
         try:

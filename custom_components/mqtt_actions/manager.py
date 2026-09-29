@@ -371,15 +371,8 @@ class Manager:
     async def _async_publish_discovery(self, device: Device) -> None:
         """Publish the retained discovery of a device; an unavailable MQTT client is logged, the next start retries."""
         assert self._publisher is not None  # noqa: S101
-        if device.spec.kind != SUBENTRY_SWITCH:
-            return  # The Select payload arrives with its discovery builder
         await _async_attempt(
-            partial(
-                self._publisher.async_publish_device,
-                device_id=device.device_id,
-                name=device.name,
-                instance_id=self._instance_id,
-            ),
+            partial(self._publisher.async_publish_device, spec=device.spec, instance_id=self._instance_id),
             f"publish the discovery of device {device.name}",
         )
 

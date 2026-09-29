@@ -15,7 +15,7 @@ Select devices whose options each run their own actions, plus predictable execut
 
 ### Option editor (DEV-03, DEV-04)
 - **D-01:** The Select subentry flow uses a menu with a loop: after the device settings, a menu offers add option / edit option / remove option / done. Each option has its own step with StateValue, StateFriendlyName and an actions field (ActionSelector).
-- **D-02:** Options can be added and removed after creation. Removal asks for confirmation. A removed StateValue is treated as unknown afterwards (ignored and logged, STA-07). If the current selection is removed, the entity state stays until the next valid payload arrives.
+- **D-02:** Options can be added and removed after creation. Removal asks for confirmation. A removed StateValue is treated as unknown afterwards (ignored and logged, STA-07). If the current selection is removed, the entity state stays until the next valid payload arrives. **Amendment (2026-09-29, user-approved during plan-phase):** HA's select entity reports `unknown` once its current option is renamed or removed, and no republish is done. Tracker and baseline keep the last state as described; only the entity display is `unknown` until the next valid payload. Documented in the flow texts and README.
 - **D-03:** StateValue is locked after creation; only StateFriendlyName and actions are editable (DEV-04).
 - **D-04:** Validation: at least 2 options; StateValue non-empty, without leading/trailing whitespace and unique case-insensitively; StateFriendlyName required; actions per option optional (as for the Switch).
 - **D-05:** Option order is creation order (also the order of the discovery `options` list). No reordering in Phase 2.

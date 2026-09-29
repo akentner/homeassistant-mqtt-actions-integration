@@ -722,6 +722,26 @@ async def test_reconcile_add_at_runtime_publishes_and_subscribes(
     assert len(on_calls) == 1
 
 
+async def test_reconcile_after_stop_does_not_revive_manager(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """WR-01: a late update-listener call on a stopped manager must not subscribe or publish anything."""
+    on_calls = async_mock_service(hass, "test", "on")
+    entry = await _setup(hass, make_hub_entry())
+    manager = entry.runtime_data
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    mqtt_mock.async_publish.reset_mock()
+
+    hass.config_entries.async_add_subentry(entry, _new_subentry(NEW_DEVICE_ID, on=ON_ACTIONS))
+    await manager.async_reconcile()
+
+    assert manager.devices == {}
+    assert _publishes(mqtt_mock, discovery_topic("homeassistant", NEW_DEVICE_ID)) == []
+    async_fire_mqtt_message(hass, state_topic(entry.data["base_topic"], NEW_DEVICE_ID), "ON")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(on_calls) == 0
+
+
 async def test_reconcile_change_rebuilds_scripts_keeps_baseline(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
 ) -> None:

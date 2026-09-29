@@ -173,6 +173,9 @@ class Manager:
         user creates later is not a start (D-05).
         """
         async with self._lock:
+            # A late update-listener call after async_stop must not revive a manager nobody will ever unsubscribe
+            if not self._running:
+                return
             subentries = {
                 subentry.data[CONF_DEVICE_ID]: subentry
                 for subentry in self._entry.get_subentries_of_type(SUBENTRY_SWITCH)

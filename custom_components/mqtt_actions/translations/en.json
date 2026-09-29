@@ -81,6 +81,10 @@
     "mqtt_discovery_disabled": {
       "title": "MQTT discovery is disabled",
       "description": "MQTT Actions creates its switch entities through MQTT discovery, but discovery is disabled in the MQTT integration. No switch entity appears until discovery is enabled again in the MQTT integration options."
+    },
+    "circuit_breaker_tripped": {
+      "title": "A device was paused by the circuit breaker",
+      "description": "{device} ran its actions more than {max_runs} times within {window} seconds. This usually means an action changes the state of its own device and keeps triggering itself, so MQTT Actions stopped the running actions and paused the device. Changes on the state topic still update the entity, but no actions run until the device is released. To release it, change the settings of the device or reload the integration. Saving the device without changing anything does not release it."
     }
   }
 }

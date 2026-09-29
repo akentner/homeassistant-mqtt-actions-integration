@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MQTT Actions",
+        "description": "Set up MQTT Actions for this Home Assistant instance. All instances that share devices must use the same base topic.",
+        "data": {
+          "base_topic": "Base topic",
+          "instance_name": "Instance name"
+        },
+        "data_description": {
+          "base_topic": "Root of all topics used by MQTT Actions. It cannot be changed later.",
+          "instance_name": "Name of this Home Assistant instance."
+        }
+      }
+    },
+    "abort": {
+      "mqtt_required": "The MQTT integration must be set up first.",
+      "single_instance_allowed": "MQTT Actions is already set up. Only one hub per Home Assistant instance is allowed."
+    }
+  },
+  "config_subentries": {
+    "switch": {
+      "initiate_flow": {
+        "user": "Add switch device"
+      },
+      "entry_type": "Switch device",
+      "step": {
+        "user": {
+          "title": "Add switch device",
+          "description": "The actions run when the state topic of this device changes to ON or OFF.",
+          "data": {
+            "name": "Name",
+            "on_change_to_on": "Actions when switched on",
+            "on_change_to_off": "Actions when switched off"
+          }
+        }
+      }
+    }
+  }
+}

@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. The Switch appears in HA through MQTT Discovery (UUID `unique_id`, availability, device info); toggling it in the HA UI or publishing to its retained state topic runs the matching actions locally on each real change, and a failing action is visible in the log and as a Repairs issue instead of being swallowed.
   5. After an HA restart, integration reload or broker reconnect, the integration starts cleanly even if MQTT is not ready yet, retained state only sets the baseline (no actions run unless the device's "run on startup" flag is on), only real state changes trigger actions, and the entity stays until the user explicitly deletes the device.
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -53,7 +53,7 @@ Plans:
 - [x] 01-05-PLAN.md — Discovery contract and lifecycle: change, delete, orphan, hub removal, reconnect, unload (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 01-06-PLAN.md — HACS metadata, SHA-pinned CI, public repo gate, CI green and manual UAT list (wave 6)
+- [x] 01-06-PLAN.md — HACS metadata, SHA-pinned CI, public repo gate, CI green and manual UAT list (wave 6)
 
 **UI hint**: yes
 
@@ -111,7 +111,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Walking Skeleton - Installable Switch | 5/6 | In Progress|  |
+| 1. Walking Skeleton - Installable Switch | 6/6 | In Progress|  |
 | 2. Select Devices and Reliable Execution | 0/0 | Not started | - |
 | 3. Trust, Central Config and Ownership | 0/0 | Not started | - |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |

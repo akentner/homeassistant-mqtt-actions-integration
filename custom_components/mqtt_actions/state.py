@@ -34,5 +34,21 @@ def decide(
         return Decision(act=False, baseline=last_acted, ignored=True)
     if retain:
         return Decision(act=startup_pending and run_on_startup, value=value, baseline=value)
-    act = value != last_acted
-    return Decision(act=act, value=value, baseline=value if act else last_acted)
+    return Decision(act=value != last_acted, value=value, baseline=value)
+
+
+@dataclass(slots=True)
+class StateTracker:
+    """Per-device state: the last processed value and the startup window for run_on_startup."""
+
+    last_acted: str | None = None
+    run_on_startup: bool = False
+    startup_pending: bool = True
+
+    def handle(self, retain: bool, payload: str) -> Decision:  # noqa: FBT001
+        """Process one message, update the baseline for valid values and close the startup window."""
+        decision = decide(retain, payload, self.last_acted, self.startup_pending, self.run_on_startup)
+        self.startup_pending = False
+        if not decision.ignored:
+            self.last_acted = decision.baseline
+        return decision

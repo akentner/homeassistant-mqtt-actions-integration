@@ -17,6 +17,22 @@ VARIABLE_IN_SINGLE_QUOTES = re.compile(r"'[^']*\{\w+\}[^']*'")
 
 SWITCH_FORM_FIELDS = ("name", "on_change_to_on", "on_change_to_off", "run_on_startup")
 
+SELECT_SETTINGS_FIELDS = ("name", "run_on_startup", "run_mode", "breaker_max_runs", "breaker_window")
+SELECT_ERROR_KEYS = (
+    "name_required",
+    "invalid_actions",
+    "device_id_warning",
+    "state_value_required",
+    "state_value_invalid",
+    "state_value_duplicate",
+    "friendly_name_required",
+    "friendly_name_invalid",
+    "friendly_name_reserved",
+    "friendly_name_duplicate",
+    "breaker_max_runs_range",
+    "breaker_window_range",
+)
+
 REQUIRED_KEYS = (
     "config.step.user.title",
     "config.step.user.description",
@@ -47,6 +63,23 @@ REQUIRED_KEYS = (
         for step in ("user", "reconfigure")
         for field in SWITCH_FORM_FIELDS
     ),
+    "config_subentries.select.initiate_flow.user",
+    "config_subentries.select.entry_type",
+    "config_subentries.select.abort.reconfigure_successful",
+    "selector.run_mode.options.serial",
+    "selector.run_mode.options.restart",
+    *(f"config_subentries.select.step.{step}.title" for step in ("user", "settings", "menu", "add_option")),
+    *(f"config_subentries.select.step.menu.menu_options.{option}" for option in ("add_option", "settings", "done")),
+    *(
+        f"config_subentries.select.step.{step}.data.{field}"
+        for step in ("user", "settings")
+        for field in SELECT_SETTINGS_FIELDS
+    ),
+    *(
+        f"config_subentries.select.step.add_option.data.{field}"
+        for field in ("state_value", "friendly_name", "actions")
+    ),
+    *(f"config_subentries.select.error.{key}" for key in SELECT_ERROR_KEYS),
 )
 
 
@@ -104,6 +137,13 @@ def test_error_placeholders_are_the_ones_the_flow_supplies() -> None:
     en = _load("en")
     assert _variables(en["config_subentries.switch.error.invalid_actions"]) == {"field", "error"}
     assert _variables(en["config_subentries.switch.error.device_id_warning"]) == {"device_ids"}
+
+
+def test_select_placeholders_are_the_ones_the_flow_supplies() -> None:
+    en = _load("en")
+    assert _variables(en["config_subentries.select.step.menu.description"]) == {"name", "count", "options"}
+    assert _variables(en["config_subentries.select.error.invalid_actions"]) == {"field", "error"}
+    assert _variables(en["config_subentries.select.error.device_id_warning"]) == {"device_ids"}
 
 
 def test_no_strings_json_exists() -> None:

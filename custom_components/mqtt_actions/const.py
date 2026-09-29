@@ -38,6 +38,14 @@ DEFAULT_BREAKER_WINDOW: Final = 10
 # Serial runs queue up to this many per device; more are dropped and logged. Fixed, not user-configurable (D-12)
 SERIAL_QUEUE_LIMIT: Final = 10
 
+# Select option limits enforced by the UI flow (A1, T-02-20): a Select needs at least two options to be a choice
+MIN_OPTIONS: Final = 2
+MAX_OPTIONS: Final = 50
+MAX_TEXT_LENGTH: Final = 64
+# Ranges accepted for the breaker settings in the UI flow (A7, T-02-21)
+BREAKER_MAX_RUNS_LIMIT: Final = 100
+BREAKER_WINDOW_LIMIT: Final = 3600
+
 # Component key prefix of the test button of a trigger; the key of the trigger follows (D-13)
 BUTTON_KEY_PREFIX: Final = "test_"
 

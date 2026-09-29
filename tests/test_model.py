@@ -6,7 +6,10 @@ from typing import Any
 
 import pytest
 
+from custom_components.mqtt_actions import model
 from custom_components.mqtt_actions.const import (
+    BREAKER_MAX_RUNS_LIMIT,
+    BREAKER_WINDOW_LIMIT,
     CONF_ACTIONS,
     CONF_BREAKER_MAX_RUNS,
     CONF_BREAKER_WINDOW,
@@ -19,6 +22,7 @@ from custom_components.mqtt_actions.const import (
     CONF_STATE_VALUE,
     DEFAULT_BREAKER_MAX_RUNS,
     DEFAULT_BREAKER_WINDOW,
+    MAX_TEXT_LENGTH,
     RUN_MODE_RESTART,
     RUN_MODE_SERIAL,
     SUBENTRY_SELECT,
@@ -152,3 +156,85 @@ def test_spec_breaker_coercion(stored: Any, expected: int | None, key: str, defa
 def test_spec_run_mode_coercion(stored: Any, expected: str) -> None:
     """A run mode other than serial or restart becomes serial."""
     assert _select([_option("a", "A")], **{CONF_RUN_MODE: stored}).run_mode == expected
+
+
+# --- option validation for the UI flow (D-03, D-04, T-02-19) ------------------------------------------------------
+
+OTHERS = [("existing", "Existing Name"), ("Second", "Second Name")]
+
+
+@pytest.mark.parametrize(
+    ("state_value", "friendly", "expected"),
+    [
+        ("new", "New Name", {}),
+        ("Mixed Case 1", "Umlaut Ärger 日本", {}),
+        ("x" * MAX_TEXT_LENGTH, "y" * MAX_TEXT_LENGTH, {}),
+        ("", "New", {"state_value": "state_value_required"}),
+        ("   ", "New", {"state_value": "state_value_required"}),
+        (" new", "New", {"state_value": "state_value_invalid"}),
+        ("new ", "New", {"state_value": "state_value_invalid"}),
+        ("ne\tw", "New", {"state_value": "state_value_invalid"}),
+        ("ne\nw", "New", {"state_value": "state_value_invalid"}),
+        ("\ud800", "New", {"state_value": "state_value_invalid"}),
+        ("x" * (MAX_TEXT_LENGTH + 1), "New", {"state_value": "state_value_invalid"}),
+        ("EXISTING", "New", {"state_value": "state_value_duplicate"}),
+        ("second", "New", {"state_value": "state_value_duplicate"}),
+        ("new", "", {"friendly_name": "friendly_name_required"}),
+        ("new", "   ", {"friendly_name": "friendly_name_required"}),
+        ("new", "None", {"friendly_name": "friendly_name_reserved"}),
+        ("new", " NONE ", {"friendly_name": "friendly_name_reserved"}),
+        ("new", "Ne\x00w", {"friendly_name": "friendly_name_invalid"}),
+        ("new", "\ud800", {"friendly_name": "friendly_name_invalid"}),
+        ("new", "y" * (MAX_TEXT_LENGTH + 1), {"friendly_name": "friendly_name_invalid"}),
+        ("new", "existing name", {"friendly_name": "friendly_name_duplicate"}),
+        ("new", "  SECOND NAME  ", {"friendly_name": "friendly_name_duplicate"}),
+        (
+            "existing",
+            "Existing Name",
+            {"state_value": "state_value_duplicate", "friendly_name": "friendly_name_duplicate"},
+        ),
+    ],
+)
+def test_validate_option_table(state_value: str, friendly: str, expected: dict[str, str]) -> None:
+    assert model.validate_option(state_value, friendly, OTHERS) == expected
+
+
+def test_validate_option_friendly_name_is_measured_after_strip() -> None:
+    """A padded name that is exactly at the cap after stripping is accepted."""
+    padded = "  " + "y" * MAX_TEXT_LENGTH + "  "
+    assert model.validate_option("new", padded, OTHERS) == {}
+
+
+@pytest.mark.parametrize(
+    ("state_value", "friendly", "expected"),
+    [
+        ("", "Renamed", {}),
+        (" anything goes here ", "Renamed", {}),
+        ("existing", "Renamed", {}),
+        ("", "", {"friendly_name": "friendly_name_required"}),
+        ("", "none", {"friendly_name": "friendly_name_reserved"}),
+        ("", "second name", {"friendly_name": "friendly_name_duplicate"}),
+    ],
+)
+def test_validate_option_editing_skips_state_value(state_value: str, friendly: str, expected: dict[str, str]) -> None:
+    """D-03: while editing, the StateValue is locked and never checked; the friendly name still is."""
+    assert model.validate_option(state_value, friendly, OTHERS, editing=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("max_runs", "window", "expected"),
+    [
+        (1, 1, {}),
+        (BREAKER_MAX_RUNS_LIMIT, BREAKER_WINDOW_LIMIT, {}),
+        (5.0, 10.0, {}),
+        (0, 10, {"breaker_max_runs": "breaker_max_runs_range"}),
+        (BREAKER_MAX_RUNS_LIMIT + 1, 10, {"breaker_max_runs": "breaker_max_runs_range"}),
+        (5, 0, {"breaker_window": "breaker_window_range"}),
+        (5, BREAKER_WINDOW_LIMIT + 1, {"breaker_window": "breaker_window_range"}),
+        (2.5, 10, {"breaker_max_runs": "breaker_max_runs_range"}),
+        (5, 0.5, {"breaker_window": "breaker_window_range"}),
+        (-1, -1, {"breaker_max_runs": "breaker_max_runs_range", "breaker_window": "breaker_window_range"}),
+    ],
+)
+def test_validate_breaker_boundaries(max_runs: float, window: float, expected: dict[str, str]) -> None:
+    assert model.validate_breaker(max_runs, window) == expected

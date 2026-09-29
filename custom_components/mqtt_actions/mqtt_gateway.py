@@ -1,7 +1,7 @@
 """Gateway to the built-in MQTT integration. The only module that imports it."""
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import mqtt
 from homeassistant.core import callback
@@ -51,10 +51,17 @@ class MqttGateway:
         """Publish a message with explicit qos and retain values."""
         await mqtt.async_publish(self._hass, topic, payload, int(qos), bool(retain))
 
-    def discovery_prefix(self) -> str:
-        """Return the discovery prefix configured in the MQTT integration (D-04)."""
+    def _mqtt_conf(self) -> dict[str, Any]:
+        """Return the MQTT entry configuration the way core merges it: options over data (D-04)."""
         entries = self._hass.config_entries.async_entries(mqtt.DOMAIN)
         if not entries:
-            return mqtt.DEFAULT_PREFIX
-        conf = dict(entries[0].data | entries[0].options)
-        return str(conf.get(mqtt.CONF_DISCOVERY_PREFIX, mqtt.DEFAULT_PREFIX))
+            return {}
+        return dict(entries[0].data | entries[0].options)
+
+    def discovery_prefix(self) -> str:
+        """Return the discovery prefix configured in the MQTT integration (D-04)."""
+        return str(self._mqtt_conf().get(mqtt.CONF_DISCOVERY_PREFIX, mqtt.DEFAULT_PREFIX))
+
+    def discovery_enabled(self) -> bool:
+        """Return whether the MQTT integration processes discovery messages; without it no entity ever appears."""
+        return bool(self._mqtt_conf().get(mqtt.CONF_DISCOVERY, mqtt.DEFAULT_DISCOVERY))

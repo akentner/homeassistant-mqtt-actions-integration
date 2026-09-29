@@ -33,7 +33,7 @@ from .const import (
     TRIGGER_ON,
     TRIGGER_SETUP,
 )
-from .discovery import DiscoveryPublisher
+from .discovery import AvailabilityState, DiscoveryPublisher
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .runner import ActionRunner
 from .state import StateTracker
@@ -80,7 +80,7 @@ class Manager:
         await self._async_load_store()
         integration = await async_get_integration(self._hass, DOMAIN)
         self._publisher = DiscoveryPublisher(self.gateway, self._base_topic, str(integration.version))
-        await self._publisher.async_publish_availability(self._instance_id, online=True)
+        await self._publisher.async_publish_availability(self._instance_id, AvailabilityState.ONLINE)
         await self.async_reconcile(startup=True)
 
     async def async_reconcile(self, *, startup: bool = False) -> None:

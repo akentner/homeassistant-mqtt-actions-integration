@@ -204,7 +204,10 @@ class Manager:
                     device.unsubscribe()
                 await self.runner.async_unload(device.device_id)
             self.devices.clear()
-            await self._async_publish_availability(AvailabilityState.OFFLINE)
+            # Scripts of a device whose start failed halfway are not in self.devices yet
+            await self.runner.async_unload_all()
+            if self._publisher is not None:  # None when the start failed before the publisher existed
+                await self._async_publish_availability(AvailabilityState.OFFLINE)
 
     @callback
     def _on_connection_status(self, connected: bool) -> None:  # noqa: FBT001

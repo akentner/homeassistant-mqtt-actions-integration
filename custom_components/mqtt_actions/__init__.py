@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 
 from .manager import Manager, async_remove_all_devices
 from .mqtt_gateway import MqttGateway
@@ -22,8 +22,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) 
         raise ConfigEntryNotReady(msg)
     manager = Manager(hass, entry)
     entry.runtime_data = manager
-    await manager.async_start()
+    # Registered before the start so a subentry change during a slow start is not lost; HA also runs the
+    # on-unload callbacks when this setup fails
     entry.async_on_unload(entry.add_update_listener(_async_entry_updated))
+    try:
+        await manager.async_start()
+    except HomeAssistantError as err:
+        # HA never calls async_unload_entry for a failed setup, so release subscriptions and Scripts here
+        await manager.async_stop()
+        raise ConfigEntryNotReady(str(err)) from err
+    except BaseException:
+        await manager.async_stop()
+        raise
     return True
 
 

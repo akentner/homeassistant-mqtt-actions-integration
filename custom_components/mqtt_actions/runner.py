@@ -108,6 +108,11 @@ class ActionRunner:
                 await script.async_unload()
         self._scripts[device_id] = retained
 
+    async def async_unload_all(self) -> None:
+        """Unload every Script that is still registered, including those of a device that never finished starting."""
+        for device_id in list(self._scripts):
+            await self.async_unload(device_id)
+
     async def async_unload(self, device_id: str, *, remove_issue: bool = False) -> None:
         """Unload the scripts of a device; a removed device also loses its Repairs issue."""
         for script in self._scripts.pop(device_id, []):

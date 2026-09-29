@@ -1241,3 +1241,39 @@ async def test_discovery_enabled_deletes_stale_issue(
     await _setup(hass, make_hub_entry())
 
     assert ir.async_get(hass).async_get_issue(DOMAIN, "mqtt_discovery_disabled") is None
+
+
+async def test_failed_start_releases_subscriptions_and_retries_cleanly(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """WR-02: a subscribe failure halfway through the start leaves nothing behind, and the retry runs actions once."""
+    on_calls = async_mock_service(hass, "test", "on")
+    first = make_switch_subentry("First", on=ON_ACTIONS)
+    second = make_switch_subentry("Second", on=ON_ACTIONS)
+    entry = make_hub_entry([first, second])
+    entry.add_to_hass(hass)
+    real_subscribe = mqtt.async_subscribe
+    calls = 0
+
+    async def _subscribe(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            msg = "MQTT went away"
+            raise HomeAssistantError(msg)
+        return await real_subscribe(*args, **kwargs)
+
+    with patch("custom_components.mqtt_actions.mqtt_gateway.mqtt.async_subscribe", side_effect=_subscribe):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    # The subscription of the device that did start was released again
+    await _fire(hass, entry, _device_id(first), "ON", retain=False)
+    assert len(on_calls) == 0
+
+    # The retry builds a fresh manager: one live message runs the action exactly once
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _fire(hass, entry, _device_id(first), "ON", retain=False)
+    assert len(on_calls) == 1

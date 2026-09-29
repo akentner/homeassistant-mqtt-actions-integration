@@ -36,6 +36,8 @@ class ActionRunner:
         self._scripts: dict[str, Script] = {}
         # device id -> keys of the triggers whose actions are part of that Script
         self._runnable: dict[str, frozenset[str]] = {}
+        # device id -> number of runs enqueued so far; a run may clear the failure issue only while it is the latest
+        self._generation: dict[str, int] = {}
 
     async def async_build_device(self, spec: DeviceSpec) -> None:
         """
@@ -125,9 +127,17 @@ class ActionRunner:
         trigger_key: str,
         run_variables: dict[str, Any],
     ) -> None:
-        """Start a run of the device's Script in a background task tied to the config entry lifecycle."""
+        """
+        Start a run of the device's Script in a background task tied to the config entry lifecycle.
+
+        A change of a trigger without actions never reaches this method, so it cannot cancel a running restart run
+        (A5). Reconfiguring a device unloads its previous Script, which stops the in-flight run of that Script; that
+        run ends as a cancelled task without an issue.
+        """
         if (script := self.script_for(device_id, trigger_key)) is None:
             return
+        generation = self._generation.get(device_id, 0) + 1
+        self._generation[device_id] = generation
         self._entry.async_create_background_task(
             self._hass,
             self._async_run(
@@ -135,22 +145,27 @@ class ActionRunner:
                 device_name,
                 trigger_label,
                 script=script,
+                generation=generation,
                 run_variables={**run_variables, "trigger_key": trigger_key},
             ),
             name=f"{DOMAIN} {script.name}",
         )
 
-    async def _async_run(
+    async def _async_run(  # noqa: PLR0913
         self,
         device_id: str,
         device_name: str,
         trigger_label: str,
         *,
         script: Script,
+        generation: int,
         run_variables: dict[str, Any],
     ) -> None:
         """
         Run the device's Script once; the Script mode queues or restarts.
+
+        The failure issue is cleared only by a run that returned a result (a dropped run returns None) and is still
+        the latest one enqueued for the device (a superseded run must not hide a failure, A10).
 
         A restart-cancelled or unloaded run ends as a cancelled task: CancelledError is a BaseException and is never
         caught here, so it creates neither an issue nor an error log (D-11).
@@ -158,13 +173,14 @@ class ActionRunner:
         if self._scripts.get(device_id) is not script:
             return  # The device was unloaded or rebuilt before this run started
         try:
-            await script.async_run(run_variables, Context())
+            result = await script.async_run(run_variables, Context())
         except Exception as err:  # noqa: BLE001
             # Only device and trigger names are logged, never the action data (T-01-10)
             LOGGER.exception("Actions for %s of device %s failed", trigger_label, device_name)
             self.report_failure(device_id, device_name, trigger_label, str(err))
         else:
-            ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_ACTION_FAILED_PREFIX}{device_id}")
+            if result is not None and self._generation.get(device_id) == generation:
+                self.clear_issue(device_id)
 
     def report_failure(self, device_id: str, device_name: str, trigger: str, error: str) -> None:
         """Create or update the one Repairs issue of a device; a dismissed issue stays dismissed (D-08, D-09)."""
@@ -195,6 +211,7 @@ class ActionRunner:
     async def async_unload(self, device_id: str, *, remove_issue: bool = False) -> None:
         """Unload the Script of a device, stopping its running and queued runs; a removed device loses its issue."""
         self._runnable.pop(device_id, None)
+        self._generation.pop(device_id, None)
         if (script := self._scripts.pop(device_id, None)) is not None:
             await script.async_unload()
         if remove_issue:

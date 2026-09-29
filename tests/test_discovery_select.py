@@ -5,6 +5,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.json import json_dumps
 from homeassistant.helpers.template import Template
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
@@ -18,7 +19,7 @@ from custom_components.mqtt_actions.const import (
     CONF_STATE_VALUE,
     SUBENTRY_SELECT,
 )
-from custom_components.mqtt_actions.model import DeviceSpec, spec_from_data
+from custom_components.mqtt_actions.model import DeviceSpec, spec_from_data, trigger_key
 from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, state_topic
 
 if TYPE_CHECKING:
@@ -71,7 +72,12 @@ def _templates(options: Sequence[tuple[str, str]]) -> tuple[str, str]:
 
 async def _discover(hass: HomeAssistant, spec: DeviceSpec) -> None:
     """Deliver the discovery payload of a spec to core MQTT and mark the instance online."""
-    async_fire_mqtt_message(hass, discovery_topic("homeassistant", DEVICE_ID), json_dumps(_payload(spec)))
+    await _discover_payload(hass, _payload(spec))
+
+
+async def _discover_payload(hass: HomeAssistant, payload: dict[str, Any]) -> None:
+    """Deliver a raw discovery payload to core MQTT and mark the instance online."""
+    async_fire_mqtt_message(hass, discovery_topic("homeassistant", DEVICE_ID), json_dumps(payload))
     await hass.async_block_till_done(wait_background_tasks=True)
     async_fire_mqtt_message(hass, availability_topic(BASE_TOPIC, INSTANCE_ID), "online", retain=True)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -230,3 +236,23 @@ async def test_select_device_publishes_select_discovery_through_manager(
     assert components["select"]["options"] == ["Alpha", "Bravo"]
     assert (qos, retain) == (1, True)
     assert hass.states.get("select.mode") is not None
+
+
+async def test_omitted_component_is_not_removed_but_tombstone_is(hass: HomeAssistant, mqtt_mock: Any) -> None:
+    """Research pitfall 4: core ignores a missing component, only an explicit empty component config removes it."""
+    payload = _payload(_spec([("a", "Alpha"), ("b", "Bravo"), ("c", "Charlie")]))
+    b_key = discovery.button_component_key(trigger_key("b"))
+    registry = er.async_get(hass)
+    await _discover_payload(hass, payload)
+    assert len(hass.states.async_entity_ids("button")) == 3
+
+    omitted = {**payload, "components": {key: value for key, value in payload["components"].items() if key != b_key}}
+    await _discover_payload(hass, omitted)
+    assert len(hass.states.async_entity_ids("button")) == 3
+
+    tombstoned = {**payload, "components": {**omitted["components"], b_key: {"platform": "button"}}}
+    await _discover_payload(hass, tombstoned)
+    assert len(hass.states.async_entity_ids("button")) == 2
+    assert registry.async_get_entity_id("button", "mqtt", f"{DEVICE_ID}_test_{trigger_key('b')}") is None
+    for kept in ("a", "c"):
+        assert registry.async_get_entity_id("button", "mqtt", f"{DEVICE_ID}_test_{trigger_key(kept)}") is not None

@@ -11,3 +11,8 @@ htmlcov/
 
 # Local research cache (never publish, threat T-01-02)
 .planning/research/.cache/
+
+# GSD orchestrator state (local only, never publish)
+.gsd/
+.planning/state.json
+.planning/milestone.lock

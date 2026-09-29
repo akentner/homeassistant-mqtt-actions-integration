@@ -9,7 +9,7 @@ from .const import BUTTON_KEY_PREFIX, DOMAIN, PAYLOAD_OFF, PAYLOAD_ON, SUBENTRY_
 from .topics import availability_topic, discovery_topic, state_topic, test_topic
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Collection, Sequence
 
     from .model import DeviceSpec, TriggerSpec
     from .mqtt_gateway import MqttGateway
@@ -110,8 +110,15 @@ def _button_component(topic: str, device_id: str, trigger: TriggerSpec) -> dict[
     }
 
 
-def build_discovery(*, spec: DeviceSpec, base_topic: str, instance_id: str, sw_version: str) -> dict[str, Any]:
-    """Build the device-based discovery payload of a Switch or Select device (D-01, D-03, D-05)."""
+def build_discovery(
+    *, spec: DeviceSpec, base_topic: str, instance_id: str, sw_version: str, retired: Collection[str] = ()
+) -> dict[str, Any]:
+    """
+    Build the device-based discovery payload of a Switch or Select device (D-01, D-03, D-05).
+
+    A component that is merely omitted is not removed by core MQTT discovery; only an explicit empty component
+    config is. Every retired component key therefore gets the tombstone {"platform": "button"}.
+    """
     topic = state_topic(base_topic, spec.device_id)
     components: dict[str, Any] = (
         {"select": _select_component(topic, spec)}
@@ -121,6 +128,7 @@ def build_discovery(*, spec: DeviceSpec, base_topic: str, instance_id: str, sw_v
     button_topic = test_topic(base_topic, spec.device_id)
     for trigger in spec.triggers.values():
         components[button_component_key(trigger.key)] = _button_component(button_topic, spec.device_id, trigger)
+    components.update({key: {"platform": "button"} for key in sorted(retired)})
     return {
         "device": {"identifiers": [f"{DOMAIN}_{spec.device_id}"], "name": spec.name},
         "origin": {"name": "MQTT Actions", "sw_version": sw_version},
@@ -138,10 +146,14 @@ class DiscoveryPublisher:
         self._base_topic = base_topic
         self._sw_version = sw_version
 
-    async def async_publish_device(self, *, spec: DeviceSpec, instance_id: str) -> None:
-        """Publish the retained discovery message of a Switch or Select device."""
+    async def async_publish_device(self, *, spec: DeviceSpec, instance_id: str, retired: Collection[str] = ()) -> None:
+        """Publish the retained discovery message of a Switch or Select device, tombstones included."""
         payload = build_discovery(
-            spec=spec, base_topic=self._base_topic, instance_id=instance_id, sw_version=self._sw_version
+            spec=spec,
+            base_topic=self._base_topic,
+            instance_id=instance_id,
+            sw_version=self._sw_version,
+            retired=retired,
         )
         await self._gateway.async_publish(
             discovery_topic(self._gateway.discovery_prefix(), spec.device_id),

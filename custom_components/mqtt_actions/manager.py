@@ -8,7 +8,7 @@ AVL-01) addresses it.
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
@@ -35,7 +35,7 @@ from .const import (
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
-from .discovery import AvailabilityState, DiscoveryPublisher
+from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
 from .model import DeviceSpec, spec_from_subentry, trigger_key
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .runner import ActionRunner
@@ -59,6 +59,8 @@ class Device:
     signature: str
     unsubscribe: CALLBACK_TYPE | None = None
     unsubscribe_test: CALLBACK_TYPE | None = None
+    # Button component keys of removed triggers; kept in memory so every republish carries their tombstone
+    retired_components: set[str] = field(default_factory=set)
 
     @property
     def name(self) -> str:
@@ -326,6 +328,11 @@ class Manager:
         self.runner.clear_issue(device.device_id)
         spec = spec_from_subentry(subentry)
         await self.runner.async_build_device(spec)
+        # A removed option retires its button; a re-added StateValue derives the same key, so its tombstone goes
+        current_keys = {button_component_key(key) for key in spec.triggers}
+        previous_keys = {button_component_key(key) for key in device.spec.triggers}
+        device.retired_components |= previous_keys - current_keys
+        device.retired_components -= current_keys
         device.spec = spec
         device.tracker.run_on_startup = spec.run_on_startup
         device.tracker.accepted = spec.accepted
@@ -379,7 +386,12 @@ class Manager:
         """Publish the retained discovery of a device; an unavailable MQTT client is logged, the next start retries."""
         assert self._publisher is not None  # noqa: S101
         await _async_attempt(
-            partial(self._publisher.async_publish_device, spec=device.spec, instance_id=self._instance_id),
+            partial(
+                self._publisher.async_publish_device,
+                spec=device.spec,
+                instance_id=self._instance_id,
+                retired=frozenset(device.retired_components),
+            ),
             f"publish the discovery of device {device.name}",
         )
 

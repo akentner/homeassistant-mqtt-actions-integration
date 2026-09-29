@@ -1,11 +1,11 @@
 ---
 phase: 01-walking-skeleton-installable-switch
 source: 01-REVIEW.md
-status: untriaged
+status: partially_triaged
 findings:
   total: 13
-  open: 13
-  fixed: 0
+  open: 10
+  fixed: 3
   skipped: 0
   deferred: 0
 ---
@@ -16,10 +16,10 @@ One row per finding, defaulting to `open`. Set a row to `fixed`, `skipped` or `d
 
 | ID | Title | Disposition | Source |
 |----|-------|-------------|--------|
-| WR-01 | Reconcile has no `_running` guard, so a late update-listener call revives a stopped manager | open | 01-REVIEW.md |
-| WR-02 | A failing `async_start` leaks subscriptions and scripts, and a retry doubles them | open | 01-REVIEW.md |
+| WR-01 | Reconcile has no `_running` guard, so a late update-listener call revives a stopped manager | fixed | fixed in 6361ce7; see 01-REVIEW-FIX.md |
+| WR-02 | A failing `async_start` leaks subscriptions and scripts, and a retry doubles them | fixed | fixed in 955c817 (lifecycle change, needs human verification); see 01-REVIEW-FIX.md |
 | WR-03 | The single per-device Repairs issue lets a success on one trigger erase a permanent failure on the other | open | 01-REVIEW.md |
-| WR-04 | A malformed Store payload raises `TypeError` and the entry can never start | open | 01-REVIEW.md |
+| WR-04 | A malformed Store payload raises `TypeError` and the entry can never start | fixed | fixed in 2a65b45; see 01-REVIEW-FIX.md |
 | WR-05 | Hub removal deletes the Store even when clearing the broker failed, so ghost entities are never retried | open | 01-REVIEW.md |
 | WR-06 | The broker-writable state topic can queue unbounded runs and flood the log | open | 01-REVIEW.md |
 | WR-07 | The entity `value_template` does not trim, so the entity and the manager disagree on whitespace payloads | open | 01-REVIEW.md |

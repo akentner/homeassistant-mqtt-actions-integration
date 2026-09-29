@@ -27,8 +27,6 @@ from .const import (
     ISSUE_DISCOVERY_DISABLED,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
-    PAYLOAD_OFF,
-    PAYLOAD_ON,
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_PUBLISHED,
@@ -160,6 +158,10 @@ class Manager:
         self._running = True
         self._check_discovery_enabled()
         self._entry.async_on_unload(self.gateway.async_subscribe_connection_status(self._on_connection_status))
+        current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
+        self._stored_last_acted = {
+            device_id: value for device_id, value in self._stored_last_acted.items() if device_id in current
+        }
         await self._async_orphan_cleanup()
         await self.async_reconcile(startup=True)
         await self._async_publish_availability(AvailabilityState.ONLINE)
@@ -252,13 +254,9 @@ class Manager:
         """Load the persisted baseline and published ids; anything malformed is dropped."""
         stored = await self._store.async_load() or {}
         last_acted = stored.get(STORE_LAST_ACTED)
+        # Any string is kept here; a device sanitizes its baseline against its own StateValues when it is added (A11)
         self._stored_last_acted = (
-            {
-                key: value
-                for key, value in last_acted.items()
-                # The isinstance checks come first: an unhashable value would make the set membership raise
-                if isinstance(key, str) and isinstance(value, str) and value in {PAYLOAD_ON, PAYLOAD_OFF}
-            }
+            {key: value for key, value in last_acted.items() if isinstance(key, str) and isinstance(value, str)}
             if isinstance(last_acted, dict)
             else {}
         )

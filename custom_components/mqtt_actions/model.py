@@ -1,6 +1,7 @@
 """Pure device model: one DeviceSpec per subentry, built from stored data. No Home Assistant imports at runtime."""
 
 import hashlib
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -92,16 +93,60 @@ def _switch_triggers(data: Mapping[str, Any]) -> dict[str, TriggerSpec]:
     }
 
 
+def _encodable(text: str) -> bool:
+    """Return True when a string survives UTF-8 encoding; a lone surrogate would make json_dumps raise."""
+    try:
+        text.encode()
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _valid_option(option: Any) -> bool:
+    """Return True for a stored option a spec can be built from (T-02-04); UI hygiene rules belong to the flow."""
+    if not isinstance(option, dict):
+        return False
+    value = option.get(CONF_STATE_VALUE)
+    friendly = option.get(CONF_FRIENDLY_NAME)
+    return (
+        isinstance(value, str)
+        and isinstance(friendly, str)
+        and bool(value)
+        and bool(friendly)
+        and value == value.strip()
+        and _encodable(value)
+        and _encodable(friendly)
+    )
+
+
 def _select_triggers(data: Mapping[str, Any]) -> dict[str, TriggerSpec]:
-    """Return one trigger per stored option in stored order (D-05)."""
+    """
+    Return one trigger per stored option in stored order (D-05).
+
+    Stored data never crashes the loader: malformed options are dropped, and among StateValues that are equal ignoring
+    case the first one wins.
+    """
     options = data.get(CONF_OPTIONS, [])
     triggers: dict[str, TriggerSpec] = {}
+    seen: set[str] = set()
     for option in options if isinstance(options, list) else []:
+        if not _valid_option(option) or option[CONF_STATE_VALUE].lower() in seen:
+            continue
         value = option[CONF_STATE_VALUE]
         friendly = option[CONF_FRIENDLY_NAME]
+        seen.add(value.lower())
         key = trigger_key(value)
         triggers[key] = TriggerSpec(value, key, friendly, friendly, _actions(option.get(CONF_ACTIONS)))
     return triggers
+
+
+def _count(value: Any, default: int) -> int:
+    """Return a stored breaker setting as an int: an int (not a bool) or an integral float of at least 1."""
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        value = int(value)
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
+        return value
+    return default
 
 
 def spec_from_data(subentry_type: str, title: str, data: Mapping[str, Any]) -> DeviceSpec:
@@ -118,8 +163,8 @@ def spec_from_data(subentry_type: str, title: str, data: Mapping[str, Any]) -> D
         name=title,
         run_on_startup=bool(data.get(CONF_RUN_ON_STARTUP, False)),
         run_mode=RUN_MODE_RESTART if data.get(CONF_RUN_MODE) == RUN_MODE_RESTART else RUN_MODE_SERIAL,
-        breaker_max_runs=data.get(CONF_BREAKER_MAX_RUNS, DEFAULT_BREAKER_MAX_RUNS),
-        breaker_window=data.get(CONF_BREAKER_WINDOW, DEFAULT_BREAKER_WINDOW),
+        breaker_max_runs=_count(data.get(CONF_BREAKER_MAX_RUNS), DEFAULT_BREAKER_MAX_RUNS),
+        breaker_window=_count(data.get(CONF_BREAKER_WINDOW), DEFAULT_BREAKER_WINDOW),
         accepted=accepted,
         triggers=triggers,
     )

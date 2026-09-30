@@ -14,8 +14,11 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.const import ATTR_RESTORED
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
@@ -539,6 +542,55 @@ class Manager:
         device = self._build_mirror(parsed, startup=False)
         await self._async_subscribe_mirror(device)
         self._schedule_save()
+
+    async def async_remove_mirror(self, device_id: str) -> None:
+        """
+        Remove the mirror of a device its owner deleted, and everything this instance keeps about it (D-09, SYN-05).
+
+        The caller holds the lock and has decided that the removal is final: a tombstone or a prune with positive
+        evidence. Nothing is published, the topics belong to the owner. Both subscriptions end, the Script state is
+        unloaded, the persisted payload, baseline and tripped hash are forgotten and every per-device issue is deleted.
+        Leftover registry entries are cleaned last, and only when no entity of the device is live.
+        """
+        if (device := self.mirrors.pop(device_id, None)) is None:
+            return
+        if device.unsubscribe is not None:
+            device.unsubscribe()
+        if device.unsubscribe_test is not None:
+            device.unsubscribe_test()
+        await self.runner.async_unload(device_id, remove_issue=True)
+        self._delete_breaker_issue(device_id)
+        self._delete_device_issues(device_id)
+        self._stored_last_acted.pop(device_id, None)
+        self._tripped.pop(device_id, None)
+        self._clean_registry(device_id)
+        self._schedule_save()
+
+    @callback
+    def _clean_registry(self, device_id: str) -> None:
+        """
+        Remove the device and entity registry entries a missed delete left behind, and only those.
+
+        An entity that is live in core still has its discovery on the broker: removing its registry entry would make
+        core publish an empty retained discovery, which clears the device for every instance including the owner
+        (Pitfall 10). So nothing is removed while any entity has a state that is not a restored one. Without an MQTT
+        entry or a registry device there is nothing to do.
+        """
+        if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None:
+            return
+        device_registry = dr.async_get(self._hass)
+        device = device_registry.async_get_device_by_identifier(("mqtt", f"{DOMAIN}_{device_id}"), mqtt_entry_id)
+        if device is None:
+            return
+        entities = er.async_entries_for_device(er.async_get(self._hass), device.id, include_disabled_entities=True)
+        for entity in entities:
+            state = self._hass.states.get(entity.entity_id)
+            if state is not None and not state.attributes.get(ATTR_RESTORED):
+                LOGGER.debug(
+                    "Keeping the registry entries of removed mirror %r: its entities are still live", device_id[:40]
+                )
+                return
+        device_registry.async_remove_device(device.id)
 
     async def _async_restore_mirrors(self, owned: set[str]) -> None:
         """Rebuild the cached mirrors at start; owned ids are dropped, the rest gets the startup window."""

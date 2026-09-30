@@ -238,11 +238,23 @@ class SyncManager:
         if (device := manager.devices.get(device_id)) is not None:
             self._check_owned(device, msg.payload)
             return
-        if not msg.payload:
-            return  # A tombstone removes a mirror; that belongs to the removal plan
-        manager.entry.async_create_background_task(
-            manager.hass, self._async_ingest(device_id, msg.payload), name=f"{DOMAIN} ingest"
-        )
+        # A tombstone takes the same queue as a document, so a document and its tombstone apply in arrival order
+        task = self._async_remove(device_id) if not msg.payload else self._async_ingest(device_id, msg.payload)
+        manager.entry.async_create_background_task(manager.hass, task, name=f"{DOMAIN} ingest")
+
+    async def _async_remove(self, device_id: str) -> None:
+        """Remove the mirror of a device whose config topic was cleared (D-09); an unknown id is a no-op."""
+        manager = self._manager
+        try:
+            async with manager.lock:
+                if manager.running and device_id in manager.mirrors and device_id not in manager.devices:
+                    LOGGER.debug(
+                        "The config document of mirrored device %s was cleared, so its mirror is removed",
+                        _shown(device_id),
+                    )
+                    await manager.async_remove_mirror(device_id)
+        except Exception:  # noqa: BLE001 - nothing a broker sends may reach a log
+            LOGGER.warning("The mirror of device %s could not be removed", _shown(device_id))
 
     async def _async_ingest(self, device_id: str, payload: str) -> None:
         """

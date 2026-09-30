@@ -14,6 +14,7 @@ discovery is not simulated: assert on the retained discovery topics instead.
 import uuid
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from homeassistant import loader
@@ -196,6 +197,9 @@ class InstanceFactory:
         """
         if hass is None:
             hass = await self._stack.enter_async_context(async_test_home_assistant())
+            # The context manager only restores the time zone; a hass that is not stopped stays in the plugin's
+            # INSTANCES list and aborts the test run at the second test that creates one. Runs after the managers stop.
+            self._stack.push_async_callback(partial(hass.async_stop, force=True))
             # Lets the custom integration load, as the enable_custom_integrations fixture does for the test's hass
             hass.data.pop(loader.DATA_CUSTOM_COMPONENTS, None)
         entry = MockConfigEntry(

@@ -44,7 +44,7 @@
 ### Central Config & Ownership
 
 - [x] **SYN-01**: The owner publishes one retained, versioned (`schema_version`) config document per device
-- [ ] **SYN-02**: Another HA instance reading the central config creates the same devices as read-only mirrors
+- [x] **SYN-02**: Another HA instance reading the central config creates the same devices as read-only mirrors
 - [x] **SYN-03**: Every device has one owner (its creator); only the owner can edit or delete it; followers pin the owner and raise a Repairs issue on conflicting claims
 - [ ] **SYN-04**: The owner reconciles and republishes its config on every MQTT reconnect
 - [ ] **SYN-05**: Followers never delete devices because a message is absent; removal is driven by tombstone or grace window
@@ -135,7 +135,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DSC-03 | Phase 3 | Complete |
 | DSC-04 | Phase 4 | Pending |
 | SYN-01 | Phase 3 | Complete |
-| SYN-02 | Phase 3 | Pending |
+| SYN-02 | Phase 3 | Complete |
 | SYN-03 | Phase 3 | Complete |
 | SYN-04 | Phase 3 | Pending |
 | SYN-05 | Phase 3 | Pending |

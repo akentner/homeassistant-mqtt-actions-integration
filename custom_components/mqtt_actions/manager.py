@@ -523,15 +523,18 @@ class Manager:
 
     async def async_apply_mirror(self, parsed: ParsedDocument) -> None:
         """
-        Create the read-only mirror of a validated foreign document; the caller holds the lock.
+        Create or update the read-only mirror of a validated foreign document; the caller holds the lock.
 
         A mirror is a Device without a Script: it follows the state topic for its baseline and runs nothing, because the
         runner only runs triggers of a device it built a Script for (TRU-01). It publishes nothing, is not in `devices`,
-        not in the published set and never touched by a reconcile of the owned subentries (D-08, D-19). A document for a
-        device that is already owned or mirrored changes nothing here.
+        not in the published set and never touched by a reconcile of the owned subentries (D-08, D-19). Whether the
+        document is the pinned owner's and differs from the mirror is decided by the caller; an owned id is ignored.
         """
         device_id = parsed.device_id
-        if device_id in self.devices or device_id in self.mirrors:
+        if device_id in self.devices:
+            return
+        if (existing := self.mirrors.get(device_id)) is not None:
+            self._update_mirror(existing, parsed)
             return
         device = self._build_mirror(parsed, startup=False)
         await self._async_subscribe_mirror(device)
@@ -548,10 +551,25 @@ class Manager:
                 continue
             await self._async_subscribe_mirror(self._build_mirror(parsed, startup=True))
 
+    @staticmethod
+    def _mirror_info(parsed: ParsedDocument) -> MirrorInfo:
+        """Return what a follower records of a document: its owner, both hashes, the payload and the static analysis."""
+        analysis: ActionAnalysis = analyze_spec(parsed.spec)
+        return MirrorInfo(
+            owner=parsed.owner,
+            owner_name=parsed.owner_name,
+            rev=parsed.rev,
+            content_hash=parsed.content_hash,
+            actions_hash=parsed.actions_hash,
+            payload=parsed.payload,
+            denied=analysis.denied,
+            templated=analysis.templated,
+            residual=analysis.residual,
+        )
+
     def _build_mirror(self, parsed: ParsedDocument, *, startup: bool) -> Device:
         """Build the runtime state of a mirror: tracker, breaker and the recorded static analysis; no Script."""
         spec = parsed.spec
-        analysis: ActionAnalysis = analyze_spec(spec)
         stored = self._stored_last_acted.get(parsed.device_id)
         device = Device(
             device_id=parsed.device_id,
@@ -565,20 +583,31 @@ class Manager:
             # The canonical content stands in for the subentry fingerprint, so the persisted breaker hash still works
             signature=canonical_json(parsed.content),
             breaker=self._new_breaker(spec),
-            mirror=MirrorInfo(
-                owner=parsed.owner,
-                owner_name=parsed.owner_name,
-                rev=parsed.rev,
-                content_hash=parsed.content_hash,
-                actions_hash=parsed.actions_hash,
-                payload=parsed.payload,
-                denied=analysis.denied,
-                templated=analysis.templated,
-                residual=analysis.residual,
-            ),
+            mirror=self._mirror_info(parsed),
         )
         self._restore_tripped(device)
         return device
+
+    def _update_mirror(self, device: Device, parsed: ParsedDocument) -> None:
+        """
+        Apply a changed document of the pinned owner to an existing mirror; the device and its subscriptions stay.
+
+        Like a reconfigured owned device it gets a fresh breaker with its issue deleted, and a baseline that is no
+        StateValue of the new spec becomes unknown (D-15 of Phase 2, A11).
+        """
+        spec = parsed.spec
+        mirror = self._mirror_info(parsed)
+        device.spec = spec
+        device.mirror = mirror
+        device.signature = canonical_json(parsed.content)
+        device.tracker.run_on_startup = spec.run_on_startup
+        device.tracker.accepted = spec.accepted
+        if device.tracker.last_acted is not None and device.tracker.last_acted not in spec.accepted.values():
+            device.tracker.last_acted = None
+        device.breaker = self._new_breaker(spec)
+        self._delete_breaker_issue(device.device_id)
+        self._tripped.pop(device.device_id, None)
+        self._schedule_save()
 
     async def _async_subscribe_mirror(self, device: Device) -> None:
         """Register a mirror and subscribe to its state and test topics; a failed subscribe leaves nothing behind."""

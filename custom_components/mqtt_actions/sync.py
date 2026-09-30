@@ -31,15 +31,26 @@ from .const import (
     DOMAIN,
     ISSUE_DISCOVERY_REMOVED_PREFIX,
     ISSUE_DOC_OVERWRITTEN_PREFIX,
+    ISSUE_OWNER_CONFLICT_PREFIX,
     ISSUE_OWNERSHIP_CLAIM_PREFIX,
+    ISSUE_SCHEMA_TOO_NEW_PREFIX,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
+    MAX_SCHEMA_TOO_NEW_ISSUES,
     MAX_TRACKED_INSTANCES,
     PUBLISHED_HASH_HISTORY,
     REPUBLISH_THROTTLE_SECONDS,
+    SCHEMA_VERSION,
 )
-from .document import DocumentRejectedError, build_content, content_hash, escape_markdown, parse_document
+from .document import (
+    DocumentRejectedError,
+    SchemaTooNewError,
+    build_content,
+    content_hash,
+    escape_markdown,
+    parse_document,
+)
 from .topics import (
     availability_wildcard,
     config_wildcard,
@@ -55,12 +66,14 @@ if TYPE_CHECKING:
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
     from .document import ParsedDocument
-    from .manager import Device, Manager
+    from .manager import Device, Manager, MirrorInfo
     from .mqtt_gateway import IncomingMessage
 
 TRANSLATION_DOC_OVERWRITTEN = "doc_overwritten"
 TRANSLATION_OWNERSHIP_CLAIM = "ownership_claim"
 TRANSLATION_DISCOVERY_REMOVED = "discovery_removed"
+TRANSLATION_OWNER_CONFLICT = "owner_conflict"
+TRANSLATION_SCHEMA_TOO_NEW = "schema_too_new"
 
 # Stored presence values; only these two payloads of the availability topic mean anything
 PRESENCE_ONLINE = "online"
@@ -249,11 +262,14 @@ class SyncManager:
             LOGGER.warning("A config document for device %s could not be processed", _shown(device_id))
 
     async def _async_ingest_locked(self, device_id: str, payload: str) -> None:
-        """Validate a document and apply it; the caller holds the lock."""
+        """Validate a document and apply it to the mirror of its device; the caller holds the lock."""
         manager = self._manager
         shown = _shown(device_id)
         try:
             parsed = parse_document(device_id, payload)
+        except SchemaTooNewError as err:
+            self._schema_too_new(device_id, err.version)
+            return
         except DocumentRejectedError as err:
             LOGGER.warning("A config document for device %s was dropped: %s", shown, err.reason)
             return
@@ -266,16 +282,78 @@ class SyncManager:
         if parsed.owner == manager.instance_id:
             LOGGER.debug("Ignoring a config document of this instance for the unknown device %s", shown)
             return
-        if device_id in manager.mirrors:
+        if (mirror := manager.mirrors.get(device_id)) is None:
+            if len(manager.mirrors) >= MAX_MIRRORS:
+                if not self._mirror_overflow_logged:
+                    self._mirror_overflow_logged = True
+                    LOGGER.warning(
+                        "More than %d devices of other instances were announced, so further ones are ignored",
+                        MAX_MIRRORS,
+                    )
+                return
+            await manager.async_apply_mirror(parsed)
+        elif (info := mirror.mirror) is not None and info.owner != parsed.owner:
+            # The first owner wins; nothing another owner sends changes the mirror (D-17)
+            self._conflict(mirror, info, parsed.owner_name)
             return
-        if len(manager.mirrors) >= MAX_MIRRORS:
-            if not self._mirror_overflow_logged:
-                self._mirror_overflow_logged = True
-                LOGGER.warning(
-                    "More than %d devices of other instances were announced, so further ones are ignored", MAX_MIRRORS
-                )
-            return
-        await manager.async_apply_mirror(parsed)
+        elif info is None or parsed.content_hash != info.content_hash:
+            # The hash decides, never the rev: an owner that lost its Store restarts at rev 1 (D-15)
+            await manager.async_apply_mirror(parsed)
+        self._resolve(device_id)
+
+    def _resolve(self, device_id: str) -> None:
+        """Delete the conflict and schema issues of a device: its pinned owner has a current, readable document."""
+        hass = self._manager.hass
+        for prefix in (ISSUE_OWNER_CONFLICT_PREFIX, ISSUE_SCHEMA_TOO_NEW_PREFIX):
+            ir.async_delete_issue(hass, DOMAIN, f"{prefix}{device_id}")
+
+    def _conflict(self, mirror: Device, info: MirrorInfo, claimant_name: str) -> None:
+        """React to a valid document of another owner for a mirrored device: ignore it and report both claims (D-17)."""
+        if self._raise_once(
+            ISSUE_OWNER_CONFLICT_PREFIX,
+            TRANSLATION_OWNER_CONFLICT,
+            mirror.device_id,
+            {
+                "device": escape_markdown(mirror.name),
+                "owner": escape_markdown(info.owner_name),
+                "claimant": escape_markdown(claimant_name),
+            },
+        ):
+            LOGGER.warning(
+                "Another instance claims the mirrored device %s; this instance keeps following its first owner",
+                _shown(mirror.name),
+            )
+
+    def _schema_too_new(self, device_id: str, version: int) -> None:
+        """
+        React to a document newer than this integration reads: apply nothing and ask for an update (D-14).
+
+        An existing mirror keeps its last known state. Without a mirror the number of such issues is bounded, so
+        documents with random ids cannot fill Repairs (T-03-16).
+        """
+        manager = self._manager
+        if (mirror := manager.mirrors.get(device_id)) is None:
+            existing = sum(
+                1
+                for domain, issue_id in ir.async_get(manager.hass).issues
+                if domain == DOMAIN and issue_id.startswith(ISSUE_SCHEMA_TOO_NEW_PREFIX)
+            )
+            if existing >= MAX_SCHEMA_TOO_NEW_ISSUES:
+                LOGGER.debug("Ignoring a newer config document for device %s: too many such issues", _shown(device_id))
+                return
+        shown_name = mirror.name if mirror is not None else device_id[:MAX_LOGGED_PAYLOAD_LENGTH]
+        if self._raise_once(
+            ISSUE_SCHEMA_TOO_NEW_PREFIX,
+            TRANSLATION_SCHEMA_TOO_NEW,
+            device_id,
+            {"device": escape_markdown(shown_name), "version": str(version)[:12], "supported": str(SCHEMA_VERSION)},
+            ir.IssueSeverity.WARNING,
+        ):
+            LOGGER.warning(
+                "A config document for device %s uses a newer format than this integration understands; update it "
+                "to receive changes",
+                _shown(device_id),
+            )
 
     def _check_owned(self, device: Device, payload: str) -> None:
         """Classify a message on the config topic of an owned device and heal it when it is not this instance's."""
@@ -319,7 +397,7 @@ class SyncManager:
         if self._raise_once(
             ISSUE_DOC_OVERWRITTEN_PREFIX,
             TRANSLATION_DOC_OVERWRITTEN,
-            device,
+            device.device_id,
             {"device": escape_markdown(device.name)},
         ):
             LOGGER.warning(
@@ -334,7 +412,7 @@ class SyncManager:
         if self._raise_once(
             ISSUE_OWNERSHIP_CLAIM_PREFIX,
             TRANSLATION_OWNERSHIP_CLAIM,
-            device,
+            device.device_id,
             {"device": escape_markdown(device.name), "claimant": escape_markdown(claimant)},
         ):
             LOGGER.warning(
@@ -347,13 +425,13 @@ class SyncManager:
         self,
         prefix: str,
         translation_key: str,
-        device: Device,
+        device_id: str,
         placeholders: dict[str, str],
         severity: ir.IssueSeverity = ir.IssueSeverity.ERROR,
     ) -> bool:
         """Create a non-fixable issue unless it exists, so a repeating writer cannot reset a dismissal; True if new."""
         hass = self._manager.hass
-        issue_id = f"{prefix}{device.device_id}"
+        issue_id = f"{prefix}{device_id}"
         if ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None:
             return False
         ir.async_create_issue(
@@ -399,7 +477,7 @@ class SyncManager:
         if self._raise_once(
             ISSUE_DISCOVERY_REMOVED_PREFIX,
             TRANSLATION_DISCOVERY_REMOVED,
-            device,
+            device.device_id,
             {"device": escape_markdown(device.name), "count": str(DISCOVERY_REMOVAL_HINT_COUNT)},
             ir.IssueSeverity.WARNING,
         ):

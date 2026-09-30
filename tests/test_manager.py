@@ -17,6 +17,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions.const import (
+    CONF_DELETE_DEVICES_ON_REMOVE,
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     CONF_ON_CHANGE_TO_OFF,
@@ -1012,11 +1013,11 @@ async def test_remove_entry_clears_all_owned_topics(
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
 ) -> None:
-    """D-15: removing the hub clears discovery, state and availability of every published and current device."""
+    """D-11: removing the hub with the delete option clears every published and current device and the availability."""
     sub = make_switch_subentry("Lamp", on=[{"not_an_action": True}])
     device_id = _device_id(sub)
     _preload_store(hass_storage, published=[ORPHAN_ID])
-    entry = await _setup(hass, make_hub_entry([sub]))
+    entry = await _setup(hass, make_hub_entry([sub], options={CONF_DELETE_DEVICES_ON_REMOVE: True}))
     instance_id = entry.data[CONF_INSTANCE_ID]
     assert _issue(hass, device_id) is not None
 
@@ -1044,7 +1045,10 @@ async def test_remove_entry_survives_unavailable_mqtt(
     make_switch_subentry: Callable,
 ) -> None:
     """T-01-14: with MQTT unavailable the removal still completes and only logs a warning."""
-    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+    entry = await _setup(
+        hass,
+        make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)], options={CONF_DELETE_DEVICES_ON_REMOVE: True}),
+    )
     assert await hass.config_entries.async_unload(entry.entry_id)
 
     with patch(
@@ -1066,7 +1070,7 @@ async def test_remove_entry_survives_mqtt_not_loaded(
 ) -> None:
     """An MQTT entry that exists but is not loaded (broker down at start) must not block the removal either."""
     MockConfigEntry(domain="mqtt", data={"broker": "mock-broker"}).add_to_hass(hass)
-    entry = make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)])
+    entry = make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)], options={CONF_DELETE_DEVICES_ON_REMOVE: True})
     entry.add_to_hass(hass)
     _preload_store(hass_storage, published=[ORPHAN_ID])
 

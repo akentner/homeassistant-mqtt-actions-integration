@@ -11,6 +11,8 @@ CONF_BASE_TOPIC: Final = "base_topic"
 CONF_INSTANCE_NAME: Final = "instance_name"
 CONF_INSTANCE_ID: Final = "instance_id"
 DEFAULT_BASE_TOPIC: Final = "mqtt_actions"
+# Hub config entry option (D-11): delete every owned device from the broker when the hub is removed; default keep
+CONF_DELETE_DEVICES_ON_REMOVE: Final = "delete_devices_on_remove"
 
 # Protocol path segment of every topic (D-01); bumping it is a breaking protocol change
 TOPIC_VERSION: Final = "v1"

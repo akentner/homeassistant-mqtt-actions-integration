@@ -8,6 +8,7 @@ from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions.const import (
+    CONF_DELETE_DEVICES_ON_REMOVE,
     CONF_DEVICE_ID,
     CONF_OPTIONS,
     DOMAIN,
@@ -400,7 +401,7 @@ async def test_remove_entry_clears_select_device_topics(
     sub = make_select_subentry("Mode", ABC_OPTIONS)
     device_id = _device_id(sub)
     _preload_store(hass_storage, published=[ORPHAN_ID])
-    entry = await _setup(hass, make_hub_entry([sub]))
+    entry = await _setup(hass, make_hub_entry([sub], options={CONF_DELETE_DEVICES_ON_REMOVE: True}))
     instance_id = entry.data["instance_id"]
 
     assert await hass.config_entries.async_remove(entry.entry_id)

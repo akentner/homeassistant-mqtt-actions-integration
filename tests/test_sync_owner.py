@@ -20,6 +20,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.mqtt_actions.const import (
+    CONF_DELETE_DEVICES_ON_REMOVE,
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
@@ -438,7 +439,7 @@ async def test_hub_removal_path_clears_the_config_topic(
     sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
     device_id = _device_id(sub)
     _preload_published(hass_storage, [ORPHAN_ID])
-    entry = await _setup(hass, make_hub_entry([sub]))
+    entry = await _setup(hass, make_hub_entry([sub], options={CONF_DELETE_DEVICES_ON_REMOVE: True}))
 
     assert await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)

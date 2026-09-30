@@ -125,6 +125,12 @@ ISSUE_CIRCUIT_BREAKER_PREFIX: Final = "circuit_breaker_"
 ISSUE_DOC_OVERWRITTEN_PREFIX: Final = "doc_overwritten_"
 ISSUE_OWNERSHIP_CLAIM_PREFIX: Final = "ownership_claim_"
 ISSUE_DISCOVERY_REMOVED_PREFIX: Final = "discovery_removed_"
+# Follower side, D-17 and D-14: a second owner claims a mirrored device; a document has a newer schema than this
+# integration understands
+ISSUE_OWNER_CONFLICT_PREFIX: Final = "owner_conflict_"
+ISSUE_SCHEMA_TOO_NEW_PREFIX: Final = "schema_too_new_"
+# Too-new documents of devices without a mirror raise at most this many issues, so broker noise cannot flood Repairs
+MAX_SCHEMA_TOO_NEW_ISSUES: Final = 10
 ISSUE_DISCOVERY_DISABLED: Final = "mqtt_discovery_disabled"
 # Every Repairs issue whose id is a prefix plus a device id; deleted with the device and with the hub. Later issue
 # families of a device append their prefix here.

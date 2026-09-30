@@ -5,17 +5,27 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import Mock, patch
 
 import pytest
+from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
+    DOMAIN,
+    ISSUE_CIRCUIT_BREAKER_PREFIX,
+    ISSUE_DEVICE_PREFIXES,
+    ISSUE_OWNER_CONFLICT_PREFIX,
+    ISSUE_SCHEMA_TOO_NEW_PREFIX,
+    MAX_DOCUMENT_BYTES,
+    MAX_SCHEMA_TOO_NEW_ISSUES,
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_MIRRORS,
     STORE_VERSION,
+    SUBENTRY_SELECT,
 )
 from custom_components.mqtt_actions.document import build_content, canonical_json
+from custom_components.mqtt_actions.model import SWITCH_ON_KEY
 from custom_components.mqtt_actions.topics import config_topic, discovery_topic, state_topic
 from custom_components.mqtt_actions.topics import test_topic as device_test_topic
 from tests.documents import FOREIGN_OWNER, FOREIGN_OWNER_NAME, document_payload, make_spec
@@ -31,6 +41,8 @@ if TYPE_CHECKING:
 BASE = "mqtt_actions"
 ON_ACTIONS = [{"action": "test.on", "target": {"entity_id": "light.lamp"}}]
 OFF_ACTIONS = [{"action": "test.off"}]
+OTHER_ACTIONS = [{"action": "test.other"}]
+CANARY = "CANARY-7f3a91"
 
 
 async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> MockConfigEntry:
@@ -365,3 +377,307 @@ async def test_static_analysis_is_recorded_on_the_mirror(
     assert info.denied == ("shell_command.run",)
     assert info.templated == ("{{ 'light.turn_on' }}",)
     assert info.residual == ()
+
+
+# --- updates by content hash (D-15) -----------------------------------------------------------------------------
+
+
+def _issue(hass: HomeAssistant, prefix: str, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{prefix}{device_id}")
+
+
+def _issue_ids(hass: HomeAssistant, prefix: str) -> list[str]:
+    return [
+        issue_id for domain, issue_id in ir.async_get(hass).issues if domain == DOMAIN and issue_id.startswith(prefix)
+    ]
+
+
+async def test_changed_document_updates_the_mirror(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """A different content hash replaces spec, rev, hashes and payload; device, subscriptions and baseline stay."""
+    spec = make_spec(on=ON_ACTIONS, name="Lamp")
+    changed = make_spec(device_id=spec.device_id, on=OTHER_ACTIONS, name="Lamp 2")
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, rev=1), retain=False)
+    await _state(hass, spec.device_id, "ON", retain=False)
+    mirror = _mirror(entry, spec.device_id)
+    subscriptions = (mirror.unsubscribe, mirror.unsubscribe_test)
+    first_hash = mirror.mirror.content_hash
+
+    payload = document_payload(changed, rev=2)
+    await _deliver(hass, spec.device_id, payload, retain=False)
+
+    assert _mirror(entry, spec.device_id) is mirror
+    assert mirror.spec == changed
+    assert mirror.spec.triggers[SWITCH_ON_KEY].actions == OTHER_ACTIONS
+    assert mirror.mirror.rev == 2
+    assert mirror.mirror.content_hash != first_hash
+    assert mirror.mirror.payload == payload
+    assert mirror.signature == canonical_json(build_content(changed))
+    assert (mirror.unsubscribe, mirror.unsubscribe_test) == subscriptions
+    assert mirror.tracker.last_acted == "ON"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert hass_storage[STORE_KEY]["data"][STORE_MIRRORS] == {spec.device_id: payload}
+
+
+async def test_identical_hash_is_a_noop(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """The content hash decides: the same content with a higher rev replaces, saves and publishes nothing."""
+    spec = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, rev=1), retain=False)
+    mirror = _mirror(entry, spec.device_id)
+    spec_before, info_before = mirror.spec, mirror.mirror
+    _manager(entry)._schedule_save = Mock()
+    mqtt_mock.async_publish.reset_mock()
+
+    await _deliver(hass, spec.device_id, document_payload(spec, rev=5), retain=False)
+
+    assert mirror.spec is spec_before
+    assert mirror.mirror is info_before
+    _manager(entry)._schedule_save.assert_not_called()
+    assert mqtt_mock.async_publish.call_count == 0
+
+
+async def test_lower_rev_with_different_content_is_applied(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """An owner that lost its Store restarts at rev 1; its changed document still updates the mirror."""
+    spec = make_spec(on=ON_ACTIONS)
+    changed = make_spec(device_id=spec.device_id, on=OTHER_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, rev=7), retain=False)
+
+    await _deliver(hass, spec.device_id, document_payload(changed, rev=1), retain=False)
+
+    mirror = _mirror(entry, spec.device_id)
+    assert mirror.spec == changed
+    assert mirror.mirror.rev == 1
+
+
+async def test_update_releases_a_tripped_breaker_and_sanitizes_the_baseline(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """An applied change gives a fresh breaker without its issue; a baseline that is no option any more is unknown."""
+    options = [("a", "A", []), ("b", "B", []), ("c", "C", [])]
+    spec = make_spec(SUBENTRY_SELECT, options=options)
+    changed = make_spec(SUBENTRY_SELECT, device_id=spec.device_id, options=options[:2])
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, rev=1), retain=False)
+    await _state(hass, spec.device_id, "c", retain=False)
+    manager = _manager(entry)
+    mirror = _mirror(entry, spec.device_id)
+    assert mirror.tracker.last_acted == "c"
+    old_breaker = mirror.breaker
+    old_breaker.trip()
+    manager._create_breaker_issue(mirror)
+    manager._tripped[spec.device_id] = "stale-hash"
+    assert _issue(hass, ISSUE_CIRCUIT_BREAKER_PREFIX, spec.device_id) is not None
+
+    await _deliver(hass, spec.device_id, document_payload(changed, rev=2), retain=False)
+
+    assert mirror.breaker is not old_breaker
+    assert mirror.breaker.tripped is False
+    assert _issue(hass, ISSUE_CIRCUIT_BREAKER_PREFIX, spec.device_id) is None
+    assert spec.device_id not in manager._tripped
+    assert mirror.tracker.last_acted is None
+    assert set(mirror.tracker.accepted.values()) == {"a", "b"}
+
+
+# --- owner pinning (D-17) ---------------------------------------------------------------------------------------
+
+
+async def test_pinned_owner_ignores_another_owner(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """The first owner is pinned: a valid document of another owner changes nothing and raises one conflict issue."""
+    spec = make_spec(on=ON_ACTIONS, name="Lamp_1")
+    other = make_spec(device_id=spec.device_id, on=OTHER_ACTIONS, name="Hijacked")
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, owner="owner-a", owner_name="Al_pha"), retain=False)
+    mirror = _mirror(entry, spec.device_id)
+    spec_before, info_before = mirror.spec, mirror.mirror
+
+    await _deliver(hass, spec.device_id, document_payload(other, owner="owner-b", owner_name="Be*ta"), retain=False)
+    await _deliver(
+        hass, spec.device_id, document_payload(other, owner="owner-c", owner_name="Gamma", rev=9), retain=False
+    )
+
+    assert mirror.spec is spec_before
+    assert mirror.mirror is info_before
+    assert _issue_ids(hass, ISSUE_OWNER_CONFLICT_PREFIX) == [f"{ISSUE_OWNER_CONFLICT_PREFIX}{spec.device_id}"]
+    issue = _issue(hass, ISSUE_OWNER_CONFLICT_PREFIX, spec.device_id)
+    assert issue is not None
+    assert issue.is_fixable is False
+    assert issue.severity == ir.IssueSeverity.ERROR
+    assert issue.translation_key == "owner_conflict"
+    assert issue.translation_placeholders == {"device": "Lamp\\_1", "owner": "Al\\_pha", "claimant": "Be\\*ta"}
+
+
+async def test_conflict_clears_when_the_pinned_owner_is_current_again(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """A document of the pinned owner with the current hash deletes the conflict issue."""
+    spec = make_spec(on=ON_ACTIONS)
+    other = make_spec(device_id=spec.device_id, on=OTHER_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, owner="owner-a"), retain=False)
+    await _deliver(hass, spec.device_id, document_payload(other, owner="owner-b"), retain=False)
+    assert _issue(hass, ISSUE_OWNER_CONFLICT_PREFIX, spec.device_id) is not None
+
+    await _deliver(hass, spec.device_id, document_payload(spec, owner="owner-a", rev=2), retain=False)
+
+    assert _issue(hass, ISSUE_OWNER_CONFLICT_PREFIX, spec.device_id) is None
+    assert _mirror(entry, spec.device_id).mirror.owner == "owner-a"
+
+
+# --- schema gate (D-14) -----------------------------------------------------------------------------------------
+
+
+async def test_schema_too_new_keeps_the_mirror_and_raises_an_issue(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """A newer schema applies nothing and keeps the last known mirror; the next valid document resolves the issue."""
+    spec = make_spec(on=ON_ACTIONS, name="Lamp")
+    changed = make_spec(device_id=spec.device_id, on=OTHER_ACTIONS, name="Lamp")
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    mirror = _mirror(entry, spec.device_id)
+    info_before = mirror.mirror
+
+    await _deliver(hass, spec.device_id, document_payload(changed, rev=2, schema_version=2), retain=False)
+
+    assert mirror.mirror is info_before
+    issue = _issue(hass, ISSUE_SCHEMA_TOO_NEW_PREFIX, spec.device_id)
+    assert issue is not None
+    assert issue.is_fixable is False
+    assert issue.severity == ir.IssueSeverity.WARNING
+    assert issue.translation_key == "schema_too_new"
+    assert issue.translation_placeholders == {"device": "Lamp", "version": "2", "supported": "1"}
+
+    await _deliver(hass, spec.device_id, document_payload(changed, rev=3), retain=False)
+
+    assert _issue(hass, ISSUE_SCHEMA_TOO_NEW_PREFIX, spec.device_id) is None
+    assert mirror.spec == changed
+
+
+async def test_schema_too_new_without_a_mirror_creates_no_mirror(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """A newer schema for an unknown device creates an issue but no mirror, and the issues are bounded in number."""
+    entry = await _setup(hass, make_hub_entry())
+    specs = [make_spec(name=f"Device {index}", on=ON_ACTIONS) for index in range(MAX_SCHEMA_TOO_NEW_ISSUES + 2)]
+
+    for spec in specs:
+        await _deliver(hass, spec.device_id, document_payload(spec, schema_version=2), retain=False)
+
+    assert _manager(entry).mirrors == {}
+    assert len(_issue_ids(hass, ISSUE_SCHEMA_TOO_NEW_PREFIX)) == MAX_SCHEMA_TOO_NEW_ISSUES
+    resolved = specs[0]
+    await _deliver(hass, resolved.device_id, document_payload(resolved), retain=False)
+    assert resolved.device_id in _manager(entry).mirrors
+    assert _issue(hass, ISSUE_SCHEMA_TOO_NEW_PREFIX, resolved.device_id) is None
+
+
+# --- hostile documents (T-03-18) --------------------------------------------------------------------------------
+
+
+def _hostile_payloads(spec_id: str) -> dict[str, str]:
+    """Return one rejected payload per reason; every one carries the canary in a place that must never be logged."""
+    bad_name = make_spec(device_id=spec_id, name=f"Name {CANARY}", on=ON_ACTIONS)
+    return {
+        "invalid-json": '{"name": "' + CANARY + '", "actions": [',
+        "wrong-device-id": document_payload(bad_name, tamper=lambda doc: doc.update(device_id="someone-else")),
+        "oversize": document_payload(
+            bad_name, tamper=lambda doc: doc.update(canary=CANARY, pad="x" * (MAX_DOCUMENT_BYTES + 1))
+        ),
+        "invalid-action-structure": document_payload(
+            make_spec(device_id=spec_id, name=f"Name {CANARY}", on=[{"not_a_step": CANARY}])
+        ),
+        "too-few-options": document_payload(
+            make_spec(
+                SUBENTRY_SELECT,
+                device_id=spec_id,
+                name=f"Name {CANARY}",
+                options=[("only", "Only", [{"action": "test.on", "data": {"x": CANARY}}])],
+            )
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["invalid-json", "wrong-device-id", "oversize", "invalid-action-structure", "too-few-options"],
+)
+async def test_invalid_documents_are_dropped_and_logged_without_content(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, caplog: pytest.LogCaptureFixture, case: str
+) -> None:
+    """One warning with a fixed reason: no mirror is created or changed and no payload text reaches the log."""
+    spec = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    payload = _hostile_payloads(spec.device_id)[case]
+
+    with caplog.at_level(logging.DEBUG):
+        await _deliver(hass, spec.device_id, payload, retain=False)
+
+    assert _manager(entry).mirrors == {}
+    own = _own_records(caplog)
+    assert len([record for record in own if record.levelno == logging.WARNING]) == 1
+    assert CANARY not in "\n".join(record.getMessage() for record in own)
+
+    # The same document against an existing mirror changes nothing either
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    mirror = _mirror(entry, spec.device_id)
+    info_before = mirror.mirror
+    with caplog.at_level(logging.DEBUG):
+        await _deliver(hass, spec.device_id, payload, retain=False)
+    assert mirror.mirror is info_before
+    assert CANARY not in "\n".join(record.getMessage() for record in _own_records(caplog))
+
+
+async def test_unexpected_exception_does_not_break_ingest(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A surprise exception is logged without content and a later valid document still applies."""
+    spec = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+
+    with (
+        patch(
+            "custom_components.mqtt_actions.sync.validate_spec_structure", side_effect=RuntimeError(f"boom {CANARY}")
+        ),
+        caplog.at_level(logging.DEBUG),
+    ):
+        await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+
+    assert _manager(entry).mirrors == {}
+    own = _own_records(caplog)
+    assert len([record for record in own if record.levelno == logging.WARNING]) == 1
+    assert CANARY not in "\n".join(record.getMessage() for record in own)
+    assert all(record.exc_info is None for record in own)
+
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    assert spec.device_id in _manager(entry).mirrors
+
+
+async def test_messages_for_one_device_apply_in_arrival_order(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """Two documents fired back to back apply in arrival order, so the mirror ends at the later one."""
+    first = make_spec(on=ON_ACTIONS)
+    second = make_spec(device_id=first.device_id, on=OTHER_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+
+    async_fire_mqtt_message(hass, config_topic(BASE, first.device_id), document_payload(first, rev=1), retain=False)
+    async_fire_mqtt_message(hass, config_topic(BASE, first.device_id), document_payload(second, rev=2), retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    mirror = _mirror(entry, first.device_id)
+    assert mirror.mirror.rev == 2
+    assert mirror.spec == second
+
+
+def test_mirror_issues_are_deleted_with_the_mirror_prefixes() -> None:
+    """Device delete and hub removal clean every prefix in ISSUE_DEVICE_PREFIXES, so both new families are in it."""
+    assert ISSUE_OWNER_CONFLICT_PREFIX in ISSUE_DEVICE_PREFIXES
+    assert ISSUE_SCHEMA_TOO_NEW_PREFIX in ISSUE_DEVICE_PREFIXES

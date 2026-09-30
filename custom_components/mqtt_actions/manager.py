@@ -142,14 +142,21 @@ async def _async_attempt(action: Callable[[], Awaitable[None]], description: str
 
 
 async def _async_clear_topics(publisher: DiscoveryPublisher, device_id: str) -> bool:
-    """Clear the retained discovery and state topics of a device; True when both were cleared."""
+    """
+    Clear the retained discovery, config and state topics of a device in that order; True when all were cleared.
+
+    The empty config payload is the tombstone that tells followers the device is gone (D-16).
+    """
     discovery_cleared = await _async_attempt(
         partial(publisher.async_clear_device, device_id), f"clear the discovery of device {device_id}"
+    )
+    config_cleared = await _async_attempt(
+        partial(publisher.async_clear_config, device_id), f"clear the config document of device {device_id}"
     )
     state_cleared = await _async_attempt(
         partial(publisher.async_clear_state, device_id), f"clear the retained state of device {device_id}"
     )
-    return discovery_cleared and state_cleared
+    return discovery_cleared and config_cleared and state_cleared
 
 
 async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -447,30 +454,35 @@ class Manager:
 
     async def _async_remove_device(self, device_id: str) -> None:
         """
-        Remove a deleted device in the order that keeps the manager from reading its own clear message (D-16).
+        Remove a deleted device in the order that keeps the manager from reading its own clear messages (D-16).
 
-        Discovery goes first so the entity disappears, then the subscription ends, and only then the retained state is
-        cleared. A clear that fails keeps the id in the published set so the next start retries it.
+        The device leaves `devices` first: the message handlers only act for devices in `devices`, so the discovery
+        clear, the config tombstone and the state clear of this delete can never look like a foreign event that the
+        owner would heal, which would resurrect the device (D-18). Then the discovery is cleared so the entity
+        disappears, the subscriptions end, the config tombstone follows and the retained state goes last. A clear that
+        fails keeps the id in the published set so the next start retries all three topics.
         """
         assert self._publisher is not None  # noqa: S101
-        device = self.devices[device_id]
-        cleared = await _async_attempt(
+        device = self.devices.pop(device_id)
+        discovery_cleared = await _async_attempt(
             partial(self._publisher.async_clear_device, device_id), f"clear the discovery of device {device.name}"
         )
         if device.unsubscribe is not None:
             device.unsubscribe()
         if device.unsubscribe_test is not None:
             device.unsubscribe_test()
+        config_cleared = await _async_attempt(
+            partial(self._publisher.async_clear_config, device_id), f"clear the config document of device {device.name}"
+        )
         state_cleared = await _async_attempt(
             partial(self._publisher.async_clear_state, device_id), f"clear the retained state of device {device.name}"
         )
         await self.runner.async_unload(device_id, remove_issue=True)
         self._delete_breaker_issue(device_id)
-        del self.devices[device_id]
         self._stored_last_acted.pop(device_id, None)
         self._tripped.pop(device_id, None)
         self._revs.pop(device_id, None)
-        if cleared and state_cleared:
+        if discovery_cleared and config_cleared and state_cleared:
             self._published.discard(device_id)
         self._schedule_save()
 

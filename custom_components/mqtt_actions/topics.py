@@ -3,6 +3,8 @@
 from .const import TOPIC_VERSION
 
 _FORBIDDEN_CHARACTERS = frozenset("#+\x00")
+# A parsed id is exactly one topic level: no separator and no wildcard
+_SEGMENT_FORBIDDEN = frozenset("/#+\x00")
 
 
 class InvalidBaseTopic(ValueError):  # noqa: N818
@@ -50,3 +52,48 @@ def availability_topic(base: str, instance_id: str) -> str:
 def discovery_topic(prefix: str, device_id: str) -> str:
     """Return the device-based MQTT Discovery config topic."""
     return f"{prefix}/device/{device_id}/config"
+
+
+def config_topic(base: str, device_id: str) -> str:
+    """Return the retained config document topic of a device; only its owner writes it (D-12)."""
+    return f"{base}/{TOPIC_VERSION}/devices/{device_id}/config"
+
+
+def config_wildcard(base: str) -> str:
+    """Return the subscription that matches the config topic of every device; the base is wildcard-free."""
+    return f"{base}/{TOPIC_VERSION}/devices/+/config"
+
+
+def availability_wildcard(base: str) -> str:
+    """Return the subscription that matches the availability topic of every instance."""
+    return f"{base}/{TOPIC_VERSION}/instances/+/availability"
+
+
+def discovery_wildcard(prefix: str) -> str:
+    """Return the subscription that matches the device discovery topic of every device."""
+    return f"{prefix}/device/+/config"
+
+
+def _parse_segment(topic: str, prefix: str, suffix: str) -> str | None:
+    """Return the one segment between an exact prefix and suffix, or None when the topic does not have that shape."""
+    if not (topic.startswith(prefix) and topic.endswith(suffix)) or len(topic) < len(prefix) + len(suffix) + 1:
+        return None
+    segment = topic[len(prefix) : len(topic) - len(suffix)]
+    if not segment or _SEGMENT_FORBIDDEN.intersection(segment):
+        return None
+    return segment
+
+
+def parse_config_topic(base: str, topic: str) -> str | None:
+    """Return the device id of a config topic, or None for any other topic."""
+    return _parse_segment(topic, f"{base}/{TOPIC_VERSION}/devices/", "/config")
+
+
+def parse_availability_topic(base: str, topic: str) -> str | None:
+    """Return the instance id of an availability topic, or None for any other topic."""
+    return _parse_segment(topic, f"{base}/{TOPIC_VERSION}/instances/", "/availability")
+
+
+def parse_discovery_topic(prefix: str, topic: str) -> str | None:
+    """Return the device id of a device discovery topic, or None for any other topic."""
+    return _parse_segment(topic, f"{prefix}/device/", "/config")

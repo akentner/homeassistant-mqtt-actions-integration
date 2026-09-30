@@ -25,6 +25,7 @@ from .const import (
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
+    CONF_INSTANCE_NAME,
     DOMAIN,
     ISSUE_ACTION_FAILED_PREFIX,
     ISSUE_CIRCUIT_BREAKER_PREFIX,
@@ -34,6 +35,7 @@ from .const import (
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_PUBLISHED,
+    STORE_REVS,
     STORE_SAVE_DELAY,
     STORE_TRIPPED,
     STORE_VERSION,
@@ -41,6 +43,7 @@ from .const import (
     SUBENTRY_SWITCH,
 )
 from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
+from .document import build_document, serialize_document
 from .model import DeviceSpec, spec_from_subentry, trigger_key
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .runner import ActionRunner
@@ -110,6 +113,22 @@ def _parse_tripped(stored: dict[str, Any]) -> dict[str, str]:
     if not isinstance(tripped, dict):
         return {}
     return {key: value for key, value in tripped.items() if isinstance(key, str) and isinstance(value, str)}
+
+
+def _parse_revs(stored: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return the published rev and content hash per device from a loaded Store payload; malformed data is dropped."""
+    revs = stored.get(STORE_REVS)
+    if not isinstance(revs, dict):
+        return {}
+    return {
+        key: {"rev": value["rev"], "hash": value["hash"]}
+        for key, value in revs.items()
+        if isinstance(key, str)
+        and isinstance(value, dict)
+        and isinstance(value.get("rev"), int)
+        and not isinstance(value.get("rev"), bool)
+        and isinstance(value.get("hash"), str)
+    }
 
 
 async def _async_attempt(action: Callable[[], Awaitable[None]], description: str) -> bool:
@@ -182,6 +201,8 @@ class Manager:
         self._published: set[str] = set()
         # device id -> config hash at the time its breaker tripped; the counting window is never stored (D-17)
         self._tripped: dict[str, str] = {}
+        # device id -> the rev last published and the content hash it belongs to (D-15)
+        self._revs: dict[str, dict[str, Any]] = {}
         self._running = False
         # Replaceable so tests control the breaker window; production uses the monotonic clock
         self.clock: Callable[[], float] = time.monotonic
@@ -199,8 +220,11 @@ class Manager:
             device_id: value for device_id, value in self._stored_last_acted.items() if device_id in current
         }
         self._tripped = {device_id: value for device_id, value in self._tripped.items() if device_id in current}
+        self._revs = {device_id: value for device_id, value in self._revs.items() if device_id in current}
         await self._async_orphan_cleanup()
         await self.async_reconcile(startup=True)
+        async with self._lock:
+            await self._async_publish_owned()
         await self._async_publish_availability(AvailabilityState.ONLINE)
 
     async def async_reconcile(self, *, startup: bool = False) -> None:
@@ -264,17 +288,25 @@ class Manager:
 
     async def _async_republish(self) -> None:
         """
-        Publish discovery and online availability again (FND-05).
+        Publish the config documents, the discovery and the online availability again (FND-05, SYN-04).
 
-        Idempotent: core MQTT ignores an unchanged retained discovery payload, and a broker that lost its retained
-        messages gets them back.
+        The order is load-bearing: a follower that sees the owner online and a mirror's document missing concludes
+        that the owner deleted it, so every document comes first and the availability last (D-15). Idempotent: core
+        MQTT ignores an unchanged retained discovery payload, and a broker that lost its retained messages gets them
+        back.
         """
         async with self._lock:
             if not self._running:
                 return
-            for device in self.devices.values():
-                await self._async_publish_discovery(device)
+            await self._async_publish_owned()
             await self._async_publish_availability(AvailabilityState.ONLINE)
+
+    async def _async_publish_owned(self) -> None:
+        """Publish every config document, then every discovery; the caller holds the lock and publishes availability."""
+        for device in self.devices.values():
+            await self.async_publish_config(device)
+        for device in self.devices.values():
+            await self.async_publish_discovery(device)
 
     def _check_discovery_enabled(self) -> None:
         """Warn and raise a Repairs issue when MQTT discovery is disabled, because then no entity ever appears."""
@@ -311,6 +343,7 @@ class Manager:
         )
         self._published = _parse_published(stored)
         self._tripped = _parse_tripped(stored)
+        self._revs = _parse_revs(stored)
 
     @callback
     def _data_to_save(self) -> dict[str, Any]:
@@ -323,6 +356,7 @@ class Manager:
             },
             STORE_PUBLISHED: sorted(self._published),
             STORE_TRIPPED: dict(self._tripped),
+            STORE_REVS: {device_id: dict(value) for device_id, value in self._revs.items()},
         }
 
     @callback
@@ -361,7 +395,10 @@ class Manager:
             test_topic(self._base_topic, device_id),
             partial(self._on_test_message, device_id),
         )
-        await self._async_publish_discovery(device)
+        # The start publishes all documents first, then all discovery (D-15); only a later add publishes per device
+        if not startup:
+            await self.async_publish_config(device)
+            await self.async_publish_discovery(device)
         self._published.add(device_id)
         self._schedule_save()
 
@@ -393,7 +430,8 @@ class Manager:
         self._delete_breaker_issue(device.device_id)
         if self._tripped.pop(device.device_id, None) is not None:
             self._schedule_save()
-        await self._async_publish_discovery(device)
+        await self.async_publish_config(device, changed_only=True)
+        await self.async_publish_discovery(device)
 
     async def _async_remove_device(self, device_id: str) -> None:
         """
@@ -419,6 +457,7 @@ class Manager:
         del self.devices[device_id]
         self._stored_last_acted.pop(device_id, None)
         self._tripped.pop(device_id, None)
+        self._revs.pop(device_id, None)
         if cleared and state_cleared:
             self._published.discard(device_id)
         self._schedule_save()
@@ -437,7 +476,43 @@ class Manager:
                 self._stored_last_acted.pop(device_id, None)
                 self._schedule_save()
 
-    async def _async_publish_discovery(self, device: Device) -> None:
+    async def async_publish_config(self, device: Device, *, changed_only: bool = False) -> None:
+        """
+        Publish the retained config document of an owned device (SYN-01, D-12).
+
+        The rev grows only when the content hash differs from the one last published, and both are persisted so a
+        restart republishes the same rev (D-15). With `changed_only` an unchanged document is not published again; the
+        start and every reconnect publish unconditionally. A document that cannot be built is logged by device name
+        only and nothing is published.
+        """
+        assert self._publisher is not None  # noqa: S101
+        device_id = device.device_id
+        known = self._revs.get(device_id)
+        try:
+            document = build_document(
+                device.spec,
+                owner=self._instance_id,
+                owner_name=self._entry.data[CONF_INSTANCE_NAME],
+                rev=1,
+            )
+            digest: str = document["hash"]
+            changed = known is None or known["hash"] != digest
+            document["rev"] = 1 if known is None else known["rev"] + (1 if changed else 0)
+            payload = serialize_document(document)
+        except ValueError, TypeError:
+            LOGGER.warning("The config document of device %s cannot be built, so it is not published", device.name)
+            return
+        if changed:
+            self._revs[device_id] = {"rev": document["rev"], "hash": digest}
+            self._schedule_save()
+        elif changed_only:
+            return
+        await _async_attempt(
+            partial(self._publisher.async_publish_config, device_id, payload),
+            f"publish the config document of device {device.name}",
+        )
+
+    async def async_publish_discovery(self, device: Device) -> None:
         """Publish the retained discovery of a device; an unavailable MQTT client is logged, the next start retries."""
         assert self._publisher is not None  # noqa: S101
         await _async_attempt(

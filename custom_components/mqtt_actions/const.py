@@ -14,6 +14,8 @@ DEFAULT_BASE_TOPIC: Final = "mqtt_actions"
 
 # Protocol path segment of every topic (D-01); bumping it is a breaking protocol change
 TOPIC_VERSION: Final = "v1"
+# Version of the central config document (D-12, D-14); a reader rejects a higher one and migrates a lower one
+SCHEMA_VERSION: Final = 1
 
 # Subentry types and subentry data keys (D-03)
 SUBENTRY_SWITCH: Final = "switch"
@@ -59,6 +61,8 @@ STORE_VERSION: Final = 1
 STORE_LAST_ACTED: Final = "last_acted"
 STORE_PUBLISHED: Final = "published"
 STORE_TRIPPED: Final = "tripped"
+# device id -> {"rev": int, "hash": str}: the rev last published for a device and the content hash it belongs to (D-15)
+STORE_REVS: Final = "revs"
 STORE_SAVE_DELAY: Final = 5.0
 
 # Logging: unknown payloads are logged as a truncated repr so a payload cannot grow or forge a log line

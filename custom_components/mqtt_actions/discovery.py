@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.helpers.json import json_dumps
 
 from .const import BUTTON_KEY_PREFIX, DOMAIN, PAYLOAD_OFF, PAYLOAD_ON, SUBENTRY_SELECT
-from .topics import availability_topic, discovery_topic, state_topic, test_topic
+from .topics import availability_topic, config_topic, discovery_topic, state_topic, test_topic
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Sequence
@@ -164,6 +164,14 @@ class DiscoveryPublisher:
     async def async_clear_device(self, device_id: str) -> None:
         """Remove the device: an empty retained discovery payload makes core MQTT drop the entity (DSC-02)."""
         await self._gateway.async_publish(discovery_topic(self._gateway.discovery_prefix(), device_id), "", retain=True)
+
+    async def async_publish_config(self, device_id: str, payload: str) -> None:
+        """Publish the retained config document of an owned device (D-12)."""
+        await self._gateway.async_publish(config_topic(self._base_topic, device_id), payload, retain=True)
+
+    async def async_clear_config(self, device_id: str) -> None:
+        """Clear the retained config document of a deleted device: the empty payload is the tombstone (D-09)."""
+        await self._gateway.async_publish(config_topic(self._base_topic, device_id), "", retain=True)
 
     async def async_clear_state(self, device_id: str) -> None:
         """Clear the retained state of a deleted device so no stale ON or OFF stays on the broker."""

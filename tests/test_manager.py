@@ -528,7 +528,12 @@ async def test_issue_and_log_do_not_leak_action_data(
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
 ) -> None:
-    """T-01-10: a canary in the action data reaches neither the log nor the issue variables."""
+    """
+    T-01-10: a canary in the action data reaches neither this integration's log nor the issue variables.
+
+    The config document (SYN-01) carries the actions by design, so core MQTT's own debug line for the publish is not
+    part of what this integration logs.
+    """
     canary = "CANARY-7f3a91-secret"
     _register_failing_service(hass, "boom")
     sub = make_switch_subentry("Lamp", on=[{"action": "test.fail", "data": {"message": canary}}])
@@ -537,7 +542,11 @@ async def test_issue_and_log_do_not_leak_action_data(
         await _fire(hass, entry, _device_id(sub), "ON", retain=False)
 
     (issue,) = _issues(hass)
-    assert canary not in caplog.text
+    own_log = "\n".join(
+        record.getMessage() for record in caplog.records if record.name.startswith("custom_components.mqtt_actions")
+    )
+    assert own_log
+    assert canary not in own_log
     assert canary not in repr(issue.translation_placeholders)
 
 

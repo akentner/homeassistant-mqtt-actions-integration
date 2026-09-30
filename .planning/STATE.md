@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: trust-central-config-and-ownership
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-09-30T23:23:50.400Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-09-30T23:35:32.301Z"
 last_activity: 2026-10-01
 last_activity_desc: Phase 03 execution started
-state_head: e2f04af72a8a79aa578660b2b07da0e4e9c87992
+state_head: a8056cee69a2c9c3634fed746a8971a9c9a87bbc
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 18
-  completed_plans: 13
+  completed_plans: 14
   percent: 50
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 03 (trust-central-config-and-ownership) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-10-01 — Phase 03 execution started
 
@@ -65,6 +65,7 @@ Progress: [█████░░░░░] 50% of Phase 01 plans
 | Phase 02 P05 | 12 min | 3 tasks | 12 files |
 | Phase 03 P01 | 12 min | 3 tasks | 15 files |
 | Phase 03 P02 | 13min | 3 tasks | 8 files |
+| Phase 03 P03 | 10 min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Pop-first removal: a device leaves Manager.devices before its first clear message so the owner never heals its own delete (03-02)
 - [Phase 03]: Owner republishes are throttled per device with a trailing throttle (60 s); issues for foreign writes and claims are created only when absent (03-02)
 - [Phase 03]: Discovery removal hint fires after 3 removals within 600 s using the replaceable Manager.clock; doc_overwritten and ownership_claim are ERROR severity, discovery_removed WARNING (03-02)
+- [Phase 03]: Plan 03-03: the generic HA subentry delete cannot be vetoed, so both delete paths end in the same reconcile tombstone sequence; the confirmation wording lives in the flow and the README (Open Question 1)
+- [Phase 03]: Plan 03-03: hub removal keeps every device retained by default; deletion everywhere only when delete_devices_on_remove was set in the hub OptionsFlow before removal; Store and issues are removed in both modes (D-11)
+- [Phase 03]: Plan 03-03: instance presence is tracked from the availability wildcard (online and offline only, own id excluded, capped at 256); the delete confirmation gives the count of other online instances, an upper bound because a crashed instance stays online (A11)
 
 ### Pending Todos
 
@@ -120,6 +124,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-30T23:23:50.338Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-09-30T23:35:32.232Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None

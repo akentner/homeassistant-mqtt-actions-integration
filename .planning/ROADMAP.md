@@ -103,11 +103,11 @@ Plans:
   4. Only a device's owner can edit or delete it; followers pin the owner and raise a Repairs issue on conflicting ownership claims, and if a follower removes the discovered entity the owner republishes its discovery.
   5. Deleting a device requires an explicit confirmation stating that it is removed on all connected instances, after which its central config and discovery are unpublished and the device disappears everywhere.
 
-**Plans:** 7 plans
+**Plans:** 1/7 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 03-01-PLAN.md — Wire contract: config document, strict parsing, denylist walker, owner publish, FakeBroker and gateway seams (wave 1)
+- [x] 03-01-PLAN.md — Wire contract: config document, strict parsing, denylist walker, owner publish, FakeBroker and gateway seams (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-02-PLAN.md — Owner lifecycle: delete order with config tombstone, echo and foreign-write healing, ownership claims, discovery healing (wave 2)
@@ -153,5 +153,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
-| 3. Trust, Central Config and Ownership | 0/7 | Planned | - |
+| 3. Trust, Central Config and Ownership | 1/7 | In Progress|  |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |

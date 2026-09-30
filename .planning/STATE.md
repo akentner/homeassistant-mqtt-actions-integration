@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: trust-central-config-and-ownership
-status: "Phase 2 shipped — PR #4"
-stopped_at: Phase 3 context gathered
-last_updated: "2026-09-30T22:51:48.172Z"
+status: executing
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-09-30T23:08:39.510Z"
 last_activity: 2026-10-01
-last_activity_desc: Phase 03 planning complete
-state_head: 436a51f5d43656299bd11825f5cf7fc012c48e8e
+last_activity_desc: Phase 03 execution started
+state_head: 626b5702a24ae3e40c96f1bfcd1756944fac193e
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 18
-  completed_plans: 11
+  completed_plans: 12
   percent: 50
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-28)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 02 — Select Devices and Reliable Execution
+**Current focus:** Phase 03 — trust-central-config-and-ownership
 
 ## Current Position
 
-Phase: 03 (trust-central-config-and-ownership) — READY TO EXECUTE
-Plan: Not started
-Status: Phase 2 shipped — PR #4
-Last activity: 2026-10-01 — Phase 03 planning complete
+Phase: 03 (trust-central-config-and-ownership) — EXECUTING
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-10-01 — Phase 03 execution started
 
 Progress: [█████░░░░░] 50% of Phase 01 plans
 
@@ -63,6 +63,7 @@ Progress: [█████░░░░░] 50% of Phase 01 plans
 | Phase 02 P03 | 6 min | 2 tasks | 9 files |
 | Phase 02 P04 | 48 min | 3 tasks | 11 files |
 | Phase 02 P05 | 12 min | 3 tasks | 12 files |
+| Phase 03 P01 | 12 min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Select flow is a menu loop over a deep-copied draft committed once on Done; a menu cannot show errors so Done, Remove and Add are hidden instead of failing (D-01, D-04, T-02-24)
 - [Phase 02]: Breaker number selectors carry no min and max so out-of-range input returns a translated field error; validate_breaker owns 1..100 and 1..3600 and rejects non-integral values (A7, T-02-21)
 - [Phase 02]: Edit step has no StateValue field, removal needs a confirmation menu and is hidden at two options; Done in reconfigure replaces stored data and re-injects the device id (D-02, D-03, D-05)
+- [Phase 03]: Plan 03-01: wire hash is sha256 over canonical JSON of the shared content (sorted keys, compact, unescaped UTF-8); owner, owner_name, rev, hash, device_id and schema_version are not content; actions_hash binds approvals to the StateValue-to-actions mapping and run_on_startup
+- [Phase 03]: Plan 03-01: owner publishes all config documents, then all discovery, then online availability on start and every reconnect; rev persisted with its hash in the Store key revs
+- [Phase 03]: Plan 03-01: parse_document is the only path from broker payload to spec; typed content-free RejectReason codes, wire hash never trusted, SchemaTooNewError raised first
 
 ### Pending Todos
 
@@ -112,6 +116,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-30T22:01:57.330Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-trust-central-config-and-ownership/03-CONTEXT.md
+Last session: 2026-09-30T23:08:39.447Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None

@@ -574,6 +574,9 @@ def test_walker_depth_guard() -> None:
     with pytest.raises(DocumentRejectedError) as error:
         analyze_actions(_nested(MAX_ACTION_DEPTH + 5))
     assert error.value.reason == "too_deep"
+    with pytest.raises(DocumentRejectedError):
+        analyze_actions(_nested(MAX_ACTION_DEPTH + 1))
+    assert analyze_actions(_nested(MAX_ACTION_DEPTH)).denied == ()
 
 
 def test_analyze_spec_covers_every_trigger() -> None:

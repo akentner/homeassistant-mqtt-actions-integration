@@ -48,6 +48,32 @@ MAX_TEXT_LENGTH: Final = 64
 BREAKER_MAX_RUNS_LIMIT: Final = 100
 BREAKER_WINDOW_LIMIT: Final = 3600
 
+# Limits on a config document received from the broker (D-06, T-03-02): measured in UTF-8 bytes before it is parsed,
+# and in container levels (list and dict nesting, not action steps) of an action list; a nested choose costs about four
+MAX_DOCUMENT_BYTES: Final = 256 * 1024
+MAX_ACTION_DEPTH: Final = 32
+
+# Services that actions received from the broker may never call (D-03); owned actions stay unrestricted. A fixed
+# constant the user cannot change. Whole domains, then exact service names; all lower case, as core normalizes them.
+DENIED_DOMAINS: Final = frozenset(
+    {"shell_command", "python_script", "rest_command", "command_line", "hassio", "backup"}
+)
+DENIED_SERVICES: Final = frozenset(
+    {
+        "homeassistant.restart",
+        "homeassistant.stop",
+        "homeassistant.reload_all",
+        "homeassistant.reload_core_config",
+        "homeassistant.reload_config_entry",
+        "homeassistant.set_location",
+        "homeassistant.save_persistent_states",
+        "mqtt.publish",
+        "mqtt.dump",
+        "recorder.purge",
+        "recorder.purge_entities",
+    }
+)
+
 # Component key prefix of the test button of a trigger; the key of the trigger follows (D-13)
 BUTTON_KEY_PREFIX: Final = "test_"
 

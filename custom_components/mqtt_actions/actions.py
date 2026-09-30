@@ -29,6 +29,20 @@ async def async_validate_actions(hass: HomeAssistant, raw: Any) -> list[ConfigTy
         raise ActionsInvalid(str(err)) from err
 
 
+def validate_actions_structure(raw: Any) -> None:
+    """
+    Check the structure of a raw action list against the script schema and nothing else.
+
+    Synchronous and instance independent: no service, device or entity is resolved, so a document from another
+    instance is judged the same everywhere (D-06). The error text comes from the schema and may quote a value, so a
+    caller logs the device name, never the message.
+    """
+    try:
+        cv.SCRIPT_SCHEMA(raw)
+    except (probatio.Invalid, HomeAssistantError) as err:
+        raise ActionsInvalid(str(err)) from err
+
+
 def _is_template(value: str) -> bool:
     """Return True when a string is a Jinja template, whose result cannot be judged statically."""
     return "{{" in value or "{%" in value

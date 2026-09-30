@@ -1,12 +1,21 @@
 """Follower side of the central config: foreign documents become read-only mirrors that run nothing (D-06, D-08)."""
 
+import json
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import Mock, patch
 
 import pytest
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message, async_mock_service
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_mqtt_message,
+    async_fire_time_changed,
+    async_mock_service,
+)
 
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
@@ -21,9 +30,12 @@ from custom_components.mqtt_actions.const import (
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_MIRRORS,
+    STORE_SAVE_DELAY,
+    STORE_TRIPPED,
     STORE_VERSION,
     SUBENTRY_SELECT,
 )
+from custom_components.mqtt_actions.discovery import build_discovery
 from custom_components.mqtt_actions.document import build_content, canonical_json
 from custom_components.mqtt_actions.model import SWITCH_ON_KEY
 from custom_components.mqtt_actions.topics import config_topic, discovery_topic, state_topic
@@ -33,6 +45,7 @@ from tests.documents import FOREIGN_OWNER, FOREIGN_OWNER_NAME, document_payload,
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from freezegun.api import FrozenDateTimeFactory
     from homeassistant.config_entries import ConfigSubentryData
     from homeassistant.core import HomeAssistant
 
@@ -681,3 +694,215 @@ def test_mirror_issues_are_deleted_with_the_mirror_prefixes() -> None:
     """Device delete and hub removal clean every prefix in ISSUE_DEVICE_PREFIXES, so both new families are in it."""
     assert ISSUE_OWNER_CONFLICT_PREFIX in ISSUE_DEVICE_PREFIXES
     assert ISSUE_SCHEMA_TOO_NEW_PREFIX in ISSUE_DEVICE_PREFIXES
+
+
+# --- tombstone (D-09, SYN-05) -----------------------------------------------------------------------------------
+
+
+async def _flush_store(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    """Fire the delayed store save; the frozen clock also moves the loop time the store compares against."""
+    freezer.tick(timedelta(seconds=STORE_SAVE_DELAY + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _mqtt_entry(hass: HomeAssistant) -> MockConfigEntry:
+    return hass.config_entries.async_entries("mqtt")[0]
+
+
+def _mirror_device_entry(hass: HomeAssistant, device_id: str) -> dr.DeviceEntry | None:
+    return dr.async_get(hass).async_get_device_by_identifier(
+        ("mqtt", f"{DOMAIN}_{device_id}"), _mqtt_entry(hass).entry_id
+    )
+
+
+def _register_leftovers(hass: HomeAssistant, device_id: str) -> dr.DeviceEntry:
+    """Register a device and an entity of core MQTT that have no state, as a missed delete leaves them."""
+    mqtt_entry = _mqtt_entry(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=mqtt_entry.entry_id, identifiers={("mqtt", f"{DOMAIN}_{device_id}")}, name="Leftover"
+    )
+    er.async_get(hass).async_get_or_create(
+        "switch", "mqtt", device_id, config_entry=mqtt_entry, device_id=device.id, suggested_object_id="leftover"
+    )
+    return device
+
+
+async def test_live_tombstone_removes_the_mirror_at_once(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """D-09: an empty live payload removes the mirror, its subscriptions, Script state, Store entries and issues."""
+    spec = make_spec(on=ON_ACTIONS, name="Lamp")
+    entry = await _setup(hass, make_hub_entry())
+    manager = _manager(entry)
+    await _deliver(hass, spec.device_id, document_payload(spec, owner="owner-a"), retain=False)
+    await _state(hass, spec.device_id, "ON", retain=False)
+    mirror = _mirror(entry, spec.device_id)
+    await _deliver(hass, spec.device_id, document_payload(spec, owner="owner-b"), retain=False)
+    manager._create_breaker_issue(mirror)
+    manager._tripped[spec.device_id] = "some-hash"
+    assert _issue(hass, ISSUE_OWNER_CONFLICT_PREFIX, spec.device_id) is not None
+    assert _issue(hass, ISSUE_CIRCUIT_BREAKER_PREFIX, spec.device_id) is not None
+    state_release, test_release = mirror.unsubscribe, mirror.unsubscribe_test
+    mirror.unsubscribe = Mock(side_effect=state_release)
+    mirror.unsubscribe_test = Mock(side_effect=test_release)
+    await _flush_store(hass, freezer)
+    assert hass_storage[STORE_KEY]["data"][STORE_LAST_ACTED][spec.device_id] == "ON"
+
+    with patch.object(manager.runner, "async_unload", wraps=manager.runner.async_unload) as unload:
+        await _deliver(hass, spec.device_id, "", retain=False)
+
+    assert spec.device_id not in manager.mirrors
+    mirror.unsubscribe.assert_called_once()
+    mirror.unsubscribe_test.assert_called_once()
+    unload.assert_awaited_once_with(spec.device_id, remove_issue=True)
+    for prefix in ISSUE_DEVICE_PREFIXES:
+        assert _issue(hass, prefix, spec.device_id) is None
+    await _flush_store(hass, freezer)
+    data = hass_storage[STORE_KEY]["data"]
+    assert data[STORE_MIRRORS] == {}
+    assert spec.device_id not in data[STORE_LAST_ACTED]
+    assert spec.device_id not in data[STORE_TRIPPED]
+    await _state(hass, spec.device_id, "OFF", retain=False)
+    assert mirror.tracker.last_acted == "ON"
+
+
+async def test_retained_empty_payload_also_removes(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """A retained empty payload, replayed at subscribe, is a tombstone as well."""
+    spec = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    assert spec.device_id in _manager(entry).mirrors
+
+    await _deliver(hass, spec.device_id, "", retain=True)
+
+    assert spec.device_id not in _manager(entry).mirrors
+
+
+async def test_tombstone_for_an_unknown_id_is_a_noop(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An empty payload for an id without a mirror changes nothing and logs nothing above debug."""
+    spec = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    other = make_spec(on=ON_ACTIONS)
+
+    with caplog.at_level(logging.DEBUG):
+        await _deliver(hass, other.device_id, "", retain=False)
+
+    assert set(_manager(entry).mirrors) == {spec.device_id}
+    assert [record for record in _own_records(caplog) if record.levelno > logging.DEBUG] == []
+
+
+async def test_tombstone_does_not_touch_owned_devices(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """An empty payload for an owned id is healed by the owner branch; the device stays as it is."""
+    sub: ConfigSubentryData = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = sub["data"][CONF_DEVICE_ID]
+    entry = await _setup(hass, make_hub_entry([sub]))
+    manager = _manager(entry)
+    device = manager.devices[device_id]
+    spec_before = device.spec
+    mqtt_mock.async_publish.reset_mock()
+
+    await _deliver(hass, device_id, "", retain=False)
+
+    assert manager.devices[device_id] is device
+    assert device.spec is spec_before
+    assert device_id not in manager.mirrors
+    assert callable(device.unsubscribe)
+    assert [payload for payload, _qos, _retain in _publishes(mqtt_mock, config_topic(BASE, device_id)) if payload]
+
+
+async def test_removed_mirror_can_return(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """After a tombstone a valid document creates the mirror again, as a fresh device without the old baseline."""
+    spec = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    await _state(hass, spec.device_id, "ON", retain=False)
+    first = _mirror(entry, spec.device_id)
+    await _deliver(hass, spec.device_id, "", retain=False)
+    assert spec.device_id not in _manager(entry).mirrors
+
+    await _deliver(hass, spec.device_id, document_payload(spec, rev=2), retain=False)
+
+    second = _mirror(entry, spec.device_id)
+    assert second is not first
+    assert second.tracker.last_acted is None
+    assert second.mirror is not None
+    assert second.mirror.rev == 2
+
+
+async def test_tombstone_removes_leftover_registry_entries(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """Registry entries without a live entity are leftovers of a missed delete, and the tombstone removes them."""
+    spec = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    device = _register_leftovers(hass, spec.device_id)
+    entities = er.async_entries_for_device(er.async_get(hass), device.id, include_disabled_entities=True)
+    assert len(entities) == 1
+    assert hass.states.get(entities[0].entity_id) is None
+
+    await _deliver(hass, spec.device_id, "", retain=False)
+
+    assert spec.device_id not in _manager(entry).mirrors
+    assert _mirror_device_entry(hass, spec.device_id) is None
+    assert er.async_get(hass).async_get(entities[0].entity_id) is None
+
+
+async def test_live_entities_keep_their_registry_entries(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """Pitfall 10: with live discovery the cleanup leaves the registries alone and publishes no empty discovery."""
+    spec = make_spec(on=ON_ACTIONS, name="Foreign lamp")
+    entry = await _setup(hass, make_hub_entry())
+    discovery = discovery_topic("homeassistant", spec.device_id)
+    payload = build_discovery(spec=spec, base_topic=BASE, instance_id=FOREIGN_OWNER, sw_version="1.2.3")
+    async_fire_mqtt_message(hass, discovery, json.dumps(payload), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    device = _mirror_device_entry(hass, spec.device_id)
+    assert device is not None
+    entities = er.async_entries_for_device(er.async_get(hass), device.id)
+    assert entities
+    assert all(hass.states.get(entity.entity_id) is not None for entity in entities)
+    mqtt_mock.async_publish.reset_mock()
+
+    await _deliver(hass, spec.device_id, "", retain=False)
+
+    assert spec.device_id not in _manager(entry).mirrors
+    assert _mirror_device_entry(hass, spec.device_id) is not None
+    for entity in entities:
+        assert er.async_get(hass).async_get(entity.entity_id) is not None
+        assert hass.states.get(entity.entity_id) is not None
+    assert [item for item in _publishes(mqtt_mock, discovery) if item[0] == ""] == []
+
+
+async def test_registry_cleanup_is_guarded(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """Without an MQTT entry nothing is attempted, and a device that has no registry entry is no error."""
+    first = make_spec(on=ON_ACTIONS)
+    second = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    manager = _manager(entry)
+    await _deliver(hass, first.device_id, document_payload(first), retain=False)
+    await _deliver(hass, second.device_id, document_payload(second), retain=False)
+    device = _register_leftovers(hass, first.device_id)
+
+    with patch.object(manager.gateway, "mqtt_entry_id", return_value=None):
+        await _deliver(hass, first.device_id, "", retain=False)
+    assert first.device_id not in manager.mirrors
+    assert dr.async_get(hass).async_get(device.id) is not None
+
+    assert _mirror_device_entry(hass, second.device_id) is None
+    await _deliver(hass, second.device_id, "", retain=False)
+    assert second.device_id not in manager.mirrors

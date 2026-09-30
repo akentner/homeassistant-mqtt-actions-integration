@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 
-from .manager import Manager, async_remove_all_devices
+from .const import CONF_DELETE_DEVICES_ON_REMOVE
+from .manager import Manager, async_remove_all_devices, async_remove_local_state
 from .mqtt_gateway import MqttGateway
 
 if TYPE_CHECKING:
@@ -51,8 +52,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry)
 
 async def async_remove_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) -> None:
     """
-    Clean up the broker and the local state when the hub entry is removed (D-15).
+    Clean up when the hub entry is removed: keep the devices on the broker unless the user chose deletion (D-11).
 
-    Phase 3 must redesign this as a confirmed, multi-instance-aware delete; see async_remove_all_devices.
+    Replaces the unconditional delete of Phase 1 (D-15). Home Assistant runs this after the unload and offers no dialog,
+    so the choice is the hub option stored before the removal. Keep leaves every retained message alone, including the
+    `offline` availability of the unload, so other instances show the orphans as unavailable and never prune them; it
+    touches MQTT not at all. Both modes remove the local Store and every integration issue.
     """
-    await async_remove_all_devices(hass, entry)
+    if entry.options.get(CONF_DELETE_DEVICES_ON_REMOVE, False):
+        await async_remove_all_devices(hass, entry)
+    else:
+        await async_remove_local_state(hass, entry)

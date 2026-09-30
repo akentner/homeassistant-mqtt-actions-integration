@@ -160,31 +160,49 @@ async def _async_clear_topics(publisher: DiscoveryPublisher, device_id: str) -> 
     return discovery_cleared and config_cleared and state_cleared
 
 
-async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def async_remove_local_state(hass: HomeAssistant, entry: ConfigEntry, *, store_key: str = STORE_KEY) -> None:  # noqa: ARG001
     """
-    Clear everything this instance published to the broker and forget its local state (D-15).
+    Forget everything this instance keeps locally: the Store and every integration issue (D-11).
 
-    Called when the hub config entry is removed, when no manager exists any more. The scope is the ids this instance
-    published (persisted set) plus the current subentries, plus its availability topic. Phase 3 must redesign this as a
-    confirmed, multi-instance-aware delete: with several instances sharing a broker, removing one hub must not silently
-    delete devices other instances still use.
+    Both hub removal modes end here; nothing is published. `store_key` is a test seam like the Manager constructor
+    parameters: production passes nothing.
     """
-    store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, STORE_KEY)
+    await Store(hass, STORE_VERSION, store_key).async_remove()
+    registry = ir.async_get(hass)
+    for domain, issue_id in list(registry.issues):
+        if domain == DOMAIN and (issue_id.startswith(ISSUE_DEVICE_PREFIXES) or issue_id == ISSUE_DISCOVERY_DISABLED):
+            ir.async_delete_issue(hass, domain, issue_id)
+
+
+async def async_remove_all_devices(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    *,
+    gateway: MqttGateway | None = None,
+    store_key: str = STORE_KEY,
+) -> None:
+    """
+    Delete-everywhere mode of the hub removal (D-11): clear everything this instance published and forget local state.
+
+    Only used when the user chose deletion in the hub options before removing the hub; the default keeps every device
+    retained on the broker. Called when no manager exists any more. The scope is the ids this instance published
+    (persisted set) plus the current subentries, plus its availability topic; the local state goes last. `gateway` and
+    `store_key` are test seams: production passes neither.
+    """
+    store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, store_key)
     stored = await store.async_load() or {}
     device_ids = _parse_published(stored) | {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(entry)}
     integration = await async_get_integration(hass, DOMAIN)
-    publisher = DiscoveryPublisher(MqttGateway(hass), entry.data[CONF_BASE_TOPIC], str(integration.version))
+    publisher = DiscoveryPublisher(
+        gateway if gateway is not None else MqttGateway(hass), entry.data[CONF_BASE_TOPIC], str(integration.version)
+    )
     for device_id in sorted(device_ids):
         await _async_clear_topics(publisher, device_id)
     await _async_attempt(
         partial(publisher.async_publish_availability, entry.data[CONF_INSTANCE_ID], AvailabilityState.CLEARED),
         "clear the instance availability",
     )
-    await store.async_remove()
-    registry = ir.async_get(hass)
-    for domain, issue_id in list(registry.issues):
-        if domain == DOMAIN and (issue_id.startswith(ISSUE_DEVICE_PREFIXES) or issue_id == ISSUE_DISCOVERY_DISABLED):
-            ir.async_delete_issue(hass, domain, issue_id)
+    await async_remove_local_state(hass, entry, store_key=store_key)
 
 
 class Manager:

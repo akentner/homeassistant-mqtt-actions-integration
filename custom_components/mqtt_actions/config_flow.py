@@ -14,6 +14,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     ConfigSubentry,
     ConfigSubentryFlow,
+    OptionsFlow,
     SubentryFlowResult,
 )
 from homeassistant.core import callback
@@ -25,6 +26,7 @@ from .const import (
     CONF_BASE_TOPIC,
     CONF_BREAKER_MAX_RUNS,
     CONF_BREAKER_WINDOW,
+    CONF_DELETE_DEVICES_ON_REMOVE,
     CONF_DEVICE_ID,
     CONF_FRIENDLY_NAME,
     CONF_INSTANCE_ID,
@@ -74,7 +76,9 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
     """
     Hub flow: one entry per Home Assistant instance, requires MQTT (D-11).
 
-    There is deliberately no reconfigure step: the base topic is baked into retained broker messages (D-01).
+    There is deliberately no reconfigure step: the base topic is baked into retained broker messages (D-01). What
+    happens to the devices when the hub is removed is chosen in the options flow beforehand, because Home Assistant
+    offers no hook or dialog during the removal itself (D-11).
     """
 
     VERSION = 1
@@ -114,11 +118,41 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
             schema = self.add_suggested_values_to_schema(schema, user_input)
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> HubOptionsFlow:  # noqa: ARG004
+        """Return the options flow of the hub: the keep-or-delete choice for its removal (D-11)."""
+        return HubOptionsFlow()
+
     @classmethod
     @callback
     def async_get_supported_subentry_types(cls, config_entry: ConfigEntry) -> dict[str, type[ConfigSubentryFlow]]:  # noqa: ARG003
         """Return the subentry types this integration supports."""
         return {SUBENTRY_SWITCH: SwitchSubentryFlow, SUBENTRY_SELECT: SelectSubentryFlow}
+
+
+class HubOptionsFlow(OptionsFlow):
+    """
+    Choose what removing the hub does to the devices on the broker (D-11).
+
+    A plain options flow, not a reload-on-change one: saving the option triggers the update listener, whose reconcile
+    finds nothing to do. Nothing is published here; the choice is only read when the entry is removed.
+    """
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Show the delete choice, off by default, and store it."""
+        if user_input is not None:
+            return self.async_create_entry(
+                data={CONF_DELETE_DEVICES_ON_REMOVE: bool(user_input.get(CONF_DELETE_DEVICES_ON_REMOVE, False))}
+            )
+        schema = probatio.Schema(
+            {probatio.Optional(CONF_DELETE_DEVICES_ON_REMOVE, default=False): selector.BooleanSelector()}
+        )
+        stored = bool(self.config_entry.options.get(CONF_DELETE_DEVICES_ON_REMOVE, False))
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(schema, {CONF_DELETE_DEVICES_ON_REMOVE: stored}),
+        )
 
 
 class _DeviceSubentryFlow(ConfigSubentryFlow):

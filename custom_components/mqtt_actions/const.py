@@ -95,6 +95,9 @@ STORE_SAVE_DELAY: Final = 5.0
 # the owner's own echo, and the minimum time between two republishes caused by foreign writes of one device
 PUBLISHED_HASH_HISTORY: Final = 8
 REPUBLISH_THROTTLE_SECONDS: Final = 60.0
+# A follower deleting mirrored entities again and again is explained in Repairs after this many removals in the window
+DISCOVERY_REMOVAL_HINT_COUNT: Final = 3
+DISCOVERY_REMOVAL_HINT_WINDOW_SECONDS: Final = 600.0
 
 # Logging: unknown payloads are logged as a truncated repr so a payload cannot grow or forge a log line
 MAX_LOGGED_PAYLOAD_LENGTH: Final = 40
@@ -109,6 +112,7 @@ ISSUE_ACTION_FAILED_PREFIX: Final = "action_failed_"
 ISSUE_CIRCUIT_BREAKER_PREFIX: Final = "circuit_breaker_"
 ISSUE_DOC_OVERWRITTEN_PREFIX: Final = "doc_overwritten_"
 ISSUE_OWNERSHIP_CLAIM_PREFIX: Final = "ownership_claim_"
+ISSUE_DISCOVERY_REMOVED_PREFIX: Final = "discovery_removed_"
 ISSUE_DISCOVERY_DISABLED: Final = "mqtt_discovery_disabled"
 # Every Repairs issue whose id is a prefix plus a device id; deleted with the device and with the hub. Later issue
 # families of a device append their prefix here.
@@ -117,5 +121,6 @@ ISSUE_DEVICE_PREFIXES: Final = (
     ISSUE_CIRCUIT_BREAKER_PREFIX,
     ISSUE_DOC_OVERWRITTEN_PREFIX,
     ISSUE_OWNERSHIP_CLAIM_PREFIX,
+    ISSUE_DISCOVERY_REMOVED_PREFIX,
 )
 MAX_ISSUE_ERROR_LENGTH: Final = 500

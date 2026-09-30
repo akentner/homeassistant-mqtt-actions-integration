@@ -33,7 +33,9 @@ from custom_components.mqtt_actions.const import (
     STORE_TRIPPED,
     STORE_VERSION,
 )
+from custom_components.mqtt_actions.discovery import button_component_key
 from custom_components.mqtt_actions.document import content_hash, escape_markdown
+from custom_components.mqtt_actions.model import trigger_key
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 
 if TYPE_CHECKING:
@@ -879,7 +881,9 @@ async def test_healing_keeps_retired_button_tombstones(
     await _remove_entity_elsewhere(hass, device_id)
 
     components = json.loads(_publishes(mqtt_mock, _discovery(device_id))[-1][0])["components"]
-    assert [key for key, value in components.items() if value == {"platform": "button"}] == ["test_c"]
+    assert [key for key, value in components.items() if value == {"platform": "button"}] == [
+        button_component_key(trigger_key("c"))
+    ]
     assert len(_publishes(mqtt_mock, _discovery(device_id))) == 3
 
 

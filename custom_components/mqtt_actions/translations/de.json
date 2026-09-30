@@ -219,6 +219,18 @@
     "circuit_breaker_tripped": {
       "title": "Ein Gerät wurde vom Schutzschalter pausiert",
       "description": "{device} hat seine Aktionen öfter als {max_runs} Mal innerhalb von {window} Sekunden ausgeführt. Meist ändert dann eine Aktion den Zustand ihres eigenen Geräts und löst sich dadurch immer wieder selbst aus. MQTT Actions hat deshalb die laufenden Aktionen gestoppt und das Gerät pausiert. Änderungen am Status-Topic aktualisieren die Entität weiterhin, aber es laufen keine Aktionen, bis das Gerät freigegeben wird. Ändere dazu die Einstellungen des Geräts oder lade die Integration neu. Das Speichern des Geräts ohne eine Änderung gibt es nicht frei."
+    },
+    "doc_overwritten": {
+      "title": "Die gemeinsame Konfiguration eines Geräts wurde überschrieben",
+      "description": "Etwas anderes als diese Instanz hat die gemeinsame Konfiguration von {device} auf dem MQTT-Broker geändert oder gelöscht. Diese Instanz ist die Besitzerin von {device} und hat ihre eigene Konfiguration deshalb erneut veröffentlicht. Prüfe, wer auf dem Broker in die Topics von MQTT Actions schreiben darf, und beschränke den Schreibzugriff auf die besitzende Instanz."
+    },
+    "ownership_claim": {
+      "title": "Eine andere Instanz beansprucht ein Gerät, das dir gehört",
+      "description": "Die Instanz {claimant} hat eine Konfiguration für {device} veröffentlicht, das dieser Instanz gehört. Diese Instanz bleibt die Besitzerin und hat ihre eigene Konfiguration erneut veröffentlicht. Eine Übernahme gibt es nicht: Nur die Besitzerin kann ein Gerät bearbeiten oder löschen."
+    },
+    "discovery_removed": {
+      "title": "Die Entitäten eines Geräts wurden wiederholt entfernt",
+      "description": "Die Entitäten von {device} wurden in letzter Zeit {count} Mal entfernt, zum Beispiel durch das Löschen einer Entität auf einer anderen Home-Assistant-Instanz. Diese Instanz hat die Discovery jedes Mal erneut veröffentlicht. Das Löschen einer Entität auf einer Instanz entfernt sie auf jeder Instanz. Lösche daher das Gerät selbst, wenn du es nicht mehr möchtest."
     }
   },
   "selector": {

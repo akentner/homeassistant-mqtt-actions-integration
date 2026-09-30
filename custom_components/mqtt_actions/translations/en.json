@@ -219,6 +219,18 @@
     "circuit_breaker_tripped": {
       "title": "A device was paused by the circuit breaker",
       "description": "{device} ran its actions more than {max_runs} times within {window} seconds. This usually means an action changes the state of its own device and keeps triggering itself, so MQTT Actions stopped the running actions and paused the device. Changes on the state topic still update the entity, but no actions run until the device is released. To release it, change the settings of the device or reload the integration. Saving the device without changing anything does not release it."
+    },
+    "doc_overwritten": {
+      "title": "The shared configuration of a device was overwritten",
+      "description": "Something other than this instance changed or cleared the shared configuration of {device} on the MQTT broker. This instance is the owner of {device}, so it published its own configuration again. Check who can write to the topics of MQTT Actions on the broker and restrict write access to the owning instance."
+    },
+    "ownership_claim": {
+      "title": "Another instance claims a device that you own",
+      "description": "The instance {claimant} published a configuration for {device}, which is owned by this instance. This instance remains the owner and published its own configuration again. There is no takeover: only the owner can edit or delete a device."
+    },
+    "discovery_removed": {
+      "title": "The entities of a device were removed repeatedly",
+      "description": "The entities of {device} were removed {count} times recently, for example by deleting an entity on another Home Assistant instance. Each time, this instance published the discovery again. Deleting an entity on one instance removes it on every instance, so delete the device itself if you no longer want it."
     }
   },
   "selector": {

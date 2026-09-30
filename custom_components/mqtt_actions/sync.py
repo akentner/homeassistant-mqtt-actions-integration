@@ -19,7 +19,10 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_call_later
 
 from .const import (
+    DISCOVERY_REMOVAL_HINT_COUNT,
+    DISCOVERY_REMOVAL_HINT_WINDOW_SECONDS,
     DOMAIN,
+    ISSUE_DISCOVERY_REMOVED_PREFIX,
     ISSUE_DOC_OVERWRITTEN_PREFIX,
     ISSUE_OWNERSHIP_CLAIM_PREFIX,
     LOGGER,
@@ -27,10 +30,10 @@ from .const import (
     REPUBLISH_THROTTLE_SECONDS,
 )
 from .document import DocumentRejectedError, build_content, content_hash, escape_markdown, parse_document
-from .topics import config_wildcard, parse_config_topic
+from .topics import config_wildcard, discovery_wildcard, parse_config_topic, parse_discovery_topic
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
@@ -40,6 +43,7 @@ if TYPE_CHECKING:
 
 TRANSLATION_DOC_OVERWRITTEN = "doc_overwritten"
 TRANSLATION_OWNERSHIP_CLAIM = "ownership_claim"
+TRANSLATION_DISCOVERY_REMOVED = "discovery_removed"
 
 
 class _TrailingThrottle:
@@ -97,12 +101,23 @@ class SyncManager:
         # device id -> content hashes this instance published recently; a document with one of them is its own echo
         self._published: dict[str, deque[str]] = {}
         self._config_heal = _TrailingThrottle(manager.hass, REPUBLISH_THROTTLE_SECONDS, self._start_config_heal)
+        self._discovery_heal = _TrailingThrottle(manager.hass, REPUBLISH_THROTTLE_SECONDS, self._start_discovery_heal)
+        # The discovery prefix is read when subscribing; a runtime change of it needs a reload
+        self._discovery_prefix = ""
+        # device id -> times of the most recent removals of its discovery; only the last few are kept
+        self._removals: dict[str, deque[float]] = {}
 
     async def async_start(self) -> None:
         """Subscribe to the config wildcard; the caller does this before anything is published (SYN-04)."""
         manager = self._manager
         self._unsubscribers.append(
             await manager.gateway.async_subscribe(config_wildcard(manager.base_topic), self._on_config_message)
+        )
+        self._discovery_prefix = manager.gateway.discovery_prefix()
+        self._unsubscribers.append(
+            await manager.gateway.async_subscribe(
+                discovery_wildcard(self._discovery_prefix), self._on_discovery_message
+            )
         )
 
     @callback
@@ -112,6 +127,7 @@ class SyncManager:
             unsubscribe()
         self._unsubscribers.clear()
         self._config_heal.cancel_all()
+        self._discovery_heal.cancel_all()
 
     @callback
     def note_published(self, device_id: str, digest: str) -> None:
@@ -124,6 +140,7 @@ class SyncManager:
     def forget(self, device_id: str) -> None:
         """Forget everything about a deleted device."""
         self._published.pop(device_id, None)
+        self._removals.pop(device_id, None)
 
     @callback
     def _on_config_message(self, msg: IncomingMessage) -> None:
@@ -202,7 +219,14 @@ class SyncManager:
             )
         self._heal(device.device_id)
 
-    def _raise_once(self, prefix: str, translation_key: str, device: Device, placeholders: dict[str, str]) -> bool:
+    def _raise_once(
+        self,
+        prefix: str,
+        translation_key: str,
+        device: Device,
+        placeholders: dict[str, str],
+        severity: ir.IssueSeverity = ir.IssueSeverity.ERROR,
+    ) -> bool:
         """Create a non-fixable issue unless it exists, so a repeating writer cannot reset a dismissal; True if new."""
         hass = self._manager.hass
         issue_id = f"{prefix}{device.device_id}"
@@ -213,7 +237,7 @@ class SyncManager:
             DOMAIN,
             issue_id,
             is_fixable=False,
-            severity=ir.IssueSeverity.ERROR,
+            severity=severity,
             translation_key=translation_key,
             translation_placeholders=placeholders,
         )
@@ -223,17 +247,66 @@ class SyncManager:
         self._config_heal.request(device_id)
 
     @callback
+    def _on_discovery_message(self, msg: IncomingMessage) -> None:
+        """
+        Heal the discovery of an owned device that core MQTT cleared (DSC-03, D-18).
+
+        Only an empty payload counts: the owner's own publishes and the discovery of other instances are not empty.
+        Core publishes it when any instance deletes one entity of the device, and then drops every entity of it.
+        Only ids in `devices` are healed, and a device being deleted has already left `devices`, so the owner's own
+        delete is never mistaken for a removal elsewhere.
+        """
+        if msg.payload:
+            return
+        manager = self._manager
+        device_id = parse_discovery_topic(self._discovery_prefix, msg.topic)
+        if device_id is None or (device := manager.devices.get(device_id)) is None:
+            return
+        self._note_removal(device)
+        self._discovery_heal.request(device_id)
+
+    def _note_removal(self, device: Device) -> None:
+        """Count a removal and explain in Repairs once it keeps happening (T-03-10)."""
+        now = self._manager.clock()
+        removals = self._removals.setdefault(device.device_id, deque(maxlen=DISCOVERY_REMOVAL_HINT_COUNT))
+        removals.append(now)
+        if len(removals) < DISCOVERY_REMOVAL_HINT_COUNT or now - removals[0] > DISCOVERY_REMOVAL_HINT_WINDOW_SECONDS:
+            return
+        if self._raise_once(
+            ISSUE_DISCOVERY_REMOVED_PREFIX,
+            TRANSLATION_DISCOVERY_REMOVED,
+            device,
+            {"device": escape_markdown(device.name), "count": str(DISCOVERY_REMOVAL_HINT_COUNT)},
+            ir.IssueSeverity.WARNING,
+        ):
+            LOGGER.warning(
+                "The entities of device %s were removed %d times recently, for example by deleting an entity on "
+                "another instance; the discovery is published again each time",
+                device.name,
+                DISCOVERY_REMOVAL_HINT_COUNT,
+            )
+
+    @callback
     def _start_config_heal(self, device_id: str) -> None:
-        """Start the republish of one device; the publish cannot run inside the message callback."""
+        """Start the republish of the config document of one device."""
+        self._start_heal(device_id, self._manager.async_publish_config, "config")
+
+    @callback
+    def _start_discovery_heal(self, device_id: str) -> None:
+        """Start the republish of the discovery of one device."""
+        self._start_heal(device_id, self._manager.async_publish_discovery, "discovery")
+
+    def _start_heal(self, device_id: str, publish: Callable[[Device], Awaitable[None]], what: str) -> None:
+        """Run a republish in a background task; the publish cannot run inside the message callback."""
         manager = self._manager
         manager.entry.async_create_background_task(
-            manager.hass, self._async_heal_config(device_id), name=f"{DOMAIN} heal config"
+            manager.hass, self._async_heal(device_id, publish), name=f"{DOMAIN} heal {what}"
         )
 
-    async def _async_heal_config(self, device_id: str) -> None:
-        """Publish the local document again, the same rev and payload as the last publish."""
+    async def _async_heal(self, device_id: str, publish: Callable[[Device], Awaitable[None]]) -> None:
+        """Publish again under the manager lock, unless the manager stopped or the device is gone."""
         manager = self._manager
         async with manager.lock:
             if not manager.running or (device := manager.devices.get(device_id)) is None:
                 return
-            await manager.async_publish_config(device)
+            await publish(device)

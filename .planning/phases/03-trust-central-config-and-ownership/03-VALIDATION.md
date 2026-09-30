@@ -36,24 +36,30 @@ created: "2026-10-01"
 
 ## Per-Task Verification Map
 
-Refined by the planner from the requirement-level rows of 03-RESEARCH.md (Phase Requirements to Test Map):
+Refined by the planner: one row per task of plans 03-01 to 03-07 (requirement-level rows of 03-RESEARCH.md are covered by the combination of these rows). The `-k` filters of the research map (`reconnect`, `prune`, `fanout`, `unapproved`, `delete`, `discovery`) are kept in the test names so they still select the right tests.
 
-| Req ID | Behavior | Test Type | Automated Command |
-|--------|----------|-----------|-------------------|
-| SYN-01 | Retained versioned document, canonical hash, publish order config → discovery → availability | unit + manager | `uv run pytest tests/test_document.py tests/test_sync_owner.py -x` |
-| SYN-02 | Retained document creates a mirror, cached in Store, survives restart | manager | `uv run pytest tests/test_sync_follower.py -x` |
-| SYN-03 | Owner pinning, conflict Repairs, owner-claim republish with throttle | manager + multi-instance | `uv run pytest tests/test_sync_follower.py tests/test_multi_instance.py -x` |
-| SYN-04 | Republish on every reconnect, wiped broker healed | multi-instance | `uv run pytest tests/test_multi_instance.py -k reconnect -x` |
-| SYN-05 | No delete on absence; tombstone removes at once; prune only with owner online | multi-instance | `uv run pytest tests/test_multi_instance.py -k prune -x` |
-| SYN-06 | Delete confirmation wording, config + discovery + state tombstones, retry | flow + manager | `uv run pytest tests/test_config_flow_delete.py tests/test_sync_owner.py -k delete -x` |
-| TRU-01 | Unapproved mirror runs nothing (live state, test button, run-on-startup) | manager | `uv run pytest tests/test_trust.py -k unapproved -x` |
-| TRU-02 | Approval binds action hash; changed actions re-prompt; dismissed issue does not hide it | repairs flow | `uv run pytest tests/test_repairs_flow.py -x` |
-| TRU-03 | Schema gate, nesting cap, `GuardedTemplate` incl. `continue_on_error`, blocked state | unit + runner | `uv run pytest tests/test_trust.py tests/test_document.py -x` |
-| TRU-04 | ACL example enforced by a real mosquitto | broker | `uv run pytest tests/broker/test_acl.py -x` |
-| STA-03 | UI change / external publish runs actions on every approved instance | multi-instance | `uv run pytest tests/test_multi_instance.py -k fanout -x` |
-| DSC-03 | Entity deletion clears discovery; owner republishes once per window | manager + multi-instance | `uv run pytest tests/test_sync_owner.py -k discovery -x` |
-| D-11 | Hub removal keep vs delete | manager | `uv run pytest tests/test_hub_removal.py -x` |
-| FND-04 | en/de parity for new strings | unit | `uv run pytest tests/test_translations.py -x` |
+| Task | Req ID | Behavior | Test Type | Automated Command |
+|------|--------|----------|-----------|-------------------|
+| 03-01-T1 | SYN-01, SYN-04 | Retained versioned document, canonical hash and golden fixture, publish order config, discovery, availability, rev persistence | unit + manager | `uv run pytest tests/test_topics.py tests/test_document.py tests/test_sync_owner.py -q` |
+| 03-01-T2 | TRU-03 | Strict parse, schema gate, caps, denylist walker, markdown escape | unit | `uv run pytest tests/test_document.py -q` |
+| 03-01-T3 | (Wave 0) | IncomingMessage.topic, Manager gateway and store_key, FakeBroker retain semantics, two real instances | unit + multi-instance | `uv run pytest tests/test_fake_broker.py -q` |
+| 03-02-T1 | SYN-06 | Delete order discovery, unsubscribe, config tombstone, state; pop-first; retry | manager | `uv run pytest tests/test_sync_owner.py tests/test_manager.py -q` |
+| 03-02-T2 | SYN-03 | Echo history, foreign write healing, ownership claim, trailing throttle | manager | `uv run pytest tests/test_sync_owner.py -q` |
+| 03-02-T3 | DSC-03 | Discovery healing with trailing throttle, repeated-removal hint, issue texts | manager + unit | `uv run pytest tests/test_sync_owner.py tests/test_translations.py -q` |
+| 03-03-T1 | SYN-06 | Delete confirmation menu with all-instances wording and presence count, generic path parity | flow + manager | `uv run pytest tests/test_config_flow_delete.py tests/test_config_flow.py tests/test_config_flow_select.py -q` |
+| 03-03-T2 | D-11 | Hub options flow, removal keep versus delete | manager | `uv run pytest tests/test_hub_removal.py tests/test_manager.py tests/test_manager_select.py tests/test_manager_breaker.py -q` |
+| 03-03-T3 | FND-04 | en and de parity for delete and options texts | unit | `uv run pytest tests/test_translations.py -q` |
+| 03-04-T1 | SYN-02, TRU-01 | Retained document creates an inert persistent mirror, reconcile regression, cap | manager + multi-instance | `uv run pytest tests/test_sync_follower.py tests/test_multi_instance.py -q` |
+| 03-04-T2 | SYN-03, TRU-03 | Hash-based update, owner pinning, too-new schema, hostile documents | manager | `uv run pytest tests/test_sync_follower.py -q` |
+| 03-04-T3 | FND-04 | en and de parity for conflict and schema texts | unit | `uv run pytest tests/test_translations.py -q` |
+| 03-05-T1 | SYN-05 | Live tombstone removal, guarded registry cleanup | manager + multi-instance | `uv run pytest tests/test_sync_follower.py tests/test_multi_instance.py -q` |
+| 03-05-T2 | SYN-05 | Grace-window prune only with owner online and document unseen; wipe safe | multi-instance | `uv run pytest tests/test_sync_follower.py tests/test_multi_instance.py -q` |
+| 03-06-T1 | TRU-01, TRU-03, STA-03 | Hash-bound approval, guarded Script, continue_on_error regression, blocked state, fanout | manager + runner + multi-instance | `uv run pytest tests/test_trust.py tests/test_multi_instance.py -q` |
+| 03-06-T2 | TRU-02 | Repairs approval flow, race abort, dismissal, safe view | repairs flow | `uv run pytest tests/test_repairs_flow.py tests/test_trust.py -q` |
+| 03-06-T3 | FND-04 | en and de parity for approval, blocked and denied-call texts | unit | `uv run pytest tests/test_translations.py -q` |
+| 03-07-T1 | TRU-04 | Documented ACL enforced by a real mosquitto | broker | `uv run pytest tests/broker/test_acl.py tests/test_repo_structure.py -q -rs` |
+| 03-07-T2 | STA-03, SYN-04, SYN-05, SYN-06 | Three-instance acceptance scenarios incl. wipe, conflict, forged tombstone | multi-instance | `uv run pytest tests/test_multi_instance.py -q` |
+| 03-07-T3 | TRU-04 (docs) | README phase 3 content, no device_id in examples | unit | `uv run pytest tests/test_repo_structure.py -q` |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

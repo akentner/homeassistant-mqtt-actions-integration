@@ -103,7 +103,30 @@ Plans:
   4. Only a device's owner can edit or delete it; followers pin the owner and raise a Repairs issue on conflicting ownership claims, and if a follower removes the discovered entity the owner republishes its discovery.
   5. Deleting a device requires an explicit confirmation stating that it is removed on all connected instances, after which its central config and discovery are unpublished and the device disappears everywhere.
 
-**Plans**: TBD
+**Plans:** 7 plans
+
+Plans:
+**Wave 1**
+- [ ] 03-01-PLAN.md — Wire contract: config document, strict parsing, denylist walker, owner publish, FakeBroker and gateway seams (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03-02-PLAN.md — Owner lifecycle: delete order with config tombstone, echo and foreign-write healing, ownership claims, discovery healing (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03-03-PLAN.md — Owner flows: all-instances delete confirmation with instance presence, hub removal keep or delete option (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03-04-PLAN.md — Follower: read-only mirrors, owner pinning, schema gate, Store persistence (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03-05-PLAN.md — Follower removal: tombstone, grace-window prune gated by owner availability, registry cleanup (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 03-06-PLAN.md — Trust gate: hash-bound approval via Repairs, guarded Script, blocked state, execution-time denylist (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 03-07-PLAN.md — Tested broker ACL document, multi-instance acceptance scenarios, README (wave 7)
+
 **UI hint**: yes
 
 ### Phase 4: Operations, Recovery and Release
@@ -130,5 +153,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
-| 3. Trust, Central Config and Ownership | 0/0 | Not started | - |
+| 3. Trust, Central Config and Ownership | 0/7 | Planned | - |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |

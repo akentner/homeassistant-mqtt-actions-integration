@@ -99,6 +99,10 @@ REPUBLISH_THROTTLE_SECONDS: Final = 60.0
 DISCOVERY_REMOVAL_HINT_COUNT: Final = 3
 DISCOVERY_REMOVAL_HINT_WINDOW_SECONDS: Final = 600.0
 
+# Instance presence tracked from the availability wildcard is capped so broker traffic with random ids cannot grow it
+# without bound (D-16, A2, T-03-12)
+MAX_TRACKED_INSTANCES: Final = 256
+
 # Logging: unknown payloads are logged as a truncated repr so a payload cannot grow or forge a log line
 MAX_LOGGED_PAYLOAD_LENGTH: Final = 40
 

@@ -260,6 +260,10 @@ class Manager:
         """Return whether the manager is started and not stopped."""
         return self._running
 
+    def online_instance_count(self) -> int:
+        """Return how many other instances are currently online, as announced on the availability topics."""
+        return self.sync.online_instance_count()
+
     def revision(self, device_id: str) -> int:
         """Return the rev last published for a device, 0 when none was published yet."""
         known = self._revs.get(device_id)

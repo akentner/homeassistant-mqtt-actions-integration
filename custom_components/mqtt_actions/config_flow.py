@@ -9,6 +9,7 @@ import probatio
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentry,
@@ -152,6 +153,34 @@ class _DeviceSubentryFlow(ConfigSubentryFlow):
                 return {"base": "device_id_warning"}, {"device_ids": ", ".join(device_ids)}
         return {}, {}
 
+    def _online_instance_count(self) -> int:
+        """Return the number of other instances currently online; 0 while the hub entry is not loaded."""
+        entry = self._get_entry()
+        if entry.state is not ConfigEntryState.LOADED:
+            return 0
+        return int(entry.runtime_data.online_instance_count())
+
+    async def async_step_delete_device(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """
+        Ask whether the device really goes, on every connected instance and not only on this one (D-16, SYN-06).
+
+        This is the only door to `delete_confirmed`: a menu accepts only its own options, so the removal cannot be
+        reached without passing here. The generic Home Assistant delete cannot be vetoed and ends in the same removal.
+        """
+        return self.async_show_menu(
+            step_id="delete_device",
+            menu_options=["delete_confirmed", "keep_device"],
+            description_placeholders={
+                "name": self._get_reconfigure_subentry().title,
+                "count": str(self._online_instance_count()),
+            },
+        )
+
+    async def async_step_delete_confirmed(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """Remove the subentry; the reconcile that follows clears the broker topics in the delete order (D-16)."""
+        self.hass.config_entries.async_remove_subentry(self._get_entry(), self._get_reconfigure_subentry().subentry_id)
+        return self.async_abort(reason="device_deleted")
+
     @staticmethod
     def _settings_fields() -> dict[Any, Any]:
         """Return the schema entries every device shares: startup flag, run mode and circuit breaker limits."""
@@ -200,9 +229,21 @@ class SwitchSubentryFlow(_DeviceSubentryFlow):
         """Ask for a name and the two action lists."""
         return await self._async_handle_form("user", user_input, None)
 
-    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """
+        Offer to edit or delete an existing switch (D-16).
+
+        The presence of this step is what makes Home Assistant offer reconfigure.
+        """
+        return self.async_show_menu(step_id="reconfigure", menu_options=["edit_device", "delete_device"])
+
+    async def async_step_edit_device(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         """Edit name, actions and startup flag of an existing switch; the device id stays."""
-        return await self._async_handle_form("reconfigure", user_input, self._get_reconfigure_subentry())
+        return await self._async_handle_form("edit_device", user_input, self._get_reconfigure_subentry())
+
+    async def async_step_keep_device(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """Leave the device alone and go back to the reconfigure menu."""
+        return await self.async_step_reconfigure()
 
     async def _async_handle_form(
         self,
@@ -358,6 +399,9 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
         menu_options.append("settings")
         if len(options) >= MIN_OPTIONS:
             menu_options.append("done")
+        # Deleting needs a stored device, so only the reconfigure menu offers it (D-16)
+        if self.source == SOURCE_RECONFIGURE:
+            menu_options.append("delete_device")
         return self.async_show_menu(
             step_id="menu",
             menu_options=menu_options,
@@ -522,6 +566,10 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
     async def async_step_keep_option(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
         """Leave the option alone and go back to the menu."""
         self._selected = None
+        return await self.async_step_menu()
+
+    async def async_step_keep_device(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """Leave the device alone and go back to the menu with the draft as it was."""
         return await self.async_step_menu()
 
     async def async_step_done(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:

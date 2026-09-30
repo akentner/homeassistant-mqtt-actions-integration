@@ -26,11 +26,19 @@ from .const import (
     ISSUE_DOC_OVERWRITTEN_PREFIX,
     ISSUE_OWNERSHIP_CLAIM_PREFIX,
     LOGGER,
+    MAX_TRACKED_INSTANCES,
     PUBLISHED_HASH_HISTORY,
     REPUBLISH_THROTTLE_SECONDS,
 )
 from .document import DocumentRejectedError, build_content, content_hash, escape_markdown, parse_document
-from .topics import config_wildcard, discovery_wildcard, parse_config_topic, parse_discovery_topic
+from .topics import (
+    availability_wildcard,
+    config_wildcard,
+    discovery_wildcard,
+    parse_availability_topic,
+    parse_config_topic,
+    parse_discovery_topic,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -44,6 +52,10 @@ if TYPE_CHECKING:
 TRANSLATION_DOC_OVERWRITTEN = "doc_overwritten"
 TRANSLATION_OWNERSHIP_CLAIM = "ownership_claim"
 TRANSLATION_DISCOVERY_REMOVED = "discovery_removed"
+
+# Stored presence values; only these two payloads of the availability topic mean anything
+PRESENCE_ONLINE = "online"
+PRESENCE_OFFLINE = "offline"
 
 
 class _TrailingThrottle:
@@ -106,6 +118,9 @@ class SyncManager:
         self._discovery_prefix = ""
         # device id -> times of the most recent removals of its discovery; only the last few are kept
         self._removals: dict[str, deque[float]] = {}
+        # instance id -> last announced presence; capped, and only the announced values are kept
+        self._instances: dict[str, str] = {}
+        self._presence_overflow_logged = False
 
     async def async_start(self) -> None:
         """Subscribe to the config wildcard; the caller does this before anything is published (SYN-04)."""
@@ -119,6 +134,12 @@ class SyncManager:
                 discovery_wildcard(self._discovery_prefix), self._on_discovery_message
             )
         )
+        self._presence_overflow_logged = False
+        self._unsubscribers.append(
+            await manager.gateway.async_subscribe(
+                availability_wildcard(manager.base_topic), self._on_availability_message
+            )
+        )
 
     @callback
     def async_stop(self) -> None:
@@ -128,6 +149,42 @@ class SyncManager:
         self._unsubscribers.clear()
         self._config_heal.cancel_all()
         self._discovery_heal.cancel_all()
+
+    def online_instance_count(self) -> int:
+        """Return how many instances other than this one are currently announced as online."""
+        own = self._manager.instance_id
+        return sum(
+            1 for instance_id, status in self._instances.items() if instance_id != own and status == PRESENCE_ONLINE
+        )
+
+    def instance_status(self, instance_id: str) -> str | None:
+        """Return the last announced presence of an instance (`online` or `offline`), None when it is not known."""
+        return self._instances.get(instance_id)
+
+    @callback
+    def _on_availability_message(self, msg: IncomingMessage) -> None:
+        """
+        Track the presence of an instance from its retained availability topic (D-16).
+
+        Only `online` and `offline` count (compared after strip and lower case); an empty payload forgets the instance
+        and anything else is ignored. A new id beyond the cap is not tracked and the overflow is logged once.
+        """
+        instance_id = parse_availability_topic(self._manager.base_topic, msg.topic)
+        if instance_id is None:
+            return
+        status = msg.payload.strip().lower()
+        if not msg.payload:
+            self._instances.pop(instance_id, None)
+        elif status in {PRESENCE_ONLINE, PRESENCE_OFFLINE}:
+            if instance_id not in self._instances and len(self._instances) >= MAX_TRACKED_INSTANCES:
+                if not self._presence_overflow_logged:
+                    self._presence_overflow_logged = True
+                    LOGGER.warning(
+                        "More than %d instances announced their availability, so further instances are not tracked",
+                        MAX_TRACKED_INSTANCES,
+                    )
+                return
+            self._instances[instance_id] = status
 
     @callback
     def note_published(self, device_id: str, digest: str) -> None:

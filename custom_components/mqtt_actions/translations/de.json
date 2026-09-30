@@ -272,6 +272,14 @@
     "discovery_removed": {
       "title": "Die Entitäten eines Geräts wurden wiederholt entfernt",
       "description": "Die Entitäten von {device} wurden in letzter Zeit {count} Mal entfernt, zum Beispiel durch das Löschen einer Entität auf einer anderen Home-Assistant-Instanz. Diese Instanz hat die Discovery jedes Mal erneut veröffentlicht. Das Löschen einer Entität auf einer Instanz entfernt sie auf jeder Instanz. Lösche daher das Gerät selbst, wenn du es nicht mehr möchtest."
+    },
+    "owner_conflict": {
+      "title": "Eine andere Instanz beansprucht ein Gerät, dem du folgst",
+      "description": "Das Gerät {device} gehört {owner}. Eine andere Instanz namens {claimant} hat ebenfalls eine Konfiguration dafür veröffentlicht. Diese Instanz folgt weiterhin {owner} und ignoriert den anderen Anspruch. Prüfe die Zugriffsrechte der Instanzen auf dem MQTT-Broker, damit jede Instanz nur ihre eigenen Geräte schreiben kann."
+    },
+    "schema_too_new": {
+      "title": "Eine gemeinsame Gerätekonfiguration benötigt eine neuere Integration",
+      "description": "Die gemeinsame Konfiguration von {device} verwendet die Formatversion {version}, diese Integration versteht aber nur Versionen bis {supported}. Das Gerät behält seine zuletzt bekannten Einstellungen. Aktualisiere MQTT Actions auf dieser Instanz, um Änderungen zu erhalten."
     }
   },
   "selector": {

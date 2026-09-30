@@ -272,6 +272,14 @@
     "discovery_removed": {
       "title": "The entities of a device were removed repeatedly",
       "description": "The entities of {device} were removed {count} times recently, for example by deleting an entity on another Home Assistant instance. Each time, this instance published the discovery again. Deleting an entity on one instance removes it on every instance, so delete the device itself if you no longer want it."
+    },
+    "owner_conflict": {
+      "title": "Another instance claims a device that you follow",
+      "description": "The device {device} is owned by {owner}. Another instance named {claimant} also published a configuration for it. This instance keeps following {owner} and ignores the other claim. Check the access rights of the instances on the MQTT broker, so that each instance can only write its own devices."
+    },
+    "schema_too_new": {
+      "title": "A shared device configuration needs a newer integration",
+      "description": "The shared configuration of {device} uses format version {version}, but this integration understands up to version {supported}. The device keeps its last known settings. Update MQTT Actions on this instance to receive changes."
     }
   },
   "selector": {

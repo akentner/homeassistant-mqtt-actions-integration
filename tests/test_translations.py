@@ -41,6 +41,13 @@ SELECT_ERROR_KEYS = (
     "breaker_window_range",
 )
 
+# Issue translation keys of the owner side of the central config and the variables each description may use
+NEW_ISSUES = {
+    "doc_overwritten": {"device"},
+    "ownership_claim": {"device", "claimant"},
+    "discovery_removed": {"device", "count"},
+}
+
 REQUIRED_KEYS = (
     "config.step.user.title",
     "config.step.user.description",
@@ -66,6 +73,7 @@ REQUIRED_KEYS = (
     "issues.mqtt_discovery_disabled.description",
     "issues.circuit_breaker_tripped.title",
     "issues.circuit_breaker_tripped.description",
+    *(f"issues.{issue}.{part}" for issue in NEW_ISSUES for part in ("title", "description")),
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
         for step in ("user", "reconfigure")
@@ -165,6 +173,15 @@ def test_issue_strings_use_expected_variables(language: str) -> None:
     flat = _load(language)
     assert _variables(flat["issues.action_failed.description"]) == {"device", "trigger", "time", "error"}
     assert _variables(flat["issues.circuit_breaker_tripped.description"]) == {"device", "max_runs", "window"}
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_issue_texts_exist_in_both_languages(language: str) -> None:
+    """The owner-side issues have a title and a description in every language, using exactly their placeholders."""
+    flat = _load(language)
+    for issue, variables in NEW_ISSUES.items():
+        assert flat[f"issues.{issue}.title"]
+        assert _variables(flat[f"issues.{issue}.description"]) == variables
 
 
 def test_error_placeholders_are_the_ones_the_flow_supplies() -> None:

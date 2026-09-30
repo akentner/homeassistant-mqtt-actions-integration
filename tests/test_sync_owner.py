@@ -23,6 +23,7 @@ from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
+    CONF_OPTIONS,
     DOMAIN,
     STORE_KEY,
     STORE_LAST_ACTED,
@@ -764,6 +765,210 @@ async def test_delete_and_hub_removal_delete_the_overwrite_issues(
     await _deliver(hass, config_topic(BASE, device_id), "")
     await _deliver(hass, config_topic(BASE, device_id), _foreign(mqtt_mock, device_id, owner="x", owner_name="Other"))
     assert _issue_ids(hass) == [f"{OVERWRITTEN}{device_id}", f"{CLAIM}{device_id}"]
+
+    if path == "delete_device":
+        await _delete_only_device(hass, entry)
+    else:
+        assert await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _issue_ids(hass) == []
+
+
+# --- discovery healing (DSC-03, D-18) ------------------------------------------------------------------------------
+
+REMOVED = "discovery_removed_"
+HINT_WINDOW = 600.0
+
+
+def _discovery(device_id: str) -> str:
+    return discovery_topic("homeassistant", device_id)
+
+
+async def _remove_entity_elsewhere(hass: HomeAssistant, device_id: str) -> None:
+    """Deliver the empty discovery payload core MQTT publishes when an entity of the device is deleted somewhere."""
+    await _deliver(hass, _discovery(device_id), "")
+
+
+def _use_clock(entry: MockConfigEntry) -> list[float]:
+    """Replace the manager clock with a settable one; the returned list holds its single value."""
+    now = [1000.0]
+    entry.runtime_data.clock = lambda: now[0]
+    return now
+
+
+async def test_empty_discovery_for_an_owned_device_republishes_discovery(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-18: an entity deleted on a follower clears the device discovery; the owner publishes it again."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    (first,) = _publishes(mqtt_mock, _discovery(device_id))
+
+    await _remove_entity_elsewhere(hass, device_id)
+
+    first_again, second = _publishes(mqtt_mock, _discovery(device_id))
+    assert first_again == first
+    assert second[0] != ""
+    assert second[1:] == (1, True)
+
+
+async def test_non_empty_discovery_echo_is_ignored(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """The owner's own non-empty discovery publish looping back causes no additional publish."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    ((payload, _qos, _retain),) = _publishes(mqtt_mock, _discovery(device_id))
+
+    await _deliver(hass, _discovery(device_id), payload)
+
+    assert len(_publishes(mqtt_mock, _discovery(device_id))) == 1
+
+
+async def test_empty_discovery_of_other_devices_is_ignored(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """An empty discovery payload for an id this instance does not own causes no publish."""
+    await _owned(hass, make_hub_entry, make_switch_subentry)
+    mqtt_mock.async_publish.reset_mock()
+
+    await _remove_entity_elsewhere(hass, "someone-elses-device")
+
+    assert mqtt_mock.async_publish.call_args_list == []
+
+
+async def test_discovery_republish_is_throttled_with_one_trailing_republish(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    freezer: FrozenDateTimeFactory,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """T-03-07: an immediate republish, one trailing republish for removals in the window, then immediate again."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+
+    def _count() -> int:
+        return len(_publishes(mqtt_mock, _discovery(device_id)))
+
+    assert _count() == 1
+    await _remove_entity_elsewhere(hass, device_id)
+    assert _count() == 2
+    await _remove_entity_elsewhere(hass, device_id)
+    await _remove_entity_elsewhere(hass, device_id)
+    assert _count() == 2
+    await _advance(hass, freezer)
+    assert _count() == 3
+    await _advance(hass, freezer)
+    assert _count() == 3
+
+    await _remove_entity_elsewhere(hass, device_id)
+    assert _count() == 4
+
+
+async def test_healing_keeps_retired_button_tombstones(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_select_subentry: Callable
+) -> None:
+    """The healing republish is the normal publish path, so a retired test button keeps its tombstone."""
+    sub = make_select_subentry("Mode", [("a", "A", []), ("b", "B", []), ("c", "C", [])])
+    entry = await _setup(hass, make_hub_entry([sub]))
+    subentry = _only_subentry(entry)
+    kept = [option for option in subentry.data[CONF_OPTIONS] if option["state_value"] != "c"]
+    hass.config_entries.async_update_subentry(entry, subentry, data={**subentry.data, CONF_OPTIONS: kept})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    device_id = _device_id(sub)
+
+    await _remove_entity_elsewhere(hass, device_id)
+
+    components = json.loads(_publishes(mqtt_mock, _discovery(device_id))[-1][0])["components"]
+    assert [key for key, value in components.items() if value == {"platform": "button"}] == ["test_c"]
+    assert len(_publishes(mqtt_mock, _discovery(device_id))) == 3
+
+
+async def test_repeated_removals_raise_the_hint_once(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-03-10: the third removal in the hint window raises one non-fixable issue; two raise nothing."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    _use_clock(entry)
+
+    await _remove_entity_elsewhere(hass, device_id)
+    await _remove_entity_elsewhere(hass, device_id)
+    assert _issue(hass, REMOVED, device_id) is None
+
+    with patch("custom_components.mqtt_actions.sync.ir.async_create_issue", wraps=ir.async_create_issue) as create:
+        await _remove_entity_elsewhere(hass, device_id)
+        await _remove_entity_elsewhere(hass, device_id)
+
+    issue = _issue(hass, REMOVED, device_id)
+    assert issue is not None
+    assert issue.is_fixable is False
+    assert issue.severity == ir.IssueSeverity.WARNING
+    assert issue.translation_key == "discovery_removed"
+    assert issue.translation_placeholders == {"device": "Lamp", "count": "3"}
+    assert [call.args[2] for call in create.call_args_list] == [f"{REMOVED}{device_id}"]
+
+
+async def test_removals_spread_over_time_raise_no_hint(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Removals that are further apart than the hint window never add up to a hint."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    now = _use_clock(entry)
+
+    for _ in range(5):
+        await _remove_entity_elsewhere(hass, device_id)
+        now[0] += HINT_WINDOW + 1
+
+    assert _issue(hass, REMOVED, device_id) is None
+
+
+async def test_own_delete_does_not_heal_the_discovery(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-03-08: deleting a device and delivering its discovery clear live republishes nothing."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+
+    await _delete_only_device(hass, entry)
+    await _remove_entity_elsewhere(hass, device_id)
+
+    assert [payload for payload, _qos, _retain in _publishes(mqtt_mock, _discovery(device_id))][1:] == [""]
+    assert _issue_ids(hass) == []
+
+
+async def test_discovery_subscription_is_released_on_stop(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    freezer: FrozenDateTimeFactory,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """After unload an empty discovery payload publishes nothing and a pending trailing republish does nothing."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    await _remove_entity_elsewhere(hass, device_id)
+    await _remove_entity_elsewhere(hass, device_id)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    mqtt_mock.async_publish.reset_mock()
+
+    await _advance(hass, freezer)
+    await _remove_entity_elsewhere(hass, device_id)
+    await _advance(hass, freezer)
+
+    assert mqtt_mock.async_publish.call_args_list == []
+
+
+@pytest.mark.parametrize("path", ["delete_device", "remove_hub"])
+async def test_delete_removes_the_hint_issue(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    path: str,
+) -> None:
+    """Deleting the device and removing the hub delete the repeated-removal hint of the device."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    _use_clock(entry)
+    for _ in range(3):
+        await _remove_entity_elsewhere(hass, device_id)
+    assert _issue_ids(hass) == [f"{REMOVED}{device_id}"]
 
     if path == "delete_device":
         await _delete_only_device(hass, entry)

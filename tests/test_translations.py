@@ -63,6 +63,22 @@ REQUIRED_KEYS = (
     "config_subentries.switch.entry_type",
     "config_subentries.switch.step.user.title",
     "config_subentries.switch.step.reconfigure.title",
+    "config_subentries.switch.step.reconfigure.description",
+    "config_subentries.switch.step.reconfigure.menu_options.edit_device",
+    "config_subentries.switch.step.reconfigure.menu_options.delete_device",
+    "config_subentries.switch.step.edit_device.title",
+    "config_subentries.switch.step.edit_device.description",
+    *(
+        f"config_subentries.{kind}.step.delete_device.{part}"
+        for kind in ("switch", "select")
+        for part in ("title", "description", "menu_options.delete_confirmed", "menu_options.keep_device")
+    ),
+    *(f"config_subentries.{kind}.abort.device_deleted" for kind in ("switch", "select")),
+    "config_subentries.select.step.menu.menu_options.delete_device",
+    "options.step.init.title",
+    "options.step.init.description",
+    "options.step.init.data.delete_devices_on_remove",
+    "options.step.init.data_description.delete_devices_on_remove",
     "config_subentries.switch.error.name_required",
     "config_subentries.switch.error.invalid_actions",
     "config_subentries.switch.error.device_id_warning",
@@ -76,14 +92,14 @@ REQUIRED_KEYS = (
     *(f"issues.{issue}.{part}" for issue in NEW_ISSUES for part in ("title", "description")),
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
-        for step in ("user", "reconfigure")
+        for step in ("user", "edit_device")
         for field in SWITCH_FORM_FIELDS
     ),
     "config_subentries.switch.error.breaker_max_runs_range",
     "config_subentries.switch.error.breaker_window_range",
     *(
         f"config_subentries.switch.step.{step}.data_description.{field}"
-        for step in ("user", "reconfigure")
+        for step in ("user", "edit_device")
         for field in SWITCH_FORM_FIELDS
     ),
     "config_subentries.select.initiate_flow.user",
@@ -188,6 +204,13 @@ def test_error_placeholders_are_the_ones_the_flow_supplies() -> None:
     en = _load("en")
     assert _variables(en["config_subentries.switch.error.invalid_actions"]) == {"field", "error"}
     assert _variables(en["config_subentries.switch.error.device_id_warning"]) == {"device_ids"}
+
+
+def test_delete_placeholders_are_the_ones_the_flow_supplies() -> None:
+    """The delete confirmation of both device types is given exactly the device name and the online count."""
+    en = _load("en")
+    for kind in ("switch", "select"):
+        assert _variables(en[f"config_subentries.{kind}.step.delete_device.description"]) == {"name", "count"}
 
 
 def test_select_placeholders_are_the_ones_the_flow_supplies() -> None:

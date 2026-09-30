@@ -15,7 +15,7 @@ Ordering rationale: startup semantics, the single trigger source and the Select 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Walking Skeleton - Installable Switch** - HACS-installable integration where a Switch created in the UI runs its actions on MQTT state changes, safely across restarts (completed 2026-09-29)
-- [ ] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection
+- [x] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection (completed 2026-09-30)
 - [ ] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely
 - [ ] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation
 
@@ -70,7 +70,7 @@ Plans:
   4. User can choose per device whether rapid state changes run their actions as a serial queue (default) or as restart, and can press a test button that runs a device's actions locally without changing its state.
   5. An action that toggles its own device is stopped by a per-device circuit breaker instead of looping forever, and the user is told why.
 
-**Plans:** 5/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -129,6 +129,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
-| 2. Select Devices and Reliable Execution | 5/5 | In Progress|  |
+| 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 0/0 | Not started | - |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |

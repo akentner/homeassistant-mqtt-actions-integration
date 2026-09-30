@@ -1,6 +1,8 @@
 """Owner side of the central config: one retained, versioned document per device, published before discovery."""
 
+import copy
 import json
+import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
@@ -8,6 +10,7 @@ from unittest.mock import patch
 import pytest
 from homeassistant.components import mqtt
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -20,6 +23,7 @@ from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
+    DOMAIN,
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_PUBLISHED,
@@ -28,7 +32,7 @@ from custom_components.mqtt_actions.const import (
     STORE_TRIPPED,
     STORE_VERSION,
 )
-from custom_components.mqtt_actions.document import content_hash
+from custom_components.mqtt_actions.document import content_hash, escape_markdown
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 
 if TYPE_CHECKING:
@@ -438,3 +442,329 @@ async def test_hub_removal_path_clears_the_config_topic(
 
     for owned_id in (device_id, ORPHAN_ID):
         assert _publishes(mqtt_mock, config_topic(BASE, owned_id))[-1] == ("", 1, True)
+
+
+# --- owner watches its config topic (SYN-03, D-15, D-17) ----------------------------------------------------------
+
+OVERWRITTEN = "doc_overwritten_"
+CLAIM = "ownership_claim_"
+# D-18 start value; the tests advance the clock by more than one window
+WINDOW = 60.0
+EVIL_ACTIONS = [{"action": "test.evil"}]
+CANARY = "CANARY-7f3a"
+
+
+def _issue(hass: HomeAssistant, prefix: str, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{prefix}{device_id}")
+
+
+def _issue_ids(hass: HomeAssistant) -> list[str]:
+    return sorted(issue_id for domain, issue_id in ir.async_get(hass).issues if domain == DOMAIN)
+
+
+async def _deliver(hass: HomeAssistant, topic: str, payload: str | dict[str, Any], *, retain: bool = False) -> None:
+    """Deliver one message the way a real broker forwards a live write (retain False), then let handlers finish."""
+    text = payload if isinstance(payload, str) else json.dumps(payload)
+    async_fire_mqtt_message(hass, topic, text, retain=retain)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _foreign(mqtt_mock: Any, owned_id: str, **changes: Any) -> dict[str, Any]:
+    """Return the last published document of a device with fields replaced, as another writer would send it."""
+    document = copy.deepcopy(_documents(mqtt_mock, owned_id)[-1])
+    document.update(changes)
+    return document
+
+
+async def _advance(hass: HomeAssistant, freezer: FrozenDateTimeFactory, seconds: float = WINDOW + 1) -> None:
+    freezer.tick(timedelta(seconds=seconds))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def _owned(
+    hass: HomeAssistant, make_hub_entry: Callable, make_switch_subentry: Callable, name: str = "Lamp"
+) -> tuple[MockConfigEntry, str]:
+    sub = make_switch_subentry(name, on=ON_ACTIONS)
+    return await _setup(hass, make_hub_entry([sub])), _device_id(sub)
+
+
+async def test_own_echo_is_ignored(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-15: the owner's own document coming back live raises no issue and causes no second publish."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    topic = config_topic(BASE, device_id)
+    (payload, _qos, _retain) = _publishes(mqtt_mock, topic)[0]
+
+    await _deliver(hass, topic, payload)
+
+    assert len(_documents(mqtt_mock, device_id)) == 1
+    assert _issue_ids(hass) == []
+
+
+async def test_quick_edits_do_not_look_like_foreign_writes(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-15: two quick edits, then the first document replayed late, raise no issue and no republish."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    topic = config_topic(BASE, device_id)
+    first_payload = _publishes(mqtt_mock, topic)[0][0]
+    for title in ("Lamp 2", "Lamp 3"):
+        hass.config_entries.async_update_subentry(entry, _only_subentry(entry), title=title)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(_documents(mqtt_mock, device_id)) == 3
+
+    await _deliver(hass, topic, first_payload)
+
+    assert len(_documents(mqtt_mock, device_id)) == 3
+    assert _issue_ids(hass) == []
+
+
+async def test_persisted_hash_seeds_the_echo_history(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-15: the document published before an offline edit comes back as an echo, not as a foreign write."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    topic = config_topic(BASE, device_id)
+    previous_payload = _publishes(mqtt_mock, topic)[0][0]
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    hass.config_entries.async_update_subentry(entry, _only_subentry(entry), title="Lamp renamed")
+    mqtt_mock.async_publish.reset_mock()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert [doc["rev"] for doc in _documents(mqtt_mock, device_id)] == [2]
+
+    await _deliver(hass, topic, previous_payload, retain=True)
+
+    assert [doc["rev"] for doc in _documents(mqtt_mock, device_id)] == [2]
+    assert _issue_ids(hass) == []
+
+
+async def test_foreign_content_on_my_topic_is_healed_and_reported(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-03-06: foreign content is overwritten by the owner's real document, reported, and never adopted."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    manager = entry.runtime_data
+    spec_before = manager.devices[device_id].spec
+    data_before = dict(_only_subentry(entry).data)
+
+    await _deliver(hass, config_topic(BASE, device_id), _foreign(mqtt_mock, device_id, on_change_to_on=EVIL_ACTIONS))
+
+    first, second = _publishes(mqtt_mock, config_topic(BASE, device_id))
+    assert second == first
+    issue = _issue(hass, OVERWRITTEN, device_id)
+    assert issue is not None
+    assert issue.is_fixable is False
+    assert issue.translation_key == "doc_overwritten"
+    assert manager.devices[device_id].spec is spec_before
+    assert dict(_only_subentry(entry).data) == data_before
+
+
+async def test_lower_rev_own_document_is_healed_silently(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-15: an older document of this owner (lower rev) is replaced without an issue."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    hass.config_entries.async_update_subentry(entry, _only_subentry(entry), title="Lamp 2")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(_documents(mqtt_mock, device_id)) == 2
+
+    await _deliver(
+        hass,
+        config_topic(BASE, device_id),
+        _foreign(mqtt_mock, device_id, rev=1, on_change_to_on=EVIL_ACTIONS),
+    )
+
+    assert [doc["rev"] for doc in _documents(mqtt_mock, device_id)] == [1, 2, 2]
+    assert _issue_ids(hass) == []
+
+
+async def test_equal_content_is_a_noop(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-15: the same content under another rev changes nothing."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+
+    await _deliver(hass, config_topic(BASE, device_id), _foreign(mqtt_mock, device_id, rev=99))
+
+    assert len(_documents(mqtt_mock, device_id)) == 1
+    assert _issue_ids(hass) == []
+
+
+async def test_foreign_tombstone_is_healed_and_reported(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-03-06: an empty live payload on the config topic of an owned device is healed and reported."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+
+    await _deliver(hass, config_topic(BASE, device_id), "")
+
+    assert len(_documents(mqtt_mock, device_id)) == 2
+    assert _issue(hass, OVERWRITTEN, device_id) is not None
+
+
+@pytest.mark.parametrize(
+    "make_payload",
+    [
+        lambda _doc: f"{CANARY}{{not json",
+        lambda doc: json.dumps({**doc, "device_id": "someone-else", "name": CANARY}),
+        lambda doc: json.dumps({**doc, "schema_version": 99, "extra": CANARY}),
+    ],
+    ids=["not-json", "wrong-device-id", "schema-too-new"],
+)
+async def test_garbage_on_my_topic_is_healed_and_reported(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    caplog: pytest.LogCaptureFixture,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    make_payload: Callable[[dict[str, Any]], str],
+) -> None:
+    """T-03-06: unreadable content is replaced by the real document and reported; no log line carries the payload."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    payload = make_payload(_documents(mqtt_mock, device_id)[-1])
+
+    with caplog.at_level(logging.DEBUG):
+        await _deliver(hass, config_topic(BASE, device_id), payload)
+
+    assert len(_documents(mqtt_mock, device_id)) == 2
+    assert _issue(hass, OVERWRITTEN, device_id) is not None
+    assert CANARY not in caplog.text
+
+
+async def test_other_owner_claim_raises_ownership_claim_once(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-17: a document of another owner is healed and reported once, naming the claimant."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    claim = _foreign(mqtt_mock, device_id, owner="other-instance", owner_name="Intruder")
+
+    with patch("custom_components.mqtt_actions.sync.ir.async_create_issue", wraps=ir.async_create_issue) as create:
+        await _deliver(hass, config_topic(BASE, device_id), claim)
+        await _deliver(hass, config_topic(BASE, device_id), claim)
+
+    assert len(_documents(mqtt_mock, device_id)) == 2
+    issue = _issue(hass, CLAIM, device_id)
+    assert issue is not None
+    assert issue.translation_key == "ownership_claim"
+    assert issue.translation_placeholders == {"device": "Lamp", "claimant": "Intruder"}
+    assert [call.args[2] for call in create.call_args_list] == [f"{CLAIM}{device_id}"]
+    assert _issue(hass, OVERWRITTEN, device_id) is None
+
+
+async def test_heal_is_throttled_with_one_trailing_republish(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    freezer: FrozenDateTimeFactory,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """T-03-07: three foreign writes in one window give one immediate and one trailing republish, then it is idle."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    topic = config_topic(BASE, device_id)
+    write = _foreign(mqtt_mock, device_id, on_change_to_on=EVIL_ACTIONS)
+
+    for _ in range(3):
+        await _deliver(hass, topic, write)
+    assert len(_documents(mqtt_mock, device_id)) == 2
+    await _advance(hass, freezer)
+    assert len(_documents(mqtt_mock, device_id)) == 3
+    # The trailing republish opened a new window that ends without a pending request
+    await _advance(hass, freezer)
+    assert len(_documents(mqtt_mock, device_id)) == 3
+
+    await _deliver(hass, topic, write)
+    assert len(_documents(mqtt_mock, device_id)) == 4
+
+
+async def test_hostile_claimant_name_is_escaped_in_the_issue(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-03-05: a claimant name with markdown reaches the issue escaped."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    hostile = "[click](https://evil.example)"
+
+    await _deliver(hass, config_topic(BASE, device_id), _foreign(mqtt_mock, device_id, owner="x", owner_name=hostile))
+
+    issue = _issue(hass, CLAIM, device_id)
+    assert issue is not None
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["claimant"] == escape_markdown(hostile)
+    assert issue.translation_placeholders["claimant"].startswith("\\[click\\]")
+
+
+async def test_own_delete_is_never_healed(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-03-08: the tombstone and the discovery clear of the owner's own delete cause no republish and no issue."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+
+    await _delete_only_device(hass, entry)
+    await _deliver(hass, config_topic(BASE, device_id), "")
+    await _deliver(hass, discovery_topic("homeassistant", device_id), "")
+
+    assert [payload for payload, _qos, _retain in _publishes(mqtt_mock, config_topic(BASE, device_id))][1:] == [""]
+    assert len(_publishes(mqtt_mock, discovery_topic("homeassistant", device_id))) == 2
+    assert _issue_ids(hass) == []
+
+
+async def test_documents_for_unowned_ids_are_ignored_here(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A valid document for an id this instance does not own creates nothing in the owner branch."""
+    _entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    other = _foreign(mqtt_mock, device_id, device_id="someone-elses-device", owner="x", owner_name="Other")
+    mqtt_mock.async_publish.reset_mock()
+
+    await _deliver(hass, config_topic(BASE, "someone-elses-device"), other)
+
+    assert mqtt_mock.async_publish.call_args_list == []
+    assert _issue_ids(hass) == []
+
+
+async def test_stop_releases_subscription_and_timers(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    freezer: FrozenDateTimeFactory,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """After unload a foreign write publishes nothing and a pending trailing republish does nothing."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    topic = config_topic(BASE, device_id)
+    write = _foreign(mqtt_mock, device_id, on_change_to_on=EVIL_ACTIONS)
+    await _deliver(hass, topic, write)
+    await _deliver(hass, topic, write)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    mqtt_mock.async_publish.reset_mock()
+
+    await _advance(hass, freezer)
+    await _deliver(hass, topic, write)
+    await _advance(hass, freezer)
+
+    assert mqtt_mock.async_publish.call_args_list == []
+
+
+@pytest.mark.parametrize("path", ["delete_device", "remove_hub"])
+async def test_delete_and_hub_removal_delete_the_overwrite_issues(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    path: str,
+) -> None:
+    """Deleting the device and removing the hub delete the overwrite and claim issues of the device."""
+    entry, device_id = await _owned(hass, make_hub_entry, make_switch_subentry)
+    await _deliver(hass, config_topic(BASE, device_id), "")
+    await _deliver(hass, config_topic(BASE, device_id), _foreign(mqtt_mock, device_id, owner="x", owner_name="Other"))
+    assert _issue_ids(hass) == [f"{CLAIM}{device_id}", f"{OVERWRITTEN}{device_id}"]
+
+    if path == "delete_device":
+        await _delete_only_device(hass, entry)
+    else:
+        assert await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _issue_ids(hass) == []

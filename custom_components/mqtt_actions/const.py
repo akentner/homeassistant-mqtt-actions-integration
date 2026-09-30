@@ -55,6 +55,10 @@ BREAKER_WINDOW_LIMIT: Final = 3600
 MAX_DOCUMENT_BYTES: Final = 256 * 1024
 MAX_ACTION_DEPTH: Final = 32
 
+# A follower mirrors at most this many foreign devices; worst-case Store growth is MAX_MIRRORS * MAX_DOCUMENT_BYTES
+# (A2, T-03-16)
+MAX_MIRRORS: Final = 100
+
 # Services that actions received from the broker may never call (D-03); owned actions stay unrestricted. A fixed
 # constant the user cannot change. Whole domains, then exact service names; all lower case, as core normalizes them.
 DENIED_DOMAINS: Final = frozenset(
@@ -91,6 +95,8 @@ STORE_PUBLISHED: Final = "published"
 STORE_TRIPPED: Final = "tripped"
 # device id -> {"rev": int, "hash": str}: the rev last published for a device and the content hash it belongs to (D-15)
 STORE_REVS: Final = "revs"
+# device id -> the received document text of a mirror; parsed again at every load, never trusted (D-08, T-03-19)
+STORE_MIRRORS: Final = "mirrors"
 STORE_SAVE_DELAY: Final = 5.0
 
 # Owner-side defense of the published truth (D-15, D-17, D-18): how many published content hashes per device count as

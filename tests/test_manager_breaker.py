@@ -22,6 +22,7 @@ from custom_components.mqtt_actions.const import (
     ISSUE_CIRCUIT_BREAKER_PREFIX,
     STORE_KEY,
     STORE_LAST_ACTED,
+    STORE_MIRRORS,
     STORE_PUBLISHED,
     STORE_REVS,
     STORE_SAVE_DELAY,
@@ -411,7 +412,7 @@ async def test_trip_is_persisted_as_config_hash(
     await _flush_store(hass, freezer)
 
     data = _stored(hass_storage)
-    assert set(data) == {STORE_LAST_ACTED, STORE_PUBLISHED, STORE_TRIPPED, STORE_REVS}
+    assert set(data) == {STORE_LAST_ACTED, STORE_PUBLISHED, STORE_TRIPPED, STORE_REVS, STORE_MIRRORS}
     assert data[STORE_TRIPPED] == {_device_id(sub): _hash(sub)}
     assert all(isinstance(value, str) for value in data[STORE_TRIPPED].values())
 

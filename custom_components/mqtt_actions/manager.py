@@ -20,6 +20,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 
+from .actions import validate_spec_structure
 from .breaker import CircuitBreaker
 from .const import (
     CONF_BASE_TOPIC,
@@ -32,8 +33,10 @@ from .const import (
     ISSUE_DISCOVERY_DISABLED,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
+    MAX_MIRRORS,
     STORE_KEY,
     STORE_LAST_ACTED,
+    STORE_MIRRORS,
     STORE_PUBLISHED,
     STORE_REVS,
     STORE_SAVE_DELAY,
@@ -43,7 +46,14 @@ from .const import (
     SUBENTRY_SWITCH,
 )
 from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
-from .document import build_document, serialize_document
+from .document import (
+    analyze_spec,
+    build_document,
+    canonical_json,
+    escape_markdown,
+    parse_document,
+    serialize_document,
+)
 from .model import DeviceSpec, spec_from_subentry, trigger_key
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .runner import ActionRunner
@@ -57,10 +67,33 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry, ConfigSubentry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
+    from .document import ActionAnalysis, ParsedDocument
+
+
+@dataclass(frozen=True, slots=True)
+class MirrorInfo:
+    """
+    What a follower knows about the owner of a mirrored device and the document it was built from (D-08).
+
+    `denied`, `templated` and `residual` are the static analysis of the actions (A6): they are recorded, never a reason
+    to drop the document, and the approval view of a later plan shows them.
+    """
+
+    owner: str
+    owner_name: str
+    rev: int
+    content_hash: str
+    actions_hash: str
+    # The received document text; parsed again at every load, the stored hashes are never trusted (T-03-19)
+    payload: str
+    denied: tuple[str, ...] = ()
+    templated: tuple[str, ...] = ()
+    residual: tuple[str, ...] = ()
+
 
 @dataclass
 class Device:
-    """Runtime state of one device (Switch or Select)."""
+    """Runtime state of one device (Switch or Select), owned here or mirrored from another instance."""
 
     device_id: str
     spec: DeviceSpec
@@ -71,6 +104,8 @@ class Device:
     unsubscribe_test: CALLBACK_TYPE | None = None
     # Button component keys of removed triggers; kept in memory so every republish carries their tombstone
     retired_components: set[str] = field(default_factory=set)
+    # Set for a mirror of a foreign device, None for an owned device
+    mirror: MirrorInfo | None = None
 
     @property
     def name(self) -> str:
@@ -130,6 +165,33 @@ def _parse_revs(stored: dict[str, Any]) -> dict[str, dict[str, Any]]:
         and not isinstance(value.get("rev"), bool)
         and isinstance(value.get("hash"), str)
     }
+
+
+def _parse_mirrors(stored: dict[str, Any]) -> dict[str, ParsedDocument]:
+    """
+    Return the cached mirrors of a loaded Store payload; every payload is parsed and structure-checked again (T-03-19).
+
+    A malformed container, a non-string entry, a payload that no longer parses, names another device than its key or has
+    invalid actions is dropped; nothing in the Store is trusted, not even the hashes. At most MAX_MIRRORS are kept.
+    """
+    cached = stored.get(STORE_MIRRORS)
+    if not isinstance(cached, dict):
+        return {}
+    mirrors: dict[str, ParsedDocument] = {}
+    for device_id, payload in cached.items():
+        if len(mirrors) >= MAX_MIRRORS:
+            break
+        if not isinstance(device_id, str) or not isinstance(payload, str):
+            continue
+        try:
+            parsed = parse_document(device_id, payload)
+            validate_spec_structure(parsed.spec)
+            analyze_spec(parsed.spec)
+        except Exception:  # noqa: BLE001 - a cached payload is untrusted input; whatever it raises, it is dropped
+            LOGGER.debug("A cached mirror of device %r was dropped because it is not valid", device_id[:40])
+            continue
+        mirrors[device_id] = parsed
+    return mirrors
 
 
 async def _async_attempt(action: Callable[[], Awaitable[None]], description: str) -> bool:
@@ -230,6 +292,10 @@ class Manager:
         self.gateway = gateway if gateway is not None else MqttGateway(hass)
         self.runner = ActionRunner(hass, entry)
         self.devices: dict[str, Device] = {}
+        # Read-only mirrors of devices other instances own; never in `devices`, never a subentry (D-08)
+        self.mirrors: dict[str, Device] = {}
+        # Cached mirrors parsed from the Store at load, consumed when the start restores them
+        self._stored_mirrors: dict[str, ParsedDocument] = {}
         self._publisher: DiscoveryPublisher | None = None
         self._store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, store_key)
         self._stored_last_acted: dict[str, str] = {}
@@ -295,14 +361,17 @@ class Manager:
         self._running = True
         self._check_discovery_enabled()
         self._entry.async_on_unload(self.gateway.async_subscribe_connection_status(self._on_connection_status))
+        current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
+        # Cached mirrors exist before the broker replays anything, so a restart never loses a mirror (SYN-02)
+        await self._async_restore_mirrors(current)
+        kept = current | self.mirrors.keys()
+        self._stored_last_acted = {
+            device_id: value for device_id, value in self._stored_last_acted.items() if device_id in kept
+        }
+        self._tripped = {device_id: value for device_id, value in self._tripped.items() if device_id in kept}
+        self._revs = {device_id: value for device_id, value in self._revs.items() if device_id in current}
         # Subscribed before anything is published, so the owner sees its own documents and every foreign write
         await self.sync.async_start()
-        current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
-        self._stored_last_acted = {
-            device_id: value for device_id, value in self._stored_last_acted.items() if device_id in current
-        }
-        self._tripped = {device_id: value for device_id, value in self._tripped.items() if device_id in current}
-        self._revs = {device_id: value for device_id, value in self._revs.items() if device_id in current}
         await self._async_orphan_cleanup()
         await self.async_reconcile(startup=True)
         async with self._lock:
@@ -343,13 +412,14 @@ class Manager:
             self._running = False
             self.sync.async_stop()
             await self._store.async_save(self._data_to_save())
-            for device in self.devices.values():
+            for device in [*self.devices.values(), *self.mirrors.values()]:
                 if device.unsubscribe is not None:
                     device.unsubscribe()
                 if device.unsubscribe_test is not None:
                     device.unsubscribe_test()
                 await self.runner.async_unload(device.device_id)
             self.devices.clear()
+            self.mirrors.clear()
             # Scripts of a device whose start failed halfway are not in self.devices yet
             await self.runner.async_unload_all()
             if self._publisher is not None:  # None when the start failed before the publisher existed
@@ -358,7 +428,7 @@ class Manager:
     @callback
     def release_all_breakers(self) -> None:
         """Release every breaker, delete its issue and forget the tripped map; a user unload or reload is a release."""
-        for device in self.devices.values():
+        for device in [*self.devices.values(), *self.mirrors.values()]:
             device.breaker.reset()
             self._delete_breaker_issue(device.device_id)
         self._tripped.clear()
@@ -427,6 +497,7 @@ class Manager:
         self._published = _parse_published(stored)
         self._tripped = _parse_tripped(stored)
         self._revs = _parse_revs(stored)
+        self._stored_mirrors = _parse_mirrors(stored)
 
     @callback
     def _data_to_save(self) -> dict[str, Any]:
@@ -434,8 +505,11 @@ class Manager:
         return {
             STORE_LAST_ACTED: {
                 device_id: device.tracker.last_acted
-                for device_id, device in self.devices.items()
+                for device_id, device in {**self.devices, **self.mirrors}.items()
                 if device.tracker.last_acted is not None
+            },
+            STORE_MIRRORS: {
+                device_id: device.mirror.payload for device_id, device in self.mirrors.items() if device.mirror
             },
             STORE_PUBLISHED: sorted(self._published),
             STORE_TRIPPED: dict(self._tripped),
@@ -446,6 +520,89 @@ class Manager:
     def _schedule_save(self) -> None:
         """Save with a delay so a burst of messages causes one write."""
         self._store.async_delay_save(self._data_to_save, STORE_SAVE_DELAY)
+
+    async def async_apply_mirror(self, parsed: ParsedDocument) -> None:
+        """
+        Create the read-only mirror of a validated foreign document; the caller holds the lock.
+
+        A mirror is a Device without a Script: it follows the state topic for its baseline and runs nothing, because the
+        runner only runs triggers of a device it built a Script for (TRU-01). It publishes nothing, is not in `devices`,
+        not in the published set and never touched by a reconcile of the owned subentries (D-08, D-19). A document for a
+        device that is already owned or mirrored changes nothing here.
+        """
+        device_id = parsed.device_id
+        if device_id in self.devices or device_id in self.mirrors:
+            return
+        device = self._build_mirror(parsed, startup=False)
+        await self._async_subscribe_mirror(device)
+        self._schedule_save()
+
+    async def _async_restore_mirrors(self, owned: set[str]) -> None:
+        """Rebuild the cached mirrors at start; owned ids are dropped, the rest gets the startup window."""
+        cached, self._stored_mirrors = self._stored_mirrors, {}
+        for device_id, parsed in cached.items():
+            if device_id in owned:
+                LOGGER.debug(
+                    "A cached mirror of device %r was dropped because the device is owned here", device_id[:40]
+                )
+                continue
+            await self._async_subscribe_mirror(self._build_mirror(parsed, startup=True))
+
+    def _build_mirror(self, parsed: ParsedDocument, *, startup: bool) -> Device:
+        """Build the runtime state of a mirror: tracker, breaker and the recorded static analysis; no Script."""
+        spec = parsed.spec
+        analysis: ActionAnalysis = analyze_spec(spec)
+        stored = self._stored_last_acted.get(parsed.device_id)
+        device = Device(
+            device_id=parsed.device_id,
+            spec=spec,
+            tracker=StateTracker(
+                last_acted=stored if stored in spec.accepted.values() else None,
+                run_on_startup=spec.run_on_startup,
+                startup_pending=startup,
+                accepted=spec.accepted,
+            ),
+            # The canonical content stands in for the subentry fingerprint, so the persisted breaker hash still works
+            signature=canonical_json(parsed.content),
+            breaker=self._new_breaker(spec),
+            mirror=MirrorInfo(
+                owner=parsed.owner,
+                owner_name=parsed.owner_name,
+                rev=parsed.rev,
+                content_hash=parsed.content_hash,
+                actions_hash=parsed.actions_hash,
+                payload=parsed.payload,
+                denied=analysis.denied,
+                templated=analysis.templated,
+                residual=analysis.residual,
+            ),
+        )
+        self._restore_tripped(device)
+        return device
+
+    async def _async_subscribe_mirror(self, device: Device) -> None:
+        """Register a mirror and subscribe to its state and test topics; a failed subscribe leaves nothing behind."""
+        device_id = device.device_id
+        # Registered before subscribing: the retained state can arrive while the subscribe call is still awaited
+        self.mirrors[device_id] = device
+        try:
+            device.unsubscribe = await self.gateway.async_subscribe(
+                state_topic(self._base_topic, device_id), partial(self._on_message, device_id)
+            )
+            device.unsubscribe_test = await self.gateway.async_subscribe(
+                test_topic(self._base_topic, device_id), partial(self._on_test_message, device_id)
+            )
+        except BaseException:
+            self.mirrors.pop(device_id, None)
+            if device.unsubscribe is not None:
+                device.unsubscribe()
+            raise
+
+    def _device(self, device_id: str) -> Device | None:
+        """Return the owned device or the mirror with this id; the two sets never share an id."""
+        if (device := self.devices.get(device_id)) is None:
+            device = self.mirrors.get(device_id)
+        return device
 
     async def _async_add_device(self, subentry: ConfigSubentry, *, startup: bool) -> None:
         """Build scripts, subscribe to the state topic and publish discovery for one device."""
@@ -622,7 +779,7 @@ class Manager:
     @callback
     def _on_message(self, device_id: str, msg: IncomingMessage) -> None:
         """Handle a state message: separate baseline from edge and enqueue the matching script."""
-        if (device := self.devices.get(device_id)) is None:
+        if (device := self._device(device_id)) is None:
             return
         previous = device.tracker.last_acted
         decision = device.tracker.handle(msg.retain, msg.payload)
@@ -716,7 +873,8 @@ class Manager:
             severity=ir.IssueSeverity.ERROR,
             translation_key="circuit_breaker_tripped",
             translation_placeholders={
-                "device": device.name,
+                # The name of a mirror comes from the broker
+                "device": escape_markdown(device.name) if device.mirror is not None else device.name,
                 "max_runs": str(device.spec.breaker_max_runs),
                 "window": str(device.spec.breaker_window),
             },
@@ -742,7 +900,7 @@ class Manager:
         message is a replay, never a press, so it must not run actions (T-02-09). Only a payload that equals a
         StateValue of the device runs anything (T-02-08).
         """
-        if msg.retain or (device := self.devices.get(device_id)) is None:
+        if msg.retain or (device := self._device(device_id)) is None:
             return
         value = device.spec.accepted.get(msg.payload.strip().lower())
         if value is None:

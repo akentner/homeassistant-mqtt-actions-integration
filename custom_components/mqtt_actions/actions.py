@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.typing import ConfigType
 
+    from .model import DeviceSpec
+
 
 class ActionsInvalid(ValueError):  # noqa: N818
     """Raised when an action sequence fails schema or deep validation."""
@@ -41,6 +43,17 @@ def validate_actions_structure(raw: Any) -> None:
         cv.SCRIPT_SCHEMA(raw)
     except (probatio.Invalid, HomeAssistantError) as err:
         raise ActionsInvalid(str(err)) from err
+
+
+def validate_spec_structure(spec: DeviceSpec) -> None:
+    """
+    Check the structure of the actions of every trigger of a device; raise ActionsInvalid on the first flaw.
+
+    The instance independent gate a received document passes before it is stored (D-06). Like the check it builds on,
+    the error text may quote data, so a caller reports a fixed reason and never the message.
+    """
+    for trigger in spec.triggers.values():
+        validate_actions_structure(trigger.actions)
 
 
 def _is_template(value: str) -> bool:

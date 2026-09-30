@@ -1,13 +1,19 @@
 """
-Owner side of the central config: the owner defends what it published (SYN-03, D-15, D-17).
+Both sides of the central config: the owner defends what it published, a follower mirrors what others published.
 
-One subscription on the config wildcard watches the config topic of every device. For a device this instance owns
-(a key of `Manager.devices`; mirrors of foreign devices never are) the owner recognizes its own documents coming back
-as echoes, and treats everything else on its topic as a foreign write: foreign content, a foreign tombstone, an
-unreadable payload or a claim by another owner. The reaction is always the same and never touches the spec or the
-subentry: publish the local document again, throttled per device with a trailing republish so two claimants never
-ping-pong, and raise a Repairs issue when the content really differed. Nothing in a log line or an issue carries
-payload or action data; the device name and the escaped claimant name are the only broker-influenced texts.
+Owner side (SYN-03, D-15, D-17). One subscription on the config wildcard watches the config topic of every device.
+For a device this instance owns (a key of `Manager.devices`; mirrors of foreign devices never are) the owner
+recognizes its own documents coming back as echoes, and treats everything else on its topic as a foreign write:
+foreign content, a foreign tombstone, an unreadable payload or a claim by another owner. The reaction is always the
+same and never touches the spec or the subentry: publish the local document again, throttled per device with a
+trailing republish so two claimants never ping-pong, and raise a Repairs issue when the content really differed.
+Nothing in a log line or an issue carries payload or action data; the device name and the escaped claimant name are
+the only broker-influenced texts.
+
+Follower side (SYN-02, D-06, D-08). A document for a device this instance does not own is parsed strictly,
+structure-checked and turned into a read-only mirror by the manager. Nothing of a document that fails a gate is stored,
+shown or logged, except a fixed reason code and the length-capped device id (T-03-18). The ingest runs in background
+tasks that take the manager's FIFO lock, so two quick documents for one device apply in arrival order.
 """
 
 from collections import deque
@@ -18,6 +24,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_call_later
 
+from .actions import ActionsInvalid, validate_spec_structure
 from .const import (
     DISCOVERY_REMOVAL_HINT_COUNT,
     DISCOVERY_REMOVAL_HINT_WINDOW_SECONDS,
@@ -26,6 +33,8 @@ from .const import (
     ISSUE_DOC_OVERWRITTEN_PREFIX,
     ISSUE_OWNERSHIP_CLAIM_PREFIX,
     LOGGER,
+    MAX_LOGGED_PAYLOAD_LENGTH,
+    MAX_MIRRORS,
     MAX_TRACKED_INSTANCES,
     PUBLISHED_HASH_HISTORY,
     REPUBLISH_THROTTLE_SECONDS,
@@ -56,6 +65,11 @@ TRANSLATION_DISCOVERY_REMOVED = "discovery_removed"
 # Stored presence values; only these two payloads of the availability topic mean anything
 PRESENCE_ONLINE = "online"
 PRESENCE_OFFLINE = "offline"
+
+
+def _shown(device_id: str) -> str:
+    """Return a device id fit for a log line: length-capped and quoted, so a broker-chosen id cannot forge a line."""
+    return repr(device_id[:MAX_LOGGED_PAYLOAD_LENGTH]) + ("..." if len(device_id) > MAX_LOGGED_PAYLOAD_LENGTH else "")
 
 
 class _TrailingThrottle:
@@ -121,6 +135,7 @@ class SyncManager:
         # instance id -> last announced presence; capped, and only the announced values are kept
         self._instances: dict[str, str] = {}
         self._presence_overflow_logged = False
+        self._mirror_overflow_logged = False
 
     async def async_start(self) -> None:
         """Subscribe to the config wildcard; the caller does this before anything is published (SYN-04)."""
@@ -135,6 +150,7 @@ class SyncManager:
             )
         )
         self._presence_overflow_logged = False
+        self._mirror_overflow_logged = False
         self._unsubscribers.append(
             await manager.gateway.async_subscribe(
                 availability_wildcard(manager.base_topic), self._on_availability_message
@@ -201,14 +217,65 @@ class SyncManager:
 
     @callback
     def _on_config_message(self, msg: IncomingMessage) -> None:
-        """Route a message on any config topic; this plan handles the owner branch only."""
+        """Route a message on any config topic: the owner branch for an owned device, else the follower branch."""
         manager = self._manager
         device_id = parse_config_topic(manager.base_topic, msg.topic)
         if device_id is None:
             return
         if (device := manager.devices.get(device_id)) is not None:
             self._check_owned(device, msg.payload)
-        # A topic of a device this instance does not own belongs to the follower branch
+            return
+        if not msg.payload:
+            return  # A tombstone removes a mirror; that belongs to the removal plan
+        manager.entry.async_create_background_task(
+            manager.hass, self._async_ingest(device_id, msg.payload), name=f"{DOMAIN} ingest"
+        )
+
+    async def _async_ingest(self, device_id: str, payload: str) -> None:
+        """
+        Turn a document for a device this instance does not own into a mirror, in arrival order.
+
+        Runs under the manager lock, so the manager state cannot change underneath it, and is guarded by a broad
+        except: an exception in a background task would be logged by core, and a hostile document must never choose
+        what reaches a log.
+        """
+        manager = self._manager
+        try:
+            async with manager.lock:
+                # The device may have been added, or the manager stopped, since the message arrived
+                if manager.running and device_id not in manager.devices:
+                    await self._async_ingest_locked(device_id, payload)
+        except Exception:  # noqa: BLE001 - a hostile document can make anything raise; none of it may reach a log
+            LOGGER.warning("A config document for device %s could not be processed", _shown(device_id))
+
+    async def _async_ingest_locked(self, device_id: str, payload: str) -> None:
+        """Validate a document and apply it; the caller holds the lock."""
+        manager = self._manager
+        shown = _shown(device_id)
+        try:
+            parsed = parse_document(device_id, payload)
+        except DocumentRejectedError as err:
+            LOGGER.warning("A config document for device %s was dropped: %s", shown, err.reason)
+            return
+        try:
+            validate_spec_structure(parsed.spec)
+        except ActionsInvalid:
+            # The schema error may quote action data, so only the fixed reason is logged
+            LOGGER.warning("A config document for device %s was dropped: invalid_actions", shown)
+            return
+        if parsed.owner == manager.instance_id:
+            LOGGER.debug("Ignoring a config document of this instance for the unknown device %s", shown)
+            return
+        if device_id in manager.mirrors:
+            return
+        if len(manager.mirrors) >= MAX_MIRRORS:
+            if not self._mirror_overflow_logged:
+                self._mirror_overflow_logged = True
+                LOGGER.warning(
+                    "More than %d devices of other instances were announced, so further ones are ignored", MAX_MIRRORS
+                )
+            return
+        await manager.async_apply_mirror(parsed)
 
     def _check_owned(self, device: Device, payload: str) -> None:
         """Classify a message on the config topic of an owned device and heal it when it is not this instance's."""

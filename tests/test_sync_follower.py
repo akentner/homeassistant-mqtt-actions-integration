@@ -285,6 +285,7 @@ async def test_unload_releases_mirror_subscriptions(
     """After an unload no mirror is left, both subscriptions were released and a state message is harmless."""
     spec = make_spec(on=ON_ACTIONS)
     entry = await _setup(hass, make_hub_entry())
+    manager = _manager(entry)
     await _deliver(hass, spec.device_id, document_payload(spec))
     mirror = _mirror(entry, spec.device_id)
     state_release, test_release = mirror.unsubscribe, mirror.unsubscribe_test
@@ -293,7 +294,7 @@ async def test_unload_releases_mirror_subscriptions(
 
     assert await hass.config_entries.async_unload(entry.entry_id)
 
-    assert _manager(entry).mirrors == {}
+    assert manager.mirrors == {}
     mirror.unsubscribe.assert_called_once()
     mirror.unsubscribe_test.assert_called_once()
     await _state(hass, spec.device_id, "ON", retain=False)

@@ -53,6 +53,14 @@
           }
         },
         "reconfigure": {
+          "title": "Switch device",
+          "description": "Edit the actions and settings of this switch device, or delete the device.",
+          "menu_options": {
+            "edit_device": "Edit the device",
+            "delete_device": "Delete the device"
+          }
+        },
+        "edit_device": {
           "title": "Edit switch device",
           "description": "Changing the actions replaces the old ones. The device itself and its topics stay the same.",
           "data": {
@@ -73,6 +81,14 @@
             "breaker_max_runs": "The circuit breaker pauses the device when it would run its actions more often than this within the window. Releasing means changing the device or reloading the integration. Whole number from 1 to 100.",
             "breaker_window": "Length of the circuit breaker window in seconds. Whole number from 1 to 3600."
           }
+        },
+        "delete_device": {
+          "title": "Delete the device?",
+          "description": "Delete the device {name}? It is removed on all connected instances, not only on this one. Other instances currently online: {count}. They lose the device as well, and instances that are offline lose it as soon as they are connected again. The retained configuration, discovery and state of the device are deleted from the broker. This cannot be undone.",
+          "menu_options": {
+            "delete_confirmed": "Yes, delete the device on all instances",
+            "keep_device": "No, keep the device"
+          }
         }
       },
       "error": {
@@ -83,7 +99,8 @@
         "breaker_window_range": "Enter a whole number of seconds from 1 to 3600."
       },
       "abort": {
-        "reconfigure_successful": "The switch device was updated."
+        "reconfigure_successful": "The switch device was updated.",
+        "device_deleted": "The device was deleted. Connected instances remove it as well."
       }
     },
     "select": {
@@ -136,7 +153,8 @@
             "edit_option": "Edit an option",
             "remove_option": "Remove an option",
             "settings": "Edit name and settings",
-            "done": "Save the device"
+            "done": "Save the device",
+            "delete_device": "Delete the device"
           }
         },
         "add_option": {
@@ -186,6 +204,14 @@
             "remove_confirmed": "Yes, remove the option",
             "keep_option": "No, keep the option"
           }
+        },
+        "delete_device": {
+          "title": "Delete the device?",
+          "description": "Delete the device {name}? It is removed on all connected instances, not only on this one. Other instances currently online: {count}. They lose the device as well, and instances that are offline lose it as soon as they are connected again. The retained configuration, discovery and state of the device are deleted from the broker. This cannot be undone.",
+          "menu_options": {
+            "delete_confirmed": "Yes, delete the device on all instances",
+            "keep_device": "No, keep the device"
+          }
         }
       },
       "error": {
@@ -203,7 +229,22 @@
         "breaker_window_range": "Enter a whole number of seconds from 1 to 3600."
       },
       "abort": {
-        "reconfigure_successful": "The select device was updated."
+        "reconfigure_successful": "The select device was updated.",
+        "device_deleted": "The device was deleted. Connected instances remove it as well."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MQTT Actions options",
+        "description": "Choose what happens to your devices when you remove this integration. The choice is read at the moment of removal, so set it before you remove the integration.",
+        "data": {
+          "delete_devices_on_remove": "Delete all devices when this integration is removed"
+        },
+        "data_description": {
+          "delete_devices_on_remove": "Off by default: removing this integration leaves all its devices and their retained messages on the broker, and other instances keep them as orphans that show as unavailable. On: removing this integration deletes all devices created on this instance from the broker and from every connected instance."
+        }
       }
     }
   },

@@ -53,6 +53,14 @@
           }
         },
         "reconfigure": {
+          "title": "Schalter-Gerät",
+          "description": "Bearbeite die Aktionen und Einstellungen dieses Schalter-Geräts oder lösche das Gerät.",
+          "menu_options": {
+            "edit_device": "Gerät bearbeiten",
+            "delete_device": "Gerät löschen"
+          }
+        },
+        "edit_device": {
           "title": "Schalter-Gerät bearbeiten",
           "description": "Geänderte Aktionen ersetzen die alten. Das Gerät selbst und seine Topics bleiben gleich.",
           "data": {
@@ -73,6 +81,14 @@
             "breaker_max_runs": "Der Schutzschalter pausiert das Gerät, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Freigeben heißt, das Gerät zu ändern oder die Integration neu zu laden. Ganze Zahl von 1 bis 100.",
             "breaker_window": "Länge des Zeitfensters des Schutzschalters in Sekunden. Ganze Zahl von 1 bis 3600."
           }
+        },
+        "delete_device": {
+          "title": "Gerät löschen?",
+          "description": "Das Gerät {name} löschen? Es wird auf allen verbundenen Instanzen entfernt, nicht nur auf dieser. Derzeit online befindliche andere Instanzen: {count}. Sie verlieren das Gerät ebenfalls, und Instanzen, die offline sind, verlieren es, sobald sie wieder verbunden sind. Die retained Konfiguration, die Discovery und der Zustand des Geräts werden vom Broker gelöscht. Das lässt sich nicht rückgängig machen.",
+          "menu_options": {
+            "delete_confirmed": "Ja, Gerät auf allen Instanzen löschen",
+            "keep_device": "Nein, Gerät behalten"
+          }
         }
       },
       "error": {
@@ -83,7 +99,8 @@
         "breaker_window_range": "Gib eine ganze Zahl von Sekunden von 1 bis 3600 ein."
       },
       "abort": {
-        "reconfigure_successful": "Das Schalter-Gerät wurde aktualisiert."
+        "reconfigure_successful": "Das Schalter-Gerät wurde aktualisiert.",
+        "device_deleted": "Das Gerät wurde gelöscht. Verbundene Instanzen entfernen es ebenfalls."
       }
     },
     "select": {
@@ -136,7 +153,8 @@
             "edit_option": "Option bearbeiten",
             "remove_option": "Option entfernen",
             "settings": "Name und Einstellungen bearbeiten",
-            "done": "Gerät speichern"
+            "done": "Gerät speichern",
+            "delete_device": "Gerät löschen"
           }
         },
         "add_option": {
@@ -186,6 +204,14 @@
             "remove_confirmed": "Ja, Option entfernen",
             "keep_option": "Nein, Option behalten"
           }
+        },
+        "delete_device": {
+          "title": "Gerät löschen?",
+          "description": "Das Gerät {name} löschen? Es wird auf allen verbundenen Instanzen entfernt, nicht nur auf dieser. Derzeit online befindliche andere Instanzen: {count}. Sie verlieren das Gerät ebenfalls, und Instanzen, die offline sind, verlieren es, sobald sie wieder verbunden sind. Die retained Konfiguration, die Discovery und der Zustand des Geräts werden vom Broker gelöscht. Das lässt sich nicht rückgängig machen.",
+          "menu_options": {
+            "delete_confirmed": "Ja, Gerät auf allen Instanzen löschen",
+            "keep_device": "Nein, Gerät behalten"
+          }
         }
       },
       "error": {
@@ -203,7 +229,22 @@
         "breaker_window_range": "Gib eine ganze Zahl von Sekunden von 1 bis 3600 ein."
       },
       "abort": {
-        "reconfigure_successful": "Das Auswahl-Gerät wurde aktualisiert."
+        "reconfigure_successful": "Das Auswahl-Gerät wurde aktualisiert.",
+        "device_deleted": "Das Gerät wurde gelöscht. Verbundene Instanzen entfernen es ebenfalls."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MQTT-Actions-Optionen",
+        "description": "Lege fest, was mit deinen Geräten passiert, wenn du diese Integration entfernst. Die Auswahl wird beim Entfernen gelesen, stelle sie also vor dem Entfernen der Integration ein.",
+        "data": {
+          "delete_devices_on_remove": "Alle Geräte löschen, wenn diese Integration entfernt wird"
+        },
+        "data_description": {
+          "delete_devices_on_remove": "Standardmäßig aus: Beim Entfernen dieser Integration bleiben alle ihre Geräte und deren retained Nachrichten auf dem Broker, und andere Instanzen behalten sie als verwaiste Geräte, die als nicht verfügbar angezeigt werden. An: Beim Entfernen dieser Integration werden alle auf dieser Instanz erstellten Geräte vom Broker und von jeder verbundenen Instanz gelöscht."
+        }
       }
     }
   },

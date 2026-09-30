@@ -41,11 +41,13 @@ SELECT_ERROR_KEYS = (
     "breaker_window_range",
 )
 
-# Issue translation keys of the owner side of the central config and the variables each description may use
+# Issue translation keys of the central config (owner and follower side) and the variables each description may use
 NEW_ISSUES = {
     "doc_overwritten": {"device"},
     "ownership_claim": {"device", "claimant"},
     "discovery_removed": {"device", "count"},
+    "owner_conflict": {"device", "owner", "claimant"},
+    "schema_too_new": {"device", "version", "supported"},
 }
 
 REQUIRED_KEYS = (
@@ -189,6 +191,8 @@ def test_issue_strings_use_expected_variables(language: str) -> None:
     flat = _load(language)
     assert _variables(flat["issues.action_failed.description"]) == {"device", "trigger", "time", "error"}
     assert _variables(flat["issues.circuit_breaker_tripped.description"]) == {"device", "max_runs", "window"}
+    assert _variables(flat["issues.owner_conflict.description"]) == {"device", "owner", "claimant"}
+    assert _variables(flat["issues.schema_too_new.description"]) == {"device", "version", "supported"}
 
 
 @pytest.mark.parametrize("language", LANGUAGES)

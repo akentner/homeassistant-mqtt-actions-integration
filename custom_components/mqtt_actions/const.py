@@ -91,6 +91,11 @@ STORE_TRIPPED: Final = "tripped"
 STORE_REVS: Final = "revs"
 STORE_SAVE_DELAY: Final = 5.0
 
+# Owner-side defense of the published truth (D-15, D-17, D-18): how many published content hashes per device count as
+# the owner's own echo, and the minimum time between two republishes caused by foreign writes of one device
+PUBLISHED_HASH_HISTORY: Final = 8
+REPUBLISH_THROTTLE_SECONDS: Final = 60.0
+
 # Logging: unknown payloads are logged as a truncated repr so a payload cannot grow or forge a log line
 MAX_LOGGED_PAYLOAD_LENGTH: Final = 40
 
@@ -102,5 +107,15 @@ TRIGGER_SETUP: Final = "setup"
 # Repairs issues
 ISSUE_ACTION_FAILED_PREFIX: Final = "action_failed_"
 ISSUE_CIRCUIT_BREAKER_PREFIX: Final = "circuit_breaker_"
+ISSUE_DOC_OVERWRITTEN_PREFIX: Final = "doc_overwritten_"
+ISSUE_OWNERSHIP_CLAIM_PREFIX: Final = "ownership_claim_"
 ISSUE_DISCOVERY_DISABLED: Final = "mqtt_discovery_disabled"
+# Every Repairs issue whose id is a prefix plus a device id; deleted with the device and with the hub. Later issue
+# families of a device append their prefix here.
+ISSUE_DEVICE_PREFIXES: Final = (
+    ISSUE_ACTION_FAILED_PREFIX,
+    ISSUE_CIRCUIT_BREAKER_PREFIX,
+    ISSUE_DOC_OVERWRITTEN_PREFIX,
+    ISSUE_OWNERSHIP_CLAIM_PREFIX,
+)
 MAX_ISSUE_ERROR_LENGTH: Final = 500

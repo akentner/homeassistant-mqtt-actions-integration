@@ -27,8 +27,8 @@ from .const import (
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
     DOMAIN,
-    ISSUE_ACTION_FAILED_PREFIX,
     ISSUE_CIRCUIT_BREAKER_PREFIX,
+    ISSUE_DEVICE_PREFIXES,
     ISSUE_DISCOVERY_DISABLED,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
@@ -48,6 +48,7 @@ from .model import DeviceSpec, spec_from_subentry, trigger_key
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .runner import ActionRunner
 from .state import StateTracker
+from .sync import SyncManager
 from .topics import state_topic, test_topic
 
 if TYPE_CHECKING:
@@ -182,10 +183,7 @@ async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> N
     await store.async_remove()
     registry = ir.async_get(hass)
     for domain, issue_id in list(registry.issues):
-        if domain == DOMAIN and (
-            issue_id.startswith((ISSUE_ACTION_FAILED_PREFIX, ISSUE_CIRCUIT_BREAKER_PREFIX))
-            or issue_id == ISSUE_DISCOVERY_DISABLED
-        ):
+        if domain == DOMAIN and (issue_id.startswith(ISSUE_DEVICE_PREFIXES) or issue_id == ISSUE_DISCOVERY_DISABLED):
             ir.async_delete_issue(hass, domain, issue_id)
 
 
@@ -225,6 +223,47 @@ class Manager:
         self._running = False
         # Replaceable so tests control the breaker window; production uses the monotonic clock
         self.clock: Callable[[], float] = time.monotonic
+        self.sync = SyncManager(self)
+
+    @property
+    def hass(self) -> HomeAssistant:
+        """Return the Home Assistant instance."""
+        return self._hass
+
+    @property
+    def entry(self) -> ConfigEntry:
+        """Return the hub config entry."""
+        return self._entry
+
+    @property
+    def base_topic(self) -> str:
+        """Return the base topic of this hub."""
+        return self._base_topic
+
+    @property
+    def instance_id(self) -> str:
+        """Return the id of this instance, the owner written into every document it publishes."""
+        return self._instance_id
+
+    @property
+    def instance_name(self) -> str:
+        """Return the display name of this instance."""
+        return str(self._entry.data[CONF_INSTANCE_NAME])
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        """Return the lock that serializes reconcile, start, stop and every publish of owned state."""
+        return self._lock
+
+    @property
+    def running(self) -> bool:
+        """Return whether the manager is started and not stopped."""
+        return self._running
+
+    def revision(self, device_id: str) -> int:
+        """Return the rev last published for a device, 0 when none was published yet."""
+        known = self._revs.get(device_id)
+        return 0 if known is None else int(known["rev"])
 
     async def async_start(self) -> None:
         """Load the persisted state, clear orphans, start every configured device and publish availability online."""
@@ -234,6 +273,8 @@ class Manager:
         self._running = True
         self._check_discovery_enabled()
         self._entry.async_on_unload(self.gateway.async_subscribe_connection_status(self._on_connection_status))
+        # Subscribed before anything is published, so the owner sees its own documents and every foreign write
+        await self.sync.async_start()
         current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
         self._stored_last_acted = {
             device_id: value for device_id, value in self._stored_last_acted.items() if device_id in current
@@ -278,6 +319,7 @@ class Manager:
         """
         async with self._lock:
             self._running = False
+            self.sync.async_stop()
             await self._store.async_save(self._data_to_save())
             for device in self.devices.values():
                 if device.unsubscribe is not None:
@@ -404,6 +446,9 @@ class Manager:
         )
         self._restore_tripped(device)
         await self.runner.async_build_device(spec)
+        # The document published before a restart or an offline edit comes back as an echo, not as a foreign write
+        if (known := self._revs.get(device_id)) is not None:
+            self.sync.note_published(device_id, known["hash"])
         self.devices[device_id] = device
         # Resolve the device from self.devices at message time: binding the object would break after a rebuild
         device.unsubscribe = await self.gateway.async_subscribe(
@@ -478,7 +523,8 @@ class Manager:
             partial(self._publisher.async_clear_state, device_id), f"clear the retained state of device {device.name}"
         )
         await self.runner.async_unload(device_id, remove_issue=True)
-        self._delete_breaker_issue(device_id)
+        self._delete_device_issues(device_id)
+        self.sync.forget(device_id)
         self._stored_last_acted.pop(device_id, None)
         self._tripped.pop(device_id, None)
         self._revs.pop(device_id, None)
@@ -531,6 +577,8 @@ class Manager:
             self._schedule_save()
         elif changed_only:
             return
+        # Noted before the publish: the echo can arrive before the publish call returns
+        self.sync.note_published(device_id, digest)
         await _async_attempt(
             partial(self._publisher.async_publish_config, device_id, payload),
             f"publish the config document of device {device.name}",
@@ -651,6 +699,12 @@ class Manager:
                 "window": str(device.spec.breaker_window),
             },
         )
+
+    @callback
+    def _delete_device_issues(self, device_id: str) -> None:
+        """Delete every per-device Repairs issue of a device: the prefix of each issue family plus the device id."""
+        for prefix in ISSUE_DEVICE_PREFIXES:
+            ir.async_delete_issue(self._hass, DOMAIN, f"{prefix}{device_id}")
 
     @callback
     def _delete_breaker_issue(self, device_id: str) -> None:

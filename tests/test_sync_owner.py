@@ -1,13 +1,20 @@
 """Owner side of the central config: one retained, versioned document per device, published before discovery."""
 
 import json
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
-from custom_components.mqtt_actions.document import content_hash
 from homeassistant.components import mqtt
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_mqtt_message,
+    async_fire_time_changed,
+    async_mock_service,
+)
 
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
@@ -15,14 +22,19 @@ from custom_components.mqtt_actions.const import (
     CONF_INSTANCE_NAME,
     STORE_KEY,
     STORE_LAST_ACTED,
+    STORE_PUBLISHED,
     STORE_REVS,
+    STORE_SAVE_DELAY,
+    STORE_TRIPPED,
     STORE_VERSION,
 )
+from custom_components.mqtt_actions.document import content_hash
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from freezegun.api import FrozenDateTimeFactory
     from homeassistant.config_entries import ConfigSubentryData
     from homeassistant.core import HomeAssistant
 
@@ -257,3 +269,172 @@ async def test_phase1_switch_publishes_defaults(
     assert document["breaker_max_runs"] == 5
     assert document["breaker_window"] == 10
     assert _publishes(mqtt_mock, discovery_topic("homeassistant", _device_id(sub)))
+
+
+# --- delete order and tombstone (SYN-06, D-16) ---------------------------------------------------------------------
+
+ORPHAN_ID = "orphan-device-id"
+
+
+def _only_subentry(entry: MockConfigEntry) -> Any:
+    return next(iter(entry.subentries.values()))
+
+
+async def _delete_only_device(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    hass.config_entries.async_remove_subentry(entry, _only_subentry(entry).subentry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _preload_published(hass_storage: dict[str, Any], published: list[str]) -> None:
+    hass_storage[STORE_KEY] = {
+        "version": STORE_VERSION,
+        "minor_version": 1,
+        "key": STORE_KEY,
+        "data": {STORE_PUBLISHED: published},
+    }
+
+
+async def test_config_tombstone_is_empty_retained_qos_one(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-16: the config topic of a deleted device receives an empty retained qos-1 payload."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    await _delete_only_device(hass, entry)
+
+    assert _publishes(mqtt_mock, config_topic(BASE, _device_id(sub)))[-1] == ("", 1, True)
+
+
+async def test_device_leaves_devices_before_the_first_clear(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-16, D-18: observed from inside every clear publish, the deleted device is already gone from devices."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    manager = entry.runtime_data
+    seen: list[bool] = []
+    real_publish = manager.gateway.async_publish
+
+    async def _publish(topic: str, payload: str, *, retain: bool, qos: int = 1) -> None:
+        if payload == "":
+            seen.append(device_id in manager.devices)
+        await real_publish(topic, payload, retain=retain, qos=qos)
+
+    manager.gateway.async_publish = _publish
+
+    await _delete_only_device(hass, entry)
+
+    assert seen == [False, False, False]
+
+
+async def _flush_store(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    """Fire the delayed store save; the frozen clock also moves the loop time the store compares against."""
+    freezer.tick(timedelta(seconds=STORE_SAVE_DELAY + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_delete_forgets_rev_baseline_and_tripped(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    freezer: FrozenDateTimeFactory,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """The rev, the baseline and the tripped hash of a deleted device are forgotten and persisted that way."""
+    async_mock_service(hass, "test", "on")
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS, off=ON_ACTIONS, breaker_max_runs=1, breaker_window=3600)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    for payload in ("ON", "OFF"):
+        async_fire_mqtt_message(hass, state_topic(BASE, device_id), payload, retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert entry.runtime_data.devices[device_id].breaker.tripped is True
+    await _flush_store(hass, freezer)
+    data = hass_storage[STORE_KEY]["data"]
+    assert device_id in data[STORE_REVS]
+    assert device_id in data[STORE_LAST_ACTED]
+    assert device_id in data[STORE_TRIPPED]
+
+    await _delete_only_device(hass, entry)
+    await _flush_store(hass, freezer)
+
+    data = hass_storage[STORE_KEY]["data"]
+    assert device_id not in data[STORE_REVS]
+    assert device_id not in data[STORE_LAST_ACTED]
+    assert device_id not in data[STORE_TRIPPED]
+
+
+async def test_failed_clear_keeps_id_published_and_retry_clears_all_three_topics(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """A delete with failing publishes completes, keeps the id published and the next start clears all three topics."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    with patch(
+        "custom_components.mqtt_actions.mqtt_gateway.mqtt.async_publish", side_effect=HomeAssistantError("down")
+    ):
+        await _delete_only_device(hass, entry)
+
+    assert device_id not in entry.runtime_data.devices
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert hass_storage[STORE_KEY]["data"][STORE_PUBLISHED] == [device_id]
+    mqtt_mock.async_publish.reset_mock()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    for topic in (
+        discovery_topic("homeassistant", device_id),
+        config_topic(BASE, device_id),
+        state_topic(BASE, device_id),
+    ):
+        assert _publishes(mqtt_mock, topic) == [("", 1, True)]
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert hass_storage[STORE_KEY]["data"][STORE_PUBLISHED] == []
+
+
+async def test_orphan_cleanup_clears_the_config_topic(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """A published id without a subentry gets an empty publish on discovery, config and state at start."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    _preload_published(hass_storage, [ORPHAN_ID, _device_id(sub)])
+
+    await _setup(hass, make_hub_entry([sub]))
+
+    assert _publishes(mqtt_mock, discovery_topic("homeassistant", ORPHAN_ID)) == [("", 1, True)]
+    assert _publishes(mqtt_mock, config_topic(BASE, ORPHAN_ID)) == [("", 1, True)]
+    assert _publishes(mqtt_mock, state_topic(BASE, ORPHAN_ID)) == [("", 1, True)]
+
+
+async def test_hub_removal_path_clears_the_config_topic(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """async_remove_all_devices clears the config topic of every owned and published id as well."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    device_id = _device_id(sub)
+    _preload_published(hass_storage, [ORPHAN_ID])
+    entry = await _setup(hass, make_hub_entry([sub]))
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    for owned_id in (device_id, ORPHAN_ID):
+        assert _publishes(mqtt_mock, config_topic(BASE, owned_id))[-1] == ("", 1, True)

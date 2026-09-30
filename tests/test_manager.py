@@ -32,7 +32,7 @@ from custom_components.mqtt_actions.const import (
     SUBENTRY_SWITCH,
 )
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY
-from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, state_topic
+from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -863,22 +863,29 @@ async def test_reconcile_change_clears_or_reraises_setup_issue(
 # --- explicit delete (DSC-02, D-16) --------------------------------------------------------------------------------
 
 
-async def test_delete_device_clears_discovery_then_state(
+async def test_delete_clears_discovery_then_unsubscribes_then_config_tombstone_then_state(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
 ) -> None:
-    """D-16: discovery is cleared first, then the subscription ends, then the retained state is cleared."""
+    """D-16: discovery is cleared first, then the subscription ends, then the config tombstone, then the state."""
     sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
     device_id = _device_id(sub)
     entry = await _setup(hass, make_hub_entry([sub]))
     events = _record_events(entry)
     discovery = discovery_topic("homeassistant", device_id)
+    config = config_topic(STATE_TOPIC_BASE, device_id)
     state = state_topic(STATE_TOPIC_BASE, device_id)
 
     hass.config_entries.async_remove_subentry(entry, _only_subentry(entry).subentry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    assert events == [("publish", discovery, ""), ("unsubscribe",), ("publish", state, "")]
+    assert events == [
+        ("publish", discovery, ""),
+        ("unsubscribe",),
+        ("publish", config, ""),
+        ("publish", state, ""),
+    ]
     assert _publishes(mqtt_mock, discovery)[-1] == ("", 1, True)
+    assert _publishes(mqtt_mock, config)[-1] == ("", 1, True)
     assert _publishes(mqtt_mock, state)[-1] == ("", 1, True)
     assert device_id not in entry.runtime_data.devices
     # The mocked client skips a second retained message per topic and subscription, a real broker forwards the

@@ -27,9 +27,12 @@ from custom_components.mqtt_actions.const import (
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
+from tests.fake_broker import FakeBroker, InstanceFactory
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import AsyncIterator, Callable, Sequence
+
+    from homeassistant.core import HomeAssistant
 
 
 @pytest.fixture(autouse=True)
@@ -141,3 +144,17 @@ def make_hub_entry() -> Callable[..., MockConfigEntry]:
         return MockConfigEntry(**kwargs)
 
     return _make
+
+
+@pytest.fixture
+def fake_broker() -> FakeBroker:
+    """Return a fresh fake broker with real retain semantics."""
+    return FakeBroker()
+
+
+@pytest.fixture
+async def make_instance(hass: HomeAssistant, fake_broker: FakeBroker) -> AsyncIterator[InstanceFactory]:
+    """Return the factory of started instances sharing the fake broker; every instance is closed at teardown."""
+    factory = InstanceFactory(fake_broker)
+    yield factory
+    await factory.async_close()

@@ -185,18 +185,30 @@ async def async_remove_all_devices(hass: HomeAssistant, entry: ConfigEntry) -> N
 class Manager:
     """Keeps the running devices in line with the device subentries of the hub entry."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize the manager."""
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        *,
+        gateway: MqttGateway | None = None,
+        store_key: str = STORE_KEY,
+    ) -> None:
+        """
+        Initialize the manager.
+
+        The gateway and the store key are injectable so tests can run several managers against a fake broker; the
+        production defaults are the MQTT gateway and the shared store key.
+        """
         self._hass = hass
         self._entry = entry
         self._base_topic: str = entry.data[CONF_BASE_TOPIC]
         self._instance_id: str = entry.data[CONF_INSTANCE_ID]
         self._lock = asyncio.Lock()
-        self.gateway = MqttGateway(hass)
+        self.gateway = gateway if gateway is not None else MqttGateway(hass)
         self.runner = ActionRunner(hass, entry)
         self.devices: dict[str, Device] = {}
         self._publisher: DiscoveryPublisher | None = None
-        self._store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, STORE_KEY)
+        self._store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, store_key)
         self._stored_last_acted: dict[str, str] = {}
         self._published: set[str] = set()
         # device id -> config hash at the time its breaker tripped; the counting window is never stored (D-17)

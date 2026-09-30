@@ -432,7 +432,14 @@ async def test_reconfigure_starts_at_the_menu_with_edit_and_remove(hass: HomeAss
     result = await _reconfigure(hass, hub_with_select)
     assert result["type"] is FlowResultType.MENU
     assert result["step_id"] == "menu"
-    assert result["menu_options"] == ["add_option", "edit_option", "remove_option", "settings", "done"]
+    assert result["menu_options"] == [
+        "add_option",
+        "edit_option",
+        "remove_option",
+        "settings",
+        "done",
+        "delete_device",
+    ]
     assert result["description_placeholders"]["count"] == "3"
     assert result["description_placeholders"]["name"] == "Mode"
 

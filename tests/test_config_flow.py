@@ -254,10 +254,14 @@ async def test_switch_flow_entity_targets_do_not_warn(hass: HomeAssistant, hub) 
 
 
 async def _reconfigure_flow(hass: HomeAssistant, entry, subentry) -> dict[str, Any]:
-    return await hass.config_entries.subentries.async_init(
+    """Start the Switch reconfigure flow; it opens a menu (D-16) and the edit form is its first item."""
+    menu = await hass.config_entries.subentries.async_init(
         (entry.entry_id, SUBENTRY_SWITCH),
         context={"source": SOURCE_RECONFIGURE, "subentry_id": subentry.subentry_id},
     )
+    assert menu["type"] is FlowResultType.MENU
+    assert menu["step_id"] == "reconfigure"
+    return await hass.config_entries.subentries.async_configure(menu["flow_id"], {"next_step_id": "edit_device"})
 
 
 @pytest.fixture
@@ -278,7 +282,7 @@ async def test_switch_reconfigure_replaces_actions_and_keeps_device_id(hass: Hom
 
     result = await _reconfigure_flow(hass, entry, subentry)
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
+    assert result["step_id"] == "edit_device"
     prefill = _suggested_values(result)
     assert prefill["name"] == "Lamp"
     assert prefill[CONF_ON_CHANGE_TO_ON] == ON_ACTIONS

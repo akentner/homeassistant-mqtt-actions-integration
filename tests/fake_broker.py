@@ -169,7 +169,25 @@ class Instance:
     manager: Manager
     gateway: FakeGateway
     name: str
+    store_key: str = STORE_KEY
     extra: dict[str, Any] = field(default_factory=dict)
+
+    async def stop(self) -> None:
+        """Stop the current manager unless it already stopped; the broker keeps what was published."""
+        if self.manager.running:
+            await self.manager.async_stop()
+
+    async def start(self) -> None:
+        """Start a new Manager on the same hass, entry, gateway and store key, as after a restart of Home Assistant."""
+        manager = Manager(self.hass, self.entry, gateway=self.gateway, store_key=self.store_key)
+        self.entry.runtime_data = manager
+        self.manager = manager
+        await manager.async_start()
+
+    async def restart(self) -> None:
+        """Stop the manager and start a new one; the Store, the entry and the gateway stay."""
+        await self.stop()
+        await self.start()
 
 
 class InstanceFactory:
@@ -215,11 +233,13 @@ class InstanceFactory:
         )
         entry.add_to_hass(hass)
         gateway = FakeGateway(self._broker, hass)
-        manager = Manager(hass, entry, gateway=gateway, store_key=f"{STORE_KEY}.{name}")
+        store_key = f"{STORE_KEY}.{name}"
+        manager = Manager(hass, entry, gateway=gateway, store_key=store_key)
         entry.runtime_data = manager
         await manager.async_start()
-        self._stack.push_async_callback(manager.async_stop)
-        instance = Instance(hass=hass, entry=entry, manager=manager, gateway=gateway, name=name)
+        instance = Instance(hass=hass, entry=entry, manager=manager, gateway=gateway, name=name, store_key=store_key)
+        # Stops whichever manager the instance runs at the end, so a restart inside a test is not stopped twice
+        self._stack.push_async_callback(instance.stop)
         self.instances.append(instance)
         return instance
 

@@ -27,6 +27,7 @@ from custom_components.mqtt_actions.const import (
     ISSUE_SCHEMA_TOO_NEW_PREFIX,
     MAX_DOCUMENT_BYTES,
     MAX_SCHEMA_TOO_NEW_ISSUES,
+    PRUNE_GRACE_SECONDS,
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_MIRRORS,
@@ -38,7 +39,7 @@ from custom_components.mqtt_actions.const import (
 from custom_components.mqtt_actions.discovery import build_discovery
 from custom_components.mqtt_actions.document import build_content, canonical_json
 from custom_components.mqtt_actions.model import SWITCH_ON_KEY
-from custom_components.mqtt_actions.topics import config_topic, discovery_topic, state_topic
+from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 from custom_components.mqtt_actions.topics import test_topic as device_test_topic
 from tests.documents import FOREIGN_OWNER, FOREIGN_OWNER_NAME, document_payload, make_spec
 
@@ -906,3 +907,52 @@ async def test_registry_cleanup_is_guarded(hass: HomeAssistant, mqtt_mock: Any, 
     assert _mirror_device_entry(hass, second.device_id) is None
     await _deliver(hass, second.device_id, "", retain=False)
     assert second.device_id not in manager.mirrors
+
+
+# --- grace-window prune (D-10, SYN-05) --------------------------------------------------------------------------
+
+
+async def _advance_window(hass: HomeAssistant, freezer: FrozenDateTimeFactory, windows: float = 1.0) -> None:
+    freezer.tick(timedelta(seconds=PRUNE_GRACE_SECONDS * windows + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_absence_alone_never_removes_a_mirror_single_instance(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A restored mirror with no availability information survives any number of grace windows."""
+    spec = make_spec(on=ON_ACTIONS)
+    _seed_store(hass_storage, {STORE_MIRRORS: {spec.device_id: document_payload(spec)}})
+    entry = await _setup(hass, make_hub_entry())
+    assert spec.device_id in _manager(entry).mirrors
+
+    await _advance_window(hass, freezer, windows=3)
+
+    assert spec.device_id in _manager(entry).mirrors
+
+
+async def test_prune_cleans_registry_leftovers(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A pruned mirror goes through the same removal as a tombstone, leftover registry entries included."""
+    spec = make_spec(on=ON_ACTIONS)
+    _seed_store(hass_storage, {STORE_MIRRORS: {spec.device_id: document_payload(spec)}})
+    entry = await _setup(hass, make_hub_entry())
+    device = _register_leftovers(hass, spec.device_id)
+    async_fire_mqtt_message(hass, availability_topic(BASE, FOREIGN_OWNER), "online", retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert spec.device_id in _manager(entry).mirrors
+
+    await _advance_window(hass, freezer)
+
+    assert spec.device_id not in _manager(entry).mirrors
+    assert dr.async_get(hass).async_get(device.id) is None

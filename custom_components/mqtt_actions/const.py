@@ -111,6 +111,10 @@ DISCOVERY_REMOVAL_HINT_WINDOW_SECONDS: Final = 600.0
 # without bound (D-16, A2, T-03-12)
 MAX_TRACKED_INSTANCES: Final = 256
 
+# A mirror whose config document was not seen again within this window after setup, a reconnect or the owner coming
+# online is pruned, but only when its owner's availability says online (D-10, A2)
+PRUNE_GRACE_SECONDS: Final = 30.0
+
 # Logging: unknown payloads are logged as a truncated repr so a payload cannot grow or forge a log line
 MAX_LOGGED_PAYLOAD_LENGTH: Final = 40
 

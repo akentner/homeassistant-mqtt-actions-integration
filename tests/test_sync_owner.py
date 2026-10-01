@@ -729,7 +729,8 @@ async def test_documents_for_unowned_ids_are_ignored_here(
     await _deliver(hass, config_topic(BASE, "someone-elses-device"), other)
 
     assert mqtt_mock.async_publish.call_args_list == []
-    assert _issue_ids(hass) == []
+    # The follower branch mirrors it and asks for approval (plan 03-06); the owner branch raises nothing
+    assert _issue_ids(hass) == ["approval_someone-elses-device"]
 
 
 async def test_stop_releases_subscription_and_timers(

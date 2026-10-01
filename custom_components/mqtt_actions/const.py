@@ -142,6 +142,8 @@ MAX_SCHEMA_TOO_NEW_ISSUES: Final = 10
 APPROVAL_YAML_MAX_CHARS: Final = 20000
 APPROVAL_TEMPLATED_MAX_LINES: Final = 20
 APPROVAL_HASH_PREFIX_LENGTH: Final = 12
+# The blocked issue of a mirror names at most this many denied services
+BLOCKED_SERVICES_MAX_SHOWN: Final = 10
 # Approval of a mirror (D-02) and its blocked state (A6); both are deleted with the device
 ISSUE_APPROVAL_PREFIX: Final = "approval_"
 ISSUE_BLOCKED_PREFIX: Final = "blocked_"
@@ -159,5 +161,7 @@ ISSUE_DEVICE_PREFIXES: Final = (
     ISSUE_OWNER_CONFLICT_PREFIX,
     ISSUE_SCHEMA_TOO_NEW_PREFIX,
     ISSUE_DENIED_CALL_PREFIX,
+    ISSUE_APPROVAL_PREFIX,
+    ISSUE_BLOCKED_PREFIX,
 )
 MAX_ISSUE_ERROR_LENGTH: Final = 500

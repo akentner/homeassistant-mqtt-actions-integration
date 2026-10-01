@@ -23,14 +23,18 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 
-from .actions import validate_spec_structure
+from .actions import ActionsInvalid, async_validate_actions, validate_spec_structure
 from .breaker import CircuitBreaker
 from .const import (
+    APPROVAL_HASH_PREFIX_LENGTH,
+    BLOCKED_SERVICES_MAX_SHOWN,
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
     DOMAIN,
+    ISSUE_APPROVAL_PREFIX,
+    ISSUE_BLOCKED_PREFIX,
     ISSUE_CIRCUIT_BREAKER_PREFIX,
     ISSUE_DENIED_CALL_PREFIX,
     ISSUE_DEVICE_PREFIXES,
@@ -53,6 +57,7 @@ from .const import (
 from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
 from .document import (
     analyze_spec,
+    approval_sections,
     build_document,
     canonical_json,
     escape_markdown,
@@ -66,6 +71,7 @@ from .runner import ActionRunner
 from .state import StateTracker
 from .sync import SyncManager
 from .topics import state_topic, test_topic
+from .trust import build_approval_view
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -74,6 +80,7 @@ if TYPE_CHECKING:
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
     from .document import ActionAnalysis, ParsedDocument
+    from .trust import ApprovalView
 
 
 @dataclass(frozen=True, slots=True)
@@ -561,11 +568,13 @@ class Manager:
             self.runner.clear_issue(device_id)
             ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_DENIED_CALL_PREFIX}{device_id}")
             await self._async_refresh_mirror_script(existing)
+            self._sync_approval_issues(existing)
             return
         device = self._build_mirror(parsed, startup=False)
         # The Script exists before the first message can arrive, so an approved mirror never misses its startup window
         await self._async_refresh_mirror_script(device)
         await self._async_subscribe_mirror(device)
+        self._sync_approval_issues(device)
         self._schedule_save()
 
     async def async_approve(self, device_id: str, actions_hash: str) -> bool:
@@ -591,9 +600,81 @@ class Manager:
             self._approvals[device_id] = actions_hash
             self._schedule_save()
             ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_DENIED_CALL_PREFIX}{device_id}")
+            ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_APPROVAL_PREFIX}{device_id}")
             await self._async_refresh_mirror_script(mirror)
             LOGGER.info("The actions of mirrored device %r were approved", mirror.name[:MAX_LOGGED_PAYLOAD_LENGTH])
             return True
+
+    async def async_approval_view(self, device_id: str) -> ApprovalView | None:
+        """
+        Return what the approval dialog shows for a mirror, or None when there is no such mirror.
+
+        The view is built from one consistent snapshot of the mirror. Deep validation runs for every trigger with
+        actions and names the labels that do not validate on this instance; that never drops or blocks the mirror (Open
+        Question 3). The caller binds the hash of the view it displays, `async_approve` checks it again under the lock.
+        """
+        if (mirror := self.mirrors.get(device_id)) is None or (info := mirror.mirror) is None:
+            return None
+        spec = mirror.spec
+        invalid: list[str] = []
+        for label, actions in approval_sections(spec):
+            try:
+                await async_validate_actions(self._hass, actions)
+            except ActionsInvalid:
+                invalid.append(label)
+        return build_approval_view(spec, info, invalid)
+
+    @callback
+    def _sync_approval_issues(self, device: Device) -> None:
+        """
+        Bring the approval and blocked issues of a mirror in line with its state; only mirrors have them.
+
+        A statically denied mirror is explained and never approvable. An unapproved mirror with actions gets a request:
+        the old one is deleted first, because replacing an issue keeps its dismissal and a dismissed request must never
+        hide a changed one (Pitfall 8). An approved mirror and one without actions need nothing.
+        """
+        if (info := device.mirror) is None:
+            return
+        device_id = device.device_id
+        approval_id = f"{ISSUE_APPROVAL_PREFIX}{device_id}"
+        blocked_id = f"{ISSUE_BLOCKED_PREFIX}{device_id}"
+        ir.async_delete_issue(self._hass, DOMAIN, approval_id)
+        ir.async_delete_issue(self._hass, DOMAIN, blocked_id)
+        owner = escape_markdown(info.owner_name)
+        name = escape_markdown(device.name)
+        if info.denied:
+            services = ", ".join(escape_markdown(service[:80]) for service in info.denied[:BLOCKED_SERVICES_MAX_SHOWN])
+            ir.async_create_issue(
+                self._hass,
+                DOMAIN,
+                blocked_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="mirror_blocked",
+                translation_placeholders={
+                    "device": name,
+                    "owner": owner,
+                    "services": f"{services}, \u2026" if len(info.denied) > BLOCKED_SERVICES_MAX_SHOWN else services,
+                },
+            )
+            return
+        if self._approvals.get(device_id) == info.actions_hash or not spec_has_actions(device.spec):
+            return
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            approval_id,
+            # Only the id and the hash: the flow reads everything else from the manager at the moment it shows it
+            data={"device_id": device_id, "actions_hash": info.actions_hash},
+            is_fixable=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="approval_required",
+            translation_placeholders={
+                "device": name,
+                "owner": owner,
+                "hash": info.actions_hash[:APPROVAL_HASH_PREFIX_LENGTH],
+            },
+        )
 
     async def _async_refresh_mirror_script(self, device: Device) -> None:
         """
@@ -676,6 +757,7 @@ class Manager:
             device = self._build_mirror(parsed, startup=True)
             await self._async_refresh_mirror_script(device)
             await self._async_subscribe_mirror(device)
+            self._sync_approval_issues(device)
 
     @staticmethod
     def _mirror_info(parsed: ParsedDocument) -> MirrorInfo:

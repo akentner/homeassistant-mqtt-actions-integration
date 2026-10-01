@@ -293,7 +293,7 @@ async def test_residual_and_invalid_actions_are_listed(
     result = await _start_flow(hass, device_id)
 
     placeholders = result["description_placeholders"]
-    assert "script.turn_on" in placeholders["residual"]
+    assert escape_markdown("script.turn_on") in placeholders["residual"]
     assert "scene" in placeholders["residual"]
     assert "device" in placeholders["residual"]
     assert "onChangeToOff" in placeholders["invalid"]

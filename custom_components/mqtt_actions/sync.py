@@ -14,6 +14,12 @@ Follower side (SYN-02, D-06, D-08). A document for a device this instance does n
 structure-checked and turned into a read-only mirror by the manager. Nothing of a document that fails a gate is stored,
 shown or logged, except a fixed reason code and the length-capped device id (T-03-18). The ingest runs in background
 tasks that take the manager's FIFO lock, so two quick documents for one device apply in arrival order.
+
+Removal (SYN-05, D-09, D-10). A live or retained empty payload removes a mirror at once. A deletion this instance
+missed is found by a prune: a grace window after setup, every reconnect and every time an owner turns online, a mirror
+whose document was not seen since the last (re)connect is removed, but only when its pinned owner is announced online.
+A missing message alone never deletes anything: an unknown or offline owner, and a reconnect that wiped what was known
+about presence, keep every mirror.
 """
 
 from collections import deque
@@ -39,6 +45,7 @@ from .const import (
     MAX_MIRRORS,
     MAX_SCHEMA_TOO_NEW_ISSUES,
     MAX_TRACKED_INSTANCES,
+    PRUNE_GRACE_SECONDS,
     PUBLISHED_HASH_HISTORY,
     REPUBLISH_THROTTLE_SECONDS,
     SCHEMA_VERSION,
@@ -149,6 +156,10 @@ class SyncManager:
         self._instances: dict[str, str] = {}
         self._presence_overflow_logged = False
         self._mirror_overflow_logged = False
+        # Ids of mirrored devices whose config document arrived since the last (re)connect or setup; a subset of the
+        # mirror ids plus the ids of mirrors created since, so it is bounded by MAX_MIRRORS
+        self._seen: set[str] = set()
+        self._prune_timer: CALLBACK_TYPE | None = None
 
     async def async_start(self) -> None:
         """Subscribe to the config wildcard; the caller does this before anything is published (SYN-04)."""
@@ -169,15 +180,79 @@ class SyncManager:
                 availability_wildcard(manager.base_topic), self._on_availability_message
             )
         )
+        self._seen.clear()
+        self.arm_prune()
 
     @callback
     def async_stop(self) -> None:
-        """Release the subscriptions and cancel every throttle window, so nothing is published after the stop."""
+        """Release the subscriptions and cancel every timer, so nothing is published or pruned after the stop."""
         for unsubscribe in self._unsubscribers:
             unsubscribe()
         self._unsubscribers.clear()
         self._config_heal.cancel_all()
         self._discovery_heal.cancel_all()
+        self._cancel_prune()
+
+    @callback
+    def on_reconnect(self) -> None:
+        """
+        Forget what was seen and what was known about presence after a broker reconnect, then wait for the replay.
+
+        A broker that lost its retained messages replays neither documents nor availability, which must look like an
+        unknown owner and never like an online one (D-10). The owner republishes documents before it announces online.
+        """
+        self._seen.clear()
+        self._instances.clear()
+        self.arm_prune()
+
+    @callback
+    def arm_prune(self) -> None:
+        """(Re)start the grace window after which unseen mirrors of online owners are pruned."""
+        self._cancel_prune()
+        self._prune_timer = async_call_later(self._manager.hass, PRUNE_GRACE_SECONDS, self._prune_due)
+
+    @callback
+    def _cancel_prune(self) -> None:
+        if self._prune_timer is not None:
+            self._prune_timer()
+            self._prune_timer = None
+
+    @callback
+    def _prune_due(self, _now: object) -> None:
+        """Start the prune in a background task; it cannot run inside the timer callback."""
+        self._prune_timer = None
+        manager = self._manager
+        manager.entry.async_create_background_task(manager.hass, self._async_prune(), name=f"{DOMAIN} prune")
+
+    async def _async_prune(self) -> None:
+        """
+        Remove every mirror whose document was not seen since the last (re)connect and whose pinned owner is online.
+
+        The owner being online while its document is missing means it deleted the device while this instance was away.
+        An owner that is offline or unknown keeps its mirrors, so orphaned devices stay (D-10, D-11). Owned devices are
+        never in `mirrors`. Content never reaches the log, only the count.
+        """
+        manager = self._manager
+        try:
+            async with manager.lock:
+                if not manager.running:
+                    return
+                stale = [
+                    device_id
+                    for device_id, mirror in manager.mirrors.items()
+                    if device_id not in self._seen
+                    and mirror.mirror is not None
+                    and self.instance_status(mirror.mirror.owner) == PRESENCE_ONLINE
+                ]
+                for device_id in stale:
+                    await manager.async_remove_mirror(device_id)
+                    self._seen.discard(device_id)
+                if stale:
+                    LOGGER.info(
+                        "Removed %d mirrored devices that their owners deleted while this instance was away", len(stale)
+                    )
+        except Exception:  # noqa: BLE001 - nothing a broker sends may reach a log
+            LOGGER.warning("Mirrors of deleted devices could not be pruned")
 
     def online_instance_count(self) -> int:
         """Return how many instances other than this one are currently announced as online."""
@@ -213,7 +288,11 @@ class SyncManager:
                         MAX_TRACKED_INSTANCES,
                     )
                 return
+            previous = self._instances.get(instance_id)
             self._instances[instance_id] = status
+            if status == PRESENCE_ONLINE and previous != PRESENCE_ONLINE:
+                # An owner that was offline or unknown when this instance started may have deleted devices meanwhile
+                self.arm_prune()
 
     @callback
     def note_published(self, device_id: str, digest: str) -> None:
@@ -238,6 +317,11 @@ class SyncManager:
         if (device := manager.devices.get(device_id)) is not None:
             self._check_owned(device, msg.payload)
             return
+        if not msg.payload:
+            self._seen.discard(device_id)
+        elif device_id in manager.mirrors:
+            # Any document means the owner has not deleted the device, whether it is valid or not
+            self._seen.add(device_id)
         # A tombstone takes the same queue as a document, so a document and its tombstone apply in arrival order
         task = self._async_remove(device_id) if not msg.payload else self._async_ingest(device_id, msg.payload)
         manager.entry.async_create_background_task(manager.hass, task, name=f"{DOMAIN} ingest")
@@ -304,6 +388,7 @@ class SyncManager:
                     )
                 return
             await manager.async_apply_mirror(parsed)
+            self._seen.add(device_id)
         elif (info := mirror.mirror) is not None and info.owner != parsed.owner:
             # The first owner wins; nothing another owner sends changes the mirror (D-17)
             self._conflict(mirror, info, parsed.owner_name)

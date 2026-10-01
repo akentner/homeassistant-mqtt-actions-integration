@@ -438,8 +438,9 @@ class Manager:
 
     @callback
     def _on_connection_status(self, connected: bool) -> None:  # noqa: FBT001
-        """Republish after a broker reconnect; the publishes cannot run inside the dispatcher callback."""
+        """Republish after a broker reconnect and restart the follower bookkeeping; publishes need a task."""
         if connected and self._running:
+            self.sync.on_reconnect()
             self._entry.async_create_background_task(self._hass, self._async_republish(), name=f"{DOMAIN} republish")
 
     async def _async_republish(self) -> None:

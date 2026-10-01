@@ -28,6 +28,7 @@ SWITCH_FORM_FIELDS = (
 SELECT_SETTINGS_FIELDS = ("name", "run_on_startup", "run_mode", "breaker_max_runs", "breaker_window")
 SELECT_ERROR_KEYS = (
     "name_required",
+    "name_invalid",
     "invalid_actions",
     "device_id_warning",
     "state_value_required",
@@ -73,6 +74,7 @@ REQUIRED_KEYS = (
     "config.step.user.data_description.instance_name",
     "config.error.invalid_base_topic",
     "config.error.instance_name_required",
+    "config.error.instance_name_invalid",
     "config.abort.mqtt_required",
     "config.abort.single_instance_allowed",
     "config_subentries.switch.initiate_flow.user",
@@ -96,6 +98,7 @@ REQUIRED_KEYS = (
     "options.step.init.data.delete_devices_on_remove",
     "options.step.init.data_description.delete_devices_on_remove",
     "config_subentries.switch.error.name_required",
+    "config_subentries.switch.error.name_invalid",
     "config_subentries.switch.error.invalid_actions",
     "config_subentries.switch.error.device_id_warning",
     "config_subentries.switch.abort.reconfigure_successful",

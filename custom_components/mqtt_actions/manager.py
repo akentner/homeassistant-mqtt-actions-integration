@@ -56,6 +56,7 @@ from .const import (
 )
 from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
 from .document import (
+    DocumentRejectedError,
     analyze_spec,
     approval_sections,
     build_document,
@@ -328,6 +329,8 @@ class Manager:
         # device id -> the rev last published and the content hash it belongs to (D-15)
         self._revs: dict[str, dict[str, Any]] = {}
         self._running = False
+        # Owned device ids whose document the parser rejects; logged once, not published (CR-03)
+        self._unpublishable: set[str] = set()
         # Replaceable so tests control the breaker window; production uses the monotonic clock
         self.clock: Callable[[], float] = time.monotonic
         self.sync = SyncManager(self)
@@ -999,6 +1002,20 @@ class Manager:
         except ValueError, TypeError:
             LOGGER.warning("The config document of device %s cannot be built, so it is not published", device.name)
             return
+        # The document must pass the parser every follower applies, or it is dropped everywhere and the owner's own echo
+        # looks like a foreign overwrite that is healed by publishing again, in a loop (CR-03)
+        try:
+            parse_document(device_id, payload)
+        except DocumentRejectedError as err:
+            if device_id not in self._unpublishable:
+                self._unpublishable.add(device_id)
+                LOGGER.warning(
+                    "The config document of device %s would be rejected by other instances (%s), so it is not sent",
+                    device.name,
+                    err.reason,
+                )
+            return
+        self._unpublishable.discard(device_id)
         if changed:
             self._revs[device_id] = {"rev": document["rev"], "hash": digest}
             self._schedule_save()

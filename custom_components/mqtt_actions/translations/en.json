@@ -16,7 +16,8 @@
     },
     "error": {
       "invalid_base_topic": "The base topic must not be empty, must not contain # or +, must not start or end with a slash, must not contain empty levels, and must not start with $.",
-      "instance_name_required": "The instance name must not be empty."
+      "instance_name_required": "The instance name must not be empty.",
+      "instance_name_invalid": "The instance name must be printable and at most 64 characters long."
     },
     "abort": {
       "mqtt_required": "The MQTT integration must be set up first.",
@@ -93,6 +94,7 @@
       },
       "error": {
         "name_required": "The name must not be empty.",
+        "name_invalid": "The name must be printable and at most 64 characters long.",
         "invalid_actions": "The actions are invalid in {field}: {error}",
         "device_id_warning": "These device IDs exist only on this Home Assistant instance: {device_ids}. Other instances cannot resolve them, so the actions would fail there. Submit again to save anyway, or switch to entity, area or label targets.",
         "breaker_max_runs_range": "Enter a whole number from 1 to 100.",
@@ -216,6 +218,7 @@
       },
       "error": {
         "name_required": "The name must not be empty.",
+        "name_invalid": "The name must be printable and at most 64 characters long.",
         "invalid_actions": "The actions are invalid in {field}: {error}",
         "device_id_warning": "These device IDs exist only on this Home Assistant instance: {device_ids}. Other instances cannot resolve them, so the actions would fail there. Submit again to save anyway, or switch to entity, area or label targets.",
         "state_value_required": "The state value must not be empty.",

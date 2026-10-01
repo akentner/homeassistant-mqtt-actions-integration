@@ -116,6 +116,18 @@ async def test_hub_flow_rejects_invalid_base_topic(hass: HomeAssistant, mqtt_moc
     assert hass.config_entries.async_entries(DOMAIN) == []
 
 
+@pytest.mark.parametrize("bad_name", ["n" * 65, "a\nb"])
+async def test_hub_flow_rejects_unparseable_instance_name(hass: HomeAssistant, mqtt_mock, bad_name: str) -> None:
+    """CR-03: a name the document parser rejects would make every document of the instance unreadable."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_BASE_TOPIC: "mqtt_actions", CONF_INSTANCE_NAME: bad_name}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"instance_name": "instance_name_invalid"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
 async def test_hub_flow_rejects_blank_instance_name(hass: HomeAssistant, mqtt_mock) -> None:
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
     result = await hass.config_entries.flow.async_configure(
@@ -213,6 +225,16 @@ async def test_switch_flow_rejects_blank_name(hass: HomeAssistant, hub) -> None:
     result = await hass.config_entries.subentries.async_configure(result["flow_id"], _switch_input(name="   "))
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"name": "name_required"}
+    assert len(hub.subentries) == 0
+
+
+@pytest.mark.parametrize("bad_name", ["x" * 65, "a\tb"])
+async def test_switch_flow_rejects_unparseable_name(hass: HomeAssistant, hub, bad_name: str) -> None:
+    """CR-03: a device name the document parser rejects is refused in the form."""
+    result = await _start_switch_flow(hass, hub)
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], _switch_input(name=bad_name))
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"name": "name_invalid"}
     assert len(hub.subentries) == 0
 
 

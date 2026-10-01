@@ -844,3 +844,25 @@ async def test_foreign_claim_replayed_during_startup_never_becomes_a_mirror(
     assert device_id not in owner.manager.mirrors
     assert owner.manager.runner.script_count(device_id) == 1
     assert ir.async_get(hass).async_get_issue(DOMAIN, f"{ISSUE_APPROVAL_PREFIX}{device_id}") is None
+
+
+@pytest.mark.parametrize("field", ["device", "instance"])
+async def test_overlong_name_is_not_published_and_never_loops(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    field: str,
+) -> None:
+    """CR-03: a name followers would reject is not published, so there is no false overwrite and no republish loop."""
+    sub = make_switch_subentry("x" * 70 if field == "device" else "Lamp", on=[{"action": "test.on"}])
+    device_id = sub["data"]["device_id"]
+    data = None
+    if field == "instance":
+        data = {"base_topic": BASE, "instance_name": "n" * 70, "instance_id": "owner-id"}
+    owner = await make_instance("owner", hass=hass, subentries=[sub], data=data)
+    await _settle(owner)
+
+    assert config_topic(BASE, device_id) not in fake_broker.retained
+    assert [item for item in owner.gateway.published if item[0] == config_topic(BASE, device_id)] == []
+    assert ir.async_get(hass).async_get_issue(DOMAIN, f"doc_overwritten_{device_id}") is None

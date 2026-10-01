@@ -48,7 +48,7 @@ from .const import (
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
-from .model import validate_breaker, validate_option
+from .model import invalid_name, validate_breaker, validate_option
 from .topics import InvalidBaseTopic, validate_base_topic
 
 if TYPE_CHECKING:
@@ -98,6 +98,9 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors[CONF_BASE_TOPIC] = "invalid_base_topic"
             if not instance_name:
                 errors[CONF_INSTANCE_NAME] = "instance_name_required"
+            elif invalid_name(instance_name):
+                # The same rule the parser applies: a longer name would make every document of this instance unreadable
+                errors[CONF_INSTANCE_NAME] = "instance_name_invalid"
             if not errors:
                 return self.async_create_entry(
                     title=instance_name,
@@ -293,6 +296,8 @@ class SwitchSubentryFlow(_DeviceSubentryFlow):
             name = user_input[CONF_NAME].strip()
             if not name:
                 errors[CONF_NAME] = "name_required"
+            elif invalid_name(name):
+                errors[CONF_NAME] = "name_invalid"
             errors.update(self._validate_settings(user_input))
             if not errors:
                 errors, placeholders = await self._async_check_actions(
@@ -403,6 +408,8 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
             name = user_input[CONF_NAME].strip()
             if not name:
                 errors[CONF_NAME] = "name_required"
+            elif invalid_name(name):
+                errors[CONF_NAME] = "name_invalid"
             errors.update(self._validate_settings(user_input))
             if not errors:
                 self._draft.update({CONF_NAME: name, **self._coerce_settings(user_input)})

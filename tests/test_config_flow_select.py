@@ -193,6 +193,10 @@ async def test_select_flow_settings_validation(hass: HomeAssistant, hub) -> None
     assert blank["type"] is FlowResultType.FORM
     assert blank["errors"] == {"name": "name_required"}
 
+    too_long = await _configure(hass, result, _settings(name="x" * 65))
+    assert too_long["type"] is FlowResultType.FORM
+    assert too_long["errors"] == {"name": "name_invalid"}
+
     for runs, window, errors in (
         (0, 10, {"breaker_max_runs": "breaker_max_runs_range"}),
         (101, 10, {"breaker_max_runs": "breaker_max_runs_range"}),

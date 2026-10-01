@@ -183,6 +183,11 @@ def _invalid_text(text: str) -> bool:
     return not text.isprintable() or len(text) > MAX_TEXT_LENGTH
 
 
+def invalid_name(text: str) -> bool:
+    """Return True for a device or instance name the document parser would reject (unprintable or over the cap)."""
+    return _invalid_text(text)
+
+
 def validate_option(
     state_value: str,
     friendly_name: str,

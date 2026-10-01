@@ -16,7 +16,8 @@
     },
     "error": {
       "invalid_base_topic": "Das Basis-Topic darf nicht leer sein, kein # oder + enthalten, nicht mit einem Schrägstrich beginnen oder enden, keine leeren Ebenen enthalten und nicht mit $ beginnen.",
-      "instance_name_required": "Der Instanzname darf nicht leer sein."
+      "instance_name_required": "Der Instanzname darf nicht leer sein.",
+      "instance_name_invalid": "Der Instanzname darf nur druckbare Zeichen enthalten und höchstens 64 Zeichen lang sein."
     },
     "abort": {
       "mqtt_required": "Die MQTT-Integration muss zuerst eingerichtet werden.",
@@ -93,6 +94,7 @@
       },
       "error": {
         "name_required": "Der Name darf nicht leer sein.",
+        "name_invalid": "Der Name darf nur druckbare Zeichen enthalten und höchstens 64 Zeichen lang sein.",
         "invalid_actions": "Die Aktionen in {field} sind ungültig: {error}",
         "device_id_warning": "Diese Geräte-IDs gibt es nur auf dieser Home-Assistant-Instanz: {device_ids}. Andere Instanzen können sie nicht auflösen, deshalb würden die Aktionen dort fehlschlagen. Sende erneut, um trotzdem zu speichern, oder wechsle auf Entitäts-, Bereichs- oder Label-Ziele.",
         "breaker_max_runs_range": "Gib eine ganze Zahl von 1 bis 100 ein.",
@@ -216,6 +218,7 @@
       },
       "error": {
         "name_required": "Der Name darf nicht leer sein.",
+        "name_invalid": "Der Name darf nur druckbare Zeichen enthalten und höchstens 64 Zeichen lang sein.",
         "invalid_actions": "Die Aktionen in {field} sind ungültig: {error}",
         "device_id_warning": "Diese Geräte-IDs gibt es nur auf dieser Home-Assistant-Instanz: {device_ids}. Andere Instanzen können sie nicht auflösen, deshalb würden die Aktionen dort fehlschlagen. Sende erneut, um trotzdem zu speichern, oder wechsle auf Entitäts-, Bereichs- oder Label-Ziele.",
         "state_value_required": "Der Zustandswert darf nicht leer sein.",

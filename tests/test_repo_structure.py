@@ -112,6 +112,14 @@ def test_readme_documents_phase2_behavior() -> None:
     assert "only switch and select devices exist" in lowered
 
 
+def test_acl_document_states_the_limits() -> None:
+    text = (ROOT / "docs" / "broker-acl.md").read_text(encoding="utf-8")
+    lowered = text.lower()
+    for phrase in ("cooperative", "approval", "/test", "discovery prefix", "secrets", "tls"):
+        assert phrase in lowered, f"docs/broker-acl.md never mentions {phrase}"
+    assert len(re.findall(r"^```acl$", text, re.MULTILINE)) == 1
+
+
 @workflow_files
 def test_workflows_have_empty_permissions(filename: str) -> None:
     workflow = _load_workflow(filename)

@@ -290,11 +290,13 @@ def _validated(document: dict[str, Any], topic_device_id: str) -> list[list[dict
     if not _is_int(rev) or rev < 0:
         raise _reject(RejectReason.BAD_REV)
     kind = document.get("kind")
-    if kind not in {SUBENTRY_SWITCH, SUBENTRY_SELECT}:
+    # A list or dict is unhashable, so the type is checked before the membership test
+    if not isinstance(kind, str) or kind not in {SUBENTRY_SWITCH, SUBENTRY_SELECT}:
         raise _reject(RejectReason.BAD_KIND)
     if _invalid_label(document.get("name")):
         raise _reject(RejectReason.BAD_NAME)
-    if document.get(CONF_RUN_MODE) not in {RUN_MODE_SERIAL, RUN_MODE_RESTART}:
+    run_mode = document.get(CONF_RUN_MODE)
+    if not isinstance(run_mode, str) or run_mode not in {RUN_MODE_SERIAL, RUN_MODE_RESTART}:
         raise _reject(RejectReason.BAD_RUN_MODE)
     max_runs = document.get(CONF_BREAKER_MAX_RUNS)
     window = document.get(CONF_BREAKER_WINDOW)

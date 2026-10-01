@@ -280,6 +280,31 @@
     "schema_too_new": {
       "title": "Eine gemeinsame Gerätekonfiguration benötigt eine neuere Integration",
       "description": "Die gemeinsame Konfiguration von {device} verwendet die Formatversion {version}, diese Integration versteht aber nur Versionen bis {supported}. Das Gerät behält seine zuletzt bekannten Einstellungen. Aktualisiere MQTT Actions auf dieser Instanz, um Änderungen zu erhalten."
+    },
+    "approval_required": {
+      "title": "Ein Gerät einer anderen Instanz möchte hier Aktionen ausführen",
+      "description": "Das Gerät {device} von {owner} möchte auf dieser Instanz Aktionen ausführen (Hash-Anfang {hash}). Die Aktionen laufen erst, wenn du sie freigibst. Öffne diese Reparatur, um sie zu prüfen.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Aktionen eines Geräts einer anderen Instanz freigeben",
+            "description": "Du gibst gleich das Gerät **{device}** der Instanz **{owner}** frei.\n\nDie folgenden Aktionen laufen auf dieser Home-Assistant-Instanz mit vollem Zugriff, sobald sich der Zustand des Geräts ändert.\n\n```yaml\n{actions}\n```\n\nTemplatebasierte Servicenamen (der echte Service steht erst fest, wenn die Aktion läuft):\n\n{templated}\n\nSchritte, die Skripte, Automationen, Szenen, Geräteaktionen oder Ereignisse aufrufen (diese sind nicht eingeschränkt):\n\n{residual}\n\nTrigger, deren Aktionen auf dieser Instanz nicht gültig sind:\n\n{invalid}\n\nDiese Freigabe ist an den Hash {hash} gebunden. Sie erlischt, wenn die Besitzerin die Aktionen ändert, und du wirst erneut gefragt. Es läuft nichts, bis du bestätigst."
+          }
+        },
+        "abort": {
+          "changed": "Die Aktionen haben sich geändert, während dieser Dialog offen war, daher wurde nichts freigegeben. Öffne die neue Anfrage in den Reparaturen, um die geänderten Aktionen zu prüfen.",
+          "too_large": "Die Aktionen sind zu lang, um sie hier zu prüfen. Es wurde nichts freigegeben und das Gerät bleibt pausiert.",
+          "not_loaded": "MQTT Actions ist nicht geladen, daher kann nichts freigegeben werden. Versuche es erneut, wenn die Integration läuft."
+        }
+      }
+    },
+    "mirror_blocked": {
+      "title": "Ein Gerät einer anderen Instanz ist gesperrt",
+      "description": "Das Gerät {device} von {owner} verwendet Services, die für Aktionen von anderen Instanzen nie erlaubt sind ({services}). Es ist pausiert und kann nicht freigegeben werden. Bitte die Besitzerin, diese Services aus dem Gerät zu entfernen."
+    },
+    "denied_service_call": {
+      "title": "Eine Aktion einer anderen Instanz wurde gestoppt",
+      "description": "Ein Lauf von {trigger} von {device} wurde gestoppt, weil ein templatebasierter Servicename zum verbotenen Service {service} aufgelöst wurde. Aktionen von anderen Instanzen dürfen diesen Service nie aufrufen."
     }
   },
   "selector": {

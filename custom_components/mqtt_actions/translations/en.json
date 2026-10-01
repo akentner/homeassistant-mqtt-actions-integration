@@ -280,6 +280,31 @@
     "schema_too_new": {
       "title": "A shared device configuration needs a newer integration",
       "description": "The shared configuration of {device} uses format version {version}, but this integration understands up to version {supported}. The device keeps its last known settings. Update MQTT Actions on this instance to receive changes."
+    },
+    "approval_required": {
+      "title": "A device from another instance wants to run actions here",
+      "description": "The device {device} from {owner} wants to run actions on this instance (hash prefix {hash}). The actions do not run until you approve them. Open this repair to review them.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Approve the actions of a device from another instance",
+            "description": "You are about to approve the device **{device}** from the instance **{owner}**.\n\nThe actions below run on this Home Assistant instance, with its full access, whenever the state of the device changes.\n\n```yaml\n{actions}\n```\n\nTemplated service names (the real service is only known when the action runs):\n\n{templated}\n\nSteps that call scripts, automations, scenes, device actions or events (these are not restricted):\n\n{residual}\n\nTriggers whose actions do not validate on this instance:\n\n{invalid}\n\nThis approval is bound to the hash {hash}. It lapses when the owner changes the actions, and you are asked again. Nothing runs until you submit."
+          }
+        },
+        "abort": {
+          "changed": "The actions changed while this dialog was open, so nothing was approved. Open the new request in Repairs to review the changed actions.",
+          "too_large": "The actions are too long to review here, so nothing was approved and the device stays paused.",
+          "not_loaded": "MQTT Actions is not loaded, so nothing can be approved. Try again when the integration is running."
+        }
+      }
+    },
+    "mirror_blocked": {
+      "title": "A device from another instance is blocked",
+      "description": "The device {device} from {owner} uses services that are never allowed for actions received from other instances ({services}). It is paused and cannot be approved. Ask the owner to remove these services from the device."
+    },
+    "denied_service_call": {
+      "title": "An action from another instance was stopped",
+      "description": "A run of {trigger} of {device} was stopped because a templated service name resolved to the forbidden service {service}. Actions received from other instances may never call this service."
     }
   },
   "selector": {

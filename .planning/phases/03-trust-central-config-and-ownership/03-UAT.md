@@ -51,7 +51,9 @@ blocked: 0
 
 - gap_id: G-03-2
   truth: "The integration's own delete confirmation shows the device name as plain text"
-  status: failed
+  status: resolved
+  resolved_by: 03-08-PLAN.md
+  resolved_at: 2026-10-02
   reason: "User reported: the name is rendered as Markdown/HTML in the delete dialog (backticks become <code>, <b> becomes a real element)"
   severity: minor
   test: 2

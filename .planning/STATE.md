@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: trust-central-config-and-ownership
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-09-30T23:51:39.644Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-10-01T00:01:10.042Z"
 last_activity: 2026-10-01
 last_activity_desc: Phase 03 execution started
-state_head: 94d1ca2c0c9483e65594671f3bfadbdc96d8fece
+state_head: e6ccf95a4bb87a11ecdce7ece29e3edadbd2d338
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 18
-  completed_plans: 15
+  completed_plans: 16
   percent: 50
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 03 (trust-central-config-and-ownership) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-10-01 — Phase 03 execution started
 
@@ -67,6 +67,7 @@ Progress: [█████░░░░░] 50% of Phase 01 plans
 | Phase 03 P02 | 13min | 3 tasks | 8 files |
 | Phase 03 P03 | 10 min | 3 tasks | 15 files |
 | Phase 03 P04 | 12 min | 3 tasks | 12 files |
+| Phase 03 P05 | 25 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Plan 03-03: instance presence is tracked from the availability wildcard (online and offline only, own id excluded, capped at 256); the delete confirmation gives the count of other online instances, an upper bound because a crashed instance stays online (A11)
 - [Phase 03]: Plan 03-04: a mirror is a Device without a Script in Manager.mirrors (never in devices, never a subentry); the runner gate keeps it inert, the follower publishes nothing for it, and cached mirrors are parsed and structure-checked again at every load (D-08, D-19)
 - [Phase 03]: Plan 03-04: the content hash decides updates, never the rev; the first owner is pinned and a competing owner raises one owner_conflict issue; a too-new schema keeps the last mirror and raises a bounded schema_too_new issue (D-14, D-15, D-17)
+- [Phase 03]: 03-05: Seen set is bounded to mirror ids; marked by the config callback for ids with a mirror and by the ingest on creation (Rule 2 deviation from the literal plan)
+- [Phase 03]: 03-05: Registry cleanup treats an entity as live when its state exists and is not restored; any live entity skips the whole cleanup (Pitfall 10)
+- [Phase 03]: 03-05: PRUNE_GRACE_SECONDS = 30; reconnect clears seen set and presence cache; every owner-online transition re-arms the prune timer; no approval retention after a tombstone (A10)
 
 ### Pending Todos
 
@@ -127,6 +131,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-30T23:51:39.578Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-10-01T00:01:09.978Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None

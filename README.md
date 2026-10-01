@@ -148,13 +148,20 @@ Actions from another instance run with the full access of your Home Assistant, s
   `python_script`, `rest_command`, `command_line`, `hassio` and `backup`, and the services `homeassistant.restart`,
   `homeassistant.stop`, `homeassistant.reload_all`, `homeassistant.reload_core_config`,
   `homeassistant.reload_config_entry`, `homeassistant.set_location`, `homeassistant.save_persistent_states`,
-  `mqtt.publish`, `mqtt.dump`, `recorder.purge` and `recorder.purge_entities`. A mirror with a denied call, in any
-  nested step, is blocked: Repairs explains it and it cannot be approved. A templated service name is allowed and
-  marked in the approval view; the denylist is checked again when the name is resolved at run time, and a denied
-  result aborts the run and raises an issue.
+  `mqtt.publish`, `mqtt.dump`, `recorder.purge`, `recorder.purge_entities`, `recorder.disable`, `update.install`,
+  `downloader.download_file`, `logger.set_level`, `logger.set_default_level` and `system_log.clear`. A mirror with a
+  denied call, in any nested step, is blocked: Repairs explains it and it cannot be approved. A templated service name
+  is allowed and marked in the approval view; the denylist is checked again when the name is resolved at run time, and
+  a denied result aborts the run and raises an issue. The denylist is best effort: it names core services and cannot
+  know the services of custom integrations (for example `pyscript`), so a service that is not listed is not safe by
+  that fact.
 - Residual risk: approved actions can still call local scripts, automations, scenes, device actions and events, and can
-  send data out through allowed services such as `notify`. The denylist cannot see inside them. That is why the
-  approval shows the full YAML: approve only what you read and trust. Your own devices are not restricted at all.
+  send data out through allowed services such as `notify`. Generic calls act on whatever entity they target, so
+  `button.press`, `scene.turn_on`, `homeassistant.turn_on`, `homeassistant.turn_off` and `homeassistant.toggle` on a
+  script, scene or button entity (for example one that restarts or updates something) are not restricted either; the
+  approval view flags these calls, and calls into the `script` domain and `automation.trigger`, as residual. The
+  denylist cannot see inside them. That is why the approval shows the full YAML: approve only what you read and trust.
+  Your own devices are not restricted at all.
 
 ## Deleting devices and removing the integration
 

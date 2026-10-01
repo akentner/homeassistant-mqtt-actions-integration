@@ -455,6 +455,12 @@ def test_denylist_constants_shape() -> None:
         "mqtt.dump",
         "recorder.purge",
         "recorder.purge_entities",
+        "recorder.disable",
+        "update.install",
+        "downloader.download_file",
+        "logger.set_level",
+        "logger.set_default_level",
+        "system_log.clear",
     } == DENIED_SERVICES
     assert all(name == name.lower() and "." not in name for name in DENIED_DOMAINS)
     assert all(name == name.lower() and name.count(".") == 1 for name in DENIED_SERVICES)
@@ -469,6 +475,11 @@ def test_denylist_constants_shape() -> None:
         "mqtt.publish",
         "homeassistant.restart",
         "recorder.purge",
+        "update.install",
+        "downloader.download_file",
+        "recorder.disable",
+        "logger.set_level",
+        "  Update.Install ",
         "SHELL_COMMAND.run",
         "  Hassio.host_reboot  ",
         "\tMQTT.Publish\n",
@@ -558,6 +569,9 @@ def test_walker_flags_residual_step_types() -> None:
             {"action": "script.turn_on", "target": {"entity_id": "script.x"}},
             {"action": "script.my_script"},
             {"action": "automation.trigger"},
+            {"action": "button.press", "target": {"entity_id": "button.restart"}},
+            {"action": "homeassistant.turn_on", "target": {"entity_id": "script.x"}},
+            {"action": "homeassistant.toggle", "target": {"entity_id": "scene.x"}},
             {"action": "light.turn_on"},
         ]
     )
@@ -568,6 +582,9 @@ def test_walker_flags_residual_step_types() -> None:
         "script.turn_on",
         "script.my_script",
         "automation.trigger",
+        "button.press",
+        "homeassistant.turn_on",
+        "homeassistant.toggle",
     }
     assert analysis.denied == ()
     assert "light.turn_on" not in analysis.residual

@@ -77,6 +77,25 @@ DENIED_SERVICES: Final = frozenset(
         "mqtt.dump",
         "recorder.purge",
         "recorder.purge_entities",
+        "recorder.disable",
+        "update.install",
+        "downloader.download_file",
+        "logger.set_level",
+        "logger.set_default_level",
+        "system_log.clear",
+    }
+)
+# Services the denylist cannot judge because they act on whatever entity they target (a script, scene or button, or an
+# update or restart entity); they are never denied, but the approval view flags them as residual risk. Calls into the
+# `script` domain are flagged as well. Best effort, like the denylist itself (WR-03).
+RESIDUAL_SERVICES: Final = frozenset(
+    {
+        "automation.trigger",
+        "button.press",
+        "homeassistant.toggle",
+        "homeassistant.turn_off",
+        "homeassistant.turn_on",
+        "scene.turn_on",
     }
 )
 

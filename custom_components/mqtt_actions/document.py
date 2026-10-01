@@ -54,6 +54,7 @@ from .const import (
     MAX_DOCUMENT_BYTES,
     MAX_OPTIONS,
     MIN_OPTIONS,
+    RESIDUAL_SERVICES,
     RUN_MODE_RESTART,
     RUN_MODE_SERIAL,
     SCHEMA_VERSION,
@@ -396,7 +397,8 @@ class ActionAnalysis:
 
     `denied` are normalized static service names on the denylist. `templated` are the service-name templates as written.
     `residual` are step types the denylist cannot judge and the approval view flags: "scene", "event" and "device"
-    for those steps, and the normalized service name of a static call into the script domain or automation.trigger.
+    for those steps, and the normalized service name of a static call into the script domain or a service of
+    RESIDUAL_SERVICES (automation.trigger, button.press, homeassistant.turn_on and so on).
     """
 
     denied: tuple[str, ...] = ()
@@ -426,7 +428,7 @@ def _note_service(value: str, denied: list[str], templated: list[str], residual:
     normalized = _normalize(value)
     if is_denied(normalized):
         _add(denied, normalized)
-    elif normalized.startswith("script.") or normalized == "automation.trigger":
+    elif normalized.startswith("script.") or normalized in RESIDUAL_SERVICES:
         _add(residual, normalized)
 
 

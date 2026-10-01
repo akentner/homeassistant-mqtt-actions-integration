@@ -139,6 +139,16 @@ def test_readme_documents_phase3_behavior() -> None:
         assert any(heading.startswith(section) for heading in headings), f"README has no {section} section"
 
 
+def test_readme_lists_every_denied_and_residual_service() -> None:
+    """The README names exactly what const.py denies or flags, so the documented trust boundary cannot drift (WR-03)."""
+    from custom_components.mqtt_actions.const import DENIED_DOMAINS, DENIED_SERVICES, RESIDUAL_SERVICES
+
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    for name in (*DENIED_DOMAINS, *DENIED_SERVICES, *RESIDUAL_SERVICES):
+        assert f"`{name}`" in text, f"README never lists {name}"
+    assert "best effort" in " ".join(text.lower().split())
+
+
 def test_docs_examples_use_no_device_id_targets() -> None:
     fence = re.compile(r"^```[^\n]*\n(.*?)^```$", re.DOTALL | re.MULTILINE)
     for document in (ROOT / "README.md", ROOT / "docs" / "broker-acl.md"):

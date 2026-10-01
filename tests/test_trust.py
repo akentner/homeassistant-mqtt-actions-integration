@@ -29,7 +29,7 @@ from custom_components.mqtt_actions.const import (
     TRIGGER_ON,
     TRIGGER_SETUP,
 )
-from custom_components.mqtt_actions.document import parse_document
+from custom_components.mqtt_actions.document import escape_markdown, parse_document
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY
 from custom_components.mqtt_actions.runner import ActionRunner
 from custom_components.mqtt_actions.topics import config_topic, state_topic
@@ -228,7 +228,7 @@ async def test_denied_call_aborts_the_run_even_with_continue_on_error(
     assert issue.is_fixable is False
     assert issue.translation_placeholders is not None
     assert set(issue.translation_placeholders) == {"device", "trigger", "service"}
-    assert issue.translation_placeholders["service"] == "shell_command.x"
+    assert issue.translation_placeholders["service"] == escape_markdown("shell_command.x")
     records = [r for r in caplog.records if r.name.startswith("custom_components.mqtt_actions")]
     assert any(
         r.levelno == logging.WARNING
@@ -258,7 +258,7 @@ async def test_restricted_build_refuses_statically_denied_triggers(hass: HomeAss
     assert setup_issue is not None
     assert setup_issue.translation_placeholders is not None
     assert setup_issue.translation_placeholders["trigger"] == TRIGGER_SETUP
-    assert "shell_command.x" in setup_issue.translation_placeholders["error"]
+    assert escape_markdown("shell_command.x") in setup_issue.translation_placeholders["error"]
 
 
 # --- the approval gate (D-01, D-02, TRU-01) -----------------------------------------------------------------------

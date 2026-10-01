@@ -32,11 +32,13 @@ from .const import (
     CONF_INSTANCE_NAME,
     DOMAIN,
     ISSUE_CIRCUIT_BREAKER_PREFIX,
+    ISSUE_DENIED_CALL_PREFIX,
     ISSUE_DEVICE_PREFIXES,
     ISSUE_DISCOVERY_DISABLED,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
+    STORE_APPROVALS,
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_MIRRORS,
@@ -56,6 +58,7 @@ from .document import (
     escape_markdown,
     parse_document,
     serialize_document,
+    spec_has_actions,
 )
 from .model import DeviceSpec, spec_from_subentry, trigger_key
 from .mqtt_gateway import IncomingMessage, MqttGateway
@@ -168,6 +171,14 @@ def _parse_revs(stored: dict[str, Any]) -> dict[str, dict[str, Any]]:
         and not isinstance(value.get("rev"), bool)
         and isinstance(value.get("hash"), str)
     }
+
+
+def _parse_approvals(stored: dict[str, Any]) -> dict[str, str]:
+    """Return the approved actions hash per device from a loaded Store payload; anything malformed is dropped."""
+    approvals = stored.get(STORE_APPROVALS)
+    if not isinstance(approvals, dict):
+        return {}
+    return {key: value for key, value in approvals.items() if isinstance(key, str) and isinstance(value, str)}
 
 
 def _parse_mirrors(stored: dict[str, Any]) -> dict[str, ParsedDocument]:
@@ -299,6 +310,8 @@ class Manager:
         self.mirrors: dict[str, Device] = {}
         # Cached mirrors parsed from the Store at load, consumed when the start restores them
         self._stored_mirrors: dict[str, ParsedDocument] = {}
+        # mirror id -> the actions hash the user approved here; a mirror runs only while its hash equals this (D-02)
+        self._approvals: dict[str, str] = {}
         self._publisher: DiscoveryPublisher | None = None
         self._store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, store_key)
         self._stored_last_acted: dict[str, str] = {}
@@ -372,6 +385,9 @@ class Manager:
             device_id: value for device_id, value in self._stored_last_acted.items() if device_id in kept
         }
         self._tripped = {device_id: value for device_id, value in self._tripped.items() if device_id in kept}
+        self._approvals = {
+            device_id: value for device_id, value in self._approvals.items() if device_id in self.mirrors
+        }
         self._revs = {device_id: value for device_id, value in self._revs.items() if device_id in current}
         # Subscribed before anything is published, so the owner sees its own documents and every foreign write
         await self.sync.async_start()
@@ -502,6 +518,7 @@ class Manager:
         self._tripped = _parse_tripped(stored)
         self._revs = _parse_revs(stored)
         self._stored_mirrors = _parse_mirrors(stored)
+        self._approvals = _parse_approvals(stored)
 
     @callback
     def _data_to_save(self) -> dict[str, Any]:
@@ -515,6 +532,7 @@ class Manager:
             STORE_MIRRORS: {
                 device_id: device.mirror.payload for device_id, device in self.mirrors.items() if device.mirror
             },
+            STORE_APPROVALS: dict(self._approvals),
             STORE_PUBLISHED: sorted(self._published),
             STORE_TRIPPED: dict(self._tripped),
             STORE_REVS: {device_id: dict(value) for device_id, value in self._revs.items()},
@@ -539,10 +557,61 @@ class Manager:
             return
         if (existing := self.mirrors.get(device_id)) is not None:
             self._update_mirror(existing, parsed)
+            # A changed document starts clean: a stale setup or denied-call issue belongs to the old actions
+            self.runner.clear_issue(device_id)
+            ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_DENIED_CALL_PREFIX}{device_id}")
+            await self._async_refresh_mirror_script(existing)
             return
         device = self._build_mirror(parsed, startup=False)
+        # The Script exists before the first message can arrive, so an approved mirror never misses its startup window
+        await self._async_refresh_mirror_script(device)
         await self._async_subscribe_mirror(device)
         self._schedule_save()
+
+    async def async_approve(self, device_id: str, actions_hash: str) -> bool:
+        """
+        Approve the actions of a mirror on this instance, and only the exact hash the user saw (D-02, T-03-29).
+
+        Returns False and stores nothing unless the mirror exists, is not blocked by a denied service, has actions and
+        its current actions hash equals `actions_hash`. On success the approval is stored, the Script is built from the
+        approved actions and nothing runs retroactively: the baseline stays and only a later real edge runs.
+        """
+        async with self._lock:
+            mirror = self.mirrors.get(device_id)
+            info = None if mirror is None else mirror.mirror
+            if (
+                not self._running
+                or mirror is None
+                or info is None
+                or info.denied
+                or not spec_has_actions(mirror.spec)
+                or info.actions_hash != actions_hash
+            ):
+                return False
+            self._approvals[device_id] = actions_hash
+            self._schedule_save()
+            ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_DENIED_CALL_PREFIX}{device_id}")
+            await self._async_refresh_mirror_script(mirror)
+            LOGGER.info("The actions of mirrored device %r were approved", mirror.name[:MAX_LOGGED_PAYLOAD_LENGTH])
+            return True
+
+    async def _async_refresh_mirror_script(self, device: Device) -> None:
+        """
+        Build the Script of a mirror only for an approved, unblocked document, and unload it otherwise (TRU-01).
+
+        The gate is "no Script until the approved hash equals the actions hash of the mirror": a blocked mirror, one
+        without actions and one whose approval does not match (never approved, or the owner changed the actions) get no
+        Script, and unloading stops its running and queued runs. The build is restricted, so even a forged approval
+        entry cannot give a statically denied service a Script (T-03-33).
+        """
+        info = device.mirror
+        if info is None:
+            return
+        approved = self._approvals.get(device.device_id) == info.actions_hash
+        if info.denied or not spec_has_actions(device.spec) or not approved:
+            await self.runner.async_unload(device.device_id)
+            return
+        await self.runner.async_build_device(device.spec, restricted=True)
 
     async def async_remove_mirror(self, device_id: str) -> None:
         """
@@ -564,6 +633,8 @@ class Manager:
         self._delete_device_issues(device_id)
         self._stored_last_acted.pop(device_id, None)
         self._tripped.pop(device_id, None)
+        # An approval does not outlive its mirror (A10): a returning device is a new request
+        self._approvals.pop(device_id, None)
         self._clean_registry(device_id)
         self._schedule_save()
 
@@ -602,7 +673,9 @@ class Manager:
                     "A cached mirror of device %r was dropped because the device is owned here", device_id[:40]
                 )
                 continue
-            await self._async_subscribe_mirror(self._build_mirror(parsed, startup=True))
+            device = self._build_mirror(parsed, startup=True)
+            await self._async_refresh_mirror_script(device)
+            await self._async_subscribe_mirror(device)
 
     @staticmethod
     def _mirror_info(parsed: ParsedDocument) -> MirrorInfo:
@@ -678,6 +751,7 @@ class Manager:
             self.mirrors.pop(device_id, None)
             if device.unsubscribe is not None:
                 device.unsubscribe()
+            await self.runner.async_unload(device_id)
             raise
 
     def _device(self, device_id: str) -> Device | None:

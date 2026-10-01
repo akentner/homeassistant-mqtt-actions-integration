@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: trust-central-config-and-ownership
 status: verifying
-stopped_at: Completed 03-07-PLAN.md
-last_updated: "2026-10-01T00:34:22.328Z"
+stopped_at: Completed 03-08-PLAN.md
+last_updated: "2026-10-01T22:19:18.940Z"
 last_activity: 2026-10-01
 last_activity_desc: Phase 03 execution started
-state_head: aae6af87573e42474be08974dc968451a0adfe9a
+state_head: f5c3cb13da71ce9b788698ede04b5a9c0a97ce9f
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 19
+  completed_plans: 19
   percent: 50
 ---
 
@@ -70,6 +70,7 @@ Progress: [█████░░░░░] 50% of Phase 01 plans
 | Phase 03 P05 | 25 min | 2 tasks | 6 files |
 | Phase 03 P06 | 55 min | 3 tasks | 13 files |
 | Phase 03 P07 | 10 min | 3 tasks | 6 files |
+| Phase 03 P08 | 20min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -117,6 +118,7 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-07: ACL example uses one MQTT user per instance; ownership of config topics stays cooperative (device ids are random), approval is the real gate
 - [Phase 03]: 03-07: The documented acl block is the block the broker test enforces (the test reads docs/broker-acl.md); the external publisher gets state-topic access only
 - [Phase 03]: 03-07: owner_conflict issue is transient with an online owner (cleared when the owner's healing republish is re-seen); flagged for user review
+- [Phase 03]: 03-08: escape_markdown only on Markdown-rendered flow description placeholders; chooser labels and suggested values stay raw
 
 ### Pending Todos
 
@@ -140,6 +142,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-01T00:34:22.258Z
-Stopped at: Completed 03-07-PLAN.md
+Last session: 2026-10-01T22:19:18.863Z
+Stopped at: Completed 03-08-PLAN.md
 Resume file: None

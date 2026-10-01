@@ -48,6 +48,7 @@ from .const import (
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
+from .document import escape_markdown
 from .model import invalid_name, validate_breaker, validate_option
 from .topics import InvalidBaseTopic, validate_base_topic
 
@@ -208,7 +209,7 @@ class _DeviceSubentryFlow(ConfigSubentryFlow):
             step_id="delete_device",
             menu_options=["delete_confirmed", "keep_device"],
             description_placeholders={
-                "name": self._get_reconfigure_subentry().title,
+                "name": escape_markdown(self._get_reconfigure_subentry().title),
                 "count": str(self._online_instance_count()),
             },
         )

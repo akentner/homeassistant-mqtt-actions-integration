@@ -396,11 +396,14 @@ class Manager:
             device_id: value for device_id, value in self._approvals.items() if device_id in self.mirrors
         }
         self._revs = {device_id: value for device_id, value in self._revs.items() if device_id in current}
-        # Subscribed before anything is published, so the owner sees its own documents and every foreign write
-        await self.sync.async_start()
-        await self._async_orphan_cleanup()
-        await self.async_reconcile(startup=True)
+        # The lock is held from the first subscribe until the owned devices are registered and published: a retained
+        # document replayed while the subscribes are awaited queues its ingest on this lock, and by the time it runs
+        # the owned ids are in `devices`, so a foreign claim for an owned id can never become a mirror (CR-02)
         async with self._lock:
+            # Subscribed before anything is published, so the owner sees its own documents and every foreign write
+            await self.sync.async_start()
+            await self._async_orphan_cleanup()
+            await self._async_reconcile_locked(startup=True)
             await self._async_publish_owned()
         await self._async_publish_availability(AvailabilityState.ONLINE)
 
@@ -412,17 +415,21 @@ class Manager:
         user creates later is not a start (D-05).
         """
         async with self._lock:
-            # A late update-listener call after async_stop must not revive a manager nobody will ever unsubscribe
-            if not self._running:
-                return
-            subentries = {subentry.data[CONF_DEVICE_ID]: subentry for subentry in _device_subentries(self._entry)}
-            for device_id in [device_id for device_id in self.devices if device_id not in subentries]:
-                await self._async_remove_device(device_id)
-            for device_id, subentry in subentries.items():
-                if (device := self.devices.get(device_id)) is None:
-                    await self._async_add_device(subentry, startup=startup)
-                elif device.signature != _signature(subentry):
-                    await self._async_change_device(device, subentry)
+            await self._async_reconcile_locked(startup=startup)
+
+    async def _async_reconcile_locked(self, *, startup: bool = False) -> None:
+        """Reconcile the running devices with the subentries; the caller holds the lock."""
+        # A late update-listener call after async_stop must not revive a manager nobody will ever unsubscribe
+        if not self._running:
+            return
+        subentries = {subentry.data[CONF_DEVICE_ID]: subentry for subentry in _device_subentries(self._entry)}
+        for device_id in [device_id for device_id in self.devices if device_id not in subentries]:
+            await self._async_remove_device(device_id)
+        for device_id, subentry in subentries.items():
+            if (device := self.devices.get(device_id)) is None:
+                await self._async_add_device(subentry, startup=startup)
+            elif device.signature != _signature(subentry):
+                await self._async_change_device(device, subentry)
 
     async def async_stop(self) -> None:
         """
@@ -703,6 +710,9 @@ class Manager:
         unloaded, the persisted payload, baseline and tripped hash are forgotten and every per-device issue is deleted.
         Leftover registry entries are cleaned last, and only when no entity of the device is live.
         """
+        if device_id in self.devices:
+            # An owned id is never a mirror; unloading its Script here would kill the owner's own device
+            return
         if (device := self.mirrors.pop(device_id, None)) is None:
             return
         if device.unsubscribe is not None:

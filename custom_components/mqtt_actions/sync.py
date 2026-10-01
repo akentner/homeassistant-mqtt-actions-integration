@@ -241,6 +241,7 @@ class SyncManager:
                     device_id
                     for device_id, mirror in manager.mirrors.items()
                     if device_id not in self._seen
+                    and device_id not in manager.devices
                     and mirror.mirror is not None
                     and self.instance_status(mirror.mirror.owner) == PRESENCE_ONLINE
                 ]

@@ -1,5 +1,6 @@
 """Two real Home Assistant instances on one fake broker: the owner runs its actions, the follower only mirrors."""
 
+import asyncio
 import json
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -809,3 +810,37 @@ async def test_hub_removal_keep_leaves_orphans_that_followers_keep(
     for follower in (follower_b, follower_c):
         assert device_id in follower.manager.mirrors
     assert fake_broker.retained[availability_topic(BASE, owner_id)] == "offline"
+
+
+async def test_foreign_claim_replayed_during_startup_never_becomes_a_mirror(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CR-02: a retained claim for an owned id that arrives while the start subscribes is not turned into a mirror."""
+    from tests.fake_broker import FakeGateway
+
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
+    device_id = sub["data"]["device_id"]
+    forged = make_spec(device_id=device_id, name="Lamp", on=[{"action": "test.evil"}])
+    fake_broker.retained[config_topic(BASE, device_id)] = document_payload(forged, owner="instance-foreign")
+    original = FakeGateway.async_subscribe
+
+    async def _yielding_subscribe(self: FakeGateway, *args: Any, **kwargs: Any) -> Any:
+        # A real network subscribe yields to the loop, so replayed messages and their ingest tasks run before it returns
+        unsubscribe = await original(self, *args, **kwargs)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        return unsubscribe
+
+    monkeypatch.setattr(FakeGateway, "async_subscribe", _yielding_subscribe)
+
+    owner = await make_instance("owner", hass=hass, subentries=[sub])
+    await _settle(owner)
+
+    assert device_id in owner.manager.devices
+    assert device_id not in owner.manager.mirrors
+    assert owner.manager.runner.script_count(device_id) == 1
+    assert ir.async_get(hass).async_get_issue(DOMAIN, f"{ISSUE_APPROVAL_PREFIX}{device_id}") is None

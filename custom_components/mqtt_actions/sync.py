@@ -62,6 +62,7 @@ from .topics import (
     availability_wildcard,
     config_wildcard,
     discovery_wildcard,
+    is_valid_device_id,
     parse_availability_topic,
     parse_config_topic,
     parse_discovery_topic,
@@ -317,6 +318,10 @@ class SyncManager:
             return
         if (device := manager.devices.get(device_id)) is not None:
             self._check_owned(device, msg.payload)
+            return
+        if not is_valid_device_id(device_id):
+            # An unbounded or odd id would reach the Store, issue ids, subscriptions and the registries (WR-05)
+            LOGGER.debug("Ignoring a config message for a device with an invalid id %s", _shown(device_id))
             return
         if not msg.payload:
             self._seen.discard(device_id)

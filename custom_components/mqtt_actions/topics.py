@@ -1,10 +1,19 @@
 """Topic builders. Pure functions without Home Assistant imports."""
 
+import re
+
 from .const import TOPIC_VERSION
 
 _FORBIDDEN_CHARACTERS = frozenset("#+\x00")
 # A parsed id is exactly one topic level: no separator and no wildcard
 _SEGMENT_FORBIDDEN = frozenset("/#+\x00")
+# Owned device ids are uuid4 strings; a foreign id is accepted only in this shape and length (WR-05)
+_DEVICE_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def is_valid_device_id(value: str) -> bool:
+    """Return True for an id fit to be stored and used in issue ids and topics: 1 to 64 of letters, digits, _ and -."""
+    return _DEVICE_ID.fullmatch(value) is not None
 
 
 class InvalidBaseTopic(ValueError):  # noqa: N818

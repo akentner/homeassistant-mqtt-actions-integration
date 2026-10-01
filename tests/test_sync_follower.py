@@ -130,6 +130,22 @@ async def test_retained_document_creates_a_read_only_mirror(
     assert not entry.subentries
 
 
+@pytest.mark.parametrize("device_id", ["x" * 65, "x" * 5000, "has space", "umlaut-\u00e4", "line\nbreak"])
+async def test_document_with_an_invalid_device_id_creates_no_mirror(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, device_id: str
+) -> None:
+    """WR-05: an id outside 1-64 of letters, digits, underscore and dash never becomes a mirror, key or issue."""
+    spec = make_spec(device_id=device_id, on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+
+    await _deliver(hass, device_id, document_payload(spec))
+
+    manager = _manager(entry)
+    assert manager.mirrors == {}
+    assert device_id not in manager._data_to_save()[STORE_MIRRORS]
+    assert not [issue for domain, issue in ir.async_get(hass).issues if domain == DOMAIN and device_id in issue]
+
+
 async def test_mirror_never_publishes_anything_for_the_device(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
 ) -> None:

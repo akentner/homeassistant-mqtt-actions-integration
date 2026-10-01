@@ -119,3 +119,22 @@ def test_discovery_wildcard_and_parsers() -> None:
     ]
     for topic in bad:
         assert topics.parse_discovery_topic("homeassistant", topic) is None, topic
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("5d1d6c55-1b1d-4a5c-9a39-2d3f0b2b6a11", True),
+        ("a", True),
+        ("x" * 64, True),
+        ("x" * 65, False),
+        ("", False),
+        ("a b", False),
+        ("a.b", False),
+        ("a\n", False),
+        ("\u00e4", False),
+    ],
+)
+def test_is_valid_device_id(value: str, *, expected: bool) -> None:
+    """WR-05: a foreign device id is 1 to 64 characters of letters, digits, underscore and dash."""
+    assert topics.is_valid_device_id(value) is expected

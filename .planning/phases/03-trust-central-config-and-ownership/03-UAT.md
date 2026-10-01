@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: complete
 phase: 03-trust-central-config-and-ownership
 source: [03-VERIFICATION.md]
 started: 2026-10-01T07:56:44Z
-updated: 2026-10-02T00:30:00Z
+updated: 2026-10-02T01:30:00Z
 ---
 
 ## Current Test
@@ -19,9 +19,10 @@ source: automated (chrome-devtools against a real HA 2026.9 frontend), confirmed
 
 ### 2. Generic HA subentry delete dialog vs. the integration's own confirmation (SYN-06)
 expected: The generic dialog cannot name other instances; after confirming, retained discovery/config/state are gone and the follower's mirror vanishes. The integration's own Delete menu step shows the all-instances text with the online count. User decides whether SYN-06 is met as written.
-result: issue
-reported: "Generic dialog says only 'Zugehörige Geräte und Entitäten werden dauerhaft gelöscht.' (as expected). The integration's own dialog names all instances and the online count (1), and after confirming config/discovery/state are gone and the mirror vanished on the follower. But the device name is rendered as Markdown/HTML in that dialog: backticks become <code> and <b>fett</b> becomes a real <b> element (name 'UAT `bt` a_b_c | <b>fett</b>')."
-severity: minor
+result: pass
+previous_result: issue
+previous_reported: "Generic dialog says only 'Zugehörige Geräte und Entitäten werden dauerhaft gelöscht.' (as expected). The integration's own dialog names all instances and the online count (1), and after confirming config/discovery/state are gone and the mirror vanished on the follower. But the device name is rendered as Markdown/HTML in that dialog: backticks become <code> and <b>fett</b> becomes a real <b> element (name 'UAT `bt` a_b_c | <b>fett</b>')."
+retested: 2026-10-02 after gap-closure plan 03-08 (G-03-2); real HA frontend on ha-a, the delete dialog shows the name as plain text (0 code, 0 injected elements)
 
 ### 3. Two real HA instances on one real Mosquitto with docs/broker-acl.md
 expected: Device appears on B via core MQTT Discovery, B shows an approval request, A republishes discovery within the throttle window after B deletes the entity, after approval a toggle on either side runs the actions on both.
@@ -41,8 +42,8 @@ source: code read plus several real restarts and reloads with retained documents
 ## Summary
 
 total: 5
-passed: 4
-issues: 1
+passed: 5
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0

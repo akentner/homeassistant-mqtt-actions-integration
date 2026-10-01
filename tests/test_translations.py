@@ -65,6 +65,17 @@ APPROVAL_FLOW_KEYS = (
 )
 FENCED_YAML = re.compile(r"```yaml\s*\{actions\}\s*```")
 
+# Flow descriptions whose user-text placeholders the flow escapes with escape_markdown (G-03-2). A translation must use
+# them as bare words: wrapped in code, emphasis, link or quote markup they would render wrong or be escaped twice.
+ESCAPED_FLOW_PLACEHOLDERS = {
+    "config_subentries.switch.step.delete_device.description": ("name",),
+    "config_subentries.select.step.delete_device.description": ("name",),
+    "config_subentries.select.step.menu.description": ("name", "options"),
+    "config_subentries.select.step.edit_option_details.description": ("state_value",),
+    "config_subentries.select.step.remove_confirm.description": ("friendly_name", "state_value"),
+}
+MARKDOWN_CONTROL = r"\\`*_\[\]<>|~#"
+
 REQUIRED_KEYS = (
     "config.step.user.title",
     "config.step.user.description",
@@ -277,3 +288,19 @@ def test_discovery_issue_speaks_of_entities_not_switch_entities(language: str) -
 def test_no_strings_json_exists() -> None:
     """Custom integrations use translations/en.json; strings.json is core-only."""
     assert not (TRANSLATIONS_DIR.parent / "strings.json").exists()
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_escaped_flow_placeholders_are_not_wrapped_in_markup(language: str) -> None:
+    """A single escape pass renders right only if the placeholder is a bare word (T-03-39)."""
+    flat = _load(language)
+    offenders = []
+    for key, names in ESCAPED_FLOW_PLACEHOLDERS.items():
+        text = flat[key]
+        if "```" in text:
+            offenders.append((key, "fenced block"))
+        for name in names:
+            variable = re.escape("{" + name + "}")
+            if re.search(f"[{MARKDOWN_CONTROL}]{variable}|{variable}[{MARKDOWN_CONTROL}]", text):
+                offenders.append((key, name))
+    assert offenders == []

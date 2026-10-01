@@ -648,6 +648,20 @@ def test_view_labels_select_options_and_lists_invalid_triggers() -> None:
     assert view.invalid == "- Alpha (a)"
 
 
+def test_view_shows_every_action_list_when_select_labels_collide() -> None:
+    """Two options whose labels are equal ("a (b (c)") both appear in the review; none is dropped (CR-01)."""
+    spec = make_spec(
+        "select",
+        options=[("c", "a (b", [{"action": "lock.unlock"}]), ("b (c", "a", [{"action": "light.turn_on"}])],
+    )
+
+    view = _view(spec)
+
+    assert "lock.unlock" in view.actions_yaml
+    assert "light.turn_on" in view.actions_yaml
+    assert view.truncated is False
+
+
 def test_view_caps_the_yaml_and_flags_truncation() -> None:
     """A document too long to show in full is flagged, and the text never exceeds the cap."""
     spec = make_spec(on=ON_ACTIONS)

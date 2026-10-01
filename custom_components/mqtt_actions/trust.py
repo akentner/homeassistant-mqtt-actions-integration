@@ -149,7 +149,9 @@ def _bullets(items: Iterable[str], limit: int | None = None) -> str:
 
 def _actions_yaml(spec: DeviceSpec) -> tuple[str, bool]:
     """Return the sanitized YAML of every non-empty action list under its label, and whether it was cut at the cap."""
-    sections = dict(approval_sections(spec))
+    # A list of single-key mappings, never one dict: two labels may be equal (a hostile Select option pair) and a dict
+    # would silently drop all but one action list from the review
+    sections = [{label: actions} for label, actions in approval_sections(spec)]
     try:
         text = yaml_dump(sections)
     except Exception:  # noqa: BLE001 - whatever the dumper cannot represent is still shown, as JSON

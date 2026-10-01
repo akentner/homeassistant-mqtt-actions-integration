@@ -217,6 +217,7 @@ def test_issue_strings_use_expected_variables(language: str) -> None:
         "owner",
         "hash",
         "actions",
+        "startup",
         "templated",
         "residual",
         "invalid",

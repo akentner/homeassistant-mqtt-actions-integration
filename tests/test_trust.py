@@ -648,6 +648,12 @@ def test_view_labels_select_options_and_lists_invalid_triggers() -> None:
     assert view.invalid == "- Alpha (a)"
 
 
+def test_view_carries_the_startup_flag() -> None:
+    """WR-02: the view exposes run_on_startup, which the approval hash binds."""
+    assert _view(make_spec(on=ON_ACTIONS, run_on_startup=True)).run_on_startup is True
+    assert _view(make_spec(on=ON_ACTIONS)).run_on_startup is False
+
+
 def test_view_shows_every_action_list_when_select_labels_collide() -> None:
     """Two options whose labels are equal ("a (b (c)") both appear in the review; none is dropped (CR-01)."""
     spec = make_spec(

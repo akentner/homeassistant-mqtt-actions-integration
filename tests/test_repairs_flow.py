@@ -266,7 +266,17 @@ async def test_flow_shows_device_owner_yaml_hash_and_templates(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "confirm"
     placeholders = result["description_placeholders"]
-    assert set(placeholders) == {"device", "owner", "hash", "actions", "templated", "residual", "invalid"}
+    assert set(placeholders) == {
+        "device",
+        "owner",
+        "hash",
+        "actions",
+        "startup",
+        "templated",
+        "residual",
+        "invalid",
+    }
+    assert placeholders["startup"] == "false"
     assert placeholders["device"] == "Lamp"
     assert placeholders["owner"] == escape_markdown(FOREIGN_OWNER_NAME)
     assert placeholders["hash"] == _actions_hash(entry, device_id)[:APPROVAL_HASH_PREFIX_LENGTH]
@@ -276,6 +286,17 @@ async def test_flow_shows_device_owner_yaml_hash_and_templates(
     assert placeholders["templated"] == "- {{ 'notify.notify' }}"
     assert placeholders["residual"] == EMPTY_LIST
     assert placeholders["invalid"] == EMPTY_LIST
+
+
+async def test_flow_states_the_startup_flag_the_hash_binds(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """WR-02: a device that also runs at startup says so in the dialog; the flag is part of the approved hash."""
+    _entry, device_id, _spec = await _pending(hass, make_hub_entry, run_on_startup=True)
+
+    result = await _start_flow(hass, device_id)
+
+    assert result["description_placeholders"]["startup"] == "true"
 
 
 async def test_residual_and_invalid_actions_are_listed(

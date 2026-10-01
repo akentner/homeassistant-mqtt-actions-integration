@@ -70,6 +70,7 @@ class ApprovalRepairFlow(RepairsFlow):
                     "owner": view.owner_name,
                     "hash": view.short_hash,
                     "actions": view.actions_yaml,
+                    "startup": str(view.run_on_startup).lower(),
                     "templated": view.templated,
                     "residual": view.residual,
                     "invalid": view.invalid,

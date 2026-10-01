@@ -448,10 +448,11 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
             step_id="menu",
             menu_options=menu_options,
             description_placeholders={
-                "name": self._draft[CONF_NAME],
+                "name": escape_markdown(self._draft[CONF_NAME]),
                 "count": str(len(options)),
                 "options": "\n".join(
-                    f"- {option[CONF_FRIENDLY_NAME]} ({option[CONF_STATE_VALUE]})" for option in options
+                    f"- {escape_markdown(option[CONF_FRIENDLY_NAME])} ({escape_markdown(option[CONF_STATE_VALUE])})"
+                    for option in options
                 ),
             },
         )
@@ -571,7 +572,7 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
             step_id="edit_option_details",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
             errors=errors,
-            description_placeholders={**placeholders, "state_value": option[CONF_STATE_VALUE]},
+            description_placeholders={**placeholders, "state_value": escape_markdown(option[CONF_STATE_VALUE])},
         )
 
     async def async_step_remove_option(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
@@ -592,8 +593,8 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
             step_id="remove_confirm",
             menu_options=["remove_confirmed", "keep_option"],
             description_placeholders={
-                "friendly_name": option[CONF_FRIENDLY_NAME],
-                "state_value": option[CONF_STATE_VALUE],
+                "friendly_name": escape_markdown(option[CONF_FRIENDLY_NAME]),
+                "state_value": escape_markdown(option[CONF_STATE_VALUE]),
             },
         )
 

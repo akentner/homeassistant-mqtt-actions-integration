@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Walking Skeleton - Installable Switch** - HACS-installable integration where a Switch created in the UI runs its actions on MQTT state changes, safely across restarts (completed 2026-09-29)
 - [x] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection (completed 2026-09-30)
-- [ ] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely
+- [x] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely (completed 2026-10-02)
 - [ ] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation
 
 ## Phase Details
@@ -103,7 +103,7 @@ Plans:
   4. Only a device's owner can edit or delete it; followers pin the owner and raise a Repairs issue on conflicting ownership claims, and if a follower removes the discovered entity the owner republishes its discovery.
   5. Deleting a device requires an explicit confirmation stating that it is removed on all connected instances, after which its central config and discovery are unpublished and the device disappears everywhere.
 
-**Plans:** 8/8 plans executed
+**Plans:** 8/8 plans complete
 
 Plans:
 - [x] 03-08-PLAN.md
@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
-| 3. Trust, Central Config and Ownership | 8/8 | In Progress|  |
+| 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |
 
 ## Backlog

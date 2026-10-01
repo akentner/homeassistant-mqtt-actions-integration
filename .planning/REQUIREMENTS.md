@@ -56,9 +56,9 @@
 
 ### Trust & Security
 
-- [ ] **TRU-01**: Remote-provided actions are not executed by default (deny)
-- [ ] **TRU-02**: User can approve a remote device's actions per instance via Repairs; approval is bound to the action hash, so changed actions require re-approval
-- [ ] **TRU-03**: Every action sequence received from the broker is validated against the script schema, and a service denylist is enforced at execution time
+- [x] **TRU-01**: Remote-provided actions are not executed by default (deny)
+- [x] **TRU-02**: User can approve a remote device's actions per instance via Repairs; approval is bound to the action hash, so changed actions require re-approval
+- [x] **TRU-03**: Every action sequence received from the broker is validated against the script schema, and a service denylist is enforced at execution time
 - [ ] **TRU-04**: Documentation includes a broker ACL example binding each instance to its own topics
 
 ### Operations
@@ -144,9 +144,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SYN-08 | Phase 4 | Pending |
 | SYN-09 | Phase 4 | Pending |
 | SYN-10 | Phase 4 | Pending |
-| TRU-01 | Phase 3 | Pending |
-| TRU-02 | Phase 3 | Pending |
-| TRU-03 | Phase 3 | Pending |
+| TRU-01 | Phase 3 | Complete |
+| TRU-02 | Phase 3 | Complete |
+| TRU-03 | Phase 3 | Complete |
 | TRU-04 | Phase 3 | Pending |
 | OPS-01 | Phase 4 | Pending |
 | OPS-02 | Phase 4 | Pending |

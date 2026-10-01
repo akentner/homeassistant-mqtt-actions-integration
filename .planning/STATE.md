@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: trust-central-config-and-ownership
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-10-01T00:01:10.042Z"
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-10-01T00:20:41.894Z"
 last_activity: 2026-10-01
 last_activity_desc: Phase 03 execution started
-state_head: e6ccf95a4bb87a11ecdce7ece29e3edadbd2d338
+state_head: 7529a8f1c084f1176211bef987d4cbdd926236ef
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 17
   percent: 50
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 03 (trust-central-config-and-ownership) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-10-01 — Phase 03 execution started
 
@@ -68,6 +68,7 @@ Progress: [█████░░░░░] 50% of Phase 01 plans
 | Phase 03 P03 | 10 min | 3 tasks | 15 files |
 | Phase 03 P04 | 12 min | 3 tasks | 12 files |
 | Phase 03 P05 | 25 min | 2 tasks | 6 files |
+| Phase 03 P06 | 55 min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,10 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-05: Seen set is bounded to mirror ids; marked by the config callback for ids with a mirror and by the ingest on creation (Rule 2 deviation from the literal plan)
 - [Phase 03]: 03-05: Registry cleanup treats an entity as live when its state exists and is not restored; any live entity skips the whole cleanup (Pitfall 10)
 - [Phase 03]: 03-05: PRUNE_GRACE_SECONDS = 30; reconnect clears seen set and presence cache; every owner-online transition re-arms the prune timer; no approval retention after a tombstone (A10)
+- [Phase 03]: Mirror Scripts are built before the mirror subscribes and only when approvals[id] equals the actions hash; unapproved, changed, blocked and action-less mirrors run nothing
+- [Phase 03]: Execution-time denylist through GuardedTemplate raising a plain Exception so continue_on_error cannot swallow a denial; statically denied mirrors are blocked and never approvable
+- [Phase 03]: Approval issues are deleted then created on every applied document and at start so a dismissed request never hides a changed one; empty lists in the dialog are an em dash
+- [Phase 03]: Action failure issues of mirrors escape device name, trigger label and error text because they come from the broker
 
 ### Pending Todos
 
@@ -131,6 +136,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-01T00:01:09.978Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-10-01T00:20:41.823Z
+Stopped at: Completed 03-06-PLAN.md
 Resume file: None

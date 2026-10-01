@@ -155,3 +155,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 7/7 | In Progress|  |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |
+
+## Backlog
+
+### Phase 999.1: Per-instance local actions on mirrored devices (followers add own actions, relates to MAP-01) (BACKLOG)
+
+**Goal:** [Captured for future planning] A follower instance can add its own local actions to a mirrored device, on top of the owner's document (for example different entities per instance). Found during Phase 3 UAT: mirrors are read-only today.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)

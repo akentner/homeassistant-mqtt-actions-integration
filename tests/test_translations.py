@@ -48,7 +48,21 @@ NEW_ISSUES = {
     "discovery_removed": {"device", "count"},
     "owner_conflict": {"device", "owner", "claimant"},
     "schema_too_new": {"device", "version", "supported"},
+    "approval_required": {"device", "owner", "hash"},
+    "mirror_blocked": {"device", "owner", "services"},
+    "denied_service_call": {"device", "trigger", "service"},
 }
+
+# The approval fix flow (plan 03-06): the confirm step and the three reasons it can abort
+APPROVAL_FLOW = "issues.approval_required.fix_flow"
+APPROVAL_FLOW_KEYS = (
+    f"{APPROVAL_FLOW}.step.confirm.title",
+    f"{APPROVAL_FLOW}.step.confirm.description",
+    f"{APPROVAL_FLOW}.abort.changed",
+    f"{APPROVAL_FLOW}.abort.too_large",
+    f"{APPROVAL_FLOW}.abort.not_loaded",
+)
+FENCED_YAML = re.compile(r"```yaml\s*\{actions\}\s*```")
 
 REQUIRED_KEYS = (
     "config.step.user.title",
@@ -92,6 +106,7 @@ REQUIRED_KEYS = (
     "issues.circuit_breaker_tripped.title",
     "issues.circuit_breaker_tripped.description",
     *(f"issues.{issue}.{part}" for issue in NEW_ISSUES for part in ("title", "description")),
+    *APPROVAL_FLOW_KEYS,
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
         for step in ("user", "edit_device")
@@ -193,6 +208,24 @@ def test_issue_strings_use_expected_variables(language: str) -> None:
     assert _variables(flat["issues.circuit_breaker_tripped.description"]) == {"device", "max_runs", "window"}
     assert _variables(flat["issues.owner_conflict.description"]) == {"device", "owner", "claimant"}
     assert _variables(flat["issues.schema_too_new.description"]) == {"device", "version", "supported"}
+    assert _variables(flat["issues.approval_required.description"]) == {"device", "owner", "hash"}
+    assert _variables(flat[f"{APPROVAL_FLOW}.step.confirm.description"]) == {
+        "device",
+        "owner",
+        "hash",
+        "actions",
+        "templated",
+        "residual",
+        "invalid",
+    }
+    assert _variables(flat["issues.mirror_blocked.description"]) == {"device", "owner", "services"}
+    assert _variables(flat["issues.denied_service_call.description"]) == {"device", "trigger", "service"}
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_confirm_description_contains_a_fenced_yaml_block(language: str) -> None:
+    """The actions are shown as code: the placeholder sits alone inside a fenced yaml block."""
+    assert FENCED_YAML.search(_load(language)[f"{APPROVAL_FLOW}.step.confirm.description"])
 
 
 @pytest.mark.parametrize("language", LANGUAGES)

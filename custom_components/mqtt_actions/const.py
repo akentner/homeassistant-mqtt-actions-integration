@@ -137,6 +137,14 @@ ISSUE_OWNER_CONFLICT_PREFIX: Final = "owner_conflict_"
 ISSUE_SCHEMA_TOO_NEW_PREFIX: Final = "schema_too_new_"
 # Too-new documents of devices without a mirror raise at most this many issues, so broker noise cannot flood Repairs
 MAX_SCHEMA_TOO_NEW_ISSUES: Final = 10
+# Approval view limits (A2): the YAML of the approval dialog is refused above this many characters instead of being
+# shown truncated, at most this many templated service names are listed, and this many characters of the hash show
+APPROVAL_YAML_MAX_CHARS: Final = 20000
+APPROVAL_TEMPLATED_MAX_LINES: Final = 20
+APPROVAL_HASH_PREFIX_LENGTH: Final = 12
+# Approval of a mirror (D-02) and its blocked state (A6); both are deleted with the device
+ISSUE_APPROVAL_PREFIX: Final = "approval_"
+ISSUE_BLOCKED_PREFIX: Final = "blocked_"
 # A templated service name of a mirror resolved to a denied service at run time (D-05)
 ISSUE_DENIED_CALL_PREFIX: Final = "denied_call_"
 ISSUE_DISCOVERY_DISABLED: Final = "mqtt_discovery_disabled"

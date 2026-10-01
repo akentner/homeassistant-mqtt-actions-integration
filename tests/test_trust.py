@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError, TemplateError
@@ -16,6 +17,8 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.mqtt_actions.actions import async_validate_actions
 from custom_components.mqtt_actions.const import (
+    APPROVAL_HASH_PREFIX_LENGTH,
+    APPROVAL_TEMPLATED_MAX_LINES,
     CONF_BASE_TOPIC,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
@@ -599,3 +602,84 @@ async def test_tombstone_forgets_the_approval(hass: HomeAssistant, mqtt_mock: An
     saved = manager._data_to_save()
     assert saved[STORE_APPROVALS] == {}
     assert spec.device_id not in saved[STORE_MIRRORS]
+
+
+# --- the approval view (D-02, T-03-28) ---------------------------------------------------------------------------
+
+
+def _view(spec: DeviceSpec, invalid: tuple[str, ...] = (), **document: Any) -> Any:
+    from custom_components.mqtt_actions.manager import Manager
+    from custom_components.mqtt_actions.trust import build_approval_view
+
+    info = Manager._mirror_info(parse_document(spec.device_id, document_payload(spec, **document)))
+    return build_approval_view(spec, info, invalid)
+
+
+def test_view_renders_each_non_empty_action_list_under_its_label() -> None:
+    """The YAML holds the lists that have actions under the dialog labels; names are escaped, empty lists are dashes."""
+    from custom_components.mqtt_actions.trust import EMPTY_LIST_TEXT
+
+    spec = make_spec(on=ON_ACTIONS, name="My_lamp")
+
+    view = _view(spec)
+
+    assert view.device_name == escape_markdown("My_lamp")
+    assert view.owner_name == escape_markdown("Foreign instance")
+    assert len(view.short_hash) == APPROVAL_HASH_PREFIX_LENGTH
+    assert view.actions_hash.startswith(view.short_hash)
+    assert "onChangeToOn:" in view.actions_yaml
+    assert "action: test.on" in view.actions_yaml
+    assert "onChangeToOff" not in view.actions_yaml
+    assert view.truncated is False
+    assert (view.templated, view.residual, view.invalid) == (EMPTY_LIST_TEXT,) * 3
+
+
+def test_view_labels_select_options_and_lists_invalid_triggers() -> None:
+    """A Select option is labelled with its friendly name and value; invalid labels appear as a bullet list."""
+    spec = make_spec(
+        "select", options=[("a", "Alpha", ON_ACTIONS), ("b", "Bravo", OFF_ACTIONS), ("c", "Charlie", [])], name="Mode"
+    )
+
+    view = _view(spec, ("Alpha (a)",))
+
+    assert "Alpha (a):" in view.actions_yaml
+    assert "Bravo (b):" in view.actions_yaml
+    assert "Charlie" not in view.actions_yaml
+    assert view.invalid == "- Alpha (a)"
+
+
+def test_view_caps_the_yaml_and_flags_truncation() -> None:
+    """A document too long to show in full is flagged, and the text never exceeds the cap."""
+    spec = make_spec(on=ON_ACTIONS)
+
+    with patch("custom_components.mqtt_actions.trust.APPROVAL_YAML_MAX_CHARS", 20):
+        view = _view(spec)
+
+    assert view.truncated is True
+    assert len(view.actions_yaml) <= 20
+
+
+def test_view_caps_the_templated_names() -> None:
+    """At most APPROVAL_TEMPLATED_MAX_LINES templated names are listed, and the rest is counted."""
+    actions = [{"action": f"{{{{ 'x.y{index}' }}}}"} for index in range(APPROVAL_TEMPLATED_MAX_LINES + 5)]
+    spec = make_spec(on=actions)
+
+    view = _view(spec)
+
+    lines = view.templated.splitlines()
+    assert len(lines) == APPROVAL_TEMPLATED_MAX_LINES + 1
+    assert lines[0] == "- {{ 'x.y0' }}"
+    assert lines[-1].endswith("(+5)")
+
+
+def test_view_removes_control_characters_and_fence_runs() -> None:
+    """Control and format characters go, and no run of three backticks can close the fence in the dialog."""
+    hostile = {"message": f"a{chr(7)}b{chr(0x202E)}c ```yaml\n```` d"}
+    spec = make_spec(on=[{"action": "notify.notify", "data": hostile}])
+
+    view = _view(spec)
+
+    assert "```" not in view.actions_yaml
+    assert chr(7) not in view.actions_yaml
+    assert chr(0x202E) not in view.actions_yaml
+    assert "abc" in view.actions_yaml

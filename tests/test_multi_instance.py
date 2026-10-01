@@ -303,3 +303,43 @@ async def test_prune_only_touches_mirrors(
     assert set(owner_b.manager.devices) == {id_b}
     assert set(owner_a.manager.mirrors) == {id_b}
     assert set(owner_b.manager.mirrors) == {id_a}
+
+
+# --- approval and execution on every instance (STA-03, TRU-01) ---------------------------------------------------
+
+
+async def test_approved_mirror_runs_actions_on_both_instances(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """After the follower approved, a UI-style and an external state change run the actions on both instances."""
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}], off=[{"action": "test.off"}])
+    device_id = sub["data"]["device_id"]
+    owner = await make_instance("owner", hass=hass, subentries=[sub])
+    follower = await make_instance("follower")
+    owner_on = async_mock_service(owner.hass, "test", "on")
+    owner_off = async_mock_service(owner.hass, "test", "off")
+    follower_on = async_mock_service(follower.hass, "test", "on")
+    follower_off = async_mock_service(follower.hass, "test", "off")
+    await _settle(owner, follower)
+    assert device_id in follower.manager.mirrors
+
+    # Before the approval the follower runs nothing, whoever changes the state
+    await follower.gateway.async_publish(state_topic(BASE, device_id), "OFF", retain=True)
+    await _settle(owner, follower)
+    assert (len(owner_off), len(follower_off)) == (1, 0)
+
+    mirror = follower.manager.mirrors[device_id]
+    assert mirror.mirror is not None
+    assert await follower.manager.async_approve(device_id, mirror.mirror.actions_hash) is True
+    await _settle(owner, follower)
+
+    # A toggle in the UI of the follower publishes the state through its own gateway
+    await follower.gateway.async_publish(state_topic(BASE, device_id), "ON", retain=True)
+    await _settle(owner, follower)
+    assert (len(owner_on), len(follower_on)) == (1, 1)
+
+    # An external client publishes straight to the broker
+    fake_broker.publish(state_topic(BASE, device_id), "OFF", retain=True)
+    await _settle(owner, follower)
+    assert (len(owner_off), len(follower_off)) == (2, 1)
+    assert (len(owner_on), len(follower_on)) == (1, 1)

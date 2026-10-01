@@ -97,6 +97,8 @@ STORE_TRIPPED: Final = "tripped"
 STORE_REVS: Final = "revs"
 # device id -> the received document text of a mirror; parsed again at every load, never trusted (D-08, T-03-19)
 STORE_MIRRORS: Final = "mirrors"
+# device id -> the actions hash the user approved on this instance; separate from the mirror records (D-02, A10)
+STORE_APPROVALS: Final = "approvals"
 STORE_SAVE_DELAY: Final = 5.0
 
 # Owner-side defense of the published truth (D-15, D-17, D-18): how many published content hashes per device count as
@@ -135,6 +137,8 @@ ISSUE_OWNER_CONFLICT_PREFIX: Final = "owner_conflict_"
 ISSUE_SCHEMA_TOO_NEW_PREFIX: Final = "schema_too_new_"
 # Too-new documents of devices without a mirror raise at most this many issues, so broker noise cannot flood Repairs
 MAX_SCHEMA_TOO_NEW_ISSUES: Final = 10
+# A templated service name of a mirror resolved to a denied service at run time (D-05)
+ISSUE_DENIED_CALL_PREFIX: Final = "denied_call_"
 ISSUE_DISCOVERY_DISABLED: Final = "mqtt_discovery_disabled"
 # Every Repairs issue whose id is a prefix plus a device id; deleted with the device and with the hub. Later issue
 # families of a device append their prefix here.

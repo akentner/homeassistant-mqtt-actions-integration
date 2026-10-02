@@ -164,6 +164,7 @@ SIGNAL_DEVICES_CHANGED: Final = f"{DOMAIN}_devices_changed_{{}}"
 SERVICE_RESYNC: Final = "resync"
 SERVICE_EXPORT_DEVICES: Final = "export_devices"
 SERVICE_IMPORT_DEVICES: Final = "import_devices"
+SERVICE_RETRIGGER: Final = "retrigger"
 
 # Export document (D-11): the format name and version let a later reader tell versions apart; the file lives only in
 # this directory below the configuration directory, never in www, which Home Assistant serves without authentication
@@ -179,6 +180,32 @@ MAX_IMPORT_BYTES: Final = 4 * 1024 * 1024
 # Minimum time between two accepted resyncs (D-12): a held button or a looping automation cannot queue unbounded
 # republishes; measured on Manager.clock
 RESYNC_MIN_INTERVAL_SECONDS: Final = 5.0
+
+# Re-trigger (D-01 to D-04): the caller collects acknowledgements for at most this long and leaves early when every
+# expected instance answered; one accepted request per device per interval on the caller and on a receiver; a receiver
+# remembers this many request ids; a request older than the maximum age, or sent that far into the future, is dropped
+# (which is also the clock-skew tolerance between instances). All fixed, none user-configurable.
+RETRIGGER_ACK_WINDOW_SECONDS: Final = 5.0
+RETRIGGER_DEVICE_INTERVAL_SECONDS: Final = 5.0
+RETRIGGER_SEEN_LIMIT: Final = 128
+RETRIGGER_MAX_AGE_SECONDS: Final = 60.0
+# Status words of an acknowledgement; no_answer is only ever produced by the caller and never sent on the wire (D-03)
+ACK_EXECUTED: Final = "executed"
+ACK_NOT_APPROVED: Final = "not_approved"
+ACK_PAUSED: Final = "paused"
+ACK_OBSERVING: Final = "observing"
+ACK_DISABLED: Final = "disabled"
+ACK_ERROR: Final = "error"
+ACK_NO_ANSWER: Final = "no_answer"
+# Reason words that accompany a status; short codes, never free text
+REASON_UNKNOWN_DEVICE: Final = "unknown_device"
+REASON_BAD_STATE: Final = "bad_state"
+REASON_NO_ACTIONS: Final = "no_actions"
+REASON_NOT_RUNNABLE: Final = "not_runnable"
+REASON_OFFLINE: Final = "offline"
+# Reasons the caller refuses a re-trigger with, before anything is sent; they never appear on the wire
+REASON_RATE_LIMITED: Final = "rate_limited"
+REASON_NO_STATE: Final = "no_state"
 
 # A mirror whose config document was not seen again within this window after setup, a reconnect or the owner coming
 # online is pruned, but only when its owner's availability says online (D-10, A2)

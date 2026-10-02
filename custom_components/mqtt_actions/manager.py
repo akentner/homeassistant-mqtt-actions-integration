@@ -79,6 +79,7 @@ from .model import DeviceSpec, shown, spec_from_subentry, trigger_key
 from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .presence import PresenceManager
+from .retrigger import RetriggerCoordinator
 from .runner import ActionRunner
 from .state import StateTracker
 from .sync import SyncManager
@@ -360,6 +361,7 @@ class Manager:
         self.clock: Callable[[], float] = time.monotonic
         self.sync = SyncManager(self)
         self.presence = PresenceManager(self)
+        self.retrigger = RetriggerCoordinator(self)
         # The integration version, read at the start; announced in the heartbeat
         self._version = ""
         # When the last accepted resync happened on `clock`; None until the first one (D-12)
@@ -441,6 +443,10 @@ class Manager:
     def has_device(self, device_id: str) -> bool:
         """Return whether the id belongs to an owned device or a mirror."""
         return self._device(device_id) is not None
+
+    def device(self, device_id: str) -> Device | None:
+        """Return the owned device or the mirror with this id, None for an unknown id."""
+        return self._device(device_id)
 
     async def async_set_device_mode(self, device_id: str, mode: str) -> None:
         """
@@ -559,6 +565,7 @@ class Manager:
             # Subscribed before anything is published, so the owner sees its own documents and every foreign write
             await self.sync.async_start()
             await self.presence.async_start()
+            await self.retrigger.async_start()
             await self._async_orphan_cleanup()
             await self._async_reconcile_locked(startup=True)
             await self._async_publish_owned()
@@ -603,6 +610,7 @@ class Manager:
             self._running = False
             self.sync.async_stop()
             self.presence.async_stop()
+            self.retrigger.async_stop()
             await self._store.async_save(self._data_to_save())
             for device in [*self.devices.values(), *self.mirrors.values()]:
                 if device.unsubscribe is not None:

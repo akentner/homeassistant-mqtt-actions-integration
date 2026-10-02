@@ -83,6 +83,17 @@ TRANSFERRED_FLOW_KEYS = (
 )
 FENCED_YAML = re.compile(r"```yaml\s*\{actions\}\s*```")
 
+# The tracer (plan 04-14) proves the hassfest text-source rule on one issue; the expansion widens it to every issue
+GUARDED_ISSUES = ("duplicate_instance_id",)
+
+# Phrases the confirm step of a fixable issue must contain, because that step is the only text the issue shows
+FIXABLE_WORDING = {
+    "duplicate_instance_id": {
+        "en": ("backup was restored", "same topics"),
+        "de": ("Backup", "dieselben Topics"),
+    },
+}
+
 # Flow descriptions whose user-text placeholders the flow escapes with escape_markdown (G-03-2). A translation must use
 # them as bare words: wrapped in code, emphasis, link or quote markup they would render wrong or be escaped twice.
 ESCAPED_FLOW_PLACEHOLDERS = {
@@ -260,6 +271,40 @@ def _flatten(node: Any, prefix: str = "") -> dict[str, str]:
 
 def _load(language: str) -> dict[str, str]:
     return _flatten(json.loads((TRANSLATIONS_DIR / f"{language}.json").read_text(encoding="utf-8")))
+
+
+def _raw(language: str) -> dict[str, Any]:
+    """The parsed language file with its structure (``_load`` flattens and cannot tell siblings apart)."""
+    return json.loads((TRANSLATIONS_DIR / f"{language}.json").read_text(encoding="utf-8"))
+
+
+def _issue_problems(node: Any) -> list[str]:
+    """Violations of the hassfest rule for one issue translation.
+
+    hassfest puts ``description`` and ``fix_flow`` in the exclusion group ``fixable`` (a fixable issue shows its text
+    in the steps of the flow) and requires at least one of them next to a title.
+    """
+    if not isinstance(node, dict):
+        return ["the issue translation is not an object"]
+    problems: list[str] = []
+    if not node.get("title"):
+        problems.append("title is missing or empty")
+    has_description, has_fix_flow = "description" in node, "fix_flow" in node
+    if has_description and has_fix_flow:
+        problems.append("description and fix_flow together violate the exclusion group 'fixable'")
+    if not has_description and not has_fix_flow:
+        problems.append("neither description nor fix_flow is present")
+    if has_fix_flow:
+        steps = node["fix_flow"].get("step") if isinstance(node["fix_flow"], dict) else None
+        if not isinstance(steps, dict) or not steps:
+            problems.append("fix_flow has no steps")
+        else:
+            problems.extend(
+                f"fix_flow step {name} has no description"
+                for name, step in steps.items()
+                if not isinstance(step, dict) or not step.get("description")
+            )
+    return problems
 
 
 def _variables(text: str) -> set[str]:
@@ -474,3 +519,41 @@ def test_required_transferred_keys_exist_in_both_languages(language: str) -> Non
     assert _variables(flat[f"{TRANSFERRED_FLOW}.step.confirm.description"]) == {"device", "claimant"}
     assert not _variables(flat[f"{TRANSFERRED_FLOW}.abort.not_loaded"])
     assert not _variables(flat[f"{TRANSFERRED_FLOW}.abort.changed"])
+
+
+@pytest.mark.parametrize("issue", GUARDED_ISSUES)
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_issue_has_one_text_source(language: str, issue: str) -> None:
+    """hassfest accepts an issue with a title and exactly one of description or fix_flow, in every language.
+
+    Local equivalent of the CI step: docker run --rm -v "$PWD":/github/workspace:Z ghcr.io/home-assistant/hassfest
+    """
+    assert _issue_problems(_raw(language)["issues"][issue]) == []
+
+
+def test_issue_guard_detects_the_hassfest_violations() -> None:
+    """The guard is pinned to the rule on synthetic data, so the real check cannot pass vacuously."""
+    step = {"step": {"confirm": {"title": "t", "description": "d"}}}
+    both = _issue_problems({"title": "t", "description": "d", "fix_flow": step})
+    assert both
+    assert any("fixable" in problem for problem in both)
+    assert _issue_problems({"title": "t"})
+    assert _issue_problems({"description": "d"})
+    assert _issue_problems({"title": "t", "fix_flow": {"step": {"confirm": {"title": "t", "description": ""}}}})
+    assert _issue_problems({"title": "t", "fix_flow": {}})
+    assert _issue_problems("text")
+    assert _issue_problems({"title": "t", "description": "d"}) == []
+    assert _issue_problems({"title": "t", "fix_flow": step}) == []
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_fixable_issue_text_keeps_its_explanation(language: str) -> None:
+    """A fixable issue shows only its confirm step, so that step holds the explanation (T-04-64)."""
+    flat = _load(language)
+    missing = [
+        (issue, phrase)
+        for issue, phrases in FIXABLE_WORDING.items()
+        for phrase in phrases[language]
+        if phrase not in flat[f"issues.{issue}.fix_flow.step.confirm.description"]
+    ]
+    assert missing == []

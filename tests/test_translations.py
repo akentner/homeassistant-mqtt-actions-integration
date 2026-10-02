@@ -52,9 +52,12 @@ NEW_ISSUES = {
     "approval_required": {"device", "owner", "hash"},
     "mirror_blocked": {"device", "owner", "services"},
     "denied_service_call": {"device", "trigger", "service"},
-    "duplicate_instance_id": {"instance"},
     "transferred": {"device", "claimant"},
 }
+
+# Fixable issues show their text in the confirm step of the fix flow (hassfest rejects an issue-level description next
+# to a fix_flow); issue key to the variables of that step
+FIXABLE_ISSUES = {"duplicate_instance_id": {"instance", "devices"}}
 
 # The approval fix flow (plan 03-06): the confirm step and the three reasons it can abort
 APPROVAL_FLOW = "issues.approval_required.fix_flow"
@@ -102,7 +105,6 @@ ESCAPED_FLOW_PLACEHOLDERS = {
     "config_subentries.select.step.menu.description": ("name", "options"),
     "config_subentries.select.step.edit_option_details.description": ("state_value",),
     "config_subentries.select.step.remove_confirm.description": ("friendly_name", "state_value"),
-    "issues.duplicate_instance_id.description": ("instance",),
     f"{DUPLICATE_FLOW}.step.confirm.description": ("instance",),
     "issues.transferred.description": ("device", "claimant"),
     f"{TRANSFERRED_FLOW}.step.confirm.description": ("device", "claimant"),
@@ -171,7 +173,8 @@ REQUIRED_KEYS = (
     "issues.mqtt_discovery_disabled.description",
     "issues.circuit_breaker_tripped.title",
     "issues.circuit_breaker_tripped.description",
-    *(f"issues.{issue}.{part}" for issue in NEW_ISSUES for part in ("title", "description")),
+    *(f"issues.{issue}.title" for issue in (*NEW_ISSUES, *FIXABLE_ISSUES)),
+    *(f"issues.{issue}.description" for issue in NEW_ISSUES),
     *APPROVAL_FLOW_KEYS,
     *DUPLICATE_FLOW_KEYS,
     *TRANSFERRED_FLOW_KEYS,
@@ -392,6 +395,10 @@ def test_issue_texts_exist_in_both_languages(language: str) -> None:
     for issue, variables in NEW_ISSUES.items():
         assert flat[f"issues.{issue}.title"]
         assert _variables(flat[f"issues.{issue}.description"]) == variables
+    for issue, variables in FIXABLE_ISSUES.items():
+        assert flat[f"issues.{issue}.title"]
+        assert _variables(flat[f"issues.{issue}.fix_flow.step.confirm.description"]) == variables
+        assert f"issues.{issue}.description" not in flat
 
 
 def test_error_placeholders_are_the_ones_the_flow_supplies() -> None:
@@ -499,7 +506,6 @@ def test_required_duplicate_keys_exist_in_both_languages(language: str) -> None:
     flat = _load(language)
     assert [key for key in DUPLICATE_FLOW_KEYS if not flat.get(key)] == []
     assert flat["issues.duplicate_instance_id.title"]
-    assert _variables(flat["issues.duplicate_instance_id.description"]) == {"instance"}
     assert _variables(flat[f"{DUPLICATE_FLOW}.step.confirm.description"]) == {"instance", "devices"}
     assert not _variables(flat[f"{DUPLICATE_FLOW}.abort.not_loaded"])
     assert not _variables(flat[f"{DUPLICATE_FLOW}.abort.changed"])

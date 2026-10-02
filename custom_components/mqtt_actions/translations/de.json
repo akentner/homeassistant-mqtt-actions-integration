@@ -341,12 +341,11 @@
     },
     "duplicate_instance_id": {
       "title": "Eine andere Instanz verwendet dieselbe Instanz-ID",
-      "description": "Eine andere Home-Assistant-Instanz sendet Heartbeats mit derselben Instanz-ID wie {instance}. Das passiert meist, wenn ein Backup auf einem zweiten Rechner wiederhergestellt oder ein Klon gestartet wurde. Beide Instanzen schreiben dann dieselben Topics auf dem MQTT-Broker. Öffne diese Reparatur, um dieser Instanz eine neue ID zu geben. Bis du bestätigst, ändert sich nichts.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Dieser Instanz eine neue Instanz-ID geben",
-            "description": "Du gibst gleich der Instanz {instance} eine neue Instanz-ID, weil eine andere Instanz dieselbe verwendet.\n\nDiese Instanz vergisst ihre eigenen {devices} Geräte nur lokal. Auf dem MQTT-Broker wird nichts gelöscht oder geändert: Die Topics, die Discovery und die Verfügbarkeit des Originals bleiben genau so, wie sie sind, und das Original bleibt Besitzer seiner Geräte.\n\nDanach lädt diese Instanz mit der neuen ID neu und zeigt dieselben Geräte als schreibgeschützte Spiegel des Originals. Geräte, die diese Instanz eigenständig besitzen soll, müssen danach neu angelegt oder importiert werden.\n\nBeschränkt dein MQTT-Broker die Topics pro Instanz mit einer ACL, trage die neue Instanz-ID dort ein, sonst kann diese Instanz nur lesen. Es passiert nichts, bis du bestätigst."
+            "description": "Eine andere Home-Assistant-Instanz sendet Heartbeats mit derselben Instanz-ID wie {instance}. Das passiert meist, wenn ein Backup auf einem zweiten Rechner wiederhergestellt oder ein Klon gestartet wurde. Beide Instanzen schreiben dann dieselben Topics auf dem MQTT-Broker.\n\nDu gibst gleich der Instanz {instance} eine neue Instanz-ID.\n\nDiese Instanz vergisst ihre eigenen {devices} Geräte nur lokal. Auf dem MQTT-Broker wird nichts gelöscht oder geändert: Die Topics, die Discovery und die Verfügbarkeit des Originals bleiben genau so, wie sie sind, und das Original bleibt Besitzer seiner Geräte.\n\nDanach lädt diese Instanz mit der neuen ID neu und zeigt dieselben Geräte als schreibgeschützte Spiegel des Originals. Geräte, die diese Instanz eigenständig besitzen soll, müssen danach neu angelegt oder importiert werden.\n\nBeschränkt dein MQTT-Broker die Topics pro Instanz mit einer ACL, trage die neue Instanz-ID dort ein, sonst kann diese Instanz nur lesen. Es passiert nichts, bis du bestätigst."
           }
         },
         "abort": {

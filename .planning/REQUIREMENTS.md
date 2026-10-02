@@ -66,7 +66,7 @@
 - [ ] **OPS-01**: A service re-triggers the actions on all approved instances (non-retained, `request_id` dedupe, rate-limited)
 - [ ] **OPS-02**: Instances acknowledge a re-trigger, and the caller can see which instances executed it
 - [x] **OPS-03**: User can see the connected instances (roster with presence heartbeat)
-- [ ] **OPS-04**: Diagnostics export with sensitive data redacted
+- [x] **OPS-04**: Diagnostics export with sensitive data redacted
 - [ ] **OPS-05**: README and docs cover setup, trust model, limitations; releases are automated with manifest version in step with the tag
 - [x] **OPS-06**: Test suite covers unit level, a real-Mosquitto tier, and multi-instance scenarios via an in-memory fake broker
 
@@ -151,7 +151,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPS-01 | Phase 4 | Pending |
 | OPS-02 | Phase 4 | Pending |
 | OPS-03 | Phase 4 | Complete |
-| OPS-04 | Phase 4 | Pending |
+| OPS-04 | Phase 4 | Complete |
 | OPS-05 | Phase 4 | Pending |
 | OPS-06 | Phase 4 | Complete |
 

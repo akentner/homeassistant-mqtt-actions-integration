@@ -263,6 +263,8 @@ ISSUE_DENIED_CALL_PREFIX: Final = "denied_call_"
 ISSUE_DISCOVERY_DISABLED: Final = "mqtt_discovery_disabled"
 # Another instance shares this instance's id, for example a clone or a restored backup; fixable, one per instance (D-07)
 ISSUE_DUPLICATE_INSTANCE_ID: Final = "duplicate_instance_id"
+# An old owner recognized that another instance adopted one of its devices; fixable, one per device (D-09)
+ISSUE_TRANSFERRED_PREFIX: Final = "transferred_"
 # Every Repairs issue whose id is a prefix plus a device id; deleted with the device and with the hub. Later issue
 # families of a device append their prefix here.
 ISSUE_DEVICE_PREFIXES: Final = (
@@ -276,5 +278,6 @@ ISSUE_DEVICE_PREFIXES: Final = (
     ISSUE_DENIED_CALL_PREFIX,
     ISSUE_APPROVAL_PREFIX,
     ISSUE_BLOCKED_PREFIX,
+    ISSUE_TRANSFERRED_PREFIX,
 )
 MAX_ISSUE_ERROR_LENGTH: Final = 500

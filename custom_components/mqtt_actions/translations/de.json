@@ -354,6 +354,22 @@
           "changed": "Die Instanz-ID hat sich geändert, seit dieses Problem gemeldet wurde, daher wurde nichts geändert. Besteht das Problem weiter, erscheint in den Reparaturen ein neues."
         }
       }
+    },
+    "transferred": {
+      "title": "Ein Gerät, das dir gehörte, wurde von einer anderen Instanz übernommen",
+      "description": "Die Instanz {claimant} hat das Gerät {device}, das dieser Instanz gehörte, übernommen und mit sich selbst als neuer Besitzerin veröffentlicht. Diese Instanz hat aufgehört, {device} zu veröffentlichen, damit sich die beiden Instanzen nicht gegenseitig überschreiben. Sie besitzt das Gerät lokal weiterhin und führt dafür ihre eigenen Aktionen aus, bis du es freigibst. Es wird nichts automatisch entfernt. Öffne diese Reparatur, damit diese Instanz stattdessen {claimant} folgt.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Der neuen Besitzerin eines Geräts folgen",
+            "description": "Du lässt gleich diese Instanz das Gerät {device} nicht mehr besitzen und stattdessen {claimant} folgen.\n\nDiese Instanz vergisst das Gerät lokal. Auf dem MQTT-Broker wird nichts geändert oder gelöscht: Die Konfiguration, die Discovery und der Zustand des Geräts bleiben genau so, wie {claimant} sie veröffentlicht hat. Danach erscheint {device} hier als schreibgeschützter Spiegel von {claimant}, mit denselben Entitäten. Weil seine Aktionen nun von einer anderen Instanz kommen, musst du sie hier freigeben, bevor sie laufen.\n\nSchließt du diese Reparatur stattdessen, bleibt das Gerät unverändert und diese Instanz schweigt dazu bis zum nächsten Start. Nach einem Start veröffentlicht diese Instanz das Gerät noch einmal, die neue Besitzerin veröffentlicht es erneut, und diese Reparatur kommt wieder. Die Schaltfläche „Neu synchronisieren“ der neuen Besitzerin stellt die Discovery wieder her, falls das nötig ist. Es passiert nichts, bis du bestätigst."
+          }
+        },
+        "abort": {
+          "not_loaded": "MQTT Actions ist nicht geladen, daher wurde nichts geändert. Versuche es erneut, wenn die Integration läuft.",
+          "changed": "Das Gerät oder seine neue Besitzerin hat sich geändert, seit dieses Problem gemeldet wurde, daher wurde nichts geändert. Hat eine andere Instanz das Gerät übernommen, erscheint in den Reparaturen ein neues Problem."
+        }
+      }
     }
   },
   "selector": {

@@ -1346,7 +1346,7 @@ async def test_marker_that_does_not_name_this_instance_is_a_claim(
 
 @pytest.mark.parametrize(
     "variant",
-    ["bad_marker_entry", "marker_not_a_list", "tampered_hash"],
+    ["bad_marker_entry", "marker_not_a_list", "invalid_content"],
 )
 async def test_invalid_foreign_document_never_creates_the_transfer_issue(
     hass: HomeAssistant,
@@ -1372,7 +1372,7 @@ async def test_invalid_foreign_document_never_creates_the_transfer_issue(
         )
     else:
         payload = document_payload(
-            spec, owner="ghost-owner", transferred_from=[own], tamper=lambda document: document.update(hash="0" * 64)
+            spec, owner="ghost-owner", transferred_from=[own], tamper=lambda document: document.update(kind="bogus")
         )
     fake_broker.publish(config_topic(BASE, device_id), payload, retain=True)
     await _settle(a)

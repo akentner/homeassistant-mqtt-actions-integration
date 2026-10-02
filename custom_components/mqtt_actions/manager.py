@@ -1066,6 +1066,23 @@ class Manager:
         self._transfers.pop(device_id, None)
         self._unpublishable.discard(device_id)
 
+    async def async_release_device_locally(self, device_id: str) -> bool:
+        """
+        Let this instance follow the adopter of one of its devices instead of owning it; False when it does not apply.
+
+        Applies only to an owned device that was recognized as transferred away. The device is released locally, with
+        nothing published, and the saved document of the adopter then creates the mirror, which starts with the
+        baseline and the mode the device had (D-09).
+        """
+        if (info := self.sync.transfer_info(device_id)) is None or device_id not in self.devices:
+            return False
+        if not await self.async_release_locally([device_id]):
+            return False
+        async with self._lock:
+            if self._running:
+                await self.sync.async_follow(device_id, info.payload)
+        return True
+
     async def async_resolve_duplicate_id(self) -> None:
         """
         Fix a duplicate instance id: forget the own devices locally and continue under a new id (D-08).
@@ -1509,6 +1526,9 @@ class Manager:
         """
         assert self._publisher is not None  # noqa: S101
         device_id = device.device_id
+        if device_id in self.sync.transferred_away:
+            # Another instance adopted it; this instance never publishes it again, not even on a start or a resync
+            return
         known = self._revs.get(device_id)
         try:
             document = build_document(
@@ -1555,6 +1575,8 @@ class Manager:
     async def async_publish_discovery(self, device: Device) -> None:
         """Publish the retained discovery of a device; an unavailable MQTT client is logged, the next start retries."""
         assert self._publisher is not None  # noqa: S101
+        if device.device_id in self.sync.transferred_away:
+            return
         await _async_attempt(
             partial(
                 self._publisher.async_publish_device,

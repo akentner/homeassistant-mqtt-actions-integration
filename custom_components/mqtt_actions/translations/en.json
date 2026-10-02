@@ -354,6 +354,22 @@
           "changed": "The instance ID changed since this issue was raised, so nothing was changed. If the problem persists, a new issue appears in Repairs."
         }
       }
+    },
+    "transferred": {
+      "title": "A device you own was adopted by another instance",
+      "description": "The instance {claimant} adopted the device {device}, which this instance owned, and published it with itself as the new owner. This instance stopped publishing {device} so that the two instances do not overwrite each other. It still owns the device locally and runs its own actions for it until you release it. Nothing is removed automatically. Open this repair to let this instance follow {claimant} instead.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Follow the new owner of a device",
+            "description": "You are about to let this instance stop owning the device {device} and follow {claimant} instead.\n\nThis instance forgets the device locally. Nothing is changed or cleared on the MQTT broker: the configuration, the discovery and the state of the device stay exactly as {claimant} published them. Afterwards {device} shows up here as a read-only mirror of {claimant}, with the same entities. Because its actions now come from another instance, you have to approve them here before they run.\n\nIf you dismiss this repair instead, the device stays untouched and this instance stays silent about it until the next start. After a start this instance publishes the device once more, the new owner publishes it again, and this repair comes back. The Resync button of the new owner restores the discovery if it is needed. Nothing happens until you submit."
+          }
+        },
+        "abort": {
+          "not_loaded": "MQTT Actions is not loaded, so nothing was changed. Try again when the integration is running.",
+          "changed": "The device or its new owner changed since this issue was raised, so nothing was changed. If another instance adopted the device, a new issue appears in Repairs."
+        }
+      }
     }
   },
   "selector": {

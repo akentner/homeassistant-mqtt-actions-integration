@@ -16,7 +16,7 @@ TESTS = ROOT / "tests"
 COMPONENTS = ROOT / "custom_components"
 INTEGRATION = COMPONENTS / "mqtt_actions"
 WORKFLOWS = ROOT / ".github" / "workflows"
-WORKFLOW_FILES = ("validate.yml", "ci.yml")
+WORKFLOW_FILES = ("validate.yml", "ci.yml", "release.yml")
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 SHA_PIN = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
@@ -49,7 +49,8 @@ def _triggers(document: dict[Any, Any]) -> dict[str, Any]:
 
 
 def _steps(document: dict[Any, Any]) -> list[dict[str, Any]]:
-    return [step for job in document["jobs"].values() for step in job["steps"]]
+    # A job that only calls a reusable workflow has no steps.
+    return [step for job in document["jobs"].values() for step in job.get("steps", [])]
 
 
 def _uses_refs(document: dict[Any, Any]) -> list[str]:
@@ -194,6 +195,10 @@ def test_all_action_refs_are_pinned_by_sha(filename: str) -> None:
     refs = _uses_refs(workflow)
     assert refs, "workflow uses no actions at all"
     for ref in refs:
+        if ref.startswith("./"):
+            # A local reusable workflow has no SHA; it must exist in this repository.
+            assert (ROOT / ref).is_file(), f"{ref} does not exist in the repository"
+            continue
         assert SHA_PIN.match(ref), f"{ref} is not pinned by a 40-character commit SHA"
 
 
@@ -344,3 +349,57 @@ def test_mosquitto_is_installed_only_in_the_broker_job() -> None:
     for name, job in jobs.items():
         mentions = any("mosquitto" in command.lower() for command in _job_commands(job))
         assert mentions == (name == "broker"), f"job {name}: mosquitto must be installed in the broker job only"
+
+
+def _all_jobs() -> list[tuple[str, str, dict[str, Any]]]:
+    return [
+        (filename, name, job) for filename in WORKFLOW_FILES for name, job in _load_workflow(filename)["jobs"].items()
+    ]
+
+
+def test_ci_and_validate_are_reusable_and_skip_tag_pushes() -> None:
+    for filename in ("ci.yml", "validate.yml"):
+        triggers = _triggers(_load_workflow(filename))
+        assert "workflow_call" in triggers, f"{filename} is not reusable"
+        push = triggers["push"] or {}
+        assert "v*.*.*" in push.get("tags-ignore", []), f"{filename} runs a second time on a version tag"
+        assert "branches" not in push
+        assert "branches-ignore" not in push
+
+
+def test_release_triggers_on_version_tags_only() -> None:
+    push = _triggers(_load_workflow("release.yml"))["push"]
+    assert "v*.*.*" in push["tags"]
+    assert "branches" not in push
+    assert "branches-ignore" not in push
+
+
+def test_release_checks_the_manifest_version_against_the_tag() -> None:
+    job = _load_workflow("release.yml")["jobs"]["check-version"]
+    commands = _job_commands(job)
+    assert any("manifest.json" in run and "GITHUB_REF_NAME" in run for run in commands)
+    assert not any("${{" in run for run in commands), "the tag name must reach the script as a shell variable only"
+
+
+def test_release_needs_the_version_check_and_every_tier() -> None:
+    jobs = _load_workflow("release.yml")["jobs"]
+    assert jobs["ci"]["uses"] == "./.github/workflows/ci.yml"
+    assert jobs["validate"]["uses"] == "./.github/workflows/validate.yml"
+    assert {"check-version", "ci", "validate"} <= set(jobs["release"]["needs"])
+
+
+def test_only_the_release_job_can_write() -> None:
+    for filename, name, job in _all_jobs():
+        permissions = job.get("permissions", {})
+        if (filename, name) == ("release.yml", "release"):
+            assert permissions == {"contents": "write"}
+            continue
+        assert set(permissions.values()) <= {"read", "none"}, f"{filename}:{name} can write"
+
+
+def test_release_creates_the_release_with_generated_notes() -> None:
+    job = _load_workflow("release.yml")["jobs"]["release"]
+    commands = _job_commands(job)
+    assert any("gh release create" in run and "--verify-tag" in run and "--generate-notes" in run for run in commands)
+    assert any(step.get("env", {}).get("GH_TOKEN") for step in job["steps"]) or "GH_TOKEN" in job.get("env", {})
+    assert not any("uses" in step for step in job["steps"]), "the release job must not use any action"

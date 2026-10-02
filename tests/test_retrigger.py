@@ -33,6 +33,9 @@ if TYPE_CHECKING:
 
     from tests.fake_broker import FakeBroker, Instance
 
+# The receiver tests run real instances on the fake broker, so the whole module belongs to the multi-instance tier
+pytestmark = pytest.mark.multi_instance
+
 BASE = "b"
 REQUEST_ID = "0b1d4e0e-3d5a-4f6e-8a55-2c1f9a7d6b10"
 

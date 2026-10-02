@@ -63,13 +63,13 @@ class Heartbeat:
     session: str
 
 
-def _valid_text(value: object) -> bool:
-    """Return whether a heartbeat text is a non-blank, printable string within the name length cap."""
+def valid_text(value: object) -> bool:
+    """Return whether a broker text (heartbeat or acknowledgement) is a non-blank, printable string within the cap."""
     return isinstance(value, str) and bool(value.strip()) and not invalid_name(value)
 
 
-def _valid_session(value: object) -> bool:
-    """Return whether a session id is a canonical lower-case uuid text."""
+def valid_uuid(value: object) -> bool:
+    """Return whether a session or request id is a canonical lower-case uuid text."""
     if not isinstance(value, str):
         return False
     try:
@@ -78,13 +78,13 @@ def _valid_session(value: object) -> bool:
         return False
 
 
-def _within_size_cap(payload: str) -> bool:
+def within_size_cap(payload: str) -> bool:
     """Return whether a payload is within the message cap in characters and in UTF-8 bytes."""
     if len(payload) > MAX_BROKER_MESSAGE_BYTES:
         return False
     try:
         return len(payload.encode()) <= MAX_BROKER_MESSAGE_BYTES
-    except UnicodeEncodeError:  # a lone surrogate cannot be text of a heartbeat
+    except UnicodeEncodeError:  # a lone surrogate cannot be text of a message of this protocol
         return False
 
 
@@ -95,7 +95,7 @@ def _valid_devices(value: object) -> bool:
 
 def _heartbeat_object(base_topic: str, topic: str, payload: str) -> tuple[str, dict[str, Any]] | None:
     """Return the topic id and the JSON object of a message whose size, topic and payload id are acceptable."""
-    if not _within_size_cap(payload):
+    if not within_size_cap(payload):
         return None
     topic_id = parse_heartbeat_topic(base_topic, topic)
     if topic_id is None or not is_valid_device_id(topic_id):
@@ -119,7 +119,7 @@ def parse_heartbeat(base_topic: str, topic: str, payload: str) -> Heartbeat | No
         return None
     topic_id, data = parsed
     name, version, devices, session = (data.get(key) for key in ("name", "version", "devices", "session"))
-    if _valid_text(name) and _valid_text(version) and _valid_devices(devices) and _valid_session(session):
+    if valid_text(name) and valid_text(version) and _valid_devices(devices) and valid_uuid(session):
         return Heartbeat(instance_id=topic_id, name=name, version=version, devices=devices, session=session)
     return None
 

@@ -15,9 +15,11 @@ The canonical-JSON and sha256 algorithm is part of the wire contract and changin
 - `canonical_json` is `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)`
 - `content_hash` is the sha256 hex digest of the UTF-8 canonical JSON of the content; owner, owner name, rev, hash,
   device id and schema version are not content, so moving or renaming an instance never changes what a device means
-- `actions_hash` binds an approval (D-02). It is the sha256 of the canonical JSON of the kind, `run_on_startup` and the
-  list of [lower-cased StateValue, actions] pairs sorted by the lower-cased StateValue. It changes when the
-  state-to-actions mapping or the startup flag changes, never on a rename, a run mode change or a breaker change (A5).
+- `actions_hash` binds an approval (D-02, D-16). It is the sha256 of the canonical JSON of the kind, `run_on_startup`,
+  `run_mode`, both breaker limits and the list of [lower-cased StateValue, actions] pairs sorted by the lower-cased
+  StateValue. It changes when the state-to-actions mapping, the startup flag, the run mode or a breaker limit changes,
+  never on a rename. It is computed locally from received content and never read from the wire, so binding more
+  settings changes no wire field and needs no SCHEMA_VERSION bump.
 
 Documents are built from the DeviceSpec, where defaults are applied, and never from raw subentry data: a device stored
 before Phase 2 publishes the same defaults as an explicit one, so a hash always means "behaves the same".
@@ -109,12 +111,28 @@ def content_hash(content: dict[str, Any]) -> str:
 
 
 def actions_hash(spec: DeviceSpec) -> str:
-    """Return the hash an approval is bound to: the StateValue-to-actions mapping plus the startup flag (A5)."""
+    """
+    Return the hash an approval is bound to: the mapping, the startup flag, the run mode and the breaker limits.
+
+    What a user approves is what can run, including how often and in which mode (A5 revised by D-16, WR-04); only the
+    name is left out, so a rename keeps the approval.
+    """
     pairs = sorted(
         ([trigger.value.lower(), trigger.actions] for trigger in spec.triggers.values()),
         key=lambda pair: pair[0],
     )
-    return _sha256(canonical_json({"kind": spec.kind, CONF_RUN_ON_STARTUP: spec.run_on_startup, "triggers": pairs}))
+    return _sha256(
+        canonical_json(
+            {
+                "kind": spec.kind,
+                CONF_RUN_ON_STARTUP: spec.run_on_startup,
+                CONF_RUN_MODE: spec.run_mode,
+                CONF_BREAKER_MAX_RUNS: spec.breaker_max_runs,
+                CONF_BREAKER_WINDOW: spec.breaker_window,
+                "triggers": pairs,
+            }
+        )
+    )
 
 
 def build_document(spec: DeviceSpec, *, owner: str, owner_name: str, rev: int) -> dict[str, Any]:

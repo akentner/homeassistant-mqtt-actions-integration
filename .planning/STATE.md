@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-10-02T08:32:31.040Z"
+stopped_at: Completed 04-08-PLAN.md
+last_updated: "2026-10-02T08:42:02.410Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 6b990ae2fdbcc42a3c1b9276bd629e20f96fb10e
+state_head: c46a3452a5040dba381d8645ca0b842068ae6cea
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 26
+  completed_plans: 27
   percent: 75
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 8 of 13
+Plan: 9 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
@@ -79,6 +79,7 @@ Progress: [████████░░] 75% of Phase 01 plans
 | Phase 04 P05 | 15 min | 3 tasks | 14 files |
 | Phase 04 P06 | 7 min | 2 tasks | 3 files |
 | Phase 04 P07 | 5 min | 2 tasks | 5 files |
+| Phase 04 P08 | 7 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-06: mirrors share the owned devices' select add loop (config_subentry_id None for a mirror); _remove_companion removes only the (mqtt_actions, id) device and never the core MQTT device
 - [Phase 04]: 04-07: diagnostics are an allow-list (hub, roster, device rows with 8-char instance ids); async_redact_data only as a safety net — Naming what is included is safer than removing what is not; sentinel tests prove no action content, device name or full id leaves
 - [Phase 04]: 04-07: ApprovalState words (owned, approved, pending, blocked, no_actions, unknown) are the single public answer via Manager.approval_state — Diagnostics and later re-trigger acknowledgements use the same words
+- [Phase 04]: 04-08: Services are registered once in async_setup (admin only, optional response); a service field naming a device is device_id (device selector) resolved to the uuid via the (mqtt_actions, uuid) identifier — Hassfest rule; hub, foreign and unknown devices refused; mirrors refused for export
+- [Phase 04]: 04-08: Export files live only in <config>/mqtt_actions/ (0700 dir, 0600 file, bare name pattern, symlink refused); other write failures raise export_write_failed — Never www; user input never forms a path; log carries only a reason code
 
 ### Pending Todos
 
@@ -164,6 +167,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T08:32:30.941Z
-Stopped at: Completed 04-07-PLAN.md
+Last session: 2026-10-02T08:42:02.327Z
+Stopped at: Completed 04-08-PLAN.md
 Resume file: None

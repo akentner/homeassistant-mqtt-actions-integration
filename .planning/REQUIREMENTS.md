@@ -39,7 +39,7 @@
 - [x] **DSC-01**: The owner publishes MQTT Discovery for every entity (UUID `unique_id`, availability, device info)
 - [x] **DSC-02**: Discovery is removed only on explicit user deletion, never on unload or shutdown
 - [x] **DSC-03**: The owner republishes discovery if it was removed by a follower deleting the entity
-- [ ] **DSC-04**: User can trigger a manual resync that republishes config and discovery of all owned devices
+- [x] **DSC-04**: User can trigger a manual resync that republishes config and discovery of all owned devices
 
 ### Central Config & Ownership
 
@@ -133,7 +133,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DSC-01 | Phase 1 | Complete |
 | DSC-02 | Phase 1 | Complete |
 | DSC-03 | Phase 3 | Complete |
-| DSC-04 | Phase 4 | Pending |
+| DSC-04 | Phase 4 | Complete |
 | SYN-01 | Phase 3 | Complete |
 | SYN-02 | Phase 3 | Complete |
 | SYN-03 | Phase 3 | Complete |

@@ -12,14 +12,16 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
+from custom_components.mqtt_actions import const as const_module
 from custom_components.mqtt_actions.const import (
+    CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     DOMAIN,
     HEARTBEAT_OFFLINE_SECONDS,
     MAX_TRACKED_INSTANCES,
 )
 from custom_components.mqtt_actions.sensor import RosterSensor
-from custom_components.mqtt_actions.topics import heartbeat_topic
+from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, heartbeat_topic
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -199,3 +201,113 @@ async def test_roster_attribute_is_unrecorded_and_capped(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert len(_instances(hass, entity_id)) == MAX_TRACKED_INSTANCES + 1
     assert _recorded_attributes_bytes(hass, entity_id) < RECORDER_MAX_ATTRS_BYTES
+
+
+ON_ACTIONS = [{"action": "test.on"}]
+
+
+def _resync_entity_id(hass: HomeAssistant, entry: Any) -> str | None:
+    return er.async_get(hass).async_get_entity_id("button", DOMAIN, f"{entry.entry_id}_resync")
+
+
+async def _press(hass: HomeAssistant, entity_id: str) -> None:
+    await hass.services.async_call("button", "press", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _published_topics(mqtt_mock: Any) -> list[str]:
+    return [call.args[0] for call in mqtt_mock.async_publish.call_args_list]
+
+
+async def test_resync_button_republishes_in_the_phase_3_order(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-12: the press publishes the config document, the discovery and `online`, in that order and never a clear."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    device_id = sub["data"][CONF_DEVICE_ID]
+    entity_id = _resync_entity_id(hass, entry)
+    assert entity_id is not None
+    mqtt_mock.async_publish.reset_mock()
+
+    await _press(hass, entity_id)
+
+    calls = mqtt_mock.async_publish.call_args_list
+    topics = _published_topics(mqtt_mock)
+    document = config_topic(BASE, device_id)
+    discovery = discovery_topic("homeassistant", device_id)
+    availability = availability_topic(BASE, entry.data[CONF_INSTANCE_ID])
+    assert topics.index(document) < topics.index(discovery) < topics.index(availability)
+    for topic in (document, discovery, availability):
+        (call,) = (call for call in calls if call.args[0] == topic)
+        assert call.args[3] is True  # retained
+        assert call.args[1] not in {"", b""}
+    assert calls[topics.index(availability)].args[1] == "online"
+    assert [call.args[0] for call in calls if call.args[1] in {"", b""}] == []
+
+
+async def test_resync_is_throttled(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-15: a second press within the cooldown publishes nothing; after the cooldown it publishes again."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    now = [1000.0]
+    entry.runtime_data.clock = lambda: now[0]
+    entity_id = _resync_entity_id(hass, entry)
+    assert entity_id is not None
+    document = config_topic(BASE, sub["data"][CONF_DEVICE_ID])
+    mqtt_mock.async_publish.reset_mock()
+
+    await _press(hass, entity_id)
+    assert _published_topics(mqtt_mock).count(document) == 1
+
+    now[0] += const_module.RESYNC_MIN_INTERVAL_SECONDS - 1
+    mqtt_mock.async_publish.reset_mock()
+    await _press(hass, entity_id)
+    assert _published_topics(mqtt_mock) == []
+
+    now[0] += 2
+    await _press(hass, entity_id)
+    assert _published_topics(mqtt_mock).count(document) == 1
+
+
+async def test_resync_returns_false_when_not_running(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A stopped manager neither publishes nor answers True."""
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+    manager = entry.runtime_data
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert manager.running is False
+    mqtt_mock.async_publish.reset_mock()
+
+    assert await manager.async_resync() is False
+    assert _published_topics(mqtt_mock) == []
+
+
+async def test_resync_returns_true_after_a_republish(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """The first call republishes and says so; a call inside the cooldown says False."""
+    entry = await _setup(hass, make_hub_entry())
+    manager = entry.runtime_data
+    now = [1000.0]
+    manager.clock = lambda: now[0]
+
+    assert await manager.async_resync() is True
+    assert await manager.async_resync() is False
+
+
+async def test_resync_button_entity(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """D-12: the button sits on the hub device in the config category."""
+    entry = await _setup(hass, make_hub_entry())
+    entity_id = _resync_entity_id(hass, entry)
+    assert entity_id is not None
+    registered = er.async_get(hass).async_get(entity_id)
+    device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
+    assert registered is not None
+    assert device is not None
+    assert registered.device_id == device.id
+    assert registered.entity_category is EntityCategory.CONFIG

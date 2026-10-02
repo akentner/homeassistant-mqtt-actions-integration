@@ -129,6 +129,7 @@ REQUIRED_KEYS = (
     "config_subentries.switch.error.breaker_max_runs_range",
     "config_subentries.switch.error.breaker_window_range",
     "entity.sensor.instances_online.name",
+    "entity.button.resync.name",
     *(
         f"config_subentries.switch.step.{step}.data_description.{field}"
         for step in ("user", "edit_device")

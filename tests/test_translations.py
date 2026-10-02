@@ -87,6 +87,9 @@ SERVICE_EXCEPTIONS = (
     "export_write_failed",
 )
 
+# The message of a rejected import: exactly the position and the fixed reason code
+IMPORT_REJECTED_VARIABLES = {"index", "reason"}
+
 REQUIRED_KEYS = (
     "config.step.user.title",
     "config.step.user.description",
@@ -150,6 +153,14 @@ REQUIRED_KEYS = (
         for field in ("device_id", "file_name")
         for part in ("name", "description")
     ),
+    "services.import_devices.name",
+    "services.import_devices.description",
+    *(
+        f"services.import_devices.fields.{field}.{part}"
+        for field in ("data", "file_name")
+        for part in ("name", "description")
+    ),
+    "exceptions.import_rejected.message",
     *(f"exceptions.{key}.message" for key in SERVICE_EXCEPTIONS),
     *(f"entity.select.{key}.name" for key in ("device_mode", "instance_mode")),
     *(
@@ -267,6 +278,15 @@ def test_issue_strings_use_expected_variables(language: str) -> None:
     }
     assert _variables(flat["issues.mirror_blocked.description"]) == {"device", "owner", "services"}
     assert _variables(flat["issues.denied_service_call.description"]) == {"device", "trigger", "service"}
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_import_keys_exist_in_both_languages(language: str) -> None:
+    """The import service texts exist, and the rejection message uses exactly the position and the reason."""
+    flat = _load(language)
+    assert flat["services.import_devices.name"]
+    assert flat["services.import_devices.description"]
+    assert _variables(flat["exceptions.import_rejected.message"]) == IMPORT_REJECTED_VARIABLES
 
 
 @pytest.mark.parametrize("language", LANGUAGES)

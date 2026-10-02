@@ -2,11 +2,20 @@
 
 import json
 import stat
-from typing import TYPE_CHECKING
+import uuid
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from custom_components.mqtt_actions.const import EXPORT_DIRECTORY, EXPORT_FORMAT, EXPORT_VERSION, SUBENTRY_SELECT
+from custom_components.mqtt_actions import portability
+from custom_components.mqtt_actions.const import (
+    CONF_DEVICE_ID,
+    EXPORT_DIRECTORY,
+    EXPORT_FORMAT,
+    EXPORT_VERSION,
+    SUBENTRY_SELECT,
+    SUBENTRY_SWITCH,
+)
 from custom_components.mqtt_actions.document import build_content
 from custom_components.mqtt_actions.portability import PortabilityError, build_export, export_file_path, write_export
 from tests.documents import make_spec
@@ -127,3 +136,108 @@ def test_write_export_refuses_a_symlinked_directory(tmp_path: Path) -> None:
 
     assert raised.value.reason == "symlink"
     assert list(elsewhere.iterdir()) == []
+
+
+# --- import: envelope and preparation (D-11) --------------------------------------------------------------------------
+
+OWNER = "instance-local"
+OWNER_NAME = "Local instance"
+
+
+def _envelope(**overrides: Any) -> dict[str, Any]:
+    document: dict[str, Any] = {"format": EXPORT_FORMAT, "export_version": EXPORT_VERSION, "devices": []}
+    document.update(overrides)
+    return document
+
+
+def test_parse_export_accepts_the_export_envelope() -> None:
+    """D-11: format, version and a devices list give the item list; anything else is a fixed reason code."""
+    items = [build_content(make_spec(name="Lamp", on=SWITCH_ACTIONS))]
+    assert portability.parse_export(_envelope(devices=items)) == items
+    assert portability.parse_export(_envelope([])) == []
+
+    for broken in (
+        [],
+        "text",
+        None,
+        _envelope(format="something_else"),
+        {"export_version": 1, "devices": []},
+        _envelope(devices="not a list"),
+        _envelope(devices={"a": 1}),
+        _envelope(export_version="1"),
+        _envelope(export_version=True),
+        _envelope(export_version=0),
+    ):
+        with pytest.raises(PortabilityError) as raised:
+            portability.parse_export(broken)
+        assert raised.value.reason == "bad_format"
+        assert raised.value.index is None
+
+    with pytest.raises(PortabilityError) as too_new:
+        portability.parse_export(_envelope(export_version=EXPORT_VERSION + 1))
+    assert too_new.value.reason == "too_new"
+
+
+def test_prepare_import_assigns_new_ids_and_owner() -> None:
+    """Every item gets a fresh uuid4 and the shared content of the item, nothing else."""
+    switch = make_spec(name="Lamp", on=SWITCH_ACTIONS, run_on_startup=True, run_mode="restart", breaker_max_runs=7)
+    select = make_spec(
+        SUBENTRY_SELECT,
+        name="Scene",
+        options=[("a", "First", SWITCH_ACTIONS), ("b", "Second", [])],
+        breaker_window=30,
+    )
+    items = [build_content(switch), build_content(select)]
+
+    prepared = portability.prepare_import(items, owner=OWNER, owner_name=OWNER_NAME)
+
+    assert [device.index for device in prepared] == [1, 2]
+    assert [(device.kind, device.name) for device in prepared] == [
+        (SUBENTRY_SWITCH, "Lamp"),
+        (SUBENTRY_SELECT, "Scene"),
+    ]
+    ids = [device.device_id for device in prepared]
+    assert len(set(ids)) == 2
+    assert switch.device_id not in ids
+    assert all(uuid.UUID(device_id).version == 4 for device_id in ids)
+    for device, item in zip(prepared, items, strict=True):
+        expected = {key: value for key, value in item.items() if key not in {"kind", "name"}}
+        assert device.data == {**expected, CONF_DEVICE_ID: device.device_id}
+        assert device.spec.device_id == device.device_id
+    first, second = prepared
+    assert (first.spec.run_on_startup, first.spec.run_mode, first.spec.breaker_max_runs) == (True, "restart", 7)
+    assert second.spec.breaker_window == 30
+    assert [trigger.value for trigger in second.spec.triggers.values()] == ["a", "b"]
+
+
+def test_forged_bookkeeping_keys_are_ignored() -> None:
+    """T-04-36: owner, ids, rev, hash and schema version inside an item never reach the new device."""
+    forged = {
+        **build_content(make_spec(name="Lamp", on=SWITCH_ACTIONS)),
+        "owner": "someone-else",
+        "owner_name": "Someone else",
+        "device_id": "forged-id",
+        "rev": 99,
+        "hash": "f" * 64,
+        "schema_version": 99,
+    }
+
+    (device,) = portability.prepare_import([forged], owner=OWNER, owner_name=OWNER_NAME)
+
+    assert device.device_id != "forged-id"
+    assert uuid.UUID(device.device_id).version == 4
+    assert device.data[CONF_DEVICE_ID] == device.device_id
+    assert {"owner", "owner_name", "rev", "hash", "schema_version"}.isdisjoint(device.data)
+    assert "forged-id" not in json.dumps(device.data)
+    assert "someone-else" not in json.dumps(device.data)
+
+
+def test_subentry_payload_drops_kind_and_name_and_adds_the_device_id() -> None:
+    """The shared helper that the adoption plan reuses."""
+    content = build_content(make_spec(name="Lamp", on=SWITCH_ACTIONS))
+
+    payload = portability.subentry_payload(content, "new-id")
+
+    assert payload == {**{k: v for k, v in content.items() if k not in {"kind", "name"}}, CONF_DEVICE_ID: "new-id"}
+    assert "kind" in content
+    assert "name" in content

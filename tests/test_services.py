@@ -21,8 +21,11 @@ from custom_components.mqtt_actions.const import (
     EXPORT_DIRECTORY,
     RESYNC_MIN_INTERVAL_SECONDS,
     SERVICE_EXPORT_DEVICES,
+    SERVICE_IMPORT_DEVICES,
     SERVICE_RESYNC,
+    SUBENTRY_SELECT,
 )
+from custom_components.mqtt_actions.document import build_content, content_hash
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic
 from tests.documents import document_payload, make_spec
 
@@ -372,3 +375,93 @@ async def test_services_yaml_describes_both_services(
     fields = descriptions[SERVICE_EXPORT_DEVICES]["fields"]
     assert fields[CONF_DEVICE_ID]["selector"] == {"device": {"integration": DOMAIN, "multiple": True}}
     assert "text" in fields["file_name"]["selector"]
+
+
+# --- import (D-11) ---------------------------------------------------------------------------------------------
+
+
+def _export_of(*contents: dict[str, Any]) -> dict[str, Any]:
+    return {"format": "mqtt_actions_export", "export_version": 1, "devices": list(contents)}
+
+
+def _item(name: str, **overrides: Any) -> dict[str, Any]:
+    """Return the shared content of a Switch as an export item, the way the export service would write it."""
+    return {**build_content(make_spec(name=name, on=ON_ACTIONS)), **overrides}
+
+
+def _published_documents(mqtt_mock: Any, device_id: str) -> list[dict[str, Any]]:
+    topic = config_topic(BASE, device_id)
+    return [json.loads(call.args[1]) for call in mqtt_mock.async_publish.call_args_list if call.args[0] == topic]
+
+
+async def test_import_creates_owned_devices_that_publish(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-11: two items become two owned devices with new ids, published like devices made in the UI."""
+    entry = await _setup(hass, make_hub_entry())
+    manager: Manager = entry.runtime_data
+    document = _export_of(
+        _item("Lamp"),
+        build_content(make_spec(SUBENTRY_SELECT, name="Scene", options=[("a", "A", ON_ACTIONS), ("b", "B", [])])),
+    )
+    mqtt_mock.async_publish.reset_mock()
+
+    result = await _call(hass, SERVICE_IMPORT_DEVICES, {"data": document}, response=True)
+
+    imported = result["imported"]
+    assert [(row["index"], row["name"]) for row in imported] == [(1, "Lamp"), (2, "Scene")]
+    new_ids = [row["uuid"] for row in imported]
+    assert len(set(new_ids)) == 2
+    assert {sub.title for sub in entry.subentries.values()} == {"Lamp", "Scene"}
+    assert {sub.unique_id for sub in entry.subentries.values()} == set(new_ids)
+    assert set(manager.devices) == set(new_ids)
+    for new_id in new_ids:
+        documents = _published_documents(mqtt_mock, new_id)
+        assert documents
+        assert documents[-1]["owner"] == entry.data[CONF_INSTANCE_ID]
+        assert documents[-1]["rev"] == 1
+        assert documents[-1]["device_id"] == new_id
+        assert discovery_topic("homeassistant", new_id) in _published_topics(mqtt_mock)
+
+
+async def test_export_import_round_trip(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """Exporting the owned devices and importing the response restores equal content under different ids."""
+    lamp = make_switch_subentry("Lamp", on=ON_ACTIONS, run_on_startup=True, run_mode="restart")
+    scene = make_select_subentry("Scene", [("a", "A", ON_ACTIONS), ("b", "B", [])], breaker_max_runs=9)
+    entry = await _setup(hass, make_hub_entry([lamp, scene]))
+    manager: Manager = entry.runtime_data
+    originals = {device_id: content_hash(build_content(device.spec)) for device_id, device in manager.devices.items()}
+    exported = await _call(hass, SERVICE_EXPORT_DEVICES, response=True)
+
+    result = await _call(hass, SERVICE_IMPORT_DEVICES, {"data": exported["export"]}, response=True)
+
+    new_ids = [row["uuid"] for row in result["imported"]]
+    assert set(new_ids).isdisjoint(originals)
+    assert set(manager.devices) == set(originals) | set(new_ids)
+    restored = {new_id: content_hash(build_content(manager.devices[new_id].spec)) for new_id in new_ids}
+    assert sorted(restored.values()) == sorted(originals.values())
+
+
+async def test_import_is_admin_only(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, hass_read_only_user: User, hass_admin_user: User
+) -> None:
+    """T-04-40: a read-only user is refused and nothing is created; the administrator may import."""
+    entry = await _setup(hass, make_hub_entry())
+
+    with pytest.raises(Unauthorized):
+        await _call(
+            hass, SERVICE_IMPORT_DEVICES, {"data": _export_of(_item("Lamp"))}, user=hass_read_only_user, response=True
+        )
+    assert len(entry.subentries) == 0
+
+    result = await _call(
+        hass, SERVICE_IMPORT_DEVICES, {"data": _export_of(_item("Lamp"))}, user=hass_admin_user, response=True
+    )
+    assert len(result["imported"]) == 1
+    assert len(entry.subentries) == 1

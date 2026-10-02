@@ -12,6 +12,7 @@ import pytest
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
+from custom_components.mqtt_actions import const
 from custom_components.mqtt_actions.const import (
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
@@ -342,3 +343,100 @@ def test_a_reconnect_restarts_the_listening_time() -> None:
     assert roster.owner_offline("owner") is False
     clock.now += HEARTBEAT_OFFLINE_SECONDS
     assert roster.owner_offline("owner") is True
+
+
+# --- a second instance with the same instance id (D-07, assumption A12) -----------------------------------------------
+
+
+def _use_clock(manager: Any) -> list[float]:
+    """Replace the manager clock by a settable one; the returned list holds its single value."""
+    now = [1000.0]
+    manager.clock = lambda: now[0]
+    return now
+
+
+async def _heartbeat_of_own_id(hass: HomeAssistant, entry: MockConfigEntry, session: str) -> None:
+    """Deliver a live heartbeat that carries this instance's own id and the given session."""
+    instance_id = entry.data[CONF_INSTANCE_ID]
+    async_fire_mqtt_message(
+        hass, heartbeat_topic(BASE, instance_id), _message(instance_id=instance_id, session=session)
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_duplicate_detection_needs_two_foreign_session_heartbeats(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-07: the own echo never counts, one foreign session is no duplicate, two within 90 seconds are."""
+    entry = await _setup(hass, make_hub_entry())
+    presence = entry.runtime_data.presence
+    now = _use_clock(entry.runtime_data)
+    assert presence.duplicate_detected is False
+
+    await _heartbeat_of_own_id(hass, entry, presence.session)
+    await _heartbeat_of_own_id(hass, entry, presence.session)
+    await _heartbeat_of_own_id(hass, entry, presence.session)
+    assert presence.duplicate_detected is False
+
+    await _heartbeat_of_own_id(hass, entry, SESSION)
+    assert presence.duplicate_detected is False
+    now[0] += HEARTBEAT_OFFLINE_SECONDS - 1
+    await _heartbeat_of_own_id(hass, entry, SESSION)
+    assert presence.duplicate_detected is True
+    # An own instance id never becomes a roster row
+    assert [row["id"] for row in presence.rows()] == [entry.data[CONF_INSTANCE_ID]]
+
+
+async def test_two_foreign_heartbeats_more_than_90_seconds_apart_are_no_duplicate(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """A12: an observation older than the offline timeout is dropped, so a slow trickle never confirms a duplicate."""
+    entry = await _setup(hass, make_hub_entry())
+    presence = entry.runtime_data.presence
+    now = _use_clock(entry.runtime_data)
+
+    await _heartbeat_of_own_id(hass, entry, SESSION)
+    now[0] += HEARTBEAT_OFFLINE_SECONDS + 1
+    await _heartbeat_of_own_id(hass, entry, SESSION)
+    assert presence.duplicate_detected is False
+
+    now[0] += 1
+    await _heartbeat_of_own_id(hass, entry, SESSION)
+    assert presence.duplicate_detected is True
+
+
+async def test_duplicate_clears_after_90_seconds_of_silence(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """A12: with no foreign session heard for 90 seconds the expiry timer clears the detection again."""
+    entry = await _setup(hass, make_hub_entry())
+    presence = entry.runtime_data.presence
+    now = _use_clock(entry.runtime_data)
+    await _heartbeat_of_own_id(hass, entry, SESSION)
+    await _heartbeat_of_own_id(hass, entry, SESSION)
+    assert presence.duplicate_detected is True
+
+    now[0] += HEARTBEAT_OFFLINE_SECONDS - 1
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=HEARTBEAT_OFFLINE_SECONDS - 1))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert presence.duplicate_detected is True
+
+    now[0] += 2
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=HEARTBEAT_OFFLINE_SECONDS + 5))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert presence.duplicate_detected is False
+
+
+async def test_duplicate_observations_are_bounded(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """T-04-55: a flood of foreign-session heartbeats keeps at most MAX_DUPLICATE_OBSERVATIONS records."""
+    entry = await _setup(hass, make_hub_entry())
+    presence = entry.runtime_data.presence
+    _use_clock(entry.runtime_data)
+
+    for number in range(const.MAX_DUPLICATE_OBSERVATIONS * 3):
+        await _heartbeat_of_own_id(hass, entry, str(uuid.UUID(int=number + 1)))
+
+    assert presence.duplicate_detected is True
+    assert len(presence._duplicate_seen) <= const.MAX_DUPLICATE_OBSERVATIONS

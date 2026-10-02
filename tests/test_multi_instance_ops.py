@@ -22,12 +22,19 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.mqtt_actions import retrigger as retrigger_module
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
+    CONF_INSTANCE_ID,
     CONF_ON_CHANGE_TO_ON,
     DOMAIN,
     HEARTBEAT_INTERVAL_SECONDS,
     HEARTBEAT_OFFLINE_SECONDS,
     ISSUE_OWNER_CONFLICT_PREFIX,
     SIGNAL_ROSTER_UPDATED,
+    STORE_DEVICE_MODES,
+    STORE_LAST_ACTED,
+    STORE_PUBLISHED,
+    STORE_REVS,
+    STORE_TRANSFERS,
+    STORE_TRIPPED,
 )
 from custom_components.mqtt_actions.manager import AdoptionError
 from custom_components.mqtt_actions.topics import (
@@ -1012,3 +1019,202 @@ async def test_repin_keeps_the_breaker_and_the_script_of_an_unchanged_mirror(
     assert device_c.breaker.tripped is True
     assert c.manager.runner.script_count(device_id) == 1
     assert c.manager.approval_state(device_id) == "approved"
+
+
+# --- a clone shares the instance id: detection and the local release (D-07, D-08) -------------------------------------
+
+
+async def _duplicate_pair(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> tuple[Instance, Instance, list[str]]:
+    """
+    Start the original A and a restored copy B with the same instance id, name and devices; both heard each other.
+
+    The copy keeps its own Store key (the name argument), as a restored backup on another machine would have its own
+    storage. The retained state topics hold a value, so a clearing publish of the copy would be visible.
+    """
+    lamp = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
+    mode = make_select_subentry("Mode", [("a", "A", [{"action": "test.a"}]), ("b", "B", [])])
+    a = await make_instance("alpha", hass=hass, subentries=[lamp, mode])
+    b = await make_instance("alpha-copy", data=dict(a.entry.data), subentries=[lamp, mode])
+    for instance in (a, b):
+        async_mock_service(instance.hass, "test", "on")
+        async_mock_service(instance.hass, "test", "a")
+    ids = [lamp["data"][CONF_DEVICE_ID], mode["data"][CONF_DEVICE_ID]]
+    fake_broker.publish(state_topic(BASE, ids[0]), "ON", retain=True)
+    fake_broker.publish(state_topic(BASE, ids[1]), "a", retain=True)
+    await _settle(a, b)
+    assert a.manager.instance_id == b.manager.instance_id
+    return a, b, ids
+
+
+async def _exchange_heartbeats(a: Instance, b: Instance, rounds: int = 2) -> None:
+    for _ in range(rounds):
+        await a.manager.presence.async_publish_heartbeat()
+        await b.manager.presence.async_publish_heartbeat()
+    await _settle(a, b)
+
+
+async def test_duplicate_detection_changes_nothing_by_itself(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """D-07, T-04-55: both detect the shared id, and nothing but their heartbeats is published or changed."""
+    a, b, ids = await _duplicate_pair(hass, fake_broker, make_instance, make_switch_subentry, make_select_subentry)
+    before = dict(fake_broker.retained)
+    marks = (len(a.gateway.published), len(b.gateway.published))
+
+    await _exchange_heartbeats(a, b)
+
+    assert a.manager.presence.duplicate_detected is True
+    assert b.manager.presence.duplicate_detected is True
+    for instance, mark in zip((a, b), marks, strict=True):
+        topics = {item[0] for item in instance.gateway.published[mark:]}
+        assert topics == {heartbeat_topic(BASE, instance.manager.instance_id)}
+        assert set(instance.manager.devices) == set(ids)
+        assert len(instance.entry.subentries) == 2
+    assert dict(fake_broker.retained) == before
+    assert a.entry.data[CONF_INSTANCE_ID] == b.entry.data[CONF_INSTANCE_ID]
+
+
+async def test_duplicate_id_fix_leaves_the_originals_topics_byte_identical(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """D-08, T-04-56: the copy forgets its devices locally, gets a new id and leaves the original's topics alone."""
+    a, b, ids = await _duplicate_pair(hass, fake_broker, make_instance, make_switch_subentry, make_select_subentry)
+    old_id = a.manager.instance_id
+    before = dict(fake_broker.retained)
+    assert availability_topic(BASE, old_id) in before
+    assert {config_topic(BASE, ids[0]), discovery_topic("homeassistant", ids[0]), state_topic(BASE, ids[0])} <= set(
+        before
+    )
+    mark = len(b.gateway.published)
+
+    with patch.object(b.hass.config_entries, "async_schedule_reload") as schedule:
+        await b.manager.async_resolve_duplicate_id()
+    schedule.assert_called_once_with(b.entry.entry_id)
+    await _settle(a, b)
+    await b.restart()
+    await _settle(a, b)
+
+    # Every retained message of the original is the same bytes as before
+    assert {topic: fake_broker.retained.get(topic) for topic in before} == before
+    # The copy never published an empty (clearing) payload, neither during the fix nor during its restart
+    assert [item for item in b.gateway.published[mark:] if item[1] == ""] == []
+    new_id = b.entry.data[CONF_INSTANCE_ID]
+    assert new_id != old_id
+    assert str(uuid.UUID(new_id)) == new_id
+    assert a.entry.data[CONF_INSTANCE_ID] == old_id
+    assert b.manager.instance_id == new_id
+    assert b.manager.devices == {}
+    assert len(b.entry.subentries) == 0
+    for device_id in ids:
+        mirror = b.manager.mirrors[device_id].mirror
+        assert mirror is not None
+        assert mirror.owner == old_id
+    assert fake_broker.retained[availability_topic(BASE, new_id)] == "online"
+    assert set(a.manager.devices) == set(ids)
+
+
+async def test_released_devices_are_not_readded_by_the_reconcile(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """T-04-56: the reconcile that each subentry removal triggers never adds a device that is being released."""
+    a, b, ids = await _duplicate_pair(hass, fake_broker, make_instance, make_switch_subentry, make_select_subentry)
+
+    async def _reconcile(_hass: HomeAssistant, _entry: object) -> None:
+        await b.manager.async_reconcile()
+
+    b.entry.add_update_listener(_reconcile)
+    mark = len(b.gateway.published)
+    with patch.object(b.manager, "_async_add_device", wraps=b.manager._async_add_device) as add:
+        released = await b.manager.async_release_locally(list(ids))
+        await _settle(a, b)
+
+    assert sorted(released) == sorted(ids)
+    add.assert_not_called()
+    assert b.manager.devices == {}
+    assert len(b.entry.subentries) == 0
+    assert b.manager._releasing == set()
+    assert b.gateway.published[mark:] == []
+
+
+async def test_release_keeps_baseline_and_mode_and_drops_the_rest(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """D-08: the record drops published, revs, tripped and transfers of the device, keeps baseline and mode."""
+    a, _b, ids = await _duplicate_pair(hass, fake_broker, make_instance, make_switch_subentry, make_select_subentry)
+    manager = a.manager
+    lamp_id, mode_id = ids
+    await manager.async_set_device_mode(lamp_id, "observe")
+    manager._tripped[lamp_id] = "hash"
+    manager._transfers[lamp_id] = ["previous-owner"]
+    assert lamp_id in manager._published
+    assert lamp_id in manager._revs
+    subentry_counts: list[int] = []
+
+    async def _record(_data: object) -> None:
+        subentry_counts.append(len(a.entry.subentries))
+
+    with (
+        patch.object(manager._store, "async_save", new_callable=AsyncMock, side_effect=_record) as save,
+        patch.object(manager._store, "async_delay_save") as delayed,
+    ):
+        assert await manager.async_release_locally(["unknown-id"]) == []
+        released = await manager.async_release_locally([lamp_id])
+
+    assert released == [lamp_id]
+    delayed.assert_not_called()
+    saved = save.call_args.args[0]
+    for key in (STORE_PUBLISHED, STORE_REVS, STORE_TRIPPED, STORE_TRANSFERS):
+        assert lamp_id not in saved[key], key
+    assert mode_id in saved[STORE_PUBLISHED]
+    assert mode_id in saved[STORE_REVS]
+    assert saved[STORE_LAST_ACTED][lamp_id] == "ON"
+    assert saved[STORE_DEVICE_MODES][lamp_id] == "observe"
+    # The Store was written while the subentry still existed: a crash after it loses nothing the next start would clear
+    assert subentry_counts[-1] == 2
+    assert lamp_id not in manager.devices
+    assert mode_id in manager.devices
+    assert len(a.entry.subentries) == 1
+    assert manager.device_mode(lamp_id) == "observe"
+
+
+async def test_stop_after_release_publishes_no_offline(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """T-04-57: the stop that follows the fix publishes no availability for the id it shares with the original."""
+    a, b, _ids = await _duplicate_pair(hass, fake_broker, make_instance, make_switch_subentry, make_select_subentry)
+    old_id = a.manager.instance_id
+    with patch.object(b.hass.config_entries, "async_schedule_reload"):
+        await b.manager.async_resolve_duplicate_id()
+    mark = len(b.gateway.published)
+
+    await b.manager.async_stop()
+    await _settle(a, b)
+
+    assert [item for item in b.gateway.published[mark:] if item[0] == availability_topic(BASE, old_id)] == []
+    assert fake_broker.retained[availability_topic(BASE, old_id)] == "online"

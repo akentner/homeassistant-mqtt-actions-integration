@@ -1,5 +1,7 @@
 """Companion device and mode select of a mirrored device of another instance (SYN-09, D-13, D-14, D-15)."""
 
+import json
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntryState
@@ -9,17 +11,28 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_mqtt_message,
+    async_fire_time_changed,
     async_mock_service,
 )
 
-from custom_components.mqtt_actions.const import DOMAIN, STORE_APPROVALS, STORE_KEY, STORE_MIRRORS, STORE_VERSION
+from custom_components.mqtt_actions.const import (
+    DOMAIN,
+    PRUNE_GRACE_SECONDS,
+    STORE_APPROVALS,
+    STORE_KEY,
+    STORE_MIRRORS,
+    STORE_SAVE_DELAY,
+    STORE_VERSION,
+)
+from custom_components.mqtt_actions.discovery import build_discovery
 from custom_components.mqtt_actions.document import parse_document
-from custom_components.mqtt_actions.topics import config_topic, state_topic
-from tests.documents import document_payload, make_spec
+from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
+from tests.documents import FOREIGN_OWNER, document_payload, make_spec
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from freezegun.api import FrozenDateTimeFactory
     from homeassistant.core import HomeAssistant
 
     from custom_components.mqtt_actions.manager import Manager
@@ -212,3 +225,166 @@ async def test_two_mirrors_have_separate_companions(
     assert hass.states.get(first_entity).state == "observe"
     assert hass.states.get(second_entity).state == "run"
     assert _manager(entry).device_mode(second.device_id) == "run"
+
+
+# --- life cycle: removal, prune, rename (D-13, Phase 3 pitfall 10) -------------------------------------------------
+
+
+async def _flush_store(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    """Fire the delayed store save; the frozen clock also moves the loop time the store compares against."""
+    freezer.tick(timedelta(seconds=STORE_SAVE_DELAY + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_mirror_removal_removes_the_companion_and_its_mode(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """T-04-26: a tombstone removes the mirror, its companion device, its select and its stored mode."""
+    spec = make_spec(on=ON_ACTIONS)
+    other = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    await _deliver(hass, other.device_id, document_payload(other), retain=False)
+    await _select_mode(hass, spec.device_id, "observe")
+    await _select_mode(hass, other.device_id, "observe")
+    entity_id = _mode_entity_id(hass, spec.device_id)
+    assert entity_id is not None
+    await _flush_store(hass, freezer)
+    assert hass_storage[STORE_KEY]["data"]["device_modes"] == {spec.device_id: "observe", other.device_id: "observe"}
+
+    await _deliver(hass, spec.device_id, "", retain=False)
+
+    assert spec.device_id not in _manager(entry).mirrors
+    assert _companion(hass, entry, spec.device_id) is None
+    assert _mode_entity_id(hass, spec.device_id) is None
+    assert hass.states.get(entity_id) is None
+    assert _manager(entry).device_mode(spec.device_id) == "run"
+    await _flush_store(hass, freezer)
+    assert hass_storage[STORE_KEY]["data"]["device_modes"] == {other.device_id: "observe"}
+    assert _companion(hass, entry, other.device_id) is not None
+    assert _mode_entity_id(hass, other.device_id) is not None
+
+
+async def test_prune_removes_the_companion_too(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """D-10: the grace-window prune of a mirror whose owner is online removes the companion like a tombstone."""
+    spec = make_spec(on=ON_ACTIONS)
+    _seed_store(
+        hass_storage,
+        {STORE_MIRRORS: {spec.device_id: document_payload(spec)}, "device_modes": {spec.device_id: "observe"}},
+    )
+    entry = await _setup(hass, make_hub_entry())
+    async_fire_mqtt_message(hass, availability_topic(BASE, FOREIGN_OWNER), "online", retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _companion(hass, entry, spec.device_id) is not None
+    assert spec.device_id in _manager(entry).mirrors
+
+    freezer.tick(timedelta(seconds=PRUNE_GRACE_SECONDS + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert spec.device_id not in _manager(entry).mirrors
+    assert _companion(hass, entry, spec.device_id) is None
+    assert _mode_entity_id(hass, spec.device_id) is None
+    assert _manager(entry).device_mode(spec.device_id) == "run"
+
+
+async def test_removal_never_touches_the_mqtt_registry_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """T-04-25: with live discovery entities, removing the mirror removes the companion and nothing of core MQTT."""
+    spec = make_spec(on=ON_ACTIONS, name="Foreign lamp")
+    entry = await _setup(hass, make_hub_entry())
+    discovery = discovery_topic("homeassistant", spec.device_id)
+    payload = build_discovery(spec=spec, base_topic=BASE, instance_id=FOREIGN_OWNER, sw_version="1.2.3")
+    async_fire_mqtt_message(hass, discovery, json.dumps(payload), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+
+    (mqtt_entry,) = hass.config_entries.async_entries("mqtt")
+    device_registry = dr.async_get(hass)
+    entity_registry = er.async_get(hass)
+    mqtt_device = device_registry.async_get_device_by_identifier(
+        ("mqtt", f"{DOMAIN}_{spec.device_id}"), mqtt_entry.entry_id
+    )
+    assert mqtt_device is not None
+    mqtt_entities = er.async_entries_for_device(entity_registry, mqtt_device.id)
+    assert mqtt_entities
+    assert all(hass.states.get(entity.entity_id) is not None for entity in mqtt_entities)
+    companion = _companion(hass, entry, spec.device_id)
+    assert companion is not None
+    assert companion.id != mqtt_device.id
+    mqtt_mock.async_publish.reset_mock()
+
+    await _deliver(hass, spec.device_id, "", retain=False)
+
+    assert _companion(hass, entry, spec.device_id) is None
+    assert device_registry.async_get(mqtt_device.id) == mqtt_device
+    for entity in mqtt_entities:
+        assert entity_registry.async_get(entity.entity_id) == entity
+        assert hass.states.get(entity.entity_id) is not None
+    assert [call for call in mqtt_mock.async_publish.call_args_list if call.args[0] == discovery] == []
+
+
+async def test_mirror_rename_updates_the_companion(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-13: a new document of the pinned owner with another name renames the companion device."""
+    spec = make_spec(on=ON_ACTIONS, name="Lamp")
+    renamed = make_spec(device_id=spec.device_id, on=ON_ACTIONS, name="Floor lamp")
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, rev=1), retain=False)
+    companion = _companion(hass, entry, spec.device_id)
+    assert companion is not None
+    assert companion.name == "Lamp"
+
+    await _deliver(hass, spec.device_id, document_payload(renamed, rev=2), retain=False)
+
+    companion = _companion(hass, entry, spec.device_id)
+    assert companion is not None
+    assert companion.name == "Floor lamp"
+
+
+async def test_mirror_rename_keeps_a_name_the_user_chose(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-13: a name the user gave the companion device stays when the owner renames the device."""
+    spec = make_spec(on=ON_ACTIONS, name="Lamp")
+    renamed = make_spec(device_id=spec.device_id, on=ON_ACTIONS, name="Floor lamp")
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, rev=1), retain=False)
+    companion = _companion(hass, entry, spec.device_id)
+    assert companion is not None
+    dr.async_get(hass).async_update_device(companion.id, name_by_user="My lamp")
+
+    await _deliver(hass, spec.device_id, document_payload(renamed, rev=2), retain=False)
+
+    companion = _companion(hass, entry, spec.device_id)
+    assert companion is not None
+    assert companion.name_by_user == "My lamp"
+    assert companion.name == "Lamp"
+
+
+async def test_remove_companion_is_idempotent(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """The helper does nothing for an unknown id and for a second call, and raises nothing."""
+    spec = make_spec(on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    manager = _manager(entry)
+    await _deliver(hass, spec.device_id, document_payload(spec), retain=False)
+    assert _companion(hass, entry, spec.device_id) is not None
+
+    manager._remove_companion("no-such-device")
+    manager._remove_companion(spec.device_id)
+    manager._remove_companion(spec.device_id)
+
+    assert _companion(hass, entry, spec.device_id) is None

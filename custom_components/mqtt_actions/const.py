@@ -132,6 +132,18 @@ DISCOVERY_REMOVAL_HINT_WINDOW_SECONDS: Final = 600.0
 # without bound (D-16, A2, T-03-12)
 MAX_TRACKED_INSTANCES: Final = 256
 
+# Presence (D-05): every instance publishes a non-retained heartbeat this often, and a peer counts as offline after
+# this long without one. The retained availability alone cannot show a crash, so the timeout is the liveness signal
+HEARTBEAT_INTERVAL_SECONDS: Final = 30.0
+HEARTBEAT_OFFLINE_SECONDS: Final = 90.0
+# Largest accepted broker message of the operations protocol (heartbeat, re-trigger request and acknowledgement),
+# measured in characters and in UTF-8 bytes before anything is parsed (D-05, T-04-11)
+MAX_BROKER_MESSAGE_BYTES: Final = 1024
+# Largest device count a heartbeat may claim; anything above is not a heartbeat of this integration (D-05)
+MAX_HEARTBEAT_DEVICES: Final = 10000
+# Dispatcher signal sent when the roster changed; formatted with the config entry id (D-05, D-06)
+SIGNAL_ROSTER_UPDATED: Final = f"{DOMAIN}_roster_updated_{{}}"
+
 # A mirror whose config document was not seen again within this window after setup, a reconnect or the owner coming
 # online is pruned, but only when its owner's availability says online (D-10, A2)
 PRUNE_GRACE_SECONDS: Final = 30.0

@@ -455,6 +455,11 @@ def _publish_order(instance: Instance) -> list[str]:
     return [kind for kind in kinds if kind is not None]
 
 
+def _last_before_heartbeat(instance: Instance) -> tuple[str, str, bool]:
+    """Return the last publish that is not a heartbeat; the heartbeat follows the online availability (D-05)."""
+    return [item for item in instance.gateway.published if not item[0].endswith("/heartbeat")][-1]
+
+
 def _device_topics(fake_broker: FakeBroker, device_id: str) -> list[str]:
     """Return the retained topics on the broker that belong to a device."""
     return [topic for topic in fake_broker.retained if device_id in topic]
@@ -557,7 +562,7 @@ async def test_first_start_publishes_documents_before_availability(
     last_config = max(index for index, kind in enumerate(order) if kind == "config")
     first_availability = order.index("availability")
     assert last_config < first_availability
-    assert owner.gateway.published[-1][1] == "online"
+    assert _last_before_heartbeat(owner)[1] == "online"
 
 
 async def test_reconnect_republishes_config_before_availability(
@@ -577,7 +582,7 @@ async def test_reconnect_republishes_config_before_availability(
     await _settle(owner, follower)
 
     assert _publish_order(owner) == ["config", "config", "discovery", "discovery", "availability"]
-    assert owner.gateway.published[-1][1] == "online"
+    assert _last_before_heartbeat(owner)[1] == "online"
 
 
 async def test_reconnect_after_a_wiped_broker_heals_and_followers_keep_mirrors(

@@ -68,6 +68,7 @@ from .document import (
 )
 from .model import DeviceSpec, spec_from_subentry, trigger_key
 from .mqtt_gateway import IncomingMessage, MqttGateway
+from .presence import PresenceManager
 from .runner import ActionRunner
 from .state import StateTracker
 from .sync import SyncManager
@@ -334,6 +335,9 @@ class Manager:
         # Replaceable so tests control the breaker window; production uses the monotonic clock
         self.clock: Callable[[], float] = time.monotonic
         self.sync = SyncManager(self)
+        self.presence = PresenceManager(self)
+        # The integration version, read at the start; announced in the heartbeat
+        self._version = ""
 
     @property
     def hass(self) -> HomeAssistant:
@@ -361,6 +365,11 @@ class Manager:
         return str(self._entry.data[CONF_INSTANCE_NAME])
 
     @property
+    def version(self) -> str:
+        """Return the version of this integration as read from its manifest at the start."""
+        return self._version
+
+    @property
     def lock(self) -> asyncio.Lock:
         """Return the lock that serializes reconcile, start, stop and every publish of owned state."""
         return self._lock
@@ -383,7 +392,8 @@ class Manager:
         """Load the persisted state, clear orphans, start every configured device and publish availability online."""
         await self._async_load_store()
         integration = await async_get_integration(self._hass, DOMAIN)
-        self._publisher = DiscoveryPublisher(self.gateway, self._base_topic, str(integration.version))
+        self._version = str(integration.version)
+        self._publisher = DiscoveryPublisher(self.gateway, self._base_topic, self._version)
         self._running = True
         self._check_discovery_enabled()
         self._entry.async_on_unload(self.gateway.async_subscribe_connection_status(self._on_connection_status))
@@ -405,10 +415,12 @@ class Manager:
         async with self._lock:
             # Subscribed before anything is published, so the owner sees its own documents and every foreign write
             await self.sync.async_start()
+            await self.presence.async_start()
             await self._async_orphan_cleanup()
             await self._async_reconcile_locked(startup=True)
             await self._async_publish_owned()
         await self._async_publish_availability(AvailabilityState.ONLINE)
+        await self.presence.async_publish_heartbeat()
 
     async def async_reconcile(self, *, startup: bool = False) -> None:
         """
@@ -447,6 +459,7 @@ class Manager:
         async with self._lock:
             self._running = False
             self.sync.async_stop()
+            self.presence.async_stop()
             await self._store.async_save(self._data_to_save())
             for device in [*self.devices.values(), *self.mirrors.values()]:
                 if device.unsubscribe is not None:
@@ -474,6 +487,7 @@ class Manager:
         """Republish after a broker reconnect and restart the follower bookkeeping; publishes need a task."""
         if connected and self._running:
             self.sync.on_reconnect()
+            self.presence.on_reconnect()
             self._entry.async_create_background_task(self._hass, self._async_republish(), name=f"{DOMAIN} republish")
 
     async def _async_republish(self) -> None:
@@ -490,6 +504,7 @@ class Manager:
                 return
             await self._async_publish_owned()
             await self._async_publish_availability(AvailabilityState.ONLINE)
+            await self.presence.async_publish_heartbeat()
 
     async def _async_publish_owned(self) -> None:
         """Publish every config document, then every discovery; the caller holds the lock and publishes availability."""

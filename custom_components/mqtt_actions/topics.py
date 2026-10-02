@@ -58,6 +58,11 @@ def availability_topic(base: str, instance_id: str) -> str:
     return f"{base}/{TOPIC_VERSION}/instances/{instance_id}/availability"
 
 
+def heartbeat_topic(base: str, instance_id: str) -> str:
+    """Return the non-retained heartbeat topic of an instance (D-05)."""
+    return f"{base}/{TOPIC_VERSION}/instances/{instance_id}/heartbeat"
+
+
 def discovery_topic(prefix: str, device_id: str) -> str:
     """Return the device-based MQTT Discovery config topic."""
     return f"{prefix}/device/{device_id}/config"
@@ -76,6 +81,11 @@ def config_wildcard(base: str) -> str:
 def availability_wildcard(base: str) -> str:
     """Return the subscription that matches the availability topic of every instance."""
     return f"{base}/{TOPIC_VERSION}/instances/+/availability"
+
+
+def heartbeat_wildcard(base: str) -> str:
+    """Return the subscription that matches the heartbeat topic of every instance."""
+    return f"{base}/{TOPIC_VERSION}/instances/+/heartbeat"
 
 
 def discovery_wildcard(prefix: str) -> str:
@@ -101,6 +111,11 @@ def parse_config_topic(base: str, topic: str) -> str | None:
 def parse_availability_topic(base: str, topic: str) -> str | None:
     """Return the instance id of an availability topic, or None for any other topic."""
     return _parse_segment(topic, f"{base}/{TOPIC_VERSION}/instances/", "/availability")
+
+
+def parse_heartbeat_topic(base: str, topic: str) -> str | None:
+    """Return the instance id of a heartbeat topic, or None for any other topic."""
+    return _parse_segment(topic, f"{base}/{TOPIC_VERSION}/instances/", "/heartbeat")
 
 
 def parse_discovery_topic(prefix: str, topic: str) -> str | None:

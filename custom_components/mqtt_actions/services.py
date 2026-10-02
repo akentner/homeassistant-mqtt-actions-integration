@@ -30,17 +30,24 @@ from .const import (
     DOMAIN,
     EXPORT_DIRECTORY,
     LOGGER,
+    MAX_IMPORT_BYTES,
     SERVICE_EXPORT_DEVICES,
     SERVICE_IMPORT_DEVICES,
     SERVICE_RESYNC,
 )
 from .portability import (
+    REASON_BAD_FILE_NAME,
+    REASON_BAD_FORMAT,
+    REASON_FILE_UNREADABLE,
     REASON_INVALID_ACTIONS,
+    REASON_TOO_LARGE,
     PortabilityError,
     build_export,
     export_file_path,
     parse_export,
+    parse_import_text,
     prepare_import,
+    read_import,
     write_export,
 )
 
@@ -150,8 +157,12 @@ def _import_rejected(err: PortabilityError) -> ServiceValidationError:
     """
     Return the translated rejection of an import: a fixed reason code and a position, never any content.
 
-    The log carries the same two values and nothing else (T-04-41).
+    A file that cannot be named or read has an error of its own; every other code is `import_rejected`. The log carries
+    the reason code and the position and nothing else (T-04-41).
     """
+    if err.reason in {REASON_BAD_FILE_NAME, REASON_FILE_UNREADABLE}:
+        LOGGER.warning("The import file was refused: %s", err.reason)
+        return ServiceValidationError(translation_domain=DOMAIN, translation_key=err.reason)
     position = str(err.index) if err.index is not None else "-"
     LOGGER.warning("An import was rejected: reason %s, position %s", err.reason, position)
     return ServiceValidationError(
@@ -170,18 +181,39 @@ async def _async_validate_deeply(hass: HomeAssistant, device: PreparedDevice) ->
             raise PortabilityError(REASON_INVALID_ACTIONS, device.index) from err
 
 
+def _checked_size(data: Any) -> Any:
+    """Return the data when its JSON text is within MAX_IMPORT_BYTES; data that is not plain JSON is no import."""
+    try:
+        size = len(json.dumps(data, ensure_ascii=False).encode())
+    except (TypeError, ValueError) as err:
+        raise PortabilityError(REASON_BAD_FORMAT) from err
+    if size > MAX_IMPORT_BYTES:
+        raise PortabilityError(REASON_TOO_LARGE)
+    return data
+
+
 async def _async_handle_import(call: ServiceCall) -> dict[str, Any]:
     """
     Create one owned device for every item of an export, or none at all.
 
-    Every item is validated before the first device is created. Creating the subentries afterwards is not
-    transactional: a failure halfway would leave the earlier devices, which is rare and documented. The update
-    listener of the entry reconciles, so the manager publishes the document and the discovery of each new device.
+    Exactly one source is given: the export as `data` or the name of a file in the private directory. Every item is
+    validated before the first device is created. Creating the subentries afterwards is not transactional: a failure
+    halfway would leave the earlier devices, which is rare and documented. The update listener of the entry
+    reconciles, so the manager publishes the document and the discovery of each new device.
     """
     hass = call.hass
     manager = async_get_loaded_manager(hass)
+    data: dict[str, Any] | None = call.data.get(CONF_DATA)
+    file_name: str | None = call.data.get(CONF_FILE_NAME)
+    if (data is None) == (file_name is None):
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="import_needs_exactly_one_source")
     try:
-        items = parse_export(call.data.get(CONF_DATA))
+        if file_name is not None:
+            text = await hass.async_add_executor_job(read_import, Path(hass.config.path()), file_name)
+            value: Any = parse_import_text(text)
+        else:
+            value = _checked_size(data)
+        items = parse_export(value)
         prepared = prepare_import(items, owner=manager.instance_id, owner_name=manager.instance_name)
         for device in prepared:
             await _async_validate_deeply(hass, device)

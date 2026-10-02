@@ -29,12 +29,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
+from homeassistant.util.json import json_loads
+
 from .actions import ActionsInvalid, validate_spec_structure
 from .const import (
     CONF_DEVICE_ID,
     EXPORT_DIRECTORY,
     EXPORT_FORMAT,
     EXPORT_VERSION,
+    MAX_IMPORT_BYTES,
+    MAX_IMPORT_DEVICES,
     SCHEMA_VERSION,
 )
 from .document import (
@@ -66,6 +70,10 @@ REASON_INVALID_DEVICE: Final = "invalid_device"
 REASON_INVALID_ACTIONS: Final = "invalid_actions"
 REASON_DENIED_SERVICE: Final = "denied_service"
 REASON_TOO_LARGE: Final = "too_large"
+REASON_TOO_MANY: Final = "too_many"
+REASON_NOT_JSON: Final = "not_json"
+# Reason code of an import file that cannot be read; the service gives it a message of its own
+REASON_FILE_UNREADABLE: Final = "file_unreadable"
 # The keys of the content that identify the device kind and name; they are the title and type of a subentry, not data
 NON_DATA_KEYS: Final = frozenset({"kind", "name"})
 DIRECTORY_MODE = 0o700
@@ -175,7 +183,55 @@ def parse_export(value: Any) -> list[Any]:
     devices = value.get("devices")
     if not isinstance(devices, list):
         raise PortabilityError(REASON_BAD_FORMAT)
+    if len(devices) > MAX_IMPORT_DEVICES:
+        raise PortabilityError(REASON_TOO_MANY)
     return devices
+
+
+def parse_import_text(text: str) -> Any:
+    """Return the JSON value of the text of an import file, or raise PortabilityError with `not_json`."""
+    try:
+        return json_loads(text)
+    except ValueError as err:
+        raise PortabilityError(REASON_NOT_JSON) from err
+
+
+def read_import(config_dir: Path, name: str) -> str:
+    """
+    Return the text of an import file in the private export directory; blocking, so call it in the executor.
+
+    Only a bare name of the fixed pattern is accepted, the directory must be a real directory and the file is opened
+    without following a link, so a planted symlink never leads out of the directory. The opened file must be a regular
+    file; its size is checked on the descriptor before anything is read and the read itself is bounded, so a huge file
+    never reaches memory (T-04-37, T-04-38). The text must be strict UTF-8. Every refusal that is not a bad name or a
+    size is `file_unreadable`, whatever the cause, so the error never tells a probe which file exists.
+    """
+    path = export_file_path(config_dir, name)
+    if path.parent.is_symlink():
+        raise PortabilityError(REASON_FILE_UNREADABLE)
+    # O_NONBLOCK keeps a FIFO planted under the name from blocking the open; the regular-file check refuses it after
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as err:
+        raise PortabilityError(REASON_FILE_UNREADABLE) from err
+    try:
+        with os.fdopen(descriptor, "rb") as handle:
+            status = os.fstat(handle.fileno())
+            if not stat.S_ISREG(status.st_mode):
+                raise PortabilityError(REASON_FILE_UNREADABLE)
+            if status.st_size > MAX_IMPORT_BYTES:
+                raise PortabilityError(REASON_TOO_LARGE)
+            raw = handle.read(MAX_IMPORT_BYTES + 1)
+    except OSError as err:
+        raise PortabilityError(REASON_FILE_UNREADABLE) from err
+    if len(raw) > MAX_IMPORT_BYTES:
+        # The file grew between the size check and the read
+        raise PortabilityError(REASON_TOO_LARGE)
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as err:
+        raise PortabilityError(REASON_FILE_UNREADABLE) from err
 
 
 def subentry_payload(content: dict[str, Any], device_id: str) -> dict[str, Any]:

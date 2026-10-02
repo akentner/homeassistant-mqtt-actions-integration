@@ -406,6 +406,12 @@
     },
     "import_rejected": {
       "message": "Der Import wurde abgelehnt (Position {index}, Grund: {reason}). Es wurde nichts angelegt. Die Position ist die Nummer des Geräts im Export, ein Strich steht für den Export als Ganzes. Gründe: bad_format (kein Export dieser Integration), too_new (Export einer neueren Version), too_many (mehr als 100 Geräte), too_large (der Import oder ein Gerät ist zu groß), not_json (der Text ist kein JSON), invalid_device (ein Feld des Geräts ist ungültig), invalid_actions (die Aktionen sind auf dieser Instanz ungültig), denied_service (die Aktionen rufen einen Dienst auf, den Importe nicht verwenden dürfen)."
+    },
+    "import_needs_exactly_one_source": {
+      "message": "Gib entweder den Export als Daten oder den Namen einer Datei an, nicht beides und nicht keines von beiden."
+    },
+    "file_unreadable": {
+      "message": "Die Importdatei konnte nicht gelesen werden. Sie muss eine normale UTF-8-Textdatei im Ordner mqtt_actions des Konfigurationsverzeichnisses sein, kein Link, und höchstens 4 MiB groß. Den Grund-Code zeigt das Home-Assistant-Protokoll."
     }
   }
 }

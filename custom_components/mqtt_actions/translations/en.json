@@ -406,6 +406,12 @@
     },
     "import_rejected": {
       "message": "The import was rejected (position {index}, reason: {reason}). Nothing was created. The position is the number of the device in the export, a dash means the export as a whole. Reasons: bad_format (not an export of this integration), too_new (export of a newer version), too_many (more than 100 devices), too_large (the import or a device is too large), not_json (the text is not JSON), invalid_device (a field of the device is not valid), invalid_actions (the actions are not valid on this instance), denied_service (the actions call a service that imports may not use)."
+    },
+    "import_needs_exactly_one_source": {
+      "message": "Give either the export as data or the name of a file, not both and not neither."
+    },
+    "file_unreadable": {
+      "message": "The import file could not be read. It must be a regular UTF-8 text file in the mqtt_actions folder of the configuration directory, not a link, and at most 4 MiB. See the Home Assistant log for the reason code."
     }
   }
 }

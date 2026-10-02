@@ -76,6 +76,9 @@ ESCAPED_FLOW_PLACEHOLDERS = {
 }
 MARKDOWN_CONTROL = r"\\`*_\[\]<>|~#"
 
+# Translated errors of the services; each carries fixed text and no placeholder
+SERVICE_EXCEPTIONS = ("not_loaded", "resync_throttled", "unknown_device", "not_a_device", "export_not_owned")
+
 REQUIRED_KEYS = (
     "config.step.user.title",
     "config.step.user.description",
@@ -130,6 +133,9 @@ REQUIRED_KEYS = (
     "config_subentries.switch.error.breaker_window_range",
     "entity.sensor.instances_online.name",
     "entity.button.resync.name",
+    "services.resync.name",
+    "services.resync.description",
+    *(f"exceptions.{key}.message" for key in SERVICE_EXCEPTIONS),
     *(f"entity.select.{key}.name" for key in ("device_mode", "instance_mode")),
     *(
         f"entity.select.{key}.state.{mode}"

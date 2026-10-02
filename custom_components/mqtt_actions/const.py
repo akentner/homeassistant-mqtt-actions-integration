@@ -160,6 +160,11 @@ MODES: Final = (MODE_RUN, MODE_OBSERVE, MODE_DISABLED)
 SIGNAL_MODES_CHANGED: Final = f"{DOMAIN}_modes_changed_{{}}"
 SIGNAL_DEVICES_CHANGED: Final = f"{DOMAIN}_devices_changed_{{}}"
 
+# Names of the services of the integration, registered once at the integration setup (D-12)
+SERVICE_RESYNC: Final = "resync"
+SERVICE_EXPORT_DEVICES: Final = "export_devices"
+SERVICE_IMPORT_DEVICES: Final = "import_devices"
+
 # Minimum time between two accepted resyncs (D-12): a held button or a looping automation cannot queue unbounded
 # republishes; measured on Manager.clock
 RESYNC_MIN_INTERVAL_SECONDS: Final = 5.0

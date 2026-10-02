@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-10-02T07:29:15.876Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-10-02T07:36:05.024Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 7ce454d2cb5c77c4946f01aaa0b46653e06e67fa
+state_head: 39bffd5d4ced664872e6e5164b15a8578a998a3f
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 20
-  percent: 63
+  completed_plans: 21
+  percent: 66
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 2 of 13
+Plan: 3 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
-Progress: [██████░░░░] 63% of Phase 01 plans
+Progress: [███████░░░] 66% of Phase 01 plans
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [██████░░░░] 63% of Phase 01 plans
 | Phase 03 P07 | 10 min | 3 tasks | 6 files |
 | Phase 03 P08 | 20min | 2 tasks | 3 files |
 | Phase 04 P01 | 7 min | 3 tasks | 8 files |
+| Phase 04 P02 | 5 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,7 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-07: owner_conflict issue is transient with an online owner (cleared when the owner's healing republish is re-seen); flagged for user review
 - [Phase 03]: 03-08: escape_markdown only on Markdown-rendered flow description placeholders; chooser labels and suggested values stay raw
 - [Phase 04]: 04-01: --strict-markers in pytest addopts; release requires hassfest/HACS validation via reusable validate.yml; ci and validate jobs in release.yml need check-version so a mismatching tag stops early; hyphenated tags are prereleases
+- [Phase 04]: 04-02: run_mode, breaker_max_runs and breaker_window are bound into actions_hash (D-16); a rename is still not; no migration code, old approvals lapse once
 
 ### Pending Todos
 
@@ -145,6 +147,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T07:29:15.797Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-10-02T07:36:04.943Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None

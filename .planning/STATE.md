@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-10-02T07:36:05.024Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-10-02T07:49:44.099Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 39bffd5d4ced664872e6e5164b15a8578a998a3f
+state_head: 4f5a97fea2ff189349cbd838b06b01ab48c1b9d9
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 21
-  percent: 66
+  completed_plans: 22
+  percent: 69
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 3 of 13
+Plan: 4 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
-Progress: [███████░░░] 66% of Phase 01 plans
+Progress: [███████░░░] 69% of Phase 01 plans
 
 ## Performance Metrics
 
@@ -74,6 +74,7 @@ Progress: [███████░░░] 66% of Phase 01 plans
 | Phase 03 P08 | 20min | 2 tasks | 3 files |
 | Phase 04 P01 | 7 min | 3 tasks | 8 files |
 | Phase 04 P02 | 5 min | 2 tasks | 11 files |
+| Phase 04 P03 | 12min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-08: escape_markdown only on Markdown-rendered flow description placeholders; chooser labels and suggested values stay raw
 - [Phase 04]: 04-01: --strict-markers in pytest addopts; release requires hassfest/HACS validation via reusable validate.yml; ci and validate jobs in release.yml need check-version so a mismatching tag stops early; hyphenated tags are prereleases
 - [Phase 04]: 04-02: run_mode, breaker_max_runs and breaker_window are bound into actions_hash (D-16); a rename is still not; no migration code, old approvals lapse once
+- [Phase 04]: 04-03: peer online while heartbeat age <= 90 s and availability not offline; expiry timer fires 1 s after the deadline — Strict comparison gives 89 s online and 91 s offline without a busy re-arm loop
+- [Phase 04]: 04-03: owner_offline treats an owner that announced online without any heartbeat as not offline; unknown owner is offline only after 90 s of listening — Unknown must never count as offline right after a start; adoption then needs force (D-09, A10)
+- [Phase 04]: 04-03: at the peer cap a new peer evicts the stalest expired row, else is not tracked — Random heartbeat ids must not block real instances permanently (T-04-12)
 
 ### Pending Todos
 
@@ -147,6 +151,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T07:36:04.943Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-10-02T07:49:44.020Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None

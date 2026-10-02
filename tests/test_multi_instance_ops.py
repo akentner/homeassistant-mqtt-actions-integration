@@ -1,22 +1,32 @@
 """Operations scenarios of several real instances on one fake broker: presence and the roster (OPS-03)."""
 
+import asyncio
 import json
 import time
+import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
 
+from custom_components.mqtt_actions import retrigger as retrigger_module
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     HEARTBEAT_INTERVAL_SECONDS,
     HEARTBEAT_OFFLINE_SECONDS,
     SIGNAL_ROSTER_UPDATED,
 )
-from custom_components.mqtt_actions.topics import availability_topic, heartbeat_topic, state_topic
+from custom_components.mqtt_actions.topics import (
+    acks_topic,
+    availability_topic,
+    heartbeat_topic,
+    retrigger_topic,
+    state_topic,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -317,3 +327,152 @@ async def test_retrigger_returns_before_the_window_when_everyone_answered(
     assert time.monotonic() - started < 2
     assert {entry["status"] for entry in result["instances"]} == {"executed"}
     await _settle(a, b)
+
+
+async def test_roster_offline_and_silent_instances_are_no_answer(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-03: offline roster instances and silent online ones are no_answer, and foreign acknowledgements are ignored."""
+    a, b, device_id, _calls = await _approved_pair(hass, fake_broker, make_instance, make_switch_subentry)
+    now = _use_clock(a)
+    _peer_heartbeat(fake_broker)
+    await _settle(a, b)
+    assert _peer_online(a) is True
+    # The peer grows stale, beta stays fresh through a new heartbeat, and its coordinator stops answering
+    now[0] += HEARTBEAT_OFFLINE_SECONDS + 10
+    await _fire(a, HEARTBEAT_OFFLINE_SECONDS + 10)
+    await b.manager.presence.async_publish_heartbeat()
+    await _settle(a, b)
+    assert _peer_online(a) is False
+    assert _peer_online(a, b.manager.instance_id) is True
+    b.manager.retrigger.async_stop()
+
+    with patch.object(retrigger_module, "RETRIGGER_ACK_WINDOW_SECONDS", 0.6):
+        task = asyncio.create_task(a.manager.retrigger.async_retrigger(device_id))
+        topic = retrigger_topic(BASE, device_id)
+        for _ in range(100):
+            sent = [payload for published, payload, _retain in a.gateway.published if published == topic]
+            if sent:
+                break
+            await asyncio.sleep(0.01)
+        request_id = json.loads(sent[0])["request_id"]
+        # Answers of beta for another request, and for another device, must not count as its answer
+        for forged_request, forged_device in ((str(uuid.uuid4()), device_id), (request_id, str(uuid.uuid4()))):
+            forged = {
+                "request_id": forged_request,
+                "device_id": forged_device,
+                "instance_id": b.manager.instance_id,
+                "instance_name": "beta",
+                "status": "executed",
+            }
+            fake_broker.publish(acks_topic(BASE, a.manager.instance_id), json.dumps(forged), retain=False)
+        started = time.monotonic()
+        result = await task
+
+    assert time.monotonic() - started < 2
+    entries = {entry["instance_id"]: entry for entry in result["instances"]}
+    assert entries[a.manager.instance_id]["status"] == "executed"
+    assert entries[b.manager.instance_id] == {
+        "instance_id": b.manager.instance_id,
+        "instance_name": "beta",
+        "status": "no_answer",
+    }
+    assert entries[PEER] == {"instance_id": PEER, "instance_name": "Peer", "status": "no_answer", "reason": "offline"}
+    assert len(entries) == 3
+    await _settle(a, b)
+
+
+async def test_retrigger_honors_modes_and_breaker_in_the_multi_instance_tier(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """TRU-01, D-14: an observing follower and a follower with a tripped breaker answer so and run nothing."""
+    a, b, device_id, calls = await _approved_pair(hass, fake_broker, make_instance, make_switch_subentry)
+    c = await make_instance("gamma")
+    c_on = async_mock_service(c.hass, "test", "on")
+    await _settle(a, b, c)
+    mirror = c.manager.mirrors[device_id].mirror
+    assert mirror is not None
+    assert await c.manager.async_approve(device_id, mirror.actions_hash) is True
+    await c.manager.presence.async_publish_heartbeat()
+    await a.manager.presence.async_publish_heartbeat()
+    await _settle(a, b, c)
+    await b.manager.async_set_device_mode(device_id, "observe")
+    c_device = c.manager.device(device_id)
+    assert c_device is not None
+    c_device.breaker.trip()
+    before = (len(calls["a_on"]), len(calls["b_on"]), len(c_on))
+
+    result = await a.manager.retrigger.async_retrigger(device_id)
+    await _settle(a, b, c)
+
+    answers = {entry["instance_id"]: entry["status"] for entry in result["instances"]}
+    assert answers == {
+        a.manager.instance_id: "executed",
+        b.manager.instance_id: "observing",
+        c.manager.instance_id: "paused",
+    }
+    assert (len(calls["a_on"]), len(calls["b_on"]), len(c_on)) == (before[0] + 1, before[1], before[2])
+
+
+async def test_unapproved_mirror_answers_not_approved_and_runs_nothing(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-42: a follower that never approved answers not_approved and its service is untouched."""
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
+    device_id = sub["data"][CONF_DEVICE_ID]
+    a = await make_instance("alpha", hass=hass, subentries=[sub])
+    b = await make_instance("beta")
+    a_on = async_mock_service(a.hass, "test", "on")
+    b_on = async_mock_service(b.hass, "test", "on")
+    await _settle(a, b)
+    fake_broker.publish(state_topic(BASE, device_id), "ON", retain=True)
+    await a.manager.presence.async_publish_heartbeat()
+    await b.manager.presence.async_publish_heartbeat()
+    await _settle(a, b)
+    assert (len(a_on), len(b_on)) == (1, 0)
+
+    result = await a.manager.retrigger.async_retrigger(device_id)
+    await _settle(a, b)
+
+    answers = {entry["instance_id"]: entry["status"] for entry in result["instances"]}
+    assert answers == {a.manager.instance_id: "executed", b.manager.instance_id: "not_approved"}
+    assert (len(a_on), len(b_on)) == (2, 0)
+
+
+async def test_acknowledgements_per_request_are_capped(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-47: one answer per instance and at most MAX_TRACKED_INSTANCES answers per request are kept."""
+    a, _b, device_id, _calls = await _approved_pair(hass, fake_broker, make_instance, make_switch_subentry)
+    _peer_heartbeat(fake_broker)  # a silent peer keeps the collector waiting while the answers arrive
+    await _settle(a)
+    topic = retrigger_topic(BASE, device_id)
+
+    with (
+        patch.object(retrigger_module, "RETRIGGER_ACK_WINDOW_SECONDS", 0.6),
+        patch.object(retrigger_module, "MAX_TRACKED_INSTANCES", 3, create=True),
+    ):
+        task = asyncio.create_task(a.manager.retrigger.async_retrigger(device_id))
+        for _ in range(100):
+            sent = [payload for published, payload, _retain in a.gateway.published if published == topic]
+            if sent:
+                break
+            await asyncio.sleep(0.01)
+        request_id = json.loads(sent[-1])["request_id"]
+        for number in range(10):
+            forged = {
+                "request_id": request_id,
+                "device_id": device_id,
+                "instance_id": f"flood-{number}",
+                "instance_name": "flood",
+                "status": "executed",
+            }
+            for _repeat in range(2):  # the second answer of an instance never replaces the first
+                fake_broker.publish(acks_topic(BASE, a.manager.instance_id), json.dumps(forged), retain=False)
+        result = await task
+
+    flood = [entry for entry in result["instances"] if entry["instance_id"].startswith("flood-")]
+    assert len({entry["instance_id"] for entry in flood}) == len(flood)
+    # The caller's own answer and its roster entries come first; the cap counts answers, so at most two extras fit
+    assert len(flood) <= 2
+    await _settle(a)

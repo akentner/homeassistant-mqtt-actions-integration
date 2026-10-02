@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-10-02T08:00:30.251Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-10-02T08:18:37.363Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 9e32abc114d9bde543d284984c71d6257691ef0b
+state_head: 20fe59c8b0876392722fd5dd883736fcc446a60f
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 23
-  percent: 72
+  completed_plans: 24
+  percent: 75
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 5 of 13
+Plan: 6 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
-Progress: [███████░░░] 72% of Phase 01 plans
+Progress: [████████░░] 75% of Phase 01 plans
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Progress: [███████░░░] 72% of Phase 01 plans
 | Phase 04 P02 | 5 min | 2 tasks | 11 files |
 | Phase 04 P03 | 12min | 3 tasks | 11 files |
 | Phase 04 P04 | 10 min | 3 tasks | 11 files |
+| Phase 04 P05 | 15 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Plan 04-04: hub device identifier is (mqtt_actions, config entry id), so it survives an instance id change
 - [Phase 04]: Plan 04-04: roster sensor counts this instance, lists it first, and caps the unrecorded instances attribute at MAX_TRACKED_INSTANCES + 1
 - [Phase 04]: Plan 04-04: Manager.async_resync returns False when throttled (5 s on Manager.clock) or stopped; the time is remembered before the republish is awaited
+- [Phase 04]: 04-05: mode gate sits between can_run and the circuit breaker; observe is logged through model.shown and never counted, disabled returns before the tracker
+- [Phase 04]: 04-05: leaving disabled re-baselines (baseline and startup window cleared, state topic resubscribed); the test topic obeys the effective mode
+- [Phase 04]: 04-05: companion devices are looked up with async_get_device_by_identifier (async_get_device is deprecated and raises in tests); mode keys are additive Store keys without a version bump
 
 ### Pending Todos
 
@@ -155,6 +159,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T08:00:30.165Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-10-02T08:18:37.283Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None

@@ -144,7 +144,7 @@ Plans:
   4. User can set per instance and device whether actions run, are only observed, or are disabled, and can download diagnostics with sensitive data redacted.
   5. README and docs cover setup, trust model and limitations; a tagged release is built automatically with the manifest version matching the tag; CI runs the unit, real-Mosquitto and multi-instance fake-broker test tiers.
 
-**Plans:** 4/13 plans executed
+**Plans:** 5/13 plans executed
 
 Plans:
 **Wave 1**
@@ -158,7 +158,7 @@ Plans:
 - [x] 04-04-PLAN.md — Hub device with the roster sensor and the resync button, platform plumbing (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 04-05-PLAN.md — Run, observe and disabled modes for owned devices and the instance, companion devices with select entities (wave 4)
+- [x] 04-05-PLAN.md — Run, observe and disabled modes for owned devices and the instance, companion devices with select entities (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 04-06-PLAN.md — Companion devices and mode selects for mirrored devices, safe life cycle (wave 5)
@@ -192,7 +192,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
-| 4. Operations, Recovery and Release | 4/13 | In Progress|  |
+| 4. Operations, Recovery and Release | 5/13 | In Progress|  |
 
 ## Backlog
 

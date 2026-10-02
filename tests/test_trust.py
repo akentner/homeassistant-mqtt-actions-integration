@@ -405,15 +405,11 @@ async def test_changed_actions_lapse_the_approval(
     assert order == ["hold:start", "hold:start"]
 
 
-async def test_rename_and_settings_change_keep_the_approval(
-    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
-) -> None:
-    """A new name, run mode or breaker limits keep the approval; the rebuilt Script uses the new run mode (A5)."""
+async def test_rename_keeps_the_approval(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """A new name with identical actions and settings keeps the approval and the Script in place (A5)."""
     async_mock_service(hass, "test", "on")
     v1 = make_spec(on=ON_ACTIONS, name="Lamp")
-    v2 = make_spec(
-        device_id=v1.device_id, on=ON_ACTIONS, name="Renamed", run_mode="restart", breaker_max_runs=3, breaker_window=7
-    )
+    v2 = make_spec(device_id=v1.device_id, on=ON_ACTIONS, name="Renamed")
     entry = await _setup(hass, make_hub_entry())
     await _deliver(hass, v1.device_id, document_payload(v1))
     assert await _approve(entry, v1.device_id) is True
@@ -421,15 +417,49 @@ async def test_rename_and_settings_change_keep_the_approval(
     approved = dict(manager._approvals)
     script = manager.runner.script_for(v1.device_id, SWITCH_ON_KEY)
     assert script is not None
-    assert script.script_mode == "queued"
 
     await _deliver(hass, v1.device_id, document_payload(v2, rev=2), retain=False)
 
     assert manager._approvals == approved
-    rebuilt = manager.runner.script_for(v1.device_id, SWITCH_ON_KEY)
-    assert rebuilt is not None
-    assert rebuilt.script_mode == "restart"
+    assert manager.runner.script_count(v1.device_id) == 1
+    assert manager.runner.script_for(v1.device_id, SWITCH_ON_KEY) is not None
     assert manager.mirrors[v1.device_id].name == "Renamed"
+    assert _issue(hass, "approval_", v1.device_id) is None
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [{"run_mode": "restart"}, {"breaker_max_runs": 3}, {"breaker_window": 7}],
+    ids=["run_mode", "breaker_max_runs", "breaker_window"],
+)
+async def test_run_mode_or_breaker_change_lapses_the_approval(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, changed: dict[str, Any]
+) -> None:
+    """A changed run mode or breaker limit stops an approved mirror and asks again, actions being equal (D-16)."""
+    on_calls = async_mock_service(hass, "test", "on")
+    v1 = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
+    v2 = make_spec(device_id=v1.device_id, on=ON_ACTIONS, off=OFF_ACTIONS, **changed)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, v1.device_id, document_payload(v1))
+    await _state(hass, v1.device_id, "OFF", retain=True)
+    assert await _approve(entry, v1.device_id) is True
+    manager = _manager(entry)
+    approved_hash = manager._approvals[v1.device_id]
+    assert manager.runner.script_count(v1.device_id) == 1
+    assert _issue(hass, "approval_", v1.device_id) is None
+
+    await _deliver(hass, v1.device_id, document_payload(v2, rev=2), retain=False)
+
+    new_hash = parse_document(v1.device_id, document_payload(v2, rev=2)).actions_hash
+    assert new_hash != approved_hash
+    assert manager.runner.script_count(v1.device_id) == 0
+    await _state(hass, v1.device_id, "OFF")
+    await _state(hass, v1.device_id, "ON")
+    assert on_calls == []
+    issue = _issue(hass, "approval_", v1.device_id)
+    assert issue is not None
+    assert issue.data is not None
+    assert issue.data["actions_hash"] == new_hash
 
 
 async def test_approval_persists_across_restart(

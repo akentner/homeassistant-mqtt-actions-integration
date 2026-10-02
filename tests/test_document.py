@@ -196,13 +196,14 @@ def test_hash_excludes_identity_and_bookkeeping() -> None:
     assert _document(_switch(**{CONF_BREAKER_WINDOW: 11}))["hash"] != base_hash
 
 
-def test_actions_hash_binds_mapping_and_startup_flag() -> None:
-    """The approval hash follows the StateValue-to-actions mapping and run_on_startup, nothing else (A5)."""
+def test_actions_hash_binds_mapping_startup_run_mode_and_breaker() -> None:
+    """The approval hash follows mapping, startup flag, run mode and both breaker limits, never a rename (D-16)."""
     base = _switch(on=LIGHT_ON, off=LIGHT_OFF)
     base_hash = actions_hash(base)
     assert actions_hash(_switch("Renamed", on=LIGHT_ON, off=LIGHT_OFF)) == base_hash
-    assert actions_hash(_switch(on=LIGHT_ON, off=LIGHT_OFF, **{CONF_RUN_MODE: "restart"})) == base_hash
-    assert actions_hash(_switch(on=LIGHT_ON, off=LIGHT_OFF, **{CONF_BREAKER_MAX_RUNS: 9})) == base_hash
+    assert actions_hash(_switch(on=LIGHT_ON, off=LIGHT_OFF, **{CONF_RUN_MODE: "restart"})) != base_hash
+    assert actions_hash(_switch(on=LIGHT_ON, off=LIGHT_OFF, **{CONF_BREAKER_MAX_RUNS: 9})) != base_hash
+    assert actions_hash(_switch(on=LIGHT_ON, off=LIGHT_OFF, **{CONF_BREAKER_WINDOW: 11})) != base_hash
     assert actions_hash(_switch(on=[{"action": "light.toggle"}], off=LIGHT_OFF)) != base_hash
     assert actions_hash(_switch(on=LIGHT_OFF, off=LIGHT_ON)) != base_hash
     assert actions_hash(_switch(on=LIGHT_ON, off=LIGHT_OFF, **{CONF_RUN_ON_STARTUP: True})) != base_hash

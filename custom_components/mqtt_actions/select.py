@@ -1,4 +1,4 @@
-"""The mode selects: one per owned device on its companion device, and one for the whole instance (D-13, D-14, D-15)."""
+"""The mode selects: one per owned or mirrored device on its companion device, one for the instance (D-13, D-14)."""
 
 from typing import TYPE_CHECKING
 
@@ -49,9 +49,9 @@ class DeviceModeSelect(_ModeSelect):
     _signals = (SIGNAL_MODES_CHANGED, SIGNAL_DEVICES_CHANGED)
 
     def __init__(self, manager: Manager, device_id: str) -> None:
-        """Initialize the select of a device that is known to the manager; its unique id is bound to the device."""
+        """Initialize the select of an owned or mirrored device; its unique id is bound to the device."""
         super().__init__(manager)
-        device = manager.devices[device_id]
+        device = manager.devices.get(device_id) or manager.mirrors[device_id]
         self._device_id = device_id
         self._attr_unique_id = f"{device_id}_mode"
         self._attr_device_info = companion_device_info(
@@ -96,7 +96,7 @@ async def async_setup_entry(
     entry: ConfigEntry[Manager],
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add the instance select, the select of every owned device and of every owned device that appears later."""
+    """Add the instance select and the select of every owned device and mirror, now and when one appears later."""
     manager = entry.runtime_data
     async_add_entities([InstanceModeSelect(manager)])
     added: set[str] = set()
@@ -104,11 +104,12 @@ async def async_setup_entry(
     @callback
     def _add_new_devices() -> None:
         # A removed device is forgotten, so a device that comes back under the same id gets its entity again
-        added.intersection_update(manager.devices)
-        for device_id in manager.devices:
+        added.intersection_update(manager.devices.keys() | manager.mirrors.keys())
+        for device_id in [*manager.devices, *manager.mirrors]:
             if device_id in added:
                 continue
             added.add(device_id)
+            # A mirror has no subentry: its companion device is a plain device of the entry (D-13 revised)
             async_add_entities(
                 [DeviceModeSelect(manager, device_id)], config_subentry_id=manager.subentry_id_of(device_id)
             )

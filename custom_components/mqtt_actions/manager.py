@@ -766,6 +766,8 @@ class Manager:
         await self._async_subscribe_mirror(device)
         self._sync_approval_issues(device)
         self._schedule_save()
+        # The select platform adds the companion device and the mode select of the new mirror (D-13)
+        self._notify_devices_changed()
 
     async def async_approve(self, device_id: str, actions_hash: str) -> bool:
         """

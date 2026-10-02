@@ -310,3 +310,37 @@ def test_ci_has_one_job_per_tier() -> None:
     for name in ("lint", "unit", "broker", "multi-instance"):
         assert any(run.startswith("uv sync --locked") for run in _job_commands(jobs[name])), f"{name} skips uv sync"
         assert jobs[name]["permissions"] == {"contents": "read"}
+
+
+def test_require_broker_switch_turns_skip_into_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.broker import conftest as broker_conftest
+
+    monkeypatch.setattr(broker_conftest.shutil, "which", lambda _name: None)
+
+    def outcome() -> type[BaseException] | None:
+        try:
+            with broker_conftest._run_broker(Path("unused.conf"), 1):
+                pass
+        except (pytest.skip.Exception, pytest.fail.Exception) as error:
+            return type(error)
+        return None
+
+    monkeypatch.delenv("MQTT_ACTIONS_REQUIRE_BROKER", raising=False)
+    assert outcome() is pytest.skip.Exception
+    # The variable is read at call time: setting it after the import must change the outcome
+    monkeypatch.setenv("MQTT_ACTIONS_REQUIRE_BROKER", "1")
+    assert outcome() is pytest.fail.Exception
+
+
+def test_broker_job_sets_the_require_switch() -> None:
+    job = _load_workflow("ci.yml")["jobs"]["broker"]
+    environments = [job.get("env", {}), *(step.get("env", {}) for step in job["steps"] if "run" in step)]
+    values = [env["MQTT_ACTIONS_REQUIRE_BROKER"] for env in environments if "MQTT_ACTIONS_REQUIRE_BROKER" in env]
+    assert values == ["1"], "the broker job must set MQTT_ACTIONS_REQUIRE_BROKER to the string 1"
+
+
+def test_mosquitto_is_installed_only_in_the_broker_job() -> None:
+    jobs = _load_workflow("ci.yml")["jobs"]
+    for name, job in jobs.items():
+        mentions = any("mosquitto" in command.lower() for command in _job_commands(job))
+        assert mentions == (name == "broker"), f"job {name}: mosquitto must be installed in the broker job only"

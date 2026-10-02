@@ -52,6 +52,7 @@ NEW_ISSUES = {
     "approval_required": {"device", "owner", "hash"},
     "mirror_blocked": {"device", "owner", "services"},
     "denied_service_call": {"device", "trigger", "service"},
+    "duplicate_instance_id": {"instance"},
 }
 
 # The approval fix flow (plan 03-06): the confirm step and the three reasons it can abort
@@ -63,6 +64,14 @@ APPROVAL_FLOW_KEYS = (
     f"{APPROVAL_FLOW}.abort.too_large",
     f"{APPROVAL_FLOW}.abort.not_loaded",
 )
+# The duplicate instance id fix flow (plan 04-12): the confirm step and the two reasons it can abort
+DUPLICATE_FLOW = "issues.duplicate_instance_id.fix_flow"
+DUPLICATE_FLOW_KEYS = (
+    f"{DUPLICATE_FLOW}.step.confirm.title",
+    f"{DUPLICATE_FLOW}.step.confirm.description",
+    f"{DUPLICATE_FLOW}.abort.not_loaded",
+    f"{DUPLICATE_FLOW}.abort.changed",
+)
 FENCED_YAML = re.compile(r"```yaml\s*\{actions\}\s*```")
 
 # Flow descriptions whose user-text placeholders the flow escapes with escape_markdown (G-03-2). A translation must use
@@ -73,6 +82,8 @@ ESCAPED_FLOW_PLACEHOLDERS = {
     "config_subentries.select.step.menu.description": ("name", "options"),
     "config_subentries.select.step.edit_option_details.description": ("state_value",),
     "config_subentries.select.step.remove_confirm.description": ("friendly_name", "state_value"),
+    "issues.duplicate_instance_id.description": ("instance",),
+    f"{DUPLICATE_FLOW}.step.confirm.description": ("instance",),
 }
 MARKDOWN_CONTROL = r"\\`*_\[\]<>|~#"
 
@@ -140,6 +151,7 @@ REQUIRED_KEYS = (
     "issues.circuit_breaker_tripped.description",
     *(f"issues.{issue}.{part}" for issue in NEW_ISSUES for part in ("title", "description")),
     *APPROVAL_FLOW_KEYS,
+    *DUPLICATE_FLOW_KEYS,
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
         for step in ("user", "edit_device")
@@ -422,3 +434,19 @@ def test_required_adopt_keys_exist_in_both_languages(language: str) -> None:
     assert _variables(flat["exceptions.adopt_not_approved.message"]) == {"device"}
     assert _variables(flat["exceptions.adopt_not_a_mirror.message"]) == set()
     assert "force: true" in flat["exceptions.adopt_owner_not_offline.message"]
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_duplicate_keys_exist_in_both_languages(language: str) -> None:
+    """The duplicate id issue and its flow have all texts, the exact variables, and say what the fix leaves alone."""
+    flat = _load(language)
+    assert [key for key in DUPLICATE_FLOW_KEYS if not flat.get(key)] == []
+    assert flat["issues.duplicate_instance_id.title"]
+    assert _variables(flat["issues.duplicate_instance_id.description"]) == {"instance"}
+    assert _variables(flat[f"{DUPLICATE_FLOW}.step.confirm.description"]) == {"instance", "devices"}
+    assert not _variables(flat[f"{DUPLICATE_FLOW}.abort.not_loaded"])
+    assert not _variables(flat[f"{DUPLICATE_FLOW}.abort.changed"])
+    # Only the local devices go, the broker topics stay, and a per-instance ACL needs the new id
+    description = flat[f"{DUPLICATE_FLOW}.step.confirm.description"]
+    assert "ACL" in description
+    assert "MQTT" in description or "Broker" in description or "broker" in description

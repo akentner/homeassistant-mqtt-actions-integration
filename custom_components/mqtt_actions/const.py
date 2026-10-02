@@ -261,6 +261,8 @@ ISSUE_BLOCKED_PREFIX: Final = "blocked_"
 # A templated service name of a mirror resolved to a denied service at run time (D-05)
 ISSUE_DENIED_CALL_PREFIX: Final = "denied_call_"
 ISSUE_DISCOVERY_DISABLED: Final = "mqtt_discovery_disabled"
+# Another instance shares this instance's id, for example a clone or a restored backup; fixable, one per instance (D-07)
+ISSUE_DUPLICATE_INSTANCE_ID: Final = "duplicate_instance_id"
 # Every Repairs issue whose id is a prefix plus a device id; deleted with the device and with the hub. Later issue
 # families of a device append their prefix here.
 ISSUE_DEVICE_PREFIXES: Final = (

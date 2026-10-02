@@ -338,6 +338,22 @@
     "denied_service_call": {
       "title": "An action from another instance was stopped",
       "description": "A run of {trigger} of {device} was stopped because a templated service name resolved to the forbidden service {service}. Actions received from other instances may never call this service."
+    },
+    "duplicate_instance_id": {
+      "title": "Another instance uses the same instance ID",
+      "description": "Another Home Assistant instance sends heartbeats with the same instance ID as {instance}. This usually happens when a backup was restored on a second machine or a clone was started. Both instances then write the same topics on the MQTT broker. Open this repair to give this instance a new ID. Nothing changes until you confirm.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Give this instance a new instance ID",
+            "description": "You are about to give the instance {instance} a new instance ID, because another instance uses the same one.\n\nThis instance forgets its own {devices} devices locally. Nothing is deleted or changed on the MQTT broker: the topics, the discovery and the availability of the original stay exactly as they are, and the original keeps ownership of its devices.\n\nThen this instance reloads with the new ID and shows the same devices as read-only mirrors of the original. Devices that this instance should own independently have to be created again or imported afterwards.\n\nIf your MQTT broker restricts the topics per instance with an ACL, add the new instance ID to it, otherwise this instance can only read. Nothing happens until you submit."
+          }
+        },
+        "abort": {
+          "not_loaded": "MQTT Actions is not loaded, so nothing was changed. Try again when the integration is running.",
+          "changed": "The instance ID changed since this issue was raised, so nothing was changed. If the problem persists, a new issue appears in Repairs."
+        }
+      }
     }
   },
   "selector": {

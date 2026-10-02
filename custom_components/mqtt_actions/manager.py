@@ -46,6 +46,7 @@ from .const import (
     ISSUE_DENIED_CALL_PREFIX,
     ISSUE_DEVICE_PREFIXES,
     ISSUE_DISCOVERY_DISABLED,
+    ISSUE_DUPLICATE_INSTANCE_ID,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
@@ -327,7 +328,10 @@ async def async_remove_local_state(hass: HomeAssistant, entry: ConfigEntry, *, s
     await Store(hass, STORE_VERSION, store_key).async_remove()
     registry = ir.async_get(hass)
     for domain, issue_id in list(registry.issues):
-        if domain == DOMAIN and (issue_id.startswith(ISSUE_DEVICE_PREFIXES) or issue_id == ISSUE_DISCOVERY_DISABLED):
+        if domain == DOMAIN and (
+            issue_id.startswith(ISSUE_DEVICE_PREFIXES)
+            or issue_id in {ISSUE_DISCOVERY_DISABLED, ISSUE_DUPLICATE_INSTANCE_ID}
+        ):
             ir.async_delete_issue(hass, domain, issue_id)
 
 
@@ -978,17 +982,32 @@ class Manager:
     @callback
     def on_duplicate_id_changed(self, *, detected: bool) -> None:
         """
-        Take note that another instance with this instance's id appeared or went quiet (D-07).
+        Raise or delete the issue about another instance with this instance's id (D-07).
 
-        Nothing changes automatically: the log line is fixed text and carries nothing from the heartbeats.
+        Nothing changes automatically: the issue only offers the fix flow. It is created once, so a dismissal stays, and
+        the log line is fixed text that carries nothing from the heartbeats.
         """
-        if detected:
-            LOGGER.warning(
-                "Another Home Assistant instance uses the same instance id as this one, for example a clone or a "
-                "restored backup"
-            )
-        else:
+        if not detected:
+            ir.async_delete_issue(self._hass, DOMAIN, ISSUE_DUPLICATE_INSTANCE_ID)
             LOGGER.info("No other instance with the same instance id was heard any more")
+            return
+        LOGGER.warning(
+            "Another Home Assistant instance uses the same instance id as this one, for example a clone or a "
+            "restored backup"
+        )
+        if ir.async_get(self._hass).async_get_issue(DOMAIN, ISSUE_DUPLICATE_INSTANCE_ID) is not None:
+            return
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            ISSUE_DUPLICATE_INSTANCE_ID,
+            # The flow acts only while the id is still the one that was reported
+            data={"instance_id": self._instance_id},
+            is_fixable=True,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=ISSUE_DUPLICATE_INSTANCE_ID,
+            translation_placeholders={"instance": escape_markdown(self.instance_name)},
+        )
 
     async def async_release_locally(self, device_ids: Iterable[str]) -> list[str]:
         """

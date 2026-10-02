@@ -1,18 +1,21 @@
 """
-The approval of a mirror as a Repairs fix flow (D-02, TRU-02).
+The fixable issues of the integration as Repairs fix flows (D-02, D-07, D-09, TRU-02).
 
-Core finds this module by its name `repairs` and calls `async_create_fix_flow` for a fixable issue of this domain.
-The only fixable issue is `approval_<device id>`. The dialog shows what the manager would run, binds the hash it showed
-and approves exactly that hash; the flow never approves "whatever is current" (T-03-29).
+Core finds this module by its name `repairs` and calls `async_create_fix_flow` for a fixable issue of this domain; the
+issue id decides the flow. `approval_<device id>` is the approval of a mirror: the dialog shows what the manager would
+run, binds the hash it showed and approves exactly that hash, never "whatever is current" (T-03-29).
+`duplicate_instance_id` is the fix for a clone that shares the instance id: it forgets the local devices and rotates
+the id after one confirmation.
 """
 
 from typing import TYPE_CHECKING
 
-import voluptuous as vol
+import probatio
 from homeassistant.components.repairs import RepairsFlow, RepairsFlowResult
 from homeassistant.config_entries import ConfigEntryState
 
-from .const import DOMAIN
+from .const import DOMAIN, ISSUE_DUPLICATE_INSTANCE_ID
+from .document import escape_markdown
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -64,7 +67,7 @@ class ApprovalRepairFlow(RepairsFlow):
             self._shown_hash = view.actions_hash
             return self.async_show_form(
                 step_id="confirm",
-                data_schema=vol.Schema({}),
+                data_schema=probatio.Schema({}),
                 description_placeholders={
                     "device": view.device_name,
                     "owner": view.owner_name,
@@ -90,10 +93,42 @@ class ApprovalRepairFlow(RepairsFlow):
         return self.async_create_entry(data={})
 
 
+class DuplicateIdRepairFlow(RepairsFlow):
+    """Gives this instance a new instance id after forgetting its own devices locally (D-08)."""
+
+    async def async_step_init(self, user_input: dict[str, str] | None = None) -> RepairsFlowResult:  # noqa: ARG002
+        """Handle the first step of a fix flow; core passes the init data here, which is never a submit."""
+        return await self.async_step_confirm()
+
+    async def async_step_confirm(self, user_input: dict[str, str] | None = None) -> RepairsFlowResult:
+        """
+        Show what the fix does, and on submit run it for the instance id the issue reported.
+
+        Both the form and the submit check the id again, so a fix that was reported for an earlier id never acts.
+        """
+        if (manager := _loaded_manager(self.hass)) is None:
+            return self.async_abort(reason="not_loaded")
+        if (self.data or {}).get("instance_id") != manager.instance_id:
+            return self.async_abort(reason="changed")
+        if user_input is None:
+            return self.async_show_form(
+                step_id="confirm",
+                data_schema=probatio.Schema({}),
+                description_placeholders={
+                    "instance": escape_markdown(manager.instance_name),
+                    "devices": str(len(manager.devices)),
+                },
+            )
+        await manager.async_resolve_duplicate_id()
+        return self.async_create_entry(data={})
+
+
 async def async_create_fix_flow(
     hass: HomeAssistant,  # noqa: ARG001
-    issue_id: str,  # noqa: ARG001
+    issue_id: str,
     data: dict[str, str | int | float | None] | None,  # noqa: ARG001
 ) -> RepairsFlow:
-    """Create the fix flow of an approval issue."""
+    """Create the fix flow of an issue; the issue id decides which one, and the approval flow is the default."""
+    if issue_id == ISSUE_DUPLICATE_INSTANCE_ID:
+        return DuplicateIdRepairFlow()
     return ApprovalRepairFlow()

@@ -251,6 +251,13 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "instances_online": {
+        "name": "Instances online"
+      }
+    }
+  },
   "issues": {
     "action_failed": {
       "title": "An action failed",

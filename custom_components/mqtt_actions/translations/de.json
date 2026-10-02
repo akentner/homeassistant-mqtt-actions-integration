@@ -251,6 +251,13 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "instances_online": {
+        "name": "Verbundene Instanzen"
+      }
+    }
+  },
   "issues": {
     "action_failed": {
       "title": "Eine Aktion ist fehlgeschlagen",

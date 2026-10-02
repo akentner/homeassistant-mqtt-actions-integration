@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 
 from .const import CONF_DELETE_DEVICES_ON_REMOVE
@@ -13,6 +14,9 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 type MqttActionsConfigEntry = ConfigEntry[Manager]
+
+# Forwarded after the manager started and unloaded before it stops (D-13)
+PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) -> bool:
@@ -35,6 +39,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) 
     except BaseException:
         await manager.async_stop()
         raise
+    # The entities read the running manager, so the platforms come last; a failure here must not leave it running
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except BaseException:
+        await manager.async_stop()
+        raise
     return True
 
 
@@ -43,8 +53,15 @@ async def _async_entry_updated(hass: HomeAssistant, entry: MqttActionsConfigEntr
     await entry.runtime_data.async_reconcile()
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) -> bool:  # noqa: ARG001
-    """Unload a config entry; a user unload or reload releases tripped breakers before the final save (D-15)."""
+async def async_unload_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) -> bool:
+    """
+    Unload a config entry: the platforms first, then the manager (D-13).
+
+    A user unload or reload releases tripped breakers before the final save (D-15). When a platform refuses to unload,
+    nothing else is touched and the entry stays loaded.
+    """
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
     entry.runtime_data.release_all_breakers()
     await entry.runtime_data.async_stop()
     return True

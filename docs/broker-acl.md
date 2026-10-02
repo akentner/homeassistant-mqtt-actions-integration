@@ -29,6 +29,7 @@ denied ones reach nobody. The text you copy is the text that was tested.
 | `<base topic>/v1/devices/<device uuid>/state` | any instance, and external publishers you trust | yes | every instance |
 | `<base topic>/v1/devices/<device uuid>/test` | any instance (test buttons) | no | every instance |
 | `<base topic>/v1/instances/<instance id>/availability` | that instance only | yes | every instance |
+| `<base topic>/v1/instances/<instance id>/heartbeat` | that instance only (every 30 seconds) | no | every instance |
 | `<discovery prefix>/device/<device uuid>/config` | the owner instance, and core MQTT of any instance that deletes the entity | yes | every instance |
 
 The base topic is `mqtt_actions` by default, the discovery prefix is `homeassistant` by default. Adjust both lines if you
@@ -51,6 +52,8 @@ topic readwrite mqtt_actions/v1/devices/+/test
 topic readwrite homeassistant/#
 topic read mqtt_actions/v1/instances/+/availability
 topic write mqtt_actions/v1/instances/<instance-id-one>/availability
+topic read mqtt_actions/v1/instances/+/heartbeat
+topic write mqtt_actions/v1/instances/<instance-id-one>/heartbeat
 
 # Home Assistant instance two
 user ha_two
@@ -60,6 +63,8 @@ topic readwrite mqtt_actions/v1/devices/+/test
 topic readwrite homeassistant/#
 topic read mqtt_actions/v1/instances/+/availability
 topic write mqtt_actions/v1/instances/<instance-id-two>/availability
+topic read mqtt_actions/v1/instances/+/heartbeat
+topic write mqtt_actions/v1/instances/<instance-id-two>/heartbeat
 
 # External publisher: may set a device state and nothing else
 user bridge
@@ -72,6 +77,8 @@ without a block has no access at all, so a client that is not listed cannot read
 What it enforces:
 
 - Each instance writes only its own availability topic: `ha_two` cannot announce `ha_one` online or offline.
+- Each instance writes only its own heartbeat topic and reads all of them. The external publisher has no access to any
+  heartbeat topic, in either direction.
 - The external publisher can write the state topic and read it back. It cannot write config, test, discovery or any
   availability topic, and it cannot read the config documents that carry the actions.
 - Only Home Assistant users reach the test topic and the discovery prefix.
@@ -92,6 +99,10 @@ The ACL cannot do everything, and the example does not pretend to:
 - **Home Assistant instances need write access to the discovery prefix.** Core MQTT clears the retained discovery topic
   when a user deletes an entity, and the owner republishes it. With a read-only prefix that clearing is denied and
   the entity stays gone for everyone. Core MQTT also publishes its birth and will messages below `homeassistant/`.
+- **The heartbeat shows who is there.** It carries the instance name, the integration version and the number of owned
+  devices, and every Home Assistant user of the group can read it, like the availability topic. It is not retained, so
+  a late subscriber receives none and a crashed instance cannot look current: a peer counts as offline after 90 seconds
+  without a heartbeat. Do not grant the heartbeat topics to external publishers.
 - **The test topic is a trigger source** next to the state topic. Do not grant it to external publishers unless you
   want them to run actions.
 - **A denied publish is not reported visibly.** A broker may acknowledge a denied QoS 1 publish like an accepted one, and

@@ -3,15 +3,15 @@ status: testing
 phase: 04-operations-recovery-and-release
 source: [04-VERIFICATION.md]
 started: 2026-10-02T19:38:46Z
-updated: 2026-10-03T00:30:00Z
+updated: 2026-10-03T00:55:00Z
 ---
 
 ## Current Test
 
-number: 2
-name: First release v0.1.0 (plan 04-01, D4)
+number: 6
+name: D8 re-trigger from Developer Tools with two real instances (plan 04-10)
 expected: |
-  After the phase is merged and Validate is green, push tag v0.1.0; Release runs and creates the GitHub release
+  Calling mqtt_actions.retrigger with response shows per-instance statuses (executed, not_approved, paused, observing, disabled, no_answer) within the 5 s window
 awaiting: user response
 
 ## Tests
@@ -23,8 +23,9 @@ note: Validate run on c52a548 (pushed phase branch) concluded success; job-level
 
 ### 2. First release v0.1.0 (plan 04-01, D4)
 expected: After the phase is merged and Validate is green, push tag v0.1.0 (equal to manifest version 0.1.0); Release runs check-version, ci and validate, then creates the GitHub release with generated notes
-result: [pending]
-note: needs the merged phase and a pushed tag v0.1.0 on GitHub.
+result: blocked
+blocked_by: release-build
+reason: Needs the merged phase and a pushed tag v0.1.0 on GitHub; cannot be done before the merge.
 
 ### 3. D5/D8 diagnostics download in a real Home Assistant (plan 04-07)
 expected: Settings > Devices & services > MQTT Actions > Download diagnostics yields a JSON with hub, roster and device rows; no action YAML, entity ids, service data, broker host or credentials; instance ids shortened to 8 characters
@@ -38,17 +39,17 @@ note: ha-one/ha-two against the Mosquitto test broker. Mirror 'UAT hub' and owne
 
 ### 5. D8 mode selects on the integration page (plan 04-05)
 expected: Hub instance-mode select and per-device mode selects appear in the configuration category with translated option labels (en and de); effective mode is the most restrictive of hub and device
-result: partial
-note: Hub 'Instanzmodus' and per-device 'Modus' selects are in the configuration category with German names; hub observe/disabled overrides a device in run (most restrictive wins). The dropdown option labels (en and de) were not opened visually.
+result: pass
+note: Hub 'Instanzmodus' and per-device 'Modus' selects are in the configuration category. Option labels verified from the frontend translations: de Ausführen / Beobachten / Deaktiviert, en Run / Observe / Disabled; the German labels are what the frontend shows. Hub observe/disabled overrides a device set to run (most restrictive wins).
 
 ### 6. D8 re-trigger from Developer Tools with two real instances (plan 04-10)
 expected: Calling mqtt_actions.retrigger with response shows per-instance statuses (executed, not_approved, paused, observing, disabled, no_answer) within the 5 s window; actions run on the approving instance and the state and baseline do not change
-result: partial
+result: [pending]
 note: Statuses seen: executed, not_approved, observing, disabled, and no_answer (before the test broker ACL allowed retrigger/acks topics). Not seen: paused (breaker). The execution of the action itself (persistent notification) was not observed; a second call within a few seconds is refused by design. Required test ACL lines: instances/+/heartbeat, devices/+/retrigger, instances/+/acks.
 
 ### 7. Import and export in a real Home Assistant (plan 04-09) and export-file reachability
 expected: export_devices with file_name writes /config/mqtt_actions/<name>.json (mode 0600) and the file is NOT reachable through /local or any unauthenticated URL; import_devices of that file creates owned devices with new UUIDs, and mirrors on other instances ask for approval
-result: partial
+result: [pending]
 note: export on ha-two wrote mqtt_actions/uat-two.json with mode 0600 in a 0700 directory; /local and direct URL return 404 (the test config has no www directory); mirrors are refused with export_not_owned; import on ha-one created an owned device with a new UUID, shown as mirror on ha-two. Approval request for mirrors was not exercised because the imported device has no actions.
 
 ### 8. D9 duplicate instance id, including the reworded confirm text (plans 04-12, 04-14)
@@ -68,17 +69,17 @@ note: judgment by the user.
 
 ### 11. Wording of the approval dialog paragraph in German and English (plan 04-02, D5)
 expected: The paragraph naming run mode and breaker limits reads naturally
-result: partial
-note: German approval dialog read through (reads naturally, names run mode and breaker limits); the English text was not read.
+result: pass
+note: German and English approval dialog read through by the user; reads naturally.
 
 ## Summary
 
 total: 11
-passed: 5
+passed: 7
 issues: 0
-pending: 6
+pending: 3
 skipped: 0
-blocked: 0
+blocked: 1
 
 ## Gaps
 

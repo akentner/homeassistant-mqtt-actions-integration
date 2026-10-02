@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 import time
+import uuid
 from dataclasses import dataclass, field
 from functools import partial
 from types import MappingProxyType
@@ -96,7 +97,7 @@ from .topics import is_valid_device_id, state_topic, test_topic
 from .trust import ApprovalState, build_approval_view
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Mapping
+    from collections.abc import Awaitable, Callable, Iterable, Mapping
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
@@ -402,6 +403,13 @@ class Manager:
         self._revs: dict[str, dict[str, Any]] = {}
         # adopted device id -> the ids of its previous owners, newest last; written into every document of the device
         self._transfers: dict[str, list[str]] = {}
+        # Device ids that are being released locally; the reconcile ignores their subentries until all are removed, so
+        # the reconcile that every subentry removal triggers cannot add a released device again (D-08, T-04-56)
+        self._releasing: set[str] = set()
+        # Released device ids whose baseline is still kept in `_stored_last_acted` for the mirror that follows
+        self._released: set[str] = set()
+        # Set after a duplicate id fix: the next stop publishes no offline availability for the id the original shares
+        self._skip_offline_once = False
         self._running = False
         # Owned device ids whose document the parser rejects; logged once, not published (CR-03)
         self._unpublishable: set[str] = set()
@@ -640,6 +648,9 @@ class Manager:
         for device_id in [device_id for device_id in self.devices if device_id not in subentries]:
             await self._async_remove_device(device_id)
         for device_id, subentry in subentries.items():
+            if device_id in self._releasing:
+                # Popped for a local release; its subentry is only waiting to be removed (D-08)
+                continue
             if (device := self.devices.get(device_id)) is None:
                 await self._async_add_device(subentry, startup=startup)
             elif device.signature != _signature(subentry):
@@ -671,7 +682,10 @@ class Manager:
             self.mirrors.clear()
             # Scripts of a device whose start failed halfway are not in self.devices yet
             await self.runner.async_unload_all()
-            if self._publisher is not None:  # None when the start failed before the publisher existed
+            if self._skip_offline_once:
+                # The availability topic of this id belongs to the original too (T-04-57); this stop is the one reload
+                self._skip_offline_once = False
+            elif self._publisher is not None:  # None when the start failed before the publisher existed
                 await self._async_publish_availability(AvailabilityState.OFFLINE)
 
     @callback
@@ -776,11 +790,20 @@ class Manager:
     @callback
     def _data_to_save(self) -> dict[str, Any]:
         """Return the persisted state; devices without a baseline are omitted (D-07)."""
+        live = {**self.devices, **self.mirrors}
         return {
             STORE_LAST_ACTED: {
-                device_id: device.tracker.last_acted
-                for device_id, device in {**self.devices, **self.mirrors}.items()
-                if device.tracker.last_acted is not None
+                # The baselines of locally released devices stay until the mirror that follows them has taken over
+                **{
+                    device_id: baseline
+                    for device_id, baseline in self._stored_last_acted.items()
+                    if device_id in self._released and device_id not in live
+                },
+                **{
+                    device_id: device.tracker.last_acted
+                    for device_id, device in live.items()
+                    if device.tracker.last_acted is not None
+                },
             },
             STORE_MIRRORS: {
                 device_id: device.mirror.payload for device_id, device in self.mirrors.items() if device.mirror
@@ -951,6 +974,93 @@ class Manager:
         self._tripped.pop(device_id, None)
         self._remove_companion(device_id)
         self.sync.forget_mirror(device_id)
+
+    @callback
+    def on_duplicate_id_changed(self, *, detected: bool) -> None:
+        """
+        Take note that another instance with this instance's id appeared or went quiet (D-07).
+
+        Nothing changes automatically: the log line is fixed text and carries nothing from the heartbeats.
+        """
+        if detected:
+            LOGGER.warning(
+                "Another Home Assistant instance uses the same instance id as this one, for example a clone or a "
+                "restored backup"
+            )
+        else:
+            LOGGER.info("No other instance with the same instance id was heard any more")
+
+    async def async_release_locally(self, device_ids: Iterable[str]) -> list[str]:
+        """
+        Forget owned devices on this instance only and return the ids that were released (D-08).
+
+        The broker is never touched: no tombstone, no discovery clear, no state clear and no publish at all, because
+        the topics may belong to another instance that owns the same ids (a clone, an adopter). The order is fixed.
+        Under the lock each device leaves `devices` first, then its subscriptions and Script end, its issues, its
+        published, revision, tripped and transfer records go, and the Store is saved at once, so a crash afterwards can
+        never make the next start clear topics of a device that is no longer here (T-04-56). Only then are the
+        subentries removed; the guard keeps the reconcile of each removal from adding a released device again. The
+        baseline and the mode stay for the mirror that may follow. Ids that are not owned devices are ignored.
+        """
+        released: list[str] = []
+        subentry_ids: list[str] = []
+        try:
+            async with self._lock:
+                for device_id in device_ids:
+                    if device_id not in self.devices:
+                        continue
+                    if (subentry_id := self.subentry_id_of(device_id)) is not None:
+                        subentry_ids.append(subentry_id)
+                    device = self.devices.pop(device_id)
+                    self._releasing.add(device_id)
+                    released.append(device_id)
+                    self._release_device(device)
+                    await self.runner.async_unload(device_id, remove_issue=True)
+                if not released:
+                    return []
+                await self._store.async_save(self._data_to_save())
+                self._notify_devices_changed()
+            for subentry_id in subentry_ids:
+                self._hass.config_entries.async_remove_subentry(self._entry, subentry_id)
+                # The update listener of the removal runs now, while the guard is still up
+                await asyncio.sleep(0)
+        finally:
+            self._releasing.difference_update(released)
+        return released
+
+    @callback
+    def _release_device(self, device: Device) -> None:
+        """Drop everything an owned device holds locally, except its baseline and mode; publishes nothing."""
+        device_id = device.device_id
+        if device.unsubscribe is not None:
+            device.unsubscribe()
+        if device.unsubscribe_test is not None:
+            device.unsubscribe_test()
+        self._delete_device_issues(device_id)
+        self.sync.forget(device_id)
+        if device.tracker.last_acted is not None:
+            self._stored_last_acted[device_id] = device.tracker.last_acted
+        self._released.add(device_id)
+        self._published.discard(device_id)
+        self._revs.pop(device_id, None)
+        self._tripped.pop(device_id, None)
+        self._transfers.pop(device_id, None)
+        self._unpublishable.discard(device_id)
+
+    async def async_resolve_duplicate_id(self) -> None:
+        """
+        Fix a duplicate instance id: forget the own devices locally and continue under a new id (D-08).
+
+        The original keeps the id, the devices, their topics and its availability. The next stop, which is the reload
+        that is scheduled here, publishes no offline availability for the old id. The new id is not in a per-instance
+        ACL of the broker; the user is told in the flow text.
+        """
+        await self.async_release_locally(list(self.devices))
+        self._skip_offline_once = True
+        self._hass.config_entries.async_update_entry(
+            self._entry, data={**self._entry.data, CONF_INSTANCE_ID: str(uuid.uuid4())}
+        )
+        self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
 
     def approval_state(self, device_id: str) -> ApprovalState:
         """

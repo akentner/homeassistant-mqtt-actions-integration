@@ -13,6 +13,7 @@ heartbeat field ever reaches a log line (T-04-14).
 
 import json
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -26,10 +27,12 @@ from homeassistant.util.json import json_loads
 
 from .const import (
     DOMAIN,
+    DUPLICATE_ID_CONFIRMATIONS,
     HEARTBEAT_INTERVAL_SECONDS,
     HEARTBEAT_OFFLINE_SECONDS,
     LOGGER,
     MAX_BROKER_MESSAGE_BYTES,
+    MAX_DUPLICATE_OBSERVATIONS,
     MAX_HEARTBEAT_DEVICES,
     MAX_TRACKED_INSTANCES,
     SIGNAL_ROSTER_UPDATED,
@@ -238,6 +241,14 @@ class PresenceManager:
         # The ids that were online at the last evaluation; a change of this set is what the entities are told about
         self._announced: frozenset[str] = frozenset()
         self._overflow_logged = False
+        # When a heartbeat with this instance's own id and another session was heard, on the manager clock; bounded
+        self._duplicate_seen: deque[float] = deque(maxlen=MAX_DUPLICATE_OBSERVATIONS)
+        self._duplicate_detected = False
+
+    @property
+    def duplicate_detected(self) -> bool:
+        """Return whether another instance with this instance's id is confirmed to be running (D-07)."""
+        return self._duplicate_detected
 
     def _now(self) -> float:
         """Read the manager clock at call time so a replaced clock reaches the roster."""
@@ -324,7 +335,12 @@ class PresenceManager:
         if msg.retain:
             return
         heartbeat = parse_heartbeat(manager.base_topic, msg.topic, msg.payload)
-        if heartbeat is None or heartbeat.instance_id == manager.instance_id:
+        if heartbeat is None:
+            return
+        if heartbeat.instance_id == manager.instance_id:
+            # This instance's own echo has this session; any other session shares the id (D-07)
+            if heartbeat.session != self.session:
+                self._observe_duplicate()
             return
         if not self._roster.observe(heartbeat):
             if not self._overflow_logged:
@@ -340,22 +356,60 @@ class PresenceManager:
         self._send_signal()
 
     @callback
+    def _observe_duplicate(self) -> None:
+        """
+        Record a heartbeat of another session under this instance's id and confirm a duplicate after enough of them.
+
+        Only observations within HEARTBEAT_OFFLINE_SECONDS count, so a slow trickle never confirms one. Detection
+        changes nothing by itself: the manager is told once and only raises an issue (D-07, T-04-55). The heartbeat
+        content never reaches a log line.
+        """
+        self._drop_old_observations()
+        self._duplicate_seen.append(self._now())
+        if not self._duplicate_detected and len(self._duplicate_seen) >= DUPLICATE_ID_CONFIRMATIONS:
+            self._duplicate_detected = True
+            self._manager.on_duplicate_id_changed(detected=True)
+        self._arm_expiry()
+
+    def _drop_old_observations(self) -> None:
+        """Forget the observations that are older than the offline timeout."""
+        now = self._now()
+        while self._duplicate_seen and now - self._duplicate_seen[0] > HEARTBEAT_OFFLINE_SECONDS:
+            self._duplicate_seen.popleft()
+
+    @callback
+    def _refresh_duplicate(self) -> None:
+        """Clear the detection once no foreign session was heard for the offline timeout."""
+        self._drop_old_observations()
+        if self._duplicate_detected and not self._duplicate_seen:
+            self._duplicate_detected = False
+            self._manager.on_duplicate_id_changed(detected=False)
+
+    def _duplicate_delay(self) -> float | None:
+        """Return the seconds until the detection clears (with a margin), None while nothing is detected."""
+        if not self._duplicate_detected or not self._duplicate_seen:
+            return None
+        remaining = self._duplicate_seen[-1] + HEARTBEAT_OFFLINE_SECONDS - self._now()
+        return max(remaining, 0.0) + EXPIRY_MARGIN_SECONDS
+
+    @callback
     def _refresh(self) -> None:
         """Re-evaluate who is online; tell the entities when the set changed and arm the timer of the next expiry."""
         online = frozenset(self._roster.online_ids())
         changed = online != self._announced
         self._announced = online
+        self._refresh_duplicate()
         self._arm_expiry()
         if changed:
             self._send_signal()
 
     @callback
     def _arm_expiry(self) -> None:
-        """(Re)arm the one timer that turns the earliest online peer offline, so it does not wait for the next tick."""
+        """(Re)arm the one timer for the next deadline: a peer turning offline or the duplicate detection clearing."""
         self._disarm_expiry()
-        delay = self._roster.next_expiry_delay()
-        if delay is not None and self._manager.running:
-            self._cancel_expiry = async_call_later(self._manager.hass, delay, self._on_expiry)
+        delays = [delay for delay in (self._roster.next_expiry_delay(), self._duplicate_delay()) if delay is not None]
+        if delays and self._manager.running:
+            self._cancel_expiry = async_call_later(self._manager.hass, min(delays), self._on_expiry)
 
     @callback
     def _disarm_expiry(self) -> None:

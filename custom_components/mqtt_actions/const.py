@@ -147,6 +147,11 @@ MAX_TRACKED_INSTANCES: Final = 256
 # this long without one. The retained availability alone cannot show a crash, so the timeout is the liveness signal
 HEARTBEAT_INTERVAL_SECONDS: Final = 30.0
 HEARTBEAT_OFFLINE_SECONDS: Final = 90.0
+# Duplicate instance id (D-07, assumption A12): this many heartbeats with this instance's own id and another session,
+# heard within HEARTBEAT_OFFLINE_SECONDS, confirm that a clone or a restored copy shares the id; at most this many
+# observations are kept, so a flood of forged heartbeats cannot grow the record
+DUPLICATE_ID_CONFIRMATIONS: Final = 2
+MAX_DUPLICATE_OBSERVATIONS: Final = 8
 # Largest accepted broker message of the operations protocol (heartbeat, re-trigger request and acknowledgement),
 # measured in characters and in UTF-8 bytes before anything is parsed (D-05, T-04-11)
 MAX_BROKER_MESSAGE_BYTES: Final = 1024

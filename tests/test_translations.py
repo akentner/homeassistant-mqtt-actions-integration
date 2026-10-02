@@ -86,14 +86,19 @@ TRANSFERRED_FLOW_KEYS = (
 )
 FENCED_YAML = re.compile(r"```yaml\s*\{actions\}\s*```")
 
-# The tracer (plan 04-14) proves the hassfest text-source rule on one issue; the expansion widens it to every issue
-GUARDED_ISSUES = ("duplicate_instance_id",)
-
 # Phrases the confirm step of a fixable issue must contain, because that step is the only text the issue shows
 FIXABLE_WORDING = {
     "duplicate_instance_id": {
         "en": ("backup was restored", "same topics"),
         "de": ("Backup", "dieselben Topics"),
+    },
+    "transferred": {
+        "en": ("adopted the device", "stopped publishing"),
+        "de": ("übernommen", "aufgehört"),
+    },
+    "approval_required": {
+        "en": ("Nothing runs until you submit", "bound to the hash"),
+        "de": ("Es läuft nichts, bis du bestätigst", "an den Hash"),
     },
 }
 
@@ -308,6 +313,10 @@ def _issue_problems(node: Any) -> list[str]:
                 if not isinstance(step, dict) or not step.get("description")
             )
     return problems
+
+
+# Every issue of the translations: the hassfest text-source rule holds for each of them in both languages
+ISSUES = tuple(sorted(_raw("en")["issues"]))
 
 
 def _variables(text: str) -> set[str]:
@@ -527,7 +536,7 @@ def test_required_transferred_keys_exist_in_both_languages(language: str) -> Non
     assert not _variables(flat[f"{TRANSFERRED_FLOW}.abort.changed"])
 
 
-@pytest.mark.parametrize("issue", GUARDED_ISSUES)
+@pytest.mark.parametrize("issue", ISSUES)
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_issue_has_one_text_source(language: str, issue: str) -> None:
     """hassfest accepts an issue with a title and exactly one of description or fix_flow, in every language.

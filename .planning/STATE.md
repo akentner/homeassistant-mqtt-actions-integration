@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-10-PLAN.md
-last_updated: "2026-10-02T16:47:04.262Z"
+stopped_at: Completed 04-11-PLAN.md
+last_updated: "2026-10-02T17:08:36.600Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 9a5011e0e0cb28cd2add2214ee0a8f61411566d8
+state_head: 17e1dd087b570ce23aa1d2f42b0f5020adeef1b8
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 29
+  completed_plans: 30
   percent: 75
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 11 of 13
+Plan: 12 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
@@ -82,6 +82,7 @@ Progress: [████████░░] 75% of Phase 01 plans
 | Phase 04 P08 | 7 min | 2 tasks | 10 files |
 | Phase 04 P09 | 8 min | 2 tasks | 9 files |
 | Phase 04 P10 | 30 min | 3 tasks | 15 files |
+| Phase 04 P11 | 17 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,9 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-10: receiver gate order retained, size and strict parse, freshness 60 s, duplicate id (128), per-device rate limit 5 s (foreign only), device, state, mode, breaker, runnability; not_approved is decided before no_actions — Replay, flood and stale requests must run nothing; every accepted request gets one answer; D-03, D-04, T-04-43 to T-04-46
 - [Phase 04]: 04-10: caller claims its per-device send slot before publishing and releases it only when the publish failed; response keys the device as uuid; no_answer and offline are synthesized by the caller and never on the wire — Concurrent calls must not both pass; documentation examples never need the registry field name; D-03
 - [Phase 04]: 04-10: tests/test_retrigger.py is a multi_instance module (receiver tests use the fake broker; a retained request is simulated by a reconnect replay) — test_tiers_partition_the_suite requires the marker for every module that uses make_instance
+- [Phase 04]: 04-11: adoption runs entirely under the manager lock (drop the mirror, save, add the subentry, reconcile); force overrides only the owner-online check, never the approval; a mirror with an owner id that cannot be named in a marker is not adoptable — A late document of the old owner must not re-create a mirror for an id about to be owned; unreviewed remote actions must never become owned ones (TRU-01, T-04-50); D-09, D-10
+- [Phase 04]: 04-11: the transferred_from marker is bookkeeping (never hashed, SCHEMA_VERSION stays 1, newest 8 kept); a follower re-pins only when the marker names its pinned owner and the roster says offline; a same-content re-pin keeps the breaker, Script and approval — A forged marker must not move followers of an online owner or release a tripped device; D-09 refined, T-04-49, T-04-52
+- [Phase 04]: 04-11: the select platform needs one devices-changed signal while an id is in neither devices nor mirrors before an owned device with the same id gets its mode select under the new subentry — Mirror to owned switch keeps the same uuid; D-13 revised
 
 ### Pending Todos
 
@@ -177,6 +181,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T16:47:04.176Z
-Stopped at: Completed 04-10-PLAN.md
+Last session: 2026-10-02T17:08:36.499Z
+Stopped at: Completed 04-11-PLAN.md
 Resume file: None

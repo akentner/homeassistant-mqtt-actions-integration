@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-10-02T07:49:44.099Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-10-02T08:00:30.251Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 4f5a97fea2ff189349cbd838b06b01ab48c1b9d9
+state_head: 9e32abc114d9bde543d284984c71d6257691ef0b
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 22
-  percent: 69
+  completed_plans: 23
+  percent: 72
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 4 of 13
+Plan: 5 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
-Progress: [███████░░░] 69% of Phase 01 plans
+Progress: [███████░░░] 72% of Phase 01 plans
 
 ## Performance Metrics
 
@@ -75,6 +75,7 @@ Progress: [███████░░░] 69% of Phase 01 plans
 | Phase 04 P01 | 7 min | 3 tasks | 8 files |
 | Phase 04 P02 | 5 min | 2 tasks | 11 files |
 | Phase 04 P03 | 12min | 3 tasks | 11 files |
+| Phase 04 P04 | 10 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,9 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-03: peer online while heartbeat age <= 90 s and availability not offline; expiry timer fires 1 s after the deadline — Strict comparison gives 89 s online and 91 s offline without a busy re-arm loop
 - [Phase 04]: 04-03: owner_offline treats an owner that announced online without any heartbeat as not offline; unknown owner is offline only after 90 s of listening — Unknown must never count as offline right after a start; adoption then needs force (D-09, A10)
 - [Phase 04]: 04-03: at the peer cap a new peer evicts the stalest expired row, else is not tracked — Random heartbeat ids must not block real instances permanently (T-04-12)
+- [Phase 04]: Plan 04-04: hub device identifier is (mqtt_actions, config entry id), so it survives an instance id change
+- [Phase 04]: Plan 04-04: roster sensor counts this instance, lists it first, and caps the unrecorded instances attribute at MAX_TRACKED_INSTANCES + 1
+- [Phase 04]: Plan 04-04: Manager.async_resync returns False when throttled (5 s on Manager.clock) or stopped; the time is remembered before the republish is awaited
 
 ### Pending Todos
 
@@ -151,6 +155,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T07:49:44.020Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-10-02T08:00:30.165Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None

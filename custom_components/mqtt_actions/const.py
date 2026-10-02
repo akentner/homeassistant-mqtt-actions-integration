@@ -50,6 +50,10 @@ MAX_TEXT_LENGTH: Final = 64
 BREAKER_MAX_RUNS_LIMIT: Final = 100
 BREAKER_WINDOW_LIMIT: Final = 3600
 
+# Adoption of an orphaned device (D-09): the transfer marker of a document lists at most this many previous owners,
+# newest last; older ones fall off. An absent marker means the device was never adopted
+MAX_TRANSFER_HISTORY: Final = 8
+
 # Limits on a config document received from the broker (D-06, T-03-02): measured in UTF-8 bytes before it is parsed,
 # and in container levels (list and dict nesting, not action steps) of an action list; a nested choose costs about four
 MAX_DOCUMENT_BYTES: Final = 256 * 1024
@@ -122,6 +126,9 @@ STORE_APPROVALS: Final = "approvals"
 # never part of a config document or a hash
 STORE_INSTANCE_MODE: Final = "instance_mode"
 STORE_DEVICE_MODES: Final = "device_modes"
+# device id -> the instance ids that owned an adopted device before, newest last; published as `transferred_from` with
+# every document of the device so a follower that missed the adoption learns it (D-09)
+STORE_TRANSFERS: Final = "transfers"
 STORE_SAVE_DELAY: Final = 5.0
 
 # Owner-side defense of the published truth (D-15, D-17, D-18): how many published content hashes per device count as
@@ -165,6 +172,11 @@ SERVICE_RESYNC: Final = "resync"
 SERVICE_EXPORT_DEVICES: Final = "export_devices"
 SERVICE_IMPORT_DEVICES: Final = "import_devices"
 SERVICE_RETRIGGER: Final = "retrigger"
+SERVICE_ADOPT_DEVICE: Final = "adopt_device"
+# Reason codes of a refused adoption (D-10); the service turns each into the translated error `adopt_<reason>`
+ADOPT_NOT_A_MIRROR: Final = "not_a_mirror"
+ADOPT_NOT_APPROVED: Final = "not_approved"
+ADOPT_OWNER_NOT_OFFLINE: Final = "owner_not_offline"
 
 # Export document (D-11): the format name and version let a later reader tell versions apart; the file lives only in
 # this directory below the configuration directory, never in www, which Home Assistant serves without authentication

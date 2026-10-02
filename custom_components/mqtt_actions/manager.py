@@ -12,8 +12,10 @@ import json
 import time
 from dataclasses import dataclass, field
 from functools import partial
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.config_entries import ConfigSubentry
 from homeassistant.const import ATTR_RESTORED
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
@@ -27,6 +29,9 @@ from homeassistant.loader import async_get_integration
 from .actions import ActionsInvalid, async_validate_actions, validate_spec_structure
 from .breaker import CircuitBreaker
 from .const import (
+    ADOPT_NOT_A_MIRROR,
+    ADOPT_NOT_APPROVED,
+    ADOPT_OWNER_NOT_OFFLINE,
     APPROVAL_HASH_PREFIX_LENGTH,
     BLOCKED_SERVICES_MAX_SHOWN,
     CONF_BASE_TOPIC,
@@ -43,6 +48,7 @@ from .const import (
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
+    MAX_TRANSFER_HISTORY,
     MODE_DISABLED,
     MODE_OBSERVE,
     MODE_RUN,
@@ -58,6 +64,7 @@ from .const import (
     STORE_PUBLISHED,
     STORE_REVS,
     STORE_SAVE_DELAY,
+    STORE_TRANSFERS,
     STORE_TRIPPED,
     STORE_VERSION,
     SUBENTRY_SELECT,
@@ -68,6 +75,7 @@ from .document import (
     DocumentRejectedError,
     analyze_spec,
     approval_sections,
+    build_content,
     build_document,
     canonical_json,
     escape_markdown,
@@ -78,18 +86,19 @@ from .document import (
 from .model import DeviceSpec, shown, spec_from_subentry, trigger_key
 from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway
+from .portability import subentry_payload
 from .presence import PresenceManager
 from .retrigger import RetriggerCoordinator
 from .runner import ActionRunner
 from .state import StateTracker
 from .sync import SyncManager
-from .topics import state_topic, test_topic
+from .topics import is_valid_device_id, state_topic, test_topic
 from .trust import ApprovalState, build_approval_view
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 
-    from homeassistant.config_entries import ConfigEntry, ConfigSubentry
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
     from .document import ActionAnalysis, ParsedDocument
@@ -115,6 +124,28 @@ class MirrorInfo:
     denied: tuple[str, ...] = ()
     templated: tuple[str, ...] = ()
     residual: tuple[str, ...] = ()
+    # The previous owners the document names when the device was adopted, newest last (D-09)
+    transferred_from: tuple[str, ...] = ()
+
+
+class AdoptionError(Exception):
+    """
+    An adoption was refused before anything changed (D-10).
+
+    `reason` is one of the ADOPT_* codes of the constants; `owner_name` is the name the current owner announced, for the
+    message of the service, and is None when there is no mirror to speak of.
+    """
+
+    def __init__(self, reason: str, owner_name: str | None = None) -> None:
+        """Remember the reason code and the owner name; the message is the code."""
+        super().__init__(reason)
+        self.reason = reason
+        self.owner_name = owner_name
+
+
+# The content hash recorded for an adopted device before its first publish: it can never equal a sha256 hex digest, so
+# the first publish of the adopter always counts as a change and publishes the old rev plus one (D-09)
+ADOPTED_HASH = "adopted"
 
 
 @dataclass
@@ -190,6 +221,21 @@ def _parse_revs(stored: dict[str, Any]) -> dict[str, dict[str, Any]]:
         and isinstance(value.get("rev"), int)
         and not isinstance(value.get("rev"), bool)
         and isinstance(value.get("hash"), str)
+    }
+
+
+def _parse_transfers(stored: dict[str, Any]) -> dict[str, list[str]]:
+    """Return the previous owners per adopted device from a loaded Store payload; anything malformed is dropped."""
+    transfers = stored.get(STORE_TRANSFERS)
+    if not isinstance(transfers, dict):
+        return {}
+    return {
+        key: list(value)
+        for key, value in transfers.items()
+        if isinstance(key, str)
+        and isinstance(value, list)
+        and 0 < len(value) <= MAX_TRANSFER_HISTORY
+        and all(isinstance(item, str) and is_valid_device_id(item) for item in value)
     }
 
 
@@ -354,6 +400,8 @@ class Manager:
         self._tripped: dict[str, str] = {}
         # device id -> the rev last published and the content hash it belongs to (D-15)
         self._revs: dict[str, dict[str, Any]] = {}
+        # adopted device id -> the ids of its previous owners, newest last; written into every document of the device
+        self._transfers: dict[str, list[str]] = {}
         self._running = False
         # Owned device ids whose document the parser rejects; logged once, not published (CR-03)
         self._unpublishable: set[str] = set()
@@ -557,6 +605,7 @@ class Manager:
             device_id: value for device_id, value in self._approvals.items() if device_id in self.mirrors
         }
         self._revs = {device_id: value for device_id, value in self._revs.items() if device_id in current}
+        self._transfers = {device_id: value for device_id, value in self._transfers.items() if device_id in current}
         self._device_modes = {device_id: value for device_id, value in self._device_modes.items() if device_id in kept}
         # The lock is held from the first subscribe until the owned devices are registered and published: a retained
         # document replayed while the subscribes are awaited queues its ingest on this lock, and by the time it runs
@@ -718,6 +767,7 @@ class Manager:
         self._published = _parse_published(stored)
         self._tripped = _parse_tripped(stored)
         self._revs = _parse_revs(stored)
+        self._transfers = _parse_transfers(stored)
         self._stored_mirrors = _parse_mirrors(stored)
         self._approvals = _parse_approvals(stored)
         self._instance_mode = _parse_instance_mode(stored)
@@ -739,6 +789,7 @@ class Manager:
             STORE_PUBLISHED: sorted(self._published),
             STORE_TRIPPED: dict(self._tripped),
             STORE_REVS: {device_id: dict(value) for device_id, value in self._revs.items()},
+            STORE_TRANSFERS: {device_id: list(value) for device_id, value in self._transfers.items()},
             STORE_INSTANCE_MODE: self._instance_mode,
             STORE_DEVICE_MODES: dict(self._device_modes),
         }
@@ -805,6 +856,91 @@ class Manager:
             await self._async_refresh_mirror_script(mirror)
             LOGGER.info("The actions of mirrored device %r were approved", mirror.name[:MAX_LOGGED_PAYLOAD_LENGTH])
             return True
+
+    async def async_adopt(self, device_id: str, *, force: bool = False) -> str:
+        """
+        Turn the mirror of an orphaned device into an owned device of this instance and return the old owner's name.
+
+        The device keeps its uuid, its state topic and its baseline, so its entities stay; this instance publishes a new
+        document with itself as owner and the old owner in the transfer marker (SYN-07, D-09, D-10). Preconditions, in
+        this order, all checked before anything changes: the id is a mirror (`not_a_mirror`); it is approved here or has
+        no actions, and a blocked or unapproved mirror is refused even with `force`, so unreviewed remote actions never
+        become owned ones (`not_approved`, T-04-50); the owner is offline according to the roster, unless `force`
+        (`owner_not_offline`, T-04-51). The whole change runs under the manager lock, so no late document of the old
+        owner can re-create the mirror halfway. Raises AdoptionError.
+        """
+        async with self._lock:
+            mirror = self.mirrors.get(device_id) if self._running and device_id not in self.devices else None
+            info = None if mirror is None else mirror.mirror
+            # A marker can only name ids of the shape of an id; an odd owner id could not be named, so it is no orphan
+            if mirror is None or info is None or not is_valid_device_id(info.owner):
+                raise AdoptionError(ADOPT_NOT_A_MIRROR)
+            if self.approval_state(device_id) in {ApprovalState.PENDING, ApprovalState.BLOCKED}:
+                raise AdoptionError(ADOPT_NOT_APPROVED, info.owner_name)
+            if not force and not self.presence.owner_offline(info.owner):
+                raise AdoptionError(ADOPT_OWNER_NOT_OFFLINE, info.owner_name)
+            await self._async_adopt_locked(mirror, info)
+            return info.owner_name
+
+    async def _async_adopt_locked(self, mirror: Device, info: MirrorInfo) -> None:
+        """
+        Replace a mirror by an owned device with the same id; the caller holds the lock and checked the preconditions.
+
+        Nothing is published to the broker and the registry of core MQTT is not touched: the discovery of the device
+        stays, and the new owner publishes it again with its own availability when the device is added.
+        """
+        device_id = mirror.device_id
+        spec = mirror.spec
+        subentry = ConfigSubentry(
+            data=MappingProxyType(subentry_payload(build_content(spec), device_id)),
+            subentry_type=spec.kind,
+            title=spec.name,
+            unique_id=device_id,
+        )
+        approval = self._approvals.get(device_id)
+        # The previous owners, newest last, never more than the marker may carry (T-04-52)
+        self._transfers[device_id] = [*info.transferred_from, info.owner][-MAX_TRANSFER_HISTORY:]
+        # The first publish of the adopter is the old rev plus one, whatever the hash is (D-09)
+        self._revs[device_id] = {"rev": info.rev, "hash": ADOPTED_HASH}
+        if mirror.tracker.last_acted is not None:
+            self._stored_last_acted[device_id] = mirror.tracker.last_acted
+        await self._async_drop_mirror(mirror)
+        # The select platform forgets the mirror's mode select now; the add below gives the owned device its own
+        self._notify_devices_changed()
+        # Saved before the subentry exists: a crash in between loses the adoption, not the device (T-04-53)
+        await self._store.async_save(self._data_to_save())
+        try:
+            self._hass.config_entries.async_add_subentry(self._entry, subentry)
+        except Exception:
+            self._transfers.pop(device_id, None)
+            self._revs.pop(device_id, None)
+            if approval is not None:
+                self._approvals[device_id] = approval
+            await self.sync.async_restore_mirror(device_id, info.payload)
+            raise
+        LOGGER.info("Adopted device %s from an instance that is offline or was forced", shown(spec.name))
+        # The update listener of the entry reconciles too, once the lock is free, and then finds nothing to do
+        await self._async_reconcile_locked()
+
+    async def _async_drop_mirror(self, mirror: Device) -> None:
+        """
+        Release a mirror without clearing anything: no broker message and no registry cleanup of core MQTT.
+
+        Both subscriptions end, the Script is unloaded, the per-device issues, the approval and the companion device go
+        and the sync side forgets the mirror. The stored mode and the baseline stay for the owned device that follows.
+        """
+        device_id = mirror.device_id
+        self.mirrors.pop(device_id, None)
+        if mirror.unsubscribe is not None:
+            mirror.unsubscribe()
+        if mirror.unsubscribe_test is not None:
+            mirror.unsubscribe_test()
+        await self.runner.async_unload(device_id, remove_issue=True)
+        self._delete_device_issues(device_id)
+        self._approvals.pop(device_id, None)
+        self._tripped.pop(device_id, None)
+        self._remove_companion(device_id)
+        self.sync.forget_mirror(device_id)
 
     def approval_state(self, device_id: str) -> ApprovalState:
         """
@@ -1014,6 +1150,7 @@ class Manager:
             denied=analysis.denied,
             templated=analysis.templated,
             residual=analysis.residual,
+            transferred_from=parsed.transferred_from,
         )
 
     def _build_mirror(self, parsed: ParsedDocument, *, startup: bool) -> Device:
@@ -1201,6 +1338,7 @@ class Manager:
         self._stored_last_acted.pop(device_id, None)
         self._tripped.pop(device_id, None)
         self._revs.pop(device_id, None)
+        self._transfers.pop(device_id, None)
         self._device_modes.pop(device_id, None)
         if discovery_cleared and config_cleared and state_cleared:
             self._published.discard(device_id)
@@ -1239,6 +1377,8 @@ class Manager:
                 owner=self._instance_id,
                 owner_name=self._entry.data[CONF_INSTANCE_NAME],
                 rev=1,
+                # An adopted device carries its previous owners in every document, so a late follower learns it (D-09)
+                transferred_from=tuple(self._transfers.get(device_id, ())),
             )
             digest: str = document["hash"]
             changed = known is None or known["hash"] != digest

@@ -398,13 +398,37 @@ class SyncManager:
             await manager.async_apply_mirror(parsed)
             self._seen.add(device_id)
         elif (info := mirror.mirror) is not None and info.owner != parsed.owner:
-            # The first owner wins; nothing another owner sends changes the mirror (D-17)
-            self._conflict(mirror, info, parsed.owner_name)
-            return
+            if not self._may_repin(info, parsed):
+                # The first owner wins; nothing another owner sends changes the mirror (D-17)
+                self._conflict(mirror, info, parsed.owner_name)
+                return
+            # The pinned owner was adopted away: the document names it and the roster says it is gone (D-09)
+            LOGGER.info("The mirrored device %s follows a new owner, because its previous owner was adopted", shown)
+            await manager.async_apply_mirror(parsed)
         elif info is None or parsed.content_hash != info.content_hash:
             # The hash decides, never the rev: an owner that lost its Store restarts at rev 1 (D-15)
             await manager.async_apply_mirror(parsed)
         self._resolve(device_id)
+
+    def _may_repin(self, info: MirrorInfo, parsed: ParsedDocument) -> bool:
+        """
+        Return whether a document of another owner moves the pin: the single exception to first owner wins (D-09).
+
+        Both must hold: the transfer marker of the document names the owner this mirror is pinned to, and the roster
+        says that owner is offline. A marker that names someone else, or a pinned owner that is online or unknown, is a
+        conflict like any other claim (T-04-49). The approval stays bound to the actions hash, so new actions of the new
+        owner still need an approval here.
+        """
+        return info.owner in parsed.transferred_from and self._manager.presence.owner_offline(info.owner)
+
+    @callback
+    def forget_mirror(self, device_id: str) -> None:
+        """Forget that a document of a device was seen; the device left the mirrors, for example by adoption."""
+        self._seen.discard(device_id)
+
+    async def async_restore_mirror(self, device_id: str, payload: str) -> None:
+        """Feed a saved document through the normal ingest path again; the caller holds the manager lock (T-04-53)."""
+        await self._async_ingest_locked(device_id, payload)
 
     def _resolve(self, device_id: str) -> None:
         """Delete the conflict and schema issues of a device: its pinned owner has a current, readable document."""

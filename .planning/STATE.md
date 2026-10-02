@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-08-PLAN.md
-last_updated: "2026-10-02T08:42:02.410Z"
+stopped_at: Completed 04-09-PLAN.md
+last_updated: "2026-10-02T08:52:36.215Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: c46a3452a5040dba381d8645ca0b842068ae6cea
+state_head: 1cc9d2efc4347acde4089a571be37a83d5e27890
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 27
+  completed_plans: 28
   percent: 75
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 9 of 13
+Plan: 10 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
@@ -80,6 +80,7 @@ Progress: [████████░░] 75% of Phase 01 plans
 | Phase 04 P06 | 7 min | 2 tasks | 3 files |
 | Phase 04 P07 | 5 min | 2 tasks | 5 files |
 | Phase 04 P08 | 7 min | 2 tasks | 10 files |
+| Phase 04 P09 | 8 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,10 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-07: ApprovalState words (owned, approved, pending, blocked, no_actions, unknown) are the single public answer via Manager.approval_state — Diagnostics and later re-trigger acknowledgements use the same words
 - [Phase 04]: 04-08: Services are registered once in async_setup (admin only, optional response); a service field naming a device is device_id (device selector) resolved to the uuid via the (mqtt_actions, uuid) identifier — Hassfest rule; hub, foreign and unknown devices refused; mirrors refused for export
 - [Phase 04]: 04-08: Export files live only in <config>/mqtt_actions/ (0700 dir, 0600 file, bare name pattern, symlink refused); other write failures raise export_write_failed — Never www; user input never forms a path; log carries only a reason code
+- [Phase 04]: Import items run through parse_document, the structure check, the static denylist and deep validation; a forged owner, id, rev or hash of an item is overwritten by this instance's values
+- [Phase 04]: Import is all or nothing: every item is validated before the first subentry is created; rejections carry only a reason code and a 1-based position
+- [Phase 04]: Import files are read by bare name from a real private directory with a no-follow open, a regular-file check and the size checked on the descriptor; every unreadable case is file_unreadable
+- [Phase 04]: Deep validation does not check that a service exists (core resolves device actions, conditions and triggers only); an unknown service name is accepted by import, as in the UI flows
 
 ### Pending Todos
 
@@ -167,6 +172,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T08:42:02.327Z
-Stopped at: Completed 04-08-PLAN.md
+Last session: 2026-10-02T08:52:36.132Z
+Stopped at: Completed 04-09-PLAN.md
 Resume file: None

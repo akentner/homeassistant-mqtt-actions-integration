@@ -144,7 +144,7 @@ Plans:
   4. User can set per instance and device whether actions run, are only observed, or are disabled, and can download diagnostics with sensitive data redacted.
   5. README and docs cover setup, trust model and limitations; a tagged release is built automatically with the manifest version matching the tag; CI runs the unit, real-Mosquitto and multi-instance fake-broker test tiers.
 
-**Plans:** 8/13 plans executed
+**Plans:** 9/13 plans executed
 
 Plans:
 **Wave 1**
@@ -168,7 +168,7 @@ Plans:
 - [x] 04-08-PLAN.md — Admin service layer with resync and export, private export files (wave 6)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 04-09-PLAN.md — Import service: strict, all-or-nothing, bounded (wave 7)
+- [x] 04-09-PLAN.md — Import service: strict, all-or-nothing, bounded (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 - [ ] 04-10-PLAN.md — Re-trigger protocol, acknowledgements, service response and ACL lines (wave 8)
@@ -192,7 +192,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
-| 4. Operations, Recovery and Release | 8/13 | In Progress|  |
+| 4. Operations, Recovery and Release | 9/13 | In Progress|  |
 
 ## Backlog
 

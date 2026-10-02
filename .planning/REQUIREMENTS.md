@@ -50,7 +50,7 @@
 - [x] **SYN-05**: Followers never delete devices because a message is absent; removal is driven by tombstone or grace window
 - [x] **SYN-06**: Deleting a device requires an explicit confirmation stating it is removed on all connected instances, then unpublishes central config and discovery
 - [ ] **SYN-07**: User can transfer ownership of a device or adopt an orphaned device
-- [ ] **SYN-08**: User can export devices to JSON and import them
+- [x] **SYN-08**: User can export devices to JSON and import them
 - [x] **SYN-09**: User can set per instance and device whether actions run, are only observed, or are disabled
 - [ ] **SYN-10**: A duplicate instance ID (cloned or restored instance) is detected and reported
 
@@ -141,7 +141,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SYN-05 | Phase 3 | Complete |
 | SYN-06 | Phase 3 | Complete |
 | SYN-07 | Phase 4 | Pending |
-| SYN-08 | Phase 4 | Pending |
+| SYN-08 | Phase 4 | Complete |
 | SYN-09 | Phase 4 | Complete |
 | SYN-10 | Phase 4 | Pending |
 | TRU-01 | Phase 3 | Complete |

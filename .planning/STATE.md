@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-11-PLAN.md
-last_updated: "2026-10-02T17:08:36.600Z"
+stopped_at: Completed 04-12-PLAN.md
+last_updated: "2026-10-02T17:32:06.486Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 17e1dd087b570ce23aa1d2f42b0f5020adeef1b8
+state_head: be385b09c4ceee35adc86648977f4dffca812aa2
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 30
+  completed_plans: 31
   percent: 75
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 12 of 13
+Plan: 13 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
@@ -83,6 +83,7 @@ Progress: [████████░░] 75% of Phase 01 plans
 | Phase 04 P09 | 8 min | 2 tasks | 9 files |
 | Phase 04 P10 | 30 min | 3 tasks | 15 files |
 | Phase 04 P11 | 17 min | 3 tasks | 14 files |
+| Phase 04 P12 | 21 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -158,6 +159,8 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-11: adoption runs entirely under the manager lock (drop the mirror, save, add the subentry, reconcile); force overrides only the owner-online check, never the approval; a mirror with an owner id that cannot be named in a marker is not adoptable — A late document of the old owner must not re-create a mirror for an id about to be owned; unreviewed remote actions must never become owned ones (TRU-01, T-04-50); D-09, D-10
 - [Phase 04]: 04-11: the transferred_from marker is bookkeeping (never hashed, SCHEMA_VERSION stays 1, newest 8 kept); a follower re-pins only when the marker names its pinned owner and the roster says offline; a same-content re-pin keeps the breaker, Script and approval — A forged marker must not move followers of an online owner or release a tripped device; D-09 refined, T-04-49, T-04-52
 - [Phase 04]: 04-11: the select platform needs one devices-changed signal while an id is in neither devices nor mirrors before an owned device with the same id gets its mode select under the new subentry — Mirror to owned switch keeps the same uuid; D-13 revised
+- [Phase 04]: Plan 04-12: the local release never publishes; the device leaves devices first, then its subscriptions, Script, issues and published/revs/tripped/transfers records go, the Store is saved at once and only then are the subentries removed behind a _releasing guard; the duplicate id fix rotates the id and the next stop skips the offline for the shared id (D-08) — A tombstone or clear on the shared topics of a clone or an adopter would delete the original's devices for every instance, so byte-identical broker state is the proof
+- [Phase 04]: Plan 04-12: an old owner that recognizes a valid adopter document naming it goes silent for that device (no heal, no publish, no clear on delete) and raises a fixable issue; the flow releases locally and follows the adopter from the saved document, nothing steps down automatically (D-09 refined, A15) — Recognition is memory-only and bounded by the owned devices; the guard sits in async_publish_config and async_publish_discovery so every publish path is covered
 
 ### Pending Todos
 
@@ -181,6 +184,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T17:08:36.499Z
-Stopped at: Completed 04-11-PLAN.md
+Last session: 2026-10-02T17:32:00.205Z
+Stopped at: Completed 04-12-PLAN.md
 Resume file: None

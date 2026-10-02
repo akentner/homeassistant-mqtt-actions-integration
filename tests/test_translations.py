@@ -130,6 +130,12 @@ REQUIRED_KEYS = (
     "config_subentries.switch.error.breaker_window_range",
     "entity.sensor.instances_online.name",
     "entity.button.resync.name",
+    *(f"entity.select.{key}.name" for key in ("device_mode", "instance_mode")),
+    *(
+        f"entity.select.{key}.state.{mode}"
+        for key in ("device_mode", "instance_mode")
+        for mode in ("run", "observe", "disabled")
+    ),
     *(
         f"config_subentries.switch.step.{step}.data_description.{field}"
         for step in ("user", "edit_device")

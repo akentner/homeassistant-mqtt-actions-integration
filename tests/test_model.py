@@ -22,6 +22,7 @@ from custom_components.mqtt_actions.const import (
     CONF_STATE_VALUE,
     DEFAULT_BREAKER_MAX_RUNS,
     DEFAULT_BREAKER_WINDOW,
+    MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_TEXT_LENGTH,
     RUN_MODE_RESTART,
     RUN_MODE_SERIAL,
@@ -238,3 +239,15 @@ def test_validate_option_editing_skips_state_value(state_value: str, friendly: s
 )
 def test_validate_breaker_boundaries(max_runs: float, window: float, expected: dict[str, str]) -> None:
     assert model.validate_breaker(max_runs, window) == expected
+
+
+def test_shown_quotes_and_caps_text() -> None:
+    """T-04-22: text from a name or the broker is quoted, capped and cannot forge a second log line."""
+    assert model.shown("Lamp") == "'Lamp'"
+    assert model.shown("") == "''"
+    assert model.shown("a" * MAX_LOGGED_PAYLOAD_LENGTH) == repr("a" * MAX_LOGGED_PAYLOAD_LENGTH)
+    cut = model.shown("b" * (MAX_LOGGED_PAYLOAD_LENGTH + 1))
+    assert cut == repr("b" * MAX_LOGGED_PAYLOAD_LENGTH) + "..."
+    forged = model.shown("first\nWARNING second")
+    assert "\n" not in forged
+    assert forged == "'first\\nWARNING second'"

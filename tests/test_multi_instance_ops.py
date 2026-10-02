@@ -7,14 +7,15 @@ from typing import TYPE_CHECKING
 import pytest
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
 
 from custom_components.mqtt_actions.const import (
+    CONF_DEVICE_ID,
     HEARTBEAT_INTERVAL_SECONDS,
     HEARTBEAT_OFFLINE_SECONDS,
     SIGNAL_ROSTER_UPDATED,
 )
-from custom_components.mqtt_actions.topics import availability_topic, heartbeat_topic
+from custom_components.mqtt_actions.topics import availability_topic, heartbeat_topic, state_topic
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -173,3 +174,59 @@ async def test_heartbeat_tick_keeps_the_roster_fresh_for_running_peers(
         await _settle(a, b)
 
     assert _peer_online(b, a.manager.instance_id) is True
+
+
+async def test_leaving_disabled_rebaselines_without_running(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-20: the retained value that changed while disabled is a baseline on return, never a run (A17)."""
+    on_calls = async_mock_service(hass, "test", "on")
+    off_calls = async_mock_service(hass, "test", "off")
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}], off=[{"action": "test.off"}], run_on_startup=True)
+    device_id = sub["data"][CONF_DEVICE_ID]
+    a = await make_instance("alpha", hass=hass, subentries=[sub])
+    device = a.manager.devices[device_id]
+    topic = state_topic(BASE, device_id)
+    assert device.tracker.startup_pending is True
+
+    await a.manager.async_set_device_mode(device_id, "disabled")
+    fake_broker.publish(topic, "OFF", retain=True)
+    await _settle(a)
+    assert device.tracker.last_acted is None
+    assert device.tracker.startup_pending is True
+
+    await a.manager.async_set_device_mode(device_id, "run")
+    await _settle(a)
+
+    # The replay of the retained OFF moved the baseline only, although run_on_startup is on
+    assert device.tracker.last_acted == "OFF"
+    assert device.tracker.startup_pending is False
+    assert (len(on_calls), len(off_calls)) == (0, 0)
+
+    fake_broker.publish(topic, "ON", retain=True)
+    await _settle(a)
+    assert (len(on_calls), len(off_calls)) == (1, 0)
+
+
+async def test_leaving_disabled_without_retained_state_counts_the_next_live_change(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """A17: with nothing retained to replay, the first live message after disabled is a real change."""
+    on_calls = async_mock_service(hass, "test", "on")
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
+    device_id = sub["data"][CONF_DEVICE_ID]
+    a = await make_instance("alpha", hass=hass, subentries=[sub])
+    topic = state_topic(BASE, device_id)
+    fake_broker.publish(topic, "ON", retain=False)
+    await _settle(a)
+    assert len(on_calls) == 1
+    assert a.manager.devices[device_id].tracker.last_acted == "ON"
+
+    await a.manager.async_set_device_mode(device_id, "disabled")
+    await a.manager.async_set_device_mode(device_id, "run")
+    await _settle(a)
+    assert a.manager.devices[device_id].tracker.last_acted is None
+
+    fake_broker.publish(topic, "ON", retain=False)
+    await _settle(a)
+    assert len(on_calls) == 2

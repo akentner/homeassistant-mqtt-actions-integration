@@ -138,3 +138,21 @@ def test_discovery_wildcard_and_parsers() -> None:
 def test_is_valid_device_id(value: str, *, expected: bool) -> None:
     """WR-05: a foreign device id is 1 to 64 characters of letters, digits, underscore and dash."""
     assert topics.is_valid_device_id(value) is expected
+
+
+def test_heartbeat_topic_helpers() -> None:
+    """D-05: the heartbeat topic is per instance, versioned and distinct from the availability topic."""
+    assert topics.heartbeat_topic("b", "i1") == f"b/{TOPIC_VERSION}/instances/i1/heartbeat"
+    assert topics.heartbeat_wildcard("b") == f"b/{TOPIC_VERSION}/instances/+/heartbeat"
+    assert topics.heartbeat_topic("b", "i1") != topics.availability_topic("b", "i1")
+    assert topics.parse_heartbeat_topic("b", topics.heartbeat_topic("b", "i1")) == "i1"
+    bad = [
+        topics.availability_topic("b", "i1"),
+        f"b/{TOPIC_VERSION}/instances/i1/x/heartbeat",
+        f"b/{TOPIC_VERSION}/instances//heartbeat",
+        f"b/{TOPIC_VERSION}/instances/+/heartbeat",
+        f"b/{TOPIC_VERSION}/instances/#/heartbeat",
+        topics.heartbeat_topic("other", "i1"),
+    ]
+    for topic in bad:
+        assert topics.parse_heartbeat_topic("b", topic) is None, topic

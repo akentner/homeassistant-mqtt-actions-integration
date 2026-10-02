@@ -19,6 +19,7 @@ from pytest_homeassistant_custom_component.common import (
     async_mock_service,
 )
 
+from custom_components.mqtt_actions import const
 from custom_components.mqtt_actions import retrigger as retrigger_module
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
@@ -27,7 +28,9 @@ from custom_components.mqtt_actions.const import (
     DOMAIN,
     HEARTBEAT_INTERVAL_SECONDS,
     HEARTBEAT_OFFLINE_SECONDS,
+    ISSUE_DOC_OVERWRITTEN_PREFIX,
     ISSUE_OWNER_CONFLICT_PREFIX,
+    ISSUE_OWNERSHIP_CLAIM_PREFIX,
     SIGNAL_ROSTER_UPDATED,
     STORE_DEVICE_MODES,
     STORE_LAST_ACTED,
@@ -36,6 +39,7 @@ from custom_components.mqtt_actions.const import (
     STORE_TRANSFERS,
     STORE_TRIPPED,
 )
+from custom_components.mqtt_actions.document import escape_markdown
 from custom_components.mqtt_actions.manager import AdoptionError
 from custom_components.mqtt_actions.topics import (
     acks_topic,
@@ -1218,3 +1222,162 @@ async def test_stop_after_release_publishes_no_offline(
 
     assert [item for item in b.gateway.published[mark:] if item[0] == availability_topic(BASE, old_id)] == []
     assert fake_broker.retained[availability_topic(BASE, old_id)] == "online"
+
+
+# --- an old owner comes back after its device was adopted (D-09 refined, assumption A15) --------------------------
+
+
+def _transferred_issue(instance: Instance, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(instance.hass).async_get_issue(DOMAIN, f"{const.ISSUE_TRANSFERRED_PREFIX}{device_id}")
+
+
+async def _adopted_and_returned(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> tuple[Instance, Instance, Instance, str, str]:
+    """
+    A owns a lamp and another device; B adopts the lamp while A is stopped; A starts again and the messages settle.
+
+    Returns A, B, C, the id of the adopted lamp and the id of the device that A still owns for sure.
+    """
+    lamp = make_switch_subentry("Lamp", on=[{"action": "test.on"}], off=[{"action": "test.off"}])
+    other = make_switch_subentry("Other", on=[{"action": "test.on"}])
+    lamp_id, other_id = lamp["data"][CONF_DEVICE_ID], other["data"][CONF_DEVICE_ID]
+    a = await make_instance("alpha", hass=hass, subentries=[lamp, other])
+    b = await make_instance("beta")
+    c = await make_instance("gamma")
+    for instance in (a, b, c):
+        async_mock_service(instance.hass, "test", "on")
+        async_mock_service(instance.hass, "test", "off")
+    await _settle(a, b, c)
+    mirror = b.manager.mirrors[lamp_id].mirror
+    assert mirror is not None
+    assert await b.manager.async_approve(lamp_id, mirror.actions_hash) is True
+    fake_broker.publish(state_topic(BASE, lamp_id), "ON", retain=True)
+    for instance in (a, b, c):
+        await instance.manager.presence.async_publish_heartbeat()
+    await _settle(a, b, c)
+    await a.stop()
+    await _settle(a, b, c)
+    await b.manager.async_adopt(lamp_id)
+    await _settle(a, b, c)
+    await a.start()
+    await _settle(a, b, c)
+    return a, b, c, lamp_id, other_id
+
+
+async def test_old_owner_recognizes_the_transfer_after_a_restart(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: A's start overwrites B's document, B heals, A recognizes the marker and raises one fixable issue."""
+    a, b, _c, lamp_id, _other_id = await _adopted_and_returned(hass, fake_broker, make_instance, make_switch_subentry)
+
+    issue = _transferred_issue(a, lamp_id)
+    assert issue is not None
+    assert issue.is_fixable is True
+    assert issue.severity is ir.IssueSeverity.WARNING
+    assert issue.translation_key == "transferred"
+    assert issue.translation_placeholders == {"device": escape_markdown("Lamp"), "claimant": escape_markdown("beta")}
+    assert issue.data == {"device_id": lamp_id, "claimant": b.manager.instance_id}
+    document = _retained_document(fake_broker, lamp_id)
+    assert document["owner"] == b.manager.instance_id
+    assert document["transferred_from"] == [a.manager.instance_id]
+    assert lamp_id in a.manager.sync.transferred_away
+    # Settled: another round of messages changes nothing, so the two owners do not fight
+    before = dict(fake_broker.retained)
+    await _settle(a, b)
+    assert dict(fake_broker.retained) == before
+
+
+async def test_recognizing_the_transfer_does_not_step_down(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-59: A still owns the device and its subentry, and it never cleared anything on the broker."""
+    a, _b, _c, lamp_id, other_id = await _adopted_and_returned(hass, fake_broker, make_instance, make_switch_subentry)
+
+    assert lamp_id in a.manager.devices
+    assert other_id in a.manager.devices
+    assert a.manager.subentry_id_of(lamp_id) is not None
+    assert len(a.entry.subentries) == 2
+    assert [item for item in a.gateway.published if item[1] == ""] == []
+
+
+async def test_transferred_away_device_is_not_republished(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-60: reconnect, resync and a heal request publish nothing for the lost device, but still for the others."""
+    a, b, c, lamp_id, other_id = await _adopted_and_returned(hass, fake_broker, make_instance, make_switch_subentry)
+    mark = len(a.gateway.published)
+
+    a.gateway.reconnect()
+    await _settle(a, b, c)
+    assert await a.manager.async_resync() is True
+    a.manager.sync._heal(lamp_id)
+    a.manager.sync._discovery_heal.request(lamp_id)
+    await _settle(a, b, c)
+
+    topics = [item[0] for item in a.gateway.published[mark:]]
+    lamp_topics = {config_topic(BASE, lamp_id), discovery_topic("homeassistant", lamp_id)}
+    other_topics = {config_topic(BASE, other_id), discovery_topic("homeassistant", other_id)}
+    assert not lamp_topics & set(topics)
+    assert other_topics <= set(topics)
+    assert _retained_document(fake_broker, lamp_id)["owner"] == b.manager.instance_id
+
+
+async def test_marker_that_does_not_name_this_instance_is_a_claim(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-59: a valid foreign document whose marker names someone else is the ordinary claim, healed and reported."""
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
+    device_id = sub["data"][CONF_DEVICE_ID]
+    a = await make_instance("alpha", hass=hass, subentries=[sub])
+    await _settle(a)
+    mark = len(a.gateway.published)
+
+    _foreign_document(
+        fake_broker, make_spec(device_id=device_id), owner="ghost-owner", rev=5, transferred_from=["somebody-else"]
+    )
+    await _settle(a)
+
+    assert ir.async_get(a.hass).async_get_issue(DOMAIN, f"{ISSUE_OWNERSHIP_CLAIM_PREFIX}{device_id}") is not None
+    assert _transferred_issue(a, device_id) is None
+    assert device_id not in a.manager.sync.transferred_away
+    assert config_topic(BASE, device_id) in [item[0] for item in a.gateway.published[mark:]]
+
+
+@pytest.mark.parametrize(
+    "variant",
+    ["bad_marker_entry", "marker_not_a_list", "tampered_hash"],
+)
+async def test_invalid_foreign_document_never_creates_the_transfer_issue(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    variant: str,
+) -> None:
+    """T-04-59: a document that names this instance but fails the parser is overwritten and healed as before."""
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
+    device_id = sub["data"][CONF_DEVICE_ID]
+    a = await make_instance("alpha", hass=hass, subentries=[sub])
+    await _settle(a)
+    mark = len(a.gateway.published)
+    own = a.manager.instance_id
+    spec = make_spec(device_id=device_id)
+
+    if variant == "bad_marker_entry":
+        payload = document_payload(spec, owner="ghost-owner", transferred_from=[own, "not an id!"])
+    elif variant == "marker_not_a_list":
+        payload = document_payload(
+            spec, owner="ghost-owner", tamper=lambda document: document.update(transferred_from=own)
+        )
+    else:
+        payload = document_payload(
+            spec, owner="ghost-owner", transferred_from=[own], tamper=lambda document: document.update(hash="0" * 64)
+        )
+    fake_broker.publish(config_topic(BASE, device_id), payload, retain=True)
+    await _settle(a)
+
+    assert _transferred_issue(a, device_id) is None
+    assert device_id not in a.manager.sync.transferred_away
+    assert ir.async_get(a.hass).async_get_issue(DOMAIN, f"{ISSUE_DOC_OVERWRITTEN_PREFIX}{device_id}") is not None
+    assert config_topic(BASE, device_id) in [item[0] for item in a.gateway.published[mark:]]

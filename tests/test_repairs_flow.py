@@ -572,7 +572,11 @@ async def test_dispatcher_returns_the_right_flow(hass: HomeAssistant) -> None:
     duplicate = await repairs.async_create_fix_flow(hass, const.ISSUE_DUPLICATE_INSTANCE_ID, {"instance_id": "x"})
     approval = await repairs.async_create_fix_flow(hass, f"{ISSUE_APPROVAL_PREFIX}abc", {"device_id": "abc"})
     other = await repairs.async_create_fix_flow(hass, "something_else", None)
+    transferred = await repairs.async_create_fix_flow(
+        hass, f"{const.ISSUE_TRANSFERRED_PREFIX}abc", {"device_id": "abc"}
+    )
 
+    assert isinstance(transferred, repairs.TransferredRepairFlow)
     assert isinstance(duplicate, repairs.DuplicateIdRepairFlow)
     assert isinstance(approval, repairs.ApprovalRepairFlow)
     assert isinstance(other, repairs.ApprovalRepairFlow)
@@ -648,3 +652,103 @@ async def test_duplicate_flow_aborts(
     assert unloaded["type"] is FlowResultType.ABORT
     assert unloaded["reason"] == "not_loaded"
     assert entry.data[CONF_INSTANCE_ID] == old_id
+
+
+# --- the returning old owner: the transferred issue and its release flow (D-09 refined) -------------------------------
+
+
+def _transferred_issue(hass: HomeAssistant, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{const.ISSUE_TRANSFERRED_PREFIX}{device_id}")
+
+
+async def _start_transferred_flow(hass: HomeAssistant, device_id: str) -> dict[str, Any]:
+    return await hass.data["repairs"]["flow_manager"].async_init(
+        DOMAIN, data={"issue_id": f"{const.ISSUE_TRANSFERRED_PREFIX}{device_id}"}
+    )
+
+
+async def _owned_and_transferred(
+    hass: HomeAssistant, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> tuple[MockConfigEntry, str]:
+    """Set up a hub that owns a lamp with a baseline, then deliver the adopter's valid document that names this hub."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    device_id = sub["data"]["device_id"]
+    entry = await _setup(hass, make_hub_entry([sub]))
+    await _state(hass, device_id, "ON", retain=True)
+    adopter = make_spec(device_id=device_id, name="Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    payload = document_payload(adopter, rev=2, transferred_from=[entry.data[CONF_INSTANCE_ID]])
+    await _deliver(hass, device_id, payload, retain=False)
+    return entry, device_id
+
+
+async def test_release_flow_follows_the_adopter(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: the form names device and claimant; a submit releases locally and follows the adopter as a mirror."""
+    entry, device_id = await _owned_and_transferred(hass, make_hub_entry, make_switch_subentry)
+    manager = _manager(entry)
+    issue = _transferred_issue(hass, device_id)
+    assert issue is not None
+    assert issue.is_fixable is True
+    assert issue.data == {"device_id": device_id, "claimant": "instance-foreign"}
+    assert device_id in manager.devices
+    mark = len(mqtt_mock.async_publish.call_args_list)
+
+    result = await _start_transferred_flow(hass, device_id)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "confirm"
+    assert result["description_placeholders"] == {
+        "device": escape_markdown("Lamp"),
+        "claimant": escape_markdown(FOREIGN_OWNER_NAME),
+    }
+    done = await _submit(hass, result["flow_id"])
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert done["type"] is FlowResultType.CREATE_ENTRY
+    assert device_id not in manager.devices
+    assert len(entry.subentries) == 0
+    mirror = manager.mirrors[device_id]
+    assert mirror.mirror is not None
+    assert mirror.mirror.owner == "instance-foreign"
+    assert mirror.tracker.last_acted == "ON"
+    assert _transferred_issue(hass, device_id) is None
+    sent = mqtt_mock.async_publish.call_args_list[mark:]
+    assert [call for call in sent if call.args[1] == ""] == []
+    assert [call for call in sent if call.args[0] == config_topic(BASE, device_id)] == []
+
+
+async def test_transferred_flow_aborts(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """The flow changes nothing when the entry is not loaded, the claimant differs or the device is not owned."""
+    entry, device_id = await _owned_and_transferred(hass, make_hub_entry, make_switch_subentry)
+    manager = _manager(entry)
+
+    for data, reason in (
+        ({"device_id": device_id, "claimant": "someone-else"}, "changed"),
+        ({"device_id": "unknown-device", "claimant": "instance-foreign"}, "changed"),
+    ):
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            f"{const.ISSUE_TRANSFERRED_PREFIX}probe",
+            data=data,
+            is_fixable=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="transferred",
+            translation_placeholders={"device": "x", "claimant": "y"},
+        )
+        probe = await hass.data["repairs"]["flow_manager"].async_init(
+            DOMAIN, data={"issue_id": f"{const.ISSUE_TRANSFERRED_PREFIX}probe"}
+        )
+        assert probe["type"] is FlowResultType.ABORT
+        assert probe["reason"] == reason
+        ir.async_delete_issue(hass, DOMAIN, f"{const.ISSUE_TRANSFERRED_PREFIX}probe")
+    assert device_id in manager.devices
+    assert len(entry.subentries) == 1
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    unloaded = await _start_transferred_flow(hass, device_id)
+    assert unloaded["type"] is FlowResultType.ABORT
+    assert unloaded["reason"] == "not_loaded"

@@ -53,6 +53,7 @@ NEW_ISSUES = {
     "mirror_blocked": {"device", "owner", "services"},
     "denied_service_call": {"device", "trigger", "service"},
     "duplicate_instance_id": {"instance"},
+    "transferred": {"device", "claimant"},
 }
 
 # The approval fix flow (plan 03-06): the confirm step and the three reasons it can abort
@@ -72,6 +73,14 @@ DUPLICATE_FLOW_KEYS = (
     f"{DUPLICATE_FLOW}.abort.not_loaded",
     f"{DUPLICATE_FLOW}.abort.changed",
 )
+# The returning old owner's release flow (plan 04-12): the confirm step and the two reasons it can abort
+TRANSFERRED_FLOW = "issues.transferred.fix_flow"
+TRANSFERRED_FLOW_KEYS = (
+    f"{TRANSFERRED_FLOW}.step.confirm.title",
+    f"{TRANSFERRED_FLOW}.step.confirm.description",
+    f"{TRANSFERRED_FLOW}.abort.not_loaded",
+    f"{TRANSFERRED_FLOW}.abort.changed",
+)
 FENCED_YAML = re.compile(r"```yaml\s*\{actions\}\s*```")
 
 # Flow descriptions whose user-text placeholders the flow escapes with escape_markdown (G-03-2). A translation must use
@@ -84,6 +93,8 @@ ESCAPED_FLOW_PLACEHOLDERS = {
     "config_subentries.select.step.remove_confirm.description": ("friendly_name", "state_value"),
     "issues.duplicate_instance_id.description": ("instance",),
     f"{DUPLICATE_FLOW}.step.confirm.description": ("instance",),
+    "issues.transferred.description": ("device", "claimant"),
+    f"{TRANSFERRED_FLOW}.step.confirm.description": ("device", "claimant"),
 }
 MARKDOWN_CONTROL = r"\\`*_\[\]<>|~#"
 
@@ -152,6 +163,7 @@ REQUIRED_KEYS = (
     *(f"issues.{issue}.{part}" for issue in NEW_ISSUES for part in ("title", "description")),
     *APPROVAL_FLOW_KEYS,
     *DUPLICATE_FLOW_KEYS,
+    *TRANSFERRED_FLOW_KEYS,
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
         for step in ("user", "edit_device")
@@ -450,3 +462,15 @@ def test_required_duplicate_keys_exist_in_both_languages(language: str) -> None:
     description = flat[f"{DUPLICATE_FLOW}.step.confirm.description"]
     assert "ACL" in description
     assert "MQTT" in description or "Broker" in description or "broker" in description
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_transferred_keys_exist_in_both_languages(language: str) -> None:
+    """The returning owner's issue and its flow have all texts and exactly the variables the code supplies."""
+    flat = _load(language)
+    assert [key for key in TRANSFERRED_FLOW_KEYS if not flat.get(key)] == []
+    assert flat["issues.transferred.title"]
+    assert _variables(flat["issues.transferred.description"]) == {"device", "claimant"}
+    assert _variables(flat[f"{TRANSFERRED_FLOW}.step.confirm.description"]) == {"device", "claimant"}
+    assert not _variables(flat[f"{TRANSFERRED_FLOW}.abort.not_loaded"])
+    assert not _variables(flat[f"{TRANSFERRED_FLOW}.abort.changed"])

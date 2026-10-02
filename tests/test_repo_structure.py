@@ -1,8 +1,10 @@
 """Executable checks for repository distribution (FND-01) and CI supply chain (FND-02)."""
 
+import ast
 import json
 import re
 import struct
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +12,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+TESTS = ROOT / "tests"
 COMPONENTS = ROOT / "custom_components"
 INTEGRATION = COMPONENTS / "mqtt_actions"
 WORKFLOWS = ROOT / ".github" / "workflows"
@@ -241,3 +244,69 @@ def test_dependabot_covers_actions_and_uv() -> None:
     assert document["version"] == 2
     ecosystems = {update["package-ecosystem"] for update in document["updates"]}
     assert {"github-actions", "uv"} <= ecosystems
+
+
+def _module_markers(path: Path) -> set[str]:
+    """Return the marker names a test module assigns to its module-level `pytestmark`."""
+    markers: set[str] = set()
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == "pytestmark" for target in node.targets):
+            continue
+        values = node.value.elts if isinstance(node.value, ast.List | ast.Tuple) else [node.value]
+        markers.update(value.attr for value in values if isinstance(value, ast.Attribute))
+    return markers
+
+
+def _uses_fixture(path: Path, fixture: str) -> bool:
+    """Return whether any function in the module takes the fixture as a parameter (AST, not text)."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return any(isinstance(node, ast.arg) and node.arg == fixture for node in ast.walk(tree))
+
+
+def _job_commands(job: dict[str, Any]) -> list[str]:
+    return [step["run"].strip() for step in job.get("steps", []) if "run" in step]
+
+
+def test_markers_are_registered_and_strict() -> None:
+    options = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["pytest"]["ini_options"]
+    registered = {marker.split(":", 1)[0].strip() for marker in options["markers"]}
+    assert {"broker", "multi_instance"} <= registered
+    assert "--strict-markers" in options["addopts"]
+
+
+def test_tiers_partition_the_suite() -> None:
+    modules = sorted(path for path in TESTS.rglob("test_*.py") if path.name != "conftest.py")
+    broker_modules = [path for path in modules if "broker" in path.relative_to(TESTS).parts[:-1]]
+    multi_modules = [path for path in modules if _uses_fixture(path, "make_instance")]
+    assert broker_modules, "no module in tests/broker"
+    assert multi_modules, "no module uses make_instance"
+    for path in modules:
+        markers = _module_markers(path) & {"broker", "multi_instance"}
+        name = path.relative_to(ROOT)
+        assert len(markers) <= 1, f"{name} carries more than one tier marker"
+        if path in broker_modules:
+            assert markers == {"broker"}, f"{name} is in tests/broker and needs pytestmark = pytest.mark.broker"
+        elif path in multi_modules:
+            assert markers == {"multi_instance"}, f"{name} uses make_instance and needs pytest.mark.multi_instance"
+        else:
+            assert not markers, f"{name} carries a tier marker but belongs to the unit tier"
+
+
+def test_ci_has_one_job_per_tier() -> None:
+    jobs = _load_workflow("ci.yml")["jobs"]
+    assert {"lint", "unit", "broker", "multi-instance"} <= set(jobs)
+    selections = {
+        "unit": 'uv run pytest -q -m "not broker and not multi_instance"',
+        "broker": "uv run pytest -q -m broker",
+        "multi-instance": "uv run pytest -q -m multi_instance",
+    }
+    for name, command in selections.items():
+        assert any(run.startswith(command) for run in _job_commands(jobs[name])), f"job {name} never runs {command}"
+    lint_commands = _job_commands(jobs["lint"])
+    for expected in ("uv run ruff check .", "uv run ruff format --check ."):
+        assert any(run.startswith(expected) for run in lint_commands), f"job lint never runs {expected}"
+    for name in ("lint", "unit", "broker", "multi-instance"):
+        assert any(run.startswith("uv sync --locked") for run in _job_commands(jobs[name])), f"{name} skips uv sync"
+        assert jobs[name]["permissions"] == {"contents": "read"}

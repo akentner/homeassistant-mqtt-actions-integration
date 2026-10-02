@@ -803,6 +803,9 @@ class Manager:
         """
         Create or update the read-only mirror of a validated foreign document; the caller holds the lock.
 
+        A document with the content the mirror already has (the new owner after an adoption) only replaces the owner
+        bookkeeping.
+
         A mirror is a Device without a Script: it follows the state topic for its baseline and runs nothing, because the
         runner only runs triggers of a device it built a Script for (TRU-01). It publishes nothing, is not in `devices`,
         not in the published set and never touched by a reconcile of the owned subentries (D-08, D-19). Whether the
@@ -812,6 +815,13 @@ class Manager:
         if device_id in self.devices:
             return
         if (existing := self.mirrors.get(device_id)) is not None:
+            if existing.mirror is not None and existing.mirror.content_hash == parsed.content_hash:
+                # The same content under a new owner is a re-pin after an adoption (D-09). Only the bookkeeping moves:
+                # a fresh breaker would release a tripped device and a rebuilt Script would drop its running queue.
+                existing.mirror = self._mirror_info(parsed)
+                self._sync_approval_issues(existing)
+                self._schedule_save()
+                return
             self._update_mirror(existing, parsed)
             self._rename_companion(device_id, parsed.spec.name)
             # A changed document starts clean: a stale setup or denied-call issue belongs to the old actions

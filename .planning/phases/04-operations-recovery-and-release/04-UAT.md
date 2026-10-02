@@ -3,15 +3,15 @@ status: testing
 phase: 04-operations-recovery-and-release
 source: [04-VERIFICATION.md]
 started: 2026-10-02T19:38:46Z
-updated: 2026-10-03T00:55:00Z
+updated: 2026-10-03T01:10:00Z
 ---
 
 ## Current Test
 
-number: 6
-name: D8 re-trigger from Developer Tools with two real instances (plan 04-10)
+number: 10
+name: README and docs read-through (plan 04-13, D5)
 expected: |
-  Calling mqtt_actions.retrigger with response shows per-instance statuses (executed, not_approved, paused, observing, disabled, no_answer) within the 5 s window
+  A new user can go from README to installation, the first operations and the troubleshooting entry of a Repairs issue by following links
 awaiting: user response
 
 ## Tests
@@ -44,13 +44,13 @@ note: Hub 'Instanzmodus' and per-device 'Modus' selects are in the configuration
 
 ### 6. D8 re-trigger from Developer Tools with two real instances (plan 04-10)
 expected: Calling mqtt_actions.retrigger with response shows per-instance statuses (executed, not_approved, paused, observing, disabled, no_answer) within the 5 s window; actions run on the approving instance and the state and baseline do not change
-result: [pending]
-note: Statuses seen: executed, not_approved, observing, disabled, and no_answer (before the test broker ACL allowed retrigger/acks topics). Not seen: paused (breaker). The execution of the action itself (persistent notification) was not observed; a second call within a few seconds is refused by design. Required test ACL lines: instances/+/heartbeat, devices/+/retrigger, instances/+/acks.
+result: pass
+note: Statuses seen across the run: executed, not_approved, observing, disabled, paused, and no_answer (while the test broker ACL still blocked the retrigger/acks topics). paused: owned test device 'UAT breaker' with breaker 2 runs in 10 s, five fast state changes on its state topic gave breaker tripped and retrigger status paused. A repeat call within a few seconds is refused by design. The persistent notification of an executed action was not observed. Test ACL lines needed: instances/+/heartbeat, devices/+/retrigger, instances/+/acks.
 
 ### 7. Import and export in a real Home Assistant (plan 04-09) and export-file reachability
 expected: export_devices with file_name writes /config/mqtt_actions/<name>.json (mode 0600) and the file is NOT reachable through /local or any unauthenticated URL; import_devices of that file creates owned devices with new UUIDs, and mirrors on other instances ask for approval
-result: [pending]
-note: export on ha-two wrote mqtt_actions/uat-two.json with mode 0600 in a 0700 directory; /local and direct URL return 404 (the test config has no www directory); mirrors are refused with export_not_owned; import on ha-one created an owned device with a new UUID, shown as mirror on ha-two. Approval request for mirrors was not exercised because the imported device has no actions.
+result: pass
+note: Export on ha-two wrote mqtt_actions/uat-two.json (0600 in a 0700 directory); /local and the direct URL return 404 (the test config has no www directory, so a weak proof); mirrors are refused with export_not_owned; import on ha-one created owned devices with new UUIDs. A device with actions (UAT breaker) imported on ha-one shows on ha-two as mirror with a Repairs issue approval_required.
 
 ### 8. D9 duplicate instance id, including the reworded confirm text (plans 04-12, 04-14)
 expected: With the same backup restored on two instances the Repairs issue appears; its dialog now carries the cause explanation (formerly the issue-level description) in the confirm step and reads correctly in en and de; after confirmation that instance runs under a new id with the original's devices as mirrors while the original's entities stay available
@@ -75,9 +75,9 @@ note: German and English approval dialog read through by the user; reads natural
 ## Summary
 
 total: 11
-passed: 7
+passed: 9
 issues: 0
-pending: 3
+pending: 1
 skipped: 0
 blocked: 1
 

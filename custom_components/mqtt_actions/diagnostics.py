@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.diagnostics import async_redact_data
 
+from .document import build_content, content_hash
+
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
@@ -79,7 +81,13 @@ def _device_row(manager: Manager, device: Device) -> dict[str, Any]:
         "kind": device.spec.kind,
         "origin": "owned" if info is None else "mirror",
         "owner": _short(manager.instance_id if info is None else info.owner),
+        "mode": manager.device_mode(device.device_id),
+        "effective_mode": manager.effective_mode(device.device_id),
         "approval": str(manager.approval_state(device.device_id)),
+        "breaker": "tripped" if device.breaker.tripped else "ok",
+        # The content hash of the shared content, never the approval hash and never any action text
+        "rev": manager.revision(device.device_id) if info is None else info.rev,
+        "hash": content_hash(build_content(device.spec)) if info is None else info.content_hash,
     }
 
 

@@ -140,6 +140,14 @@ def _discovery(device: str = "dev-1") -> str:
     return f"{PREFIX}/device/{device}/config"
 
 
+def _retrigger(device: str = "dev-1") -> str:
+    return f"{BASE}/v1/devices/{device}/retrigger"
+
+
+def _acks(instance_id: str) -> str:
+    return f"{BASE}/v1/instances/{instance_id}/acks"
+
+
 def _availability(instance_id: str) -> str:
     return f"{BASE}/v1/instances/{instance_id}/availability"
 
@@ -309,3 +317,54 @@ def test_external_publisher_has_no_heartbeat_access(
     bridge.publish(_heartbeat(instance_ids["ha_one"]), "forged", retain=False)
     bridge.publish(_heartbeat(str(uuid.uuid4())), "made-up", retain=False)
     assert ha.collect() == set()
+
+
+def test_retrigger_topic_is_a_live_trigger_for_home_assistant_users_only(clients: Callable[[str], AclClient]) -> None:
+    """D-04: a Home Assistant user's request reaches the peers live and is not replayed; the bridge has no access."""
+    peer = clients("ha_two")
+    peer.subscribe(_retrigger())
+    bridge = clients("bridge")
+    bridge.subscribe(_retrigger())
+    writer = clients("ha_one")
+
+    writer.publish(_retrigger(), "go", retain=False)
+    assert peer.collect() == {(_retrigger(), "go", False)}
+    assert bridge.collect() == set()
+
+    bridge.publish(_retrigger(), "forged", retain=False)
+    assert peer.collect() == set()
+
+    late = clients("ha_two")
+    late.subscribe(_retrigger())
+    assert late.collect() == set()
+
+
+def test_ack_topic_is_readable_only_by_its_instance(
+    clients: Callable[[str], AclClient], instance_ids: dict[str, str]
+) -> None:
+    """D-03: an instance reads the acknowledgements addressed to itself and none addressed to another instance."""
+    reader = clients("ha_one")
+    reader.subscribe(f"{BASE}/v1/instances/+/acks")
+    other = clients("ha_two")
+
+    other.publish(_acks(instance_ids["ha_one"]), "for-one", retain=False)
+    assert reader.collect() == {(_acks(instance_ids["ha_one"]), "for-one", False)}
+
+    other.publish(_acks(instance_ids["ha_two"]), "for-two", retain=False)
+    assert reader.collect() == set()
+
+
+def test_any_instance_may_answer_a_requester(clients: Callable[[str], AclClient], instance_ids: dict[str, str]) -> None:
+    """D-03: every instance answers on the topic of the requester; the bridge user can neither answer nor listen."""
+    requester = clients("ha_two")
+    requester.subscribe(_acks(instance_ids["ha_two"]))
+    bridge = clients("bridge")
+    bridge.subscribe(f"{BASE}/v1/instances/+/acks")
+    answering = clients("ha_one")
+
+    answering.publish(_acks(instance_ids["ha_two"]), "answer", retain=False)
+    assert requester.collect() == {(_acks(instance_ids["ha_two"]), "answer", False)}
+    assert bridge.collect() == set()
+
+    bridge.publish(_acks(instance_ids["ha_two"]), "forged", retain=False)
+    assert requester.collect() == set()

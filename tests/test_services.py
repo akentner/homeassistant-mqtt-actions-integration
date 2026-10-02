@@ -12,7 +12,7 @@ from homeassistant.core import Context
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError, Unauthorized
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.service import async_get_all_descriptions
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message, async_mock_service
 
 import custom_components.mqtt_actions as integration
 from custom_components.mqtt_actions.const import (
@@ -22,13 +22,21 @@ from custom_components.mqtt_actions.const import (
     EXPORT_DIRECTORY,
     MAX_IMPORT_BYTES,
     RESYNC_MIN_INTERVAL_SECONDS,
+    RETRIGGER_DEVICE_INTERVAL_SECONDS,
     SERVICE_EXPORT_DEVICES,
     SERVICE_IMPORT_DEVICES,
     SERVICE_RESYNC,
+    SERVICE_RETRIGGER,
     SUBENTRY_SELECT,
 )
 from custom_components.mqtt_actions.document import build_content, content_hash
-from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic
+from custom_components.mqtt_actions.topics import (
+    availability_topic,
+    config_topic,
+    discovery_topic,
+    retrigger_topic,
+    state_topic,
+)
 from tests.documents import document_payload, make_spec
 
 if TYPE_CHECKING:
@@ -588,3 +596,134 @@ async def test_import_file_problems_have_their_own_errors(
     assert error.translation_key == "import_rejected"
     assert error.translation_placeholders == {"index": "-", "reason": "not_json"}
     assert len(entry.subentries) == 0
+
+
+# --- retrigger (D-01 to D-03) ----------------------------------------------------------------------------------
+
+
+async def _baseline(hass: HomeAssistant, device_id: str, value: str = "ON") -> None:
+    """Deliver a live state message, so the device has a baseline and ran its actions once."""
+    async_fire_mqtt_message(hass, state_topic(BASE, device_id), value, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_retrigger_service_returns_the_acknowledgements(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-03: the call returns the request id, the device uuid, the state and one entry per instance; the action runs."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    device_id = sub["data"][CONF_DEVICE_ID]
+    calls = async_mock_service(hass, "test", "on")
+    await _baseline(hass, device_id)
+    assert len(calls) == 1
+
+    result = await _call(hass, SERVICE_RETRIGGER, {"device_id": _companion_id(hass, entry, device_id)}, response=True)
+
+    assert set(result) == {"request_id", "uuid", "state", "instances"}
+    assert result["uuid"] == device_id
+    assert result["state"] == "ON"
+    assert result["instances"] == [
+        {
+            "instance_id": entry.data[CONF_INSTANCE_ID],
+            "instance_name": "Test instance",
+            "status": "executed",
+        }
+    ]
+    assert len(calls) == 2
+
+
+async def test_retrigger_service_is_admin_only(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    hass_read_only_user: User,
+) -> None:
+    """T-04-42: a read-only user cannot start a re-trigger and nothing is published."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    device_id = sub["data"][CONF_DEVICE_ID]
+    async_mock_service(hass, "test", "on")
+    await _baseline(hass, device_id)
+    mqtt_mock.async_publish.reset_mock()
+
+    with pytest.raises(Unauthorized):
+        await _call(
+            hass,
+            SERVICE_RETRIGGER,
+            {"device_id": _companion_id(hass, entry, device_id)},
+            user=hass_read_only_user,
+            response=True,
+        )
+
+    assert retrigger_topic(BASE, device_id) not in _published_topics(mqtt_mock)
+
+
+async def test_retrigger_service_errors_are_translated(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-01, D-04: the refusals of the caller are translated validation errors, and a refusal sends nothing."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    device_id = sub["data"][CONF_DEVICE_ID]
+    registry_id = _companion_id(hass, entry, device_id)
+    async_mock_service(hass, "test", "on")
+    now = [1000.0]
+    entry.runtime_data.clock = lambda: now[0]
+    hub = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
+    assert hub is not None
+
+    async def _key(data: dict[str, Any]) -> str:
+        with pytest.raises(ServiceValidationError) as raised:
+            await _call(hass, SERVICE_RETRIGGER, data, response=True)
+        assert raised.value.translation_domain == DOMAIN
+        return str(raised.value.translation_key)
+
+    mqtt_mock.async_publish.reset_mock()
+    assert await _key({"device_id": registry_id}) == "retrigger_no_state"
+    assert await _key({"device_id": hub.id}) == "not_a_device"
+    assert retrigger_topic(BASE, device_id) not in _published_topics(mqtt_mock)
+
+    await _baseline(hass, device_id)
+    assert await _key({"device_id": registry_id, "state": "maybe"}) == "retrigger_bad_state"
+    assert retrigger_topic(BASE, device_id) not in _published_topics(mqtt_mock)
+
+    await _call(hass, SERVICE_RETRIGGER, {"device_id": registry_id}, response=True)
+    sent = _published_topics(mqtt_mock).count(retrigger_topic(BASE, device_id))
+    assert sent == 1
+    now[0] += RETRIGGER_DEVICE_INTERVAL_SECONDS - 1
+    assert await _key({"device_id": registry_id}) == "retrigger_rate_limited"
+    assert _published_topics(mqtt_mock).count(retrigger_topic(BASE, device_id)) == sent
+
+
+async def test_retrigger_service_accepts_a_mirror(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """The companion device of a mirror resolves; the request is sent and this instance answers not_approved."""
+    entry = await _setup(hass, make_hub_entry())
+    foreign = make_spec(name="Foreign lamp", on=ON_ACTIONS)
+    async_fire_mqtt_message(hass, config_topic(BASE, foreign.device_id), document_payload(foreign), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    mirror_id = _companion_id(hass, entry, foreign.device_id)
+    calls = async_mock_service(hass, "test", "on")
+
+    result = await _call(hass, SERVICE_RETRIGGER, {"device_id": mirror_id, "state": "on"}, response=True)
+
+    assert retrigger_topic(BASE, foreign.device_id) in _published_topics(mqtt_mock)
+    assert result["uuid"] == foreign.device_id
+    assert result["state"] == "ON"
+    assert [item["status"] for item in result["instances"]] == ["not_approved"]
+    assert calls == []
+
+
+async def test_services_yaml_describes_retrigger(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """services.yaml describes the re-trigger: a required device selector of this integration and an optional text."""
+    await _setup(hass, make_hub_entry())
+
+    fields = (await async_get_all_descriptions(hass))[DOMAIN][SERVICE_RETRIGGER]["fields"]
+
+    assert fields[CONF_DEVICE_ID]["required"] is True
+    assert fields[CONF_DEVICE_ID]["selector"] == {"device": {"integration": DOMAIN}}
+    assert not fields["state"].get("required")
+    assert "text" in fields["state"]["selector"]

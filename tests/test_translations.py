@@ -87,6 +87,9 @@ SERVICE_EXCEPTIONS = (
     "export_write_failed",
     "import_needs_exactly_one_source",
     "file_unreadable",
+    "retrigger_bad_state",
+    "retrigger_no_state",
+    "retrigger_rate_limited",
 )
 
 # The message of a rejected import: exactly the position and the fixed reason code
@@ -160,6 +163,13 @@ REQUIRED_KEYS = (
     *(
         f"services.import_devices.fields.{field}.{part}"
         for field in ("data", "file_name")
+        for part in ("name", "description")
+    ),
+    "services.retrigger.name",
+    "services.retrigger.description",
+    *(
+        f"services.retrigger.fields.{field}.{part}"
+        for field in ("device_id", "state")
         for part in ("name", "description")
     ),
     "exceptions.import_rejected.message",
@@ -367,3 +377,24 @@ def test_escaped_flow_placeholders_are_not_wrapped_in_markup(language: str) -> N
             if re.search(f"[{MARKDOWN_CONTROL}]{variable}|{variable}[{MARKDOWN_CONTROL}]", text):
                 offenders.append((key, name))
     assert offenders == []
+
+
+RETRIGGER_KEYS = (
+    "services.retrigger.name",
+    "services.retrigger.description",
+    "services.retrigger.fields.device_id.name",
+    "services.retrigger.fields.device_id.description",
+    "services.retrigger.fields.state.name",
+    "services.retrigger.fields.state.description",
+    "exceptions.retrigger_bad_state.message",
+    "exceptions.retrigger_no_state.message",
+    "exceptions.retrigger_rate_limited.message",
+)
+
+
+def test_required_retrigger_keys_exist_in_both_languages() -> None:
+    """The re-trigger service texts and its three translated refusals exist in en and de, with fixed text only."""
+    for language in LANGUAGES:
+        flat = _load(language)
+        assert [key for key in RETRIGGER_KEYS if not flat.get(key)] == [], language
+        assert all(not _variables(flat[key]) for key in RETRIGGER_KEYS), language

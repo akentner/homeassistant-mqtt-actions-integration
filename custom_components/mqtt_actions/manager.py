@@ -754,6 +754,7 @@ class Manager:
             return
         if (existing := self.mirrors.get(device_id)) is not None:
             self._update_mirror(existing, parsed)
+            self._rename_companion(device_id, parsed.spec.name)
             # A changed document starts clean: a stale setup or denied-call issue belongs to the old actions
             self.runner.clear_issue(device_id)
             ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_DENIED_CALL_PREFIX}{device_id}")
@@ -911,8 +912,26 @@ class Manager:
         self._tripped.pop(device_id, None)
         # An approval does not outlive its mirror (A10): a returning device is a new request
         self._approvals.pop(device_id, None)
+        # Neither a mode nor a companion device outlives its mirror (T-04-26)
+        self._device_modes.pop(device_id, None)
+        self._remove_companion(device_id)
         self._clean_registry(device_id)
         self._schedule_save()
+        self._notify_devices_changed()
+
+    @callback
+    def _remove_companion(self, device_id: str) -> None:
+        """
+        Remove the companion device of a mirror and, with it, its mode select; unknown ids and repeats do nothing.
+
+        A mirror has no subentry, so core never removes its companion. The lookup uses the identifier of this
+        integration only: the core MQTT device of the discovery payload is another registry entry and must stay,
+        because removing a live discovery entity would make core MQTT clear the device for every instance (D-13).
+        """
+        device_registry = dr.async_get(self._hass)
+        companion = device_registry.async_get_device_by_identifier((DOMAIN, device_id), self._entry.entry_id)
+        if companion is not None:
+            device_registry.async_remove_device(companion.id)
 
     @callback
     def _clean_registry(self, device_id: str) -> None:

@@ -5,7 +5,8 @@ limits are. It is written from the code: every service, field, topic, status wor
 the integration by the test suite, so a page that drifts from the code fails the build.
 
 Related pages: the [README](../README.md) is the entry point, [docs/broker-acl.md](broker-acl.md) has the broker
-access rules that the topics below need.
+access rules that the topics below need, [docs/diagnostics.md](diagnostics.md) describes the diagnostics file and
+[docs/troubleshooting.md](troubleshooting.md) explains every Repairs issue and the common operating problems.
 
 Security limits first, because they apply to everything here:
 

@@ -107,6 +107,9 @@ The ACL cannot do everything, and the example does not pretend to:
   overwrite the config topic of any device, including by writing an empty retained message (a forged tombstone).
   Instances pin the first owner they saw and republish their own documents, and they raise Repairs issues for a
   conflict, but that is cooperation, not enforcement. Put only instances you trust into the Home Assistant group.
+- **Adoption and import put content under the administrator's responsibility.** An adopted device and an imported
+  device are owned by the instance that took them, so they run there without an approval, and no ACL can judge their
+  actions. Read what you adopt or import; see [docs/operations.md](operations.md).
 - **The approval gate is the real control.** A document from another instance never runs on an instance before the user
   approved its exact actions there. A forged document can make approval requests appear or make mirrors disappear and
   reappear, which forces a new approval, but it cannot run an action.

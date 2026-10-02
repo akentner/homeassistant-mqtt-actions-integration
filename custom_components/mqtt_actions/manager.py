@@ -1471,21 +1471,24 @@ class Manager:
         clear, the config tombstone and the state clear of this delete can never look like a foreign event that the
         owner would heal, which would resurrect the device (D-18). Then the discovery is cleared so the entity
         disappears, the subscriptions end, the config tombstone follows and the retained state goes last. A clear that
-        fails keeps the id in the published set so the next start retries all three topics.
+        fails keeps the id in the published set so the next start retries all three topics. A device that another
+        instance adopted is only forgotten here: nothing is cleared, because the topics belong to the adopter (T-04-56).
         """
         assert self._publisher is not None  # noqa: S101
         device = self.devices.pop(device_id)
-        discovery_cleared = await _async_attempt(
+        # Another instance adopted the device: its topics are the adopter's now and this delete must not clear them
+        adopted_away = self.sync.transfer_info(device_id) is not None
+        discovery_cleared = adopted_away or await _async_attempt(
             partial(self._publisher.async_clear_device, device_id), f"clear the discovery of device {device.name}"
         )
         if device.unsubscribe is not None:
             device.unsubscribe()
         if device.unsubscribe_test is not None:
             device.unsubscribe_test()
-        config_cleared = await _async_attempt(
+        config_cleared = adopted_away or await _async_attempt(
             partial(self._publisher.async_clear_config, device_id), f"clear the config document of device {device.name}"
         )
-        state_cleared = await _async_attempt(
+        state_cleared = adopted_away or await _async_attempt(
             partial(self._publisher.async_clear_state, device_id), f"clear the retained state of device {device.name}"
         )
         await self.runner.async_unload(device_id, remove_issue=True)

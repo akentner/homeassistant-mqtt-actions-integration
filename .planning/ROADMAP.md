@@ -144,7 +144,7 @@ Plans:
   4. User can set per instance and device whether actions run, are only observed, or are disabled, and can download diagnostics with sensitive data redacted.
   5. README and docs cover setup, trust model and limitations; a tagged release is built automatically with the manifest version matching the tag; CI runs the unit, real-Mosquitto and multi-instance fake-broker test tiers.
 
-**Plans:** 13/13 plans executed
+**Plans:** 13/14 plans executed
 
 Plans:
 **Wave 1**
@@ -182,6 +182,9 @@ Plans:
 **Wave 11** *(blocked on Wave 10 completion)*
 - [x] 04-13-PLAN.md — README, operations, diagnostics and troubleshooting pages tied to the code by tests (wave 11)
 
+**Wave 12** *(gap closure, blocked on Wave 11 completion)*
+- [ ] 04-14-PLAN.md — Gap closure: fixable Repairs issues keep their text in the fix flow step so hassfest passes and the release gate can go green (wave 12)
+
 ## Progress
 
 **Execution Order:**
@@ -192,7 +195,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
-| 4. Operations, Recovery and Release | 13/13 | In Progress|  |
+| 4. Operations, Recovery and Release | 13/14 | In Progress|  |
 
 ## Backlog
 

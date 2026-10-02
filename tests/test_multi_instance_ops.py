@@ -1,6 +1,7 @@
 """Operations scenarios of several real instances on one fake broker: presence and the roster (OPS-03)."""
 
 import json
+import time
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -230,3 +231,89 @@ async def test_leaving_disabled_without_retained_state_counts_the_next_live_chan
     fake_broker.publish(topic, "ON", retain=False)
     await _settle(a)
     assert len(on_calls) == 2
+
+
+# --- re-trigger (OPS-01, OPS-02, D-01 to D-04) -------------------------------------------------------------------
+
+
+async def _approved_pair(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> tuple[Instance, Instance, str, dict[str, list]]:
+    """
+    Start owner A and follower B of one switch with ON and OFF actions; B approved it and both baselines are ON.
+
+    Both instances know each other through a heartbeat. The returned dict holds the service call lists by name.
+    """
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}], off=[{"action": "test.off"}])
+    device_id = sub["data"][CONF_DEVICE_ID]
+    a = await make_instance("alpha", hass=hass, subentries=[sub])
+    b = await make_instance("beta")
+    calls = {
+        "a_on": async_mock_service(a.hass, "test", "on"),
+        "a_off": async_mock_service(a.hass, "test", "off"),
+        "b_on": async_mock_service(b.hass, "test", "on"),
+        "b_off": async_mock_service(b.hass, "test", "off"),
+    }
+    await _settle(a, b)
+    mirror = b.manager.mirrors[device_id].mirror
+    assert mirror is not None
+    assert await b.manager.async_approve(device_id, mirror.actions_hash) is True
+    fake_broker.publish(state_topic(BASE, device_id), "ON", retain=True)
+    await a.manager.presence.async_publish_heartbeat()
+    await b.manager.presence.async_publish_heartbeat()
+    await _settle(a, b)
+    assert (len(calls["a_on"]), len(calls["b_on"])) == (1, 1)
+    return a, b, device_id, calls
+
+
+def _device_snapshot(instance: Instance, device_id: str) -> tuple[object, ...]:
+    """Return what a re-trigger must never change on one instance: baseline, breaker and the published revision."""
+    device = instance.manager.device(device_id)
+    assert device is not None
+    return (
+        device.tracker.last_acted,
+        device.breaker.tripped,
+        list(device.breaker._stamps),
+        instance.manager.revision(device_id),
+    )
+
+
+async def test_retrigger_runs_approved_instances_and_touches_no_state(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-01, D-02: both instances run the ON actions once, acknowledge, and no state, baseline or breaker moves."""
+    a, b, device_id, calls = await _approved_pair(hass, fake_broker, make_instance, make_switch_subentry)
+    topic = state_topic(BASE, device_id)
+    before = (_device_snapshot(a, device_id), _device_snapshot(b, device_id), dict(fake_broker.retained))
+    published_before = len(a.gateway.published) + len(b.gateway.published)
+
+    result = await a.manager.retrigger.async_retrigger(device_id)
+    await _settle(a, b)
+
+    assert (len(calls["a_on"]), len(calls["b_on"])) == (2, 2)
+    assert (len(calls["a_off"]), len(calls["b_off"])) == (0, 0)
+    assert result["uuid"] == device_id
+    assert result["state"] == "ON"
+    answers = {entry["instance_id"]: entry["status"] for entry in result["instances"]}
+    assert answers == {a.manager.instance_id: "executed", b.manager.instance_id: "executed"}
+    after = (_device_snapshot(a, device_id), _device_snapshot(b, device_id), dict(fake_broker.retained))
+    assert after[:2] == before[:2]
+    assert after[2][topic] == before[2][topic] == "ON"
+    assert after[2].keys() == before[2].keys()
+    published = [*a.gateway.published, *b.gateway.published][published_before:]
+    assert all(published_topic != topic for published_topic, _payload, _retain in published)
+    assert all(retain is False for _topic, _payload, retain in published)
+
+
+async def test_retrigger_returns_before_the_window_when_everyone_answered(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-03: the caller leaves the 5 second window as soon as every expected instance answered."""
+    a, b, device_id, _calls = await _approved_pair(hass, fake_broker, make_instance, make_switch_subentry)
+    started = time.monotonic()
+
+    result = await a.manager.retrigger.async_retrigger(device_id)
+
+    assert time.monotonic() - started < 2
+    assert {entry["status"] for entry in result["instances"]} == {"executed"}
+    await _settle(a, b)

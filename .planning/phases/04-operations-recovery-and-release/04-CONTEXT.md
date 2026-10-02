@@ -119,6 +119,13 @@ Not in this phase: active hand-off of a device to another instance, follower-loc
 
 </specifics>
 
+## Post-Research Decisions (2026-10-02, user-confirmed after 04-RESEARCH.md)
+
+- **D-13 revised:** A device belongs to exactly one config entry, so the discovery device cannot also be linked to our entry. Use a **companion device** per owned or mirrored device, registered under our entry (under the subentry for owned devices). It carries the native mode select. Native entities instead of Discovery go to backlog 999.2.
+- **D-09 refined:** Followers honor the additive `transferred_from` marker only when the pinned owner is offline per roster. A returning old owner gets a fixable Repairs release flow. No `SCHEMA_VERSION` bump, no auto step-down on a marker.
+- **Service device field is named `device_id`** (user choice). The docs-example test and project rule against `device_id` targets in shipped examples must be reconciled by the plan (field name allowed, no `device_id` targets in examples, keep the rule's intent).
+- **Instance-wide mode:** add one hub-level mode select. The effective mode is the most restrictive of hub and device (disabled > observe > run).
+
 <deferred>
 ## Deferred Ideas
 

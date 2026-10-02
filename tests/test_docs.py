@@ -1,5 +1,6 @@
 """Documentation checks: the README says what the code does (D-16)."""
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -7,14 +8,19 @@ from typing import Any
 import yaml
 
 from custom_components.mqtt_actions import const
+from tests.test_diagnostics import DEVICE_KEYS, HUB_KEYS, ROSTER_KEYS, TOP_KEYS
 
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
 DOCS = ROOT / "docs"
 OPERATIONS = DOCS / "operations.md"
+DIAGNOSTICS = DOCS / "diagnostics.md"
+TROUBLESHOOTING = DOCS / "troubleshooting.md"
+BROKER_ACL = DOCS / "broker-acl.md"
+TRANSLATIONS = ROOT / "custom_components" / "mqtt_actions" / "translations" / "en.json"
 SERVICES_YAML = ROOT / "custom_components" / "mqtt_actions" / "services.yaml"
 # The pages this plan adds; every one of them has to exist for the link and example checks to mean anything
-EXPECTED_PAGES = ("operations.md",)
+EXPECTED_PAGES = ("operations.md", "diagnostics.md", "troubleshooting.md")
 FENCE = re.compile(r"^```([^\n]*)\n(.*?)^```$", re.DOTALL | re.MULTILINE)
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 
@@ -192,3 +198,77 @@ def test_docs_links_resolve() -> None:
                 continue
             path = (document.parent / target.split("#", 1)[0]).resolve()
             assert path.exists(), f"{document.name} links to {target}, which does not exist"
+
+
+def _sentences(text: str) -> list[str]:
+    """Return the lower-cased sentences of a text, without backticks and emphasis marks."""
+    plain = _normalize(text).replace("`", "").replace("*", "")
+    return [part.strip() for part in re.split(r"(?<=[.!?:])\s", plain) if part.strip()]
+
+
+def _link_targets(document: Path) -> set[Path]:
+    """Return the files that a markdown page links to by a relative link."""
+    targets: set[Path] = set()
+    for target in LINK.findall(document.read_text(encoding="utf-8")):
+        if not target.startswith(("http://", "https://", "mailto:", "#")):
+            targets.add((document.parent / target.split("#", 1)[0]).resolve())
+    return targets
+
+
+def test_diagnostics_page_lists_the_included_keys_and_the_exclusions() -> None:
+    text = _page(DIAGNOSTICS)
+    # The key sets that tests/test_diagnostics.py pins to the real output, plus the keys the plan names
+    keys = {*TOP_KEYS, *HUB_KEYS, *ROSTER_KEYS, *DEVICE_KEYS, "hub", "roster", "devices", "approval", "breaker"}
+    for key in sorted(keys):
+        assert f"`{key}`" in text, f"the diagnostics page never names the key {key}"
+    sentences = _sentences(text)
+    assert any("instance id" in sentence and "eight characters" in sentence for sentence in sentences), (
+        "the diagnostics page never says that instance ids are shortened to eight characters"
+    )
+    exclusions = (
+        ("actions", "yaml", "templates", "entity ids", "service data"),
+        ("device names",),
+        ("credentials", "host names"),
+    )
+    for needles in exclusions:
+        assert any("never" in sentence and all(needle in sentence for needle in needles) for sentence in sentences), (
+            f"the diagnostics page has no sentence that says {', '.join(needles)} are never included"
+        )
+
+
+def test_troubleshooting_covers_every_issue_key() -> None:
+    text = _page(TROUBLESHOOTING)
+    issues = json.loads(TRANSLATIONS.read_text(encoding="utf-8"))["issues"]
+    assert issues, "the English translations have no issues"
+    for key in issues:
+        assert f"`{key}`" in text, f"the troubleshooting page has no entry for the issue {key}"
+
+
+def test_troubleshooting_covers_the_operating_problems() -> None:
+    headings = _headings(_page(TROUBLESHOOTING))
+    for problem in (
+        "entities are unavailable",
+        "approvals lapsed after an upgrade",
+        "a denied publish is not reported",
+        "adoption or ownership conflicts",
+        "a new instance id and the acl",
+        "a device exists twice on the integration page",
+        "resync did not restore the entities",
+    ):
+        assert any(heading.startswith(problem) for heading in headings), f"troubleshooting has no {problem} section"
+
+
+def test_security_limits_are_stated() -> None:
+    """No page promises more than the code gives: advisory acknowledgements, cooperative ownership, responsibility."""
+    operations = _normalize(_page(OPERATIONS))
+    assert "acknowledgements are advisory" in operations
+    assert "ownership is cooperative" in operations
+    acl = _normalize(_page(BROKER_ACL))
+    assert "cooperative" in acl
+    assert "adoption and import put content under the administrator's responsibility" in acl
+    troubleshooting = _page(TROUBLESHOOTING)
+    assert {OPERATIONS.resolve(), DIAGNOSTICS.resolve()} <= _link_targets(TROUBLESHOOTING), (
+        "the troubleshooting page does not link the operations and diagnostics pages"
+    )
+    assert "advisory" in _normalize(troubleshooting)
+    assert "cooperative" in _normalize(troubleshooting)

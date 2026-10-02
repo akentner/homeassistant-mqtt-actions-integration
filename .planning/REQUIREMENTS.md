@@ -63,8 +63,8 @@
 
 ### Operations
 
-- [ ] **OPS-01**: A service re-triggers the actions on all approved instances (non-retained, `request_id` dedupe, rate-limited)
-- [ ] **OPS-02**: Instances acknowledge a re-trigger, and the caller can see which instances executed it
+- [x] **OPS-01**: A service re-triggers the actions on all approved instances (non-retained, `request_id` dedupe, rate-limited)
+- [x] **OPS-02**: Instances acknowledge a re-trigger, and the caller can see which instances executed it
 - [x] **OPS-03**: User can see the connected instances (roster with presence heartbeat)
 - [x] **OPS-04**: Diagnostics export with sensitive data redacted
 - [ ] **OPS-05**: README and docs cover setup, trust model, limitations; releases are automated with manifest version in step with the tag
@@ -148,8 +148,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TRU-02 | Phase 3 | Complete |
 | TRU-03 | Phase 3 | Complete |
 | TRU-04 | Phase 3 | Complete |
-| OPS-01 | Phase 4 | Pending |
-| OPS-02 | Phase 4 | Pending |
+| OPS-01 | Phase 4 | Complete |
+| OPS-02 | Phase 4 | Complete |
 | OPS-03 | Phase 4 | Complete |
 | OPS-04 | Phase 4 | Complete |
 | OPS-05 | Phase 4 | Pending |

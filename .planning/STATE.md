@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-09-PLAN.md
-last_updated: "2026-10-02T08:52:36.215Z"
+stopped_at: Completed 04-10-PLAN.md
+last_updated: "2026-10-02T16:47:04.262Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 1cc9d2efc4347acde4089a571be37a83d5e27890
+state_head: 9a5011e0e0cb28cd2add2214ee0a8f61411566d8
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 28
+  completed_plans: 29
   percent: 75
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 10 of 13
+Plan: 11 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
@@ -81,6 +81,7 @@ Progress: [████████░░] 75% of Phase 01 plans
 | Phase 04 P07 | 5 min | 2 tasks | 5 files |
 | Phase 04 P08 | 7 min | 2 tasks | 10 files |
 | Phase 04 P09 | 8 min | 2 tasks | 9 files |
+| Phase 04 P10 | 30 min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,10 @@ Recent decisions affecting current work:
 - [Phase 04]: Import is all or nothing: every item is validated before the first subentry is created; rejections carry only a reason code and a 1-based position
 - [Phase 04]: Import files are read by bare name from a real private directory with a no-follow open, a regular-file check and the size checked on the descriptor; every unreadable case is file_unreadable
 - [Phase 04]: Deep validation does not check that a service exists (core resolves device actions, conditions and triggers only); an unknown service name is accepted by import, as in the UI flows
+- [Phase 04]: 04-10: re-trigger runs through the test-press path (enqueue test=True after mode and breaker checks, never breaker.record), so no state, baseline, revision or breaker count moves — A second remote execution path must reuse the existing gates; D-01, D-02, T-04-42
+- [Phase 04]: 04-10: receiver gate order retained, size and strict parse, freshness 60 s, duplicate id (128), per-device rate limit 5 s (foreign only), device, state, mode, breaker, runnability; not_approved is decided before no_actions — Replay, flood and stale requests must run nothing; every accepted request gets one answer; D-03, D-04, T-04-43 to T-04-46
+- [Phase 04]: 04-10: caller claims its per-device send slot before publishing and releases it only when the publish failed; response keys the device as uuid; no_answer and offline are synthesized by the caller and never on the wire — Concurrent calls must not both pass; documentation examples never need the registry field name; D-03
+- [Phase 04]: 04-10: tests/test_retrigger.py is a multi_instance module (receiver tests use the fake broker; a retained request is simulated by a reconnect replay) — test_tiers_partition_the_suite requires the marker for every module that uses make_instance
 
 ### Pending Todos
 
@@ -172,6 +177,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T08:52:36.132Z
-Stopped at: Completed 04-09-PLAN.md
+Last session: 2026-10-02T16:47:04.176Z
+Stopped at: Completed 04-10-PLAN.md
 Resume file: None

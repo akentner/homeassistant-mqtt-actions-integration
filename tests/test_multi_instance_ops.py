@@ -6,13 +6,18 @@ import time
 import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
+from pytest_homeassistant_custom_component.common import (
+    async_capture_events,
+    async_fire_time_changed,
+    async_mock_service,
+)
 
 from custom_components.mqtt_actions import retrigger as retrigger_module
 from custom_components.mqtt_actions.const import (
@@ -24,6 +29,7 @@ from custom_components.mqtt_actions.const import (
     ISSUE_OWNER_CONFLICT_PREFIX,
     SIGNAL_ROSTER_UPDATED,
 )
+from custom_components.mqtt_actions.manager import AdoptionError
 from custom_components.mqtt_actions.topics import (
     acks_topic,
     availability_topic,
@@ -40,6 +46,8 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from tests.fake_broker import FakeBroker, Instance
+
+from tests.documents import document_payload, make_spec
 
 pytestmark = pytest.mark.multi_instance
 
@@ -638,3 +646,369 @@ async def test_adopter_edits_after_adoption_keep_the_history(
     assert edited["rev"] == adopted["rev"] + 1
     assert edited["transferred_from"] == [a.manager.instance_id]
     assert edited["owner"] == b.manager.instance_id
+
+
+# --- adoption: preconditions, the narrow pin rule and the transfer history (D-09, D-10) ----------------------------
+
+
+def _use_running_clock(instance: Instance) -> list[float]:
+    """Replace the manager clock by a settable one that starts at the real monotonic time, and restart the listening."""
+    now = [time.monotonic()]
+    instance.manager.clock = lambda: now[0]
+    instance.manager.presence.on_reconnect()
+    return now
+
+
+def _snapshot(instance: Instance, device_id: str) -> tuple[object, ...]:
+    """Return what a refused adoption must leave alone on an instance."""
+    manager = instance.manager
+    return (
+        len(instance.gateway.published),
+        device_id in manager.mirrors,
+        device_id in manager.devices,
+        dict(manager._transfers),
+        dict(manager._revs),
+        dict(manager._approvals),
+        len(instance.entry.subentries),
+    )
+
+
+async def _refused(instance: Instance, device_id: str, reason: str, *, force: bool = False) -> AdoptionError:
+    """Assert that an adoption is refused with a reason, leaves no trace and writes no Store."""
+    before = _snapshot(instance, device_id)
+    with patch.object(instance.manager._store, "async_save", new_callable=AsyncMock) as save:
+        with pytest.raises(AdoptionError) as raised:
+            await instance.manager.async_adopt(device_id, force=force)
+        save.assert_not_called()
+    assert raised.value.reason == reason
+    assert _snapshot(instance, device_id) == before
+    return raised.value
+
+
+def _foreign_document(
+    fake_broker: FakeBroker, spec, *, owner: str = "ghost-owner", rev: int = 1, transferred_from=None
+) -> None:
+    """Publish a retained document of a synthetic owner that is not a running instance."""
+    payload = document_payload(spec, owner=owner, owner_name=owner.title(), rev=rev, transferred_from=transferred_from)
+    fake_broker.publish(config_topic(BASE, spec.device_id), payload, retain=True)
+
+
+async def test_adoption_needs_the_owner_offline_or_force(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-10: with the owner running and its heartbeats fresh the adoption names the owner and changes nothing."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    assert b.manager.presence.owner_offline(a.manager.instance_id) is False
+
+    error = await _refused(b, device_id, "owner_not_offline")
+    assert error.owner_name == "alpha"
+    assert device_id in b.manager.mirrors
+
+    assert await b.manager.async_adopt(device_id, force=True) == "alpha"
+    await _settle(a, b, c)
+    assert device_id in b.manager.devices
+    assert device_id not in b.manager.mirrors
+
+
+async def test_unknown_owner_needs_force_until_enough_was_heard(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-54: no heartbeat heard never means offline when the availability says online; silence needs 90 seconds."""
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
+    online_id = sub["data"][CONF_DEVICE_ID]
+    a = await make_instance("alpha", hass=hass, subentries=[sub])
+    b = await make_instance("beta")
+    ghost_spec = make_spec(name="Ghost lamp", on=[{"action": "test.on"}])
+    _foreign_document(fake_broker, ghost_spec)
+    await _settle(a, b)
+    for device_id in (online_id, ghost_spec.device_id):
+        mirror = b.manager.mirrors[device_id].mirror
+        assert mirror is not None
+        assert await b.manager.async_approve(device_id, mirror.actions_hash) is True
+    now = _use_running_clock(b)
+    assert fake_broker.retained[availability_topic(BASE, a.manager.instance_id)] == "online"
+
+    # An instance whose availability says online and that never sent a heartbeat is not offline, however long we wait
+    now[0] += 600
+    await _refused(b, online_id, "owner_not_offline")
+
+    # An owner nobody has heard of is offline only once this instance listened for 90 seconds
+    now[0] -= 600 - (HEARTBEAT_OFFLINE_SECONDS - 1)
+    await _refused(b, ghost_spec.device_id, "owner_not_offline")
+    now[0] += 2
+    assert await b.manager.async_adopt(ghost_spec.device_id) == "Ghost-Owner"
+    assert ghost_spec.device_id in b.manager.devices
+
+
+async def test_stale_heartbeat_allows_adoption(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: an owner whose last heartbeat is older than 90 seconds is gone, even with an online availability."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    now = _use_running_clock(b)
+    await a.manager.presence.async_publish_heartbeat()
+    await _settle(a, b, c)
+    assert fake_broker.retained[availability_topic(BASE, a.manager.instance_id)] == "online"
+    await _refused(b, device_id, "owner_not_offline")
+
+    now[0] += HEARTBEAT_OFFLINE_SECONDS + 1
+
+    assert await b.manager.async_adopt(device_id) == "alpha"
+    await _settle(a, b, c)
+    assert device_id in b.manager.devices
+
+
+async def test_adoption_requires_an_approved_mirror(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable
+) -> None:
+    """T-04-50: a pending and a blocked mirror are refused with and without force; approved and action-less pass."""
+    b = await make_instance("beta", hass=hass)
+    pending = make_spec(name="Pending", on=[{"action": "test.on"}])
+    blocked = make_spec(name="Blocked", on=[{"action": "shell_command.run"}])
+    plain = make_spec(name="Plain")
+    approved = make_spec(name="Approved", on=[{"action": "test.on"}])
+    for spec in (pending, blocked, plain, approved):
+        _foreign_document(fake_broker, spec)
+    await _settle(b)
+    mirror = b.manager.mirrors[approved.device_id].mirror
+    assert mirror is not None
+    assert await b.manager.async_approve(approved.device_id, mirror.actions_hash) is True
+    assert b.manager.approval_state(blocked.device_id) == "blocked"
+    assert b.manager.approval_state(pending.device_id) == "pending"
+
+    for spec in (pending, blocked):
+        for force in (False, True):
+            await _refused(b, spec.device_id, "not_approved", force=force)
+
+    for spec in (plain, approved):
+        assert await b.manager.async_adopt(spec.device_id, force=True) == "Ghost-Owner"
+    await _settle(b)
+    assert set(b.manager.devices) == {plain.device_id, approved.device_id}
+    assert set(b.manager.mirrors) == {pending.device_id, blocked.device_id}
+
+
+async def test_not_a_mirror_and_unknown_device(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """An owned device, an unknown id and a mirror whose owner id cannot be named in a marker are not adoptable."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    await _refused(a, device_id, "not_a_mirror", force=True)
+    await _refused(b, str(uuid.uuid4()), "not_a_mirror", force=True)
+    odd = make_spec(name="Odd owner", on=[{"action": "test.on"}])
+    payload = document_payload(odd, owner="owner with spaces", owner_name="Odd")
+    fake_broker.publish(config_topic(BASE, odd.device_id), payload, retain=True)
+    await _settle(a, b, c)
+    mirror = b.manager.mirrors[odd.device_id].mirror
+    assert mirror is not None
+    assert await b.manager.async_approve(odd.device_id, mirror.actions_hash) is True
+    await _refused(b, odd.device_id, "not_a_mirror", force=True)
+
+
+async def test_marker_with_an_online_pinned_owner_is_a_conflict(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-49: a forced adoption while the owner is online does not move a follower that sees the owner online."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    events = async_capture_events(c.hass, ir.EVENT_REPAIRS_ISSUE_REGISTRY_UPDATED)
+
+    await b.manager.async_adopt(device_id, force=True)
+    await _settle(a, b, c)
+
+    created = [
+        event.data
+        for event in events
+        if event.data["action"] == "create" and event.data["issue_id"] == f"{ISSUE_OWNER_CONFLICT_PREFIX}{device_id}"
+    ]
+    assert created
+    mirror = c.manager.mirrors[device_id].mirror
+    assert mirror is not None
+    assert mirror.owner == a.manager.instance_id
+    assert mirror.transferred_from == ()
+
+
+async def test_marker_that_does_not_name_the_pinned_owner_is_a_conflict(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-49: with the pinned owner offline, a marker naming someone else still changes nothing."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    await a.stop()
+    await _settle(a, b, c)
+    assert c.manager.presence.owner_offline(a.manager.instance_id) is True
+    pinned = c.manager.mirrors[device_id].spec
+
+    _foreign_document(fake_broker, pinned, owner="newcomer", rev=9, transferred_from=["someone-else"])
+    await _settle(a, b, c)
+
+    mirror = c.manager.mirrors[device_id].mirror
+    assert mirror is not None
+    assert mirror.owner == a.manager.instance_id
+    assert ir.async_get(c.hass).async_get_issue(DOMAIN, f"{ISSUE_OWNER_CONFLICT_PREFIX}{device_id}") is not None
+
+
+async def test_marker_naming_the_offline_pinned_owner_repins(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: the narrow rule has a positive side: the marker names the pinned owner and the roster says it is gone."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    await a.stop()
+    await _settle(a, b, c)
+
+    _foreign_document(
+        fake_broker,
+        c.manager.mirrors[device_id].spec,
+        owner="newcomer",
+        rev=9,
+        transferred_from=[a.manager.instance_id],
+    )
+    await _settle(a, b, c)
+
+    mirror = c.manager.mirrors[device_id].mirror
+    assert mirror is not None
+    assert (mirror.owner, mirror.rev) == ("newcomer", 9)
+    assert ir.async_get(c.hass).async_get_issue(DOMAIN, f"{ISSUE_OWNER_CONFLICT_PREFIX}{device_id}") is None
+
+
+async def test_forged_marker_cannot_repin_when_the_owner_is_online(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-49: a forged document that names the pinned owner changes nothing while the roster shows it online."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    pinned = c.manager.mirrors[device_id].spec
+    assert c.manager.presence.owner_offline(a.manager.instance_id) is False
+    evil = make_spec(device_id=device_id, name="Lamp", on=[{"action": "test.evil"}])
+
+    _foreign_document(fake_broker, evil, owner="forger", rev=7, transferred_from=[a.manager.instance_id])
+    await _settle(a, b, c)
+
+    mirror = c.manager.mirrors[device_id]
+    assert mirror.mirror is not None
+    assert mirror.mirror.owner == a.manager.instance_id
+    assert mirror.spec == pinned
+
+
+async def test_chain_of_adoptions_keeps_the_history(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: A to B to C names A and B in that order, and a follower pinned to B re-pins to C when B is offline."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    await a.stop()
+    await _settle(a, b, c)
+    await b.manager.async_adopt(device_id)
+    await _settle(a, b, c)
+    d = await make_instance("delta")
+    await _settle(a, b, c, d)
+    mirror_d = d.manager.mirrors[device_id].mirror
+    assert mirror_d is not None
+    assert mirror_d.owner == b.manager.instance_id
+    mirror_c = c.manager.mirrors[device_id].mirror
+    assert mirror_c is not None
+    assert await c.manager.async_approve(device_id, mirror_c.actions_hash) is True
+    await b.stop()
+    await _settle(a, b, c, d)
+
+    await c.manager.async_adopt(device_id)
+    await _settle(a, b, c, d)
+
+    document = _retained_document(fake_broker, device_id)
+    assert document["owner"] == c.manager.instance_id
+    assert document["transferred_from"] == [a.manager.instance_id, b.manager.instance_id]
+    pinned = d.manager.mirrors[device_id].mirror
+    assert pinned is not None
+    assert pinned.owner == c.manager.instance_id
+    assert ir.async_get(d.hass).async_get_issue(DOMAIN, f"{ISSUE_OWNER_CONFLICT_PREFIX}{device_id}") is None
+
+
+async def test_history_keeps_only_the_newest_eight(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable
+) -> None:
+    """T-04-52: a ninth transfer drops the oldest entry and the newest stays last."""
+    b = await make_instance("beta", hass=hass)
+    spec = make_spec(name="Lamp", on=[{"action": "test.on"}])
+    history = [f"old-{number}" for number in range(8)]
+    _foreign_document(fake_broker, spec, owner="owner-x", rev=4, transferred_from=history)
+    await _settle(b)
+    mirror = b.manager.mirrors[spec.device_id].mirror
+    assert mirror is not None
+    assert await b.manager.async_approve(spec.device_id, mirror.actions_hash) is True
+
+    await b.manager.async_adopt(spec.device_id, force=True)
+    await _settle(b)
+
+    document = _retained_document(fake_broker, spec.device_id)
+    assert document["transferred_from"] == [*history[1:], "owner-x"]
+    assert document["rev"] == 5
+    assert len(document["transferred_from"]) == 8
+
+
+async def test_follower_that_was_offline_during_the_adoption(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: a follower that starts after the adoption mirrors the adopted document directly, without a conflict."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    await a.stop()
+    await _settle(a, b, c)
+    await b.manager.async_adopt(device_id)
+    await _settle(a, b, c)
+
+    d = await make_instance("delta")
+    await _settle(a, b, c, d)
+
+    mirror = d.manager.mirrors[device_id].mirror
+    assert mirror is not None
+    assert mirror.owner == b.manager.instance_id
+    assert mirror.transferred_from == (a.manager.instance_id,)
+    assert ir.async_get(d.hass).async_get_issue(DOMAIN, f"{ISSUE_OWNER_CONFLICT_PREFIX}{device_id}") is None
+
+
+async def test_failed_subentry_add_restores_the_mirror(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-53: when the subentry cannot be added the mirror, its approval and its baseline come back."""
+    a, b, c, device_id, on_calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    off_calls = async_mock_service(b.hass, "test", "off")
+    await a.stop()
+    await _settle(a, b, c)
+
+    with (
+        patch.object(b.hass.config_entries, "async_add_subentry", side_effect=HomeAssistantError("refused")),
+        pytest.raises(HomeAssistantError),
+    ):
+        await b.manager.async_adopt(device_id)
+    await _settle(a, b, c)
+
+    assert device_id in b.manager.mirrors
+    assert device_id not in b.manager.devices
+    assert b.manager.approval_state(device_id) == "approved"
+    assert b.manager._transfers == {}
+    assert device_id not in b.manager._revs
+    assert b.manager.mirrors[device_id].tracker.last_acted == "ON"
+    fake_broker.publish(state_topic(BASE, device_id), "OFF", retain=True)
+    await _settle(a, b, c)
+    assert (len(on_calls["beta"]), len(off_calls)) == (1, 1)
+
+
+async def test_repin_keeps_the_breaker_and_the_script_of_an_unchanged_mirror(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09, D-15: following a new owner with the same content releases no tripped breaker and rebuilds no Script."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    mirror_c = c.manager.mirrors[device_id].mirror
+    assert mirror_c is not None
+    assert await c.manager.async_approve(device_id, mirror_c.actions_hash) is True
+    device_c = c.manager.mirrors[device_id]
+    device_c.breaker.trip()
+    breaker = device_c.breaker
+    await a.stop()
+    await _settle(a, b, c)
+
+    await b.manager.async_adopt(device_id)
+    await _settle(a, b, c)
+
+    info = c.manager.mirrors[device_id].mirror
+    assert info is not None
+    assert info.owner == b.manager.instance_id
+    assert c.manager.mirrors[device_id] is device_c
+    assert device_c.breaker is breaker
+    assert device_c.breaker.tripped is True
+    assert c.manager.runner.script_count(device_id) == 1
+    assert c.manager.approval_state(device_id) == "approved"

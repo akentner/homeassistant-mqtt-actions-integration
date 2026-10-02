@@ -16,7 +16,8 @@
     },
     "error": {
       "invalid_base_topic": "Das Basis-Topic darf nicht leer sein, kein # oder + enthalten, nicht mit einem Schrägstrich beginnen oder enden, keine leeren Ebenen enthalten und nicht mit $ beginnen.",
-      "instance_name_required": "Der Instanzname darf nicht leer sein."
+      "instance_name_required": "Der Instanzname darf nicht leer sein.",
+      "instance_name_invalid": "Der Instanzname darf nur druckbare Zeichen enthalten und höchstens 64 Zeichen lang sein."
     },
     "abort": {
       "mqtt_required": "Die MQTT-Integration muss zuerst eingerichtet werden.",
@@ -53,6 +54,14 @@
           }
         },
         "reconfigure": {
+          "title": "Schalter-Gerät",
+          "description": "Bearbeite die Aktionen und Einstellungen dieses Schalter-Geräts oder lösche das Gerät.",
+          "menu_options": {
+            "edit_device": "Gerät bearbeiten",
+            "delete_device": "Gerät löschen"
+          }
+        },
+        "edit_device": {
           "title": "Schalter-Gerät bearbeiten",
           "description": "Geänderte Aktionen ersetzen die alten. Das Gerät selbst und seine Topics bleiben gleich.",
           "data": {
@@ -73,17 +82,27 @@
             "breaker_max_runs": "Der Schutzschalter pausiert das Gerät, wenn es seine Aktionen innerhalb des Zeitfensters öfter als so oft ausführen würde. Freigeben heißt, das Gerät zu ändern oder die Integration neu zu laden. Ganze Zahl von 1 bis 100.",
             "breaker_window": "Länge des Zeitfensters des Schutzschalters in Sekunden. Ganze Zahl von 1 bis 3600."
           }
+        },
+        "delete_device": {
+          "title": "Gerät löschen?",
+          "description": "Das Gerät {name} löschen? Es wird auf allen verbundenen Instanzen entfernt, nicht nur auf dieser. Derzeit online befindliche andere Instanzen: {count}. Sie verlieren das Gerät ebenfalls, und Instanzen, die offline sind, verlieren es, sobald sie wieder verbunden sind. Die retained Konfiguration, die Discovery und der Zustand des Geräts werden vom Broker gelöscht. Das lässt sich nicht rückgängig machen.",
+          "menu_options": {
+            "delete_confirmed": "Ja, Gerät auf allen Instanzen löschen",
+            "keep_device": "Nein, Gerät behalten"
+          }
         }
       },
       "error": {
         "name_required": "Der Name darf nicht leer sein.",
+        "name_invalid": "Der Name darf nur druckbare Zeichen enthalten und höchstens 64 Zeichen lang sein.",
         "invalid_actions": "Die Aktionen in {field} sind ungültig: {error}",
         "device_id_warning": "Diese Geräte-IDs gibt es nur auf dieser Home-Assistant-Instanz: {device_ids}. Andere Instanzen können sie nicht auflösen, deshalb würden die Aktionen dort fehlschlagen. Sende erneut, um trotzdem zu speichern, oder wechsle auf Entitäts-, Bereichs- oder Label-Ziele.",
         "breaker_max_runs_range": "Gib eine ganze Zahl von 1 bis 100 ein.",
         "breaker_window_range": "Gib eine ganze Zahl von Sekunden von 1 bis 3600 ein."
       },
       "abort": {
-        "reconfigure_successful": "Das Schalter-Gerät wurde aktualisiert."
+        "reconfigure_successful": "Das Schalter-Gerät wurde aktualisiert.",
+        "device_deleted": "Das Gerät wurde gelöscht. Verbundene Instanzen entfernen es ebenfalls."
       }
     },
     "select": {
@@ -136,7 +155,8 @@
             "edit_option": "Option bearbeiten",
             "remove_option": "Option entfernen",
             "settings": "Name und Einstellungen bearbeiten",
-            "done": "Gerät speichern"
+            "done": "Gerät speichern",
+            "delete_device": "Gerät löschen"
           }
         },
         "add_option": {
@@ -186,10 +206,19 @@
             "remove_confirmed": "Ja, Option entfernen",
             "keep_option": "Nein, Option behalten"
           }
+        },
+        "delete_device": {
+          "title": "Gerät löschen?",
+          "description": "Das Gerät {name} löschen? Es wird auf allen verbundenen Instanzen entfernt, nicht nur auf dieser. Derzeit online befindliche andere Instanzen: {count}. Sie verlieren das Gerät ebenfalls, und Instanzen, die offline sind, verlieren es, sobald sie wieder verbunden sind. Die retained Konfiguration, die Discovery und der Zustand des Geräts werden vom Broker gelöscht. Das lässt sich nicht rückgängig machen.",
+          "menu_options": {
+            "delete_confirmed": "Ja, Gerät auf allen Instanzen löschen",
+            "keep_device": "Nein, Gerät behalten"
+          }
         }
       },
       "error": {
         "name_required": "Der Name darf nicht leer sein.",
+        "name_invalid": "Der Name darf nur druckbare Zeichen enthalten und höchstens 64 Zeichen lang sein.",
         "invalid_actions": "Die Aktionen in {field} sind ungültig: {error}",
         "device_id_warning": "Diese Geräte-IDs gibt es nur auf dieser Home-Assistant-Instanz: {device_ids}. Andere Instanzen können sie nicht auflösen, deshalb würden die Aktionen dort fehlschlagen. Sende erneut, um trotzdem zu speichern, oder wechsle auf Entitäts-, Bereichs- oder Label-Ziele.",
         "state_value_required": "Der Zustandswert darf nicht leer sein.",
@@ -203,7 +232,22 @@
         "breaker_window_range": "Gib eine ganze Zahl von Sekunden von 1 bis 3600 ein."
       },
       "abort": {
-        "reconfigure_successful": "Das Auswahl-Gerät wurde aktualisiert."
+        "reconfigure_successful": "Das Auswahl-Gerät wurde aktualisiert.",
+        "device_deleted": "Das Gerät wurde gelöscht. Verbundene Instanzen entfernen es ebenfalls."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MQTT-Actions-Optionen",
+        "description": "Lege fest, was mit deinen Geräten passiert, wenn du diese Integration entfernst. Die Auswahl wird beim Entfernen gelesen, stelle sie also vor dem Entfernen der Integration ein.",
+        "data": {
+          "delete_devices_on_remove": "Alle Geräte löschen, wenn diese Integration entfernt wird"
+        },
+        "data_description": {
+          "delete_devices_on_remove": "Standardmäßig aus: Beim Entfernen dieser Integration bleiben alle ihre Geräte und deren retained Nachrichten auf dem Broker, und andere Instanzen behalten sie als verwaiste Geräte, die als nicht verfügbar angezeigt werden. An: Beim Entfernen dieser Integration werden alle auf dieser Instanz erstellten Geräte vom Broker und von jeder verbundenen Instanz gelöscht."
+        }
       }
     }
   },
@@ -219,6 +263,51 @@
     "circuit_breaker_tripped": {
       "title": "Ein Gerät wurde vom Schutzschalter pausiert",
       "description": "{device} hat seine Aktionen öfter als {max_runs} Mal innerhalb von {window} Sekunden ausgeführt. Meist ändert dann eine Aktion den Zustand ihres eigenen Geräts und löst sich dadurch immer wieder selbst aus. MQTT Actions hat deshalb die laufenden Aktionen gestoppt und das Gerät pausiert. Änderungen am Status-Topic aktualisieren die Entität weiterhin, aber es laufen keine Aktionen, bis das Gerät freigegeben wird. Ändere dazu die Einstellungen des Geräts oder lade die Integration neu. Das Speichern des Geräts ohne eine Änderung gibt es nicht frei."
+    },
+    "doc_overwritten": {
+      "title": "Die gemeinsame Konfiguration eines Geräts wurde überschrieben",
+      "description": "Etwas anderes als diese Instanz hat die gemeinsame Konfiguration von {device} auf dem MQTT-Broker geändert oder gelöscht. Diese Instanz ist die Besitzerin von {device} und hat ihre eigene Konfiguration deshalb erneut veröffentlicht. Prüfe, wer auf dem Broker in die Topics von MQTT Actions schreiben darf, und beschränke den Schreibzugriff auf die besitzende Instanz."
+    },
+    "ownership_claim": {
+      "title": "Eine andere Instanz beansprucht ein Gerät, das dir gehört",
+      "description": "Die Instanz {claimant} hat eine Konfiguration für {device} veröffentlicht, das dieser Instanz gehört. Diese Instanz bleibt die Besitzerin und hat ihre eigene Konfiguration erneut veröffentlicht. Eine Übernahme gibt es nicht: Nur die Besitzerin kann ein Gerät bearbeiten oder löschen."
+    },
+    "discovery_removed": {
+      "title": "Die Entitäten eines Geräts wurden wiederholt entfernt",
+      "description": "Die Entitäten von {device} wurden in letzter Zeit {count} Mal entfernt, zum Beispiel durch das Löschen einer Entität auf einer anderen Home-Assistant-Instanz. Diese Instanz hat die Discovery jedes Mal erneut veröffentlicht. Das Löschen einer Entität auf einer Instanz entfernt sie auf jeder Instanz. Lösche daher das Gerät selbst, wenn du es nicht mehr möchtest."
+    },
+    "owner_conflict": {
+      "title": "Eine andere Instanz beansprucht ein Gerät, dem du folgst",
+      "description": "Das Gerät {device} gehört {owner}. Eine andere Instanz namens {claimant} hat ebenfalls eine Konfiguration dafür veröffentlicht. Diese Instanz folgt weiterhin {owner} und ignoriert den anderen Anspruch. Prüfe die Zugriffsrechte der Instanzen auf dem MQTT-Broker, damit jede Instanz nur ihre eigenen Geräte schreiben kann."
+    },
+    "schema_too_new": {
+      "title": "Eine gemeinsame Gerätekonfiguration benötigt eine neuere Integration",
+      "description": "Die gemeinsame Konfiguration von {device} verwendet die Formatversion {version}, diese Integration versteht aber nur Versionen bis {supported}. Das Gerät behält seine zuletzt bekannten Einstellungen. Aktualisiere MQTT Actions auf dieser Instanz, um Änderungen zu erhalten."
+    },
+    "approval_required": {
+      "title": "Ein Gerät einer anderen Instanz möchte hier Aktionen ausführen",
+      "description": "Das Gerät {device} von {owner} möchte auf dieser Instanz Aktionen ausführen (Hash-Anfang {hash}). Die Aktionen laufen erst, wenn du sie freigibst. Öffne diese Reparatur, um sie zu prüfen.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Aktionen eines Geräts einer anderen Instanz freigeben",
+            "description": "Du gibst gleich das Gerät **{device}** der Instanz **{owner}** frei.\n\nDie folgenden Aktionen laufen auf dieser Home-Assistant-Instanz mit vollem Zugriff, sobald sich der Zustand des Geräts ändert. Ist „Beim Start ausführen“ aktiv, laufen sie außerdem beim ersten empfangenen Zustand nach jedem Start von Home Assistant, jedem Neuladen der Integration und jeder Wiederverbindung zum Broker.\n\nBeim Start ausführen: **{startup}**\n\n```yaml\n{actions}\n```\n\nTemplatebasierte Servicenamen (der echte Service steht erst fest, wenn die Aktion läuft):\n\n{templated}\n\nSchritte, die Skripte, Automationen, Szenen, Buttons, Geräteaktionen oder Ereignisse aufrufen oder etwas allgemein ein- oder ausschalten (diese sind nicht eingeschränkt):\n\n{residual}\n\nTrigger, deren Aktionen auf dieser Instanz nicht gültig sind:\n\n{invalid}\n\nDiese Freigabe ist an den Hash {hash} gebunden. Sie erlischt, wenn die Besitzerin die Aktionen ändert, und du wirst erneut gefragt. Es läuft nichts, bis du bestätigst."
+          }
+        },
+        "abort": {
+          "changed": "Die Aktionen haben sich geändert, während dieser Dialog offen war, daher wurde nichts freigegeben. Öffne die neue Anfrage in den Reparaturen, um die geänderten Aktionen zu prüfen.",
+          "too_large": "Die Aktionen sind zu lang, um sie hier zu prüfen. Es wurde nichts freigegeben und das Gerät bleibt pausiert.",
+          "not_loaded": "MQTT Actions ist nicht geladen, daher kann nichts freigegeben werden. Versuche es erneut, wenn die Integration läuft."
+        }
+      }
+    },
+    "mirror_blocked": {
+      "title": "Ein Gerät einer anderen Instanz ist gesperrt",
+      "description": "Das Gerät {device} von {owner} verwendet Services, die für Aktionen von anderen Instanzen nie erlaubt sind ({services}). Es ist pausiert und kann nicht freigegeben werden. Bitte die Besitzerin, diese Services aus dem Gerät zu entfernen."
+    },
+    "denied_service_call": {
+      "title": "Eine Aktion einer anderen Instanz wurde gestoppt",
+      "description": "Ein Lauf von {trigger} von {device} wurde gestoppt, weil ein templatebasierter Servicename zum verbotenen Service {service} aufgelöst wurde. Aktionen von anderen Instanzen dürfen diesen Service nie aufrufen."
     }
   },
   "selector": {

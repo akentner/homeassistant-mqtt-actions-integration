@@ -116,6 +116,18 @@ async def test_hub_flow_rejects_invalid_base_topic(hass: HomeAssistant, mqtt_moc
     assert hass.config_entries.async_entries(DOMAIN) == []
 
 
+@pytest.mark.parametrize("bad_name", ["n" * 65, "a\nb"])
+async def test_hub_flow_rejects_unparseable_instance_name(hass: HomeAssistant, mqtt_mock, bad_name: str) -> None:
+    """CR-03: a name the document parser rejects would make every document of the instance unreadable."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_BASE_TOPIC: "mqtt_actions", CONF_INSTANCE_NAME: bad_name}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"instance_name": "instance_name_invalid"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
 async def test_hub_flow_rejects_blank_instance_name(hass: HomeAssistant, mqtt_mock) -> None:
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
     result = await hass.config_entries.flow.async_configure(
@@ -216,6 +228,16 @@ async def test_switch_flow_rejects_blank_name(hass: HomeAssistant, hub) -> None:
     assert len(hub.subentries) == 0
 
 
+@pytest.mark.parametrize("bad_name", ["x" * 65, "a\tb"])
+async def test_switch_flow_rejects_unparseable_name(hass: HomeAssistant, hub, bad_name: str) -> None:
+    """CR-03: a device name the document parser rejects is refused in the form."""
+    result = await _start_switch_flow(hass, hub)
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], _switch_input(name=bad_name))
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"name": "name_invalid"}
+    assert len(hub.subentries) == 0
+
+
 async def test_switch_flow_device_id_warns_then_saves_on_resubmit(hass: HomeAssistant, hub) -> None:
     result = await _start_switch_flow(hass, hub)
     flow_id = result["flow_id"]
@@ -254,10 +276,14 @@ async def test_switch_flow_entity_targets_do_not_warn(hass: HomeAssistant, hub) 
 
 
 async def _reconfigure_flow(hass: HomeAssistant, entry, subentry) -> dict[str, Any]:
-    return await hass.config_entries.subentries.async_init(
+    """Start the Switch reconfigure flow; it opens a menu (D-16) and the edit form is its first item."""
+    menu = await hass.config_entries.subentries.async_init(
         (entry.entry_id, SUBENTRY_SWITCH),
         context={"source": SOURCE_RECONFIGURE, "subentry_id": subentry.subentry_id},
     )
+    assert menu["type"] is FlowResultType.MENU
+    assert menu["step_id"] == "reconfigure"
+    return await hass.config_entries.subentries.async_configure(menu["flow_id"], {"next_step_id": "edit_device"})
 
 
 @pytest.fixture
@@ -278,7 +304,7 @@ async def test_switch_reconfigure_replaces_actions_and_keeps_device_id(hass: Hom
 
     result = await _reconfigure_flow(hass, entry, subentry)
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "reconfigure"
+    assert result["step_id"] == "edit_device"
     prefill = _suggested_values(result)
     assert prefill["name"] == "Lamp"
     assert prefill[CONF_ON_CHANGE_TO_ON] == ON_ACTIONS

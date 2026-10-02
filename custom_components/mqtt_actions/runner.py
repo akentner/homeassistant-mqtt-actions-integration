@@ -11,12 +11,16 @@ from .actions import ActionsInvalid, async_validate_actions
 from .const import (
     DOMAIN,
     ISSUE_ACTION_FAILED_PREFIX,
+    ISSUE_DENIED_CALL_PREFIX,
     LOGGER,
     MAX_ISSUE_ERROR_LENGTH,
+    MAX_LOGGED_PAYLOAD_LENGTH,
     RUN_MODE_SERIAL,
     SERIAL_QUEUE_LIMIT,
     TRIGGER_SETUP,
 )
+from .document import DocumentRejectedError, analyze_actions, escape_markdown
+from .trust import DeniedServiceCallError, guard_actions
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -38,10 +42,16 @@ class ActionRunner:
         self._runnable: dict[str, frozenset[str]] = {}
         # device id -> number of runs enqueued so far; a run may clear the failure issue only while it is the latest
         self._generation: dict[str, int] = {}
+        # Devices whose current Script was built restricted (mirrors); their broker-supplied text is escaped in issues
+        self._restricted: set[str] = set()
 
-    async def async_build_device(self, spec: DeviceSpec) -> None:
+    async def async_build_device(self, spec: DeviceSpec, *, restricted: bool = False) -> None:
         """
         Build the one Script of the device and replace the previous one.
+
+        A restricted build is for a mirror (D-03, D-05): a trigger with a statically denied service is not runnable and
+        the service-name templates of the others are guarded, so a name that resolves to a denied service stops the run.
+        Owned devices are built unrestricted.
 
         Every trigger's actions are validated on their own; invalid ones are logged and shown in Repairs (trigger
         setup) and that trigger is left out while the others and the baseline tracking keep working. The runnable
@@ -54,22 +64,43 @@ class ActionRunner:
             if not trigger.actions:
                 continue
             try:
+                if restricted:
+                    self._refuse_denied(trigger)
                 await async_validate_actions(self._hass, trigger.actions)
             except ActionsInvalid as err:
-                self._report_setup_error(spec, trigger.label, err)
+                self._report_setup_error(spec, trigger.label, err, restricted=restricted)
                 continue
             runnable.append(trigger)
-        script = await self._async_build_script(spec, runnable) if runnable else None
+        script = await self._async_build_script(spec, runnable, restricted=restricted) if runnable else None
         previous = self._scripts.pop(spec.device_id, None)
         if script is None:
             self._runnable.pop(spec.device_id, None)
+            self._restricted.discard(spec.device_id)
         else:
             self._scripts[spec.device_id] = script
             self._runnable[spec.device_id] = frozenset(trigger.key for trigger in runnable)
+            if restricted:
+                self._restricted.add(spec.device_id)
+            else:
+                self._restricted.discard(spec.device_id)
         if previous is not None:
             await previous.async_unload()
 
-    async def _async_build_script(self, spec: DeviceSpec, runnable: list[TriggerSpec]) -> Script | None:
+    @staticmethod
+    def _refuse_denied(trigger: TriggerSpec) -> None:
+        """Raise ActionsInvalid naming the denied services of a trigger; a tree that cannot be walked is refused too."""
+        try:
+            denied = analyze_actions(trigger.actions).denied
+        except DocumentRejectedError as err:
+            msg = f"the actions cannot be checked ({err.reason})"
+            raise ActionsInvalid(msg) from err
+        if denied:
+            msg = f"service {', '.join(denied)[: MAX_LOGGED_PAYLOAD_LENGTH * 2]} is not allowed for mirrored actions"
+            raise ActionsInvalid(msg)
+
+    async def _async_build_script(
+        self, spec: DeviceSpec, runnable: list[TriggerSpec], *, restricted: bool
+    ) -> Script | None:
         """Assemble and validate the combined sequence and build the Script; None when the assembly is invalid."""
         # Only the hashed hex key enters a template, never option names or user text (T-02-07)
         sequence = [
@@ -88,8 +119,10 @@ class ActionRunner:
         try:
             validated = await async_validate_actions(self._hass, sequence)
         except ActionsInvalid as err:
-            self._report_setup_error(spec, TRIGGER_SETUP, err)
+            self._report_setup_error(spec, TRIGGER_SETUP, err, restricted=restricted)
             return None
+        if restricted:
+            validated = guard_actions(validated)
         return Script(
             self._hass,
             validated,
@@ -101,11 +134,11 @@ class ActionRunner:
             logger=LOGGER,
         )
 
-    def _report_setup_error(self, spec: DeviceSpec, label: str, err: ActionsInvalid) -> None:
+    def _report_setup_error(self, spec: DeviceSpec, label: str, err: ActionsInvalid, *, restricted: bool) -> None:
         """Log invalid stored actions and show them in Repairs under trigger setup."""
         error = str(err)[:MAX_ISSUE_ERROR_LENGTH]
         LOGGER.error("Invalid actions for %s of device %s: %s", label, spec.name, error)
-        self.report_failure(spec.device_id, spec.name, TRIGGER_SETUP, error)
+        self.report_failure(spec.device_id, spec.name, TRIGGER_SETUP, error, escape=restricted)
 
     def can_run(self, device_id: str, key: str) -> bool:
         """Return True when the trigger of the device is part of the device's Script."""
@@ -151,6 +184,7 @@ class ActionRunner:
                 script=script,
                 generation=generation,
                 run_variables={**run_variables, "trigger_key": trigger_key, "test": test},
+                restricted=device_id in self._restricted,
             ),
             name=f"{DOMAIN} {script.name}",
         )
@@ -164,6 +198,7 @@ class ActionRunner:
         script: Script,
         generation: int,
         run_variables: dict[str, Any],
+        restricted: bool,
     ) -> None:
         """
         Run the device's Script once; the Script mode queues or restarts.
@@ -173,21 +208,41 @@ class ActionRunner:
 
         A restart-cancelled or unloaded run ends as a cancelled task: CancelledError is a BaseException and is never
         caught here, so it creates neither an issue nor an error log (D-11).
+
+        A service name that resolved to a denied service stops the run of a restricted Script (D-05); it is logged with
+        device, trigger and service name and shown in Repairs, never with action data.
         """
         if self._scripts.get(device_id) is not script:
             return  # The device was unloaded or rebuilt before this run started
         try:
             result = await script.async_run(run_variables, Context())
+        except DeniedServiceCallError as err:
+            LOGGER.warning(
+                "Actions for %s of device %s were stopped: the service %s is not allowed for mirrored actions",
+                trigger_label,
+                device_name,
+                err.service[:MAX_LOGGED_PAYLOAD_LENGTH],
+            )
+            self.report_denied(device_id, device_name, trigger_label, err.service)
         except Exception as err:  # noqa: BLE001
             # Only device and trigger names are logged, never the action data (T-01-10)
             LOGGER.exception("Actions for %s of device %s failed", trigger_label, device_name)
-            self.report_failure(device_id, device_name, trigger_label, str(err))
+            self.report_failure(device_id, device_name, trigger_label, str(err), escape=restricted)
         else:
             if result is not None and self._generation.get(device_id) == generation:
                 self.clear_issue(device_id)
 
-    def report_failure(self, device_id: str, device_name: str, trigger: str, error: str) -> None:
-        """Create or update the one Repairs issue of a device; a dismissed issue stays dismissed (D-08, D-09)."""
+    def report_failure(
+        self, device_id: str, device_name: str, trigger: str, error: str, *, escape: bool = False
+    ) -> None:
+        """
+        Create or update the one Repairs issue of a device; a dismissed issue stays dismissed (D-08, D-09).
+
+        `escape` is set for a mirror, whose names and error text come from the broker and reach a markdown text.
+        """
+        error = error[:MAX_ISSUE_ERROR_LENGTH]
+        if escape:
+            device_name, trigger, error = escape_markdown(device_name), escape_markdown(trigger), escape_markdown(error)
         ir.async_create_issue(
             self._hass,
             DOMAIN,
@@ -199,7 +254,23 @@ class ActionRunner:
                 "device": device_name,
                 "trigger": trigger,
                 "time": dt_util.now().replace(microsecond=0).isoformat(),
-                "error": error[:MAX_ISSUE_ERROR_LENGTH],
+                "error": error,
+            },
+        )
+
+    def report_denied(self, device_id: str, device_name: str, trigger: str, service: str) -> None:
+        """Show that a run was stopped because a templated service name resolved to a denied service (D-05)."""
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            f"{ISSUE_DENIED_CALL_PREFIX}{device_id}",
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="denied_service_call",
+            translation_placeholders={
+                "device": escape_markdown(device_name),
+                "trigger": escape_markdown(trigger),
+                "service": escape_markdown(service[:MAX_LOGGED_PAYLOAD_LENGTH]),
             },
         )
 
@@ -221,6 +292,7 @@ class ActionRunner:
         """Unload the Script of a device, stopping its running and queued runs; a removed device loses its issue."""
         self._runnable.pop(device_id, None)
         self._generation.pop(device_id, None)
+        self._restricted.discard(device_id)
         if (script := self._scripts.pop(device_id, None)) is not None:
             await script.async_unload()
         if remove_issue:

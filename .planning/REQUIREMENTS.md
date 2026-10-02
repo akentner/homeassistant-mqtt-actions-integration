@@ -28,7 +28,7 @@
 
 - [x] **STA-01**: Switching a device in the HA UI on any instance publishes to the shared retained state topic (command topic equals state topic)
 - [x] **STA-02**: An external MQTT message on the state topic triggers the same actions as a UI change
-- [ ] **STA-03**: On a real state change, the actions run locally on every participating instance
+- [x] **STA-03**: On a real state change, the actions run locally on every participating instance
 - [x] **STA-04**: Retained state received at startup or reconnect only sets the baseline and runs no actions (optional per-device "run on startup" flag)
 - [x] **STA-05**: The last processed state per device is persisted; only real edges trigger actions
 - [x] **STA-06**: A per-device circuit breaker stops action loops caused by actions that toggle their own device
@@ -38,17 +38,17 @@
 
 - [x] **DSC-01**: The owner publishes MQTT Discovery for every entity (UUID `unique_id`, availability, device info)
 - [x] **DSC-02**: Discovery is removed only on explicit user deletion, never on unload or shutdown
-- [ ] **DSC-03**: The owner republishes discovery if it was removed by a follower deleting the entity
+- [x] **DSC-03**: The owner republishes discovery if it was removed by a follower deleting the entity
 - [ ] **DSC-04**: User can trigger a manual resync that republishes config and discovery of all owned devices
 
 ### Central Config & Ownership
 
-- [ ] **SYN-01**: The owner publishes one retained, versioned (`schema_version`) config document per device
-- [ ] **SYN-02**: Another HA instance reading the central config creates the same devices as read-only mirrors
-- [ ] **SYN-03**: Every device has one owner (its creator); only the owner can edit or delete it; followers pin the owner and raise a Repairs issue on conflicting claims
-- [ ] **SYN-04**: The owner reconciles and republishes its config on every MQTT reconnect
-- [ ] **SYN-05**: Followers never delete devices because a message is absent; removal is driven by tombstone or grace window
-- [ ] **SYN-06**: Deleting a device requires an explicit confirmation stating it is removed on all connected instances, then unpublishes central config and discovery
+- [x] **SYN-01**: The owner publishes one retained, versioned (`schema_version`) config document per device
+- [x] **SYN-02**: Another HA instance reading the central config creates the same devices as read-only mirrors
+- [x] **SYN-03**: Every device has one owner (its creator); only the owner can edit or delete it; followers pin the owner and raise a Repairs issue on conflicting claims
+- [x] **SYN-04**: The owner reconciles and republishes its config on every MQTT reconnect
+- [x] **SYN-05**: Followers never delete devices because a message is absent; removal is driven by tombstone or grace window
+- [x] **SYN-06**: Deleting a device requires an explicit confirmation stating it is removed on all connected instances, then unpublishes central config and discovery
 - [ ] **SYN-07**: User can transfer ownership of a device or adopt an orphaned device
 - [ ] **SYN-08**: User can export devices to JSON and import them
 - [ ] **SYN-09**: User can set per instance and device whether actions run, are only observed, or are disabled
@@ -56,10 +56,10 @@
 
 ### Trust & Security
 
-- [ ] **TRU-01**: Remote-provided actions are not executed by default (deny)
-- [ ] **TRU-02**: User can approve a remote device's actions per instance via Repairs; approval is bound to the action hash, so changed actions require re-approval
-- [ ] **TRU-03**: Every action sequence received from the broker is validated against the script schema, and a service denylist is enforced at execution time
-- [ ] **TRU-04**: Documentation includes a broker ACL example binding each instance to its own topics
+- [x] **TRU-01**: Remote-provided actions are not executed by default (deny)
+- [x] **TRU-02**: User can approve a remote device's actions per instance via Repairs; approval is bound to the action hash, so changed actions require re-approval
+- [x] **TRU-03**: Every action sequence received from the broker is validated against the script schema, and a service denylist is enforced at execution time
+- [x] **TRU-04**: Documentation includes a broker ACL example binding each instance to its own topics
 
 ### Operations
 
@@ -125,29 +125,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEV-08 | Phase 1 | Complete |
 | STA-01 | Phase 1 | Complete |
 | STA-02 | Phase 1 | Complete |
-| STA-03 | Phase 3 | Pending |
+| STA-03 | Phase 3 | Complete |
 | STA-04 | Phase 1 | Complete |
 | STA-05 | Phase 1 | Complete |
 | STA-06 | Phase 2 | Complete |
 | STA-07 | Phase 2 | Complete |
 | DSC-01 | Phase 1 | Complete |
 | DSC-02 | Phase 1 | Complete |
-| DSC-03 | Phase 3 | Pending |
+| DSC-03 | Phase 3 | Complete |
 | DSC-04 | Phase 4 | Pending |
-| SYN-01 | Phase 3 | Pending |
-| SYN-02 | Phase 3 | Pending |
-| SYN-03 | Phase 3 | Pending |
-| SYN-04 | Phase 3 | Pending |
-| SYN-05 | Phase 3 | Pending |
-| SYN-06 | Phase 3 | Pending |
+| SYN-01 | Phase 3 | Complete |
+| SYN-02 | Phase 3 | Complete |
+| SYN-03 | Phase 3 | Complete |
+| SYN-04 | Phase 3 | Complete |
+| SYN-05 | Phase 3 | Complete |
+| SYN-06 | Phase 3 | Complete |
 | SYN-07 | Phase 4 | Pending |
 | SYN-08 | Phase 4 | Pending |
 | SYN-09 | Phase 4 | Pending |
 | SYN-10 | Phase 4 | Pending |
-| TRU-01 | Phase 3 | Pending |
-| TRU-02 | Phase 3 | Pending |
-| TRU-03 | Phase 3 | Pending |
-| TRU-04 | Phase 3 | Pending |
+| TRU-01 | Phase 3 | Complete |
+| TRU-02 | Phase 3 | Complete |
+| TRU-03 | Phase 3 | Complete |
+| TRU-04 | Phase 3 | Complete |
 | OPS-01 | Phase 4 | Pending |
 | OPS-02 | Phase 4 | Pending |
 | OPS-03 | Phase 4 | Pending |

@@ -17,6 +17,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions.const import (
+    CONF_DELETE_DEVICES_ON_REMOVE,
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     CONF_ON_CHANGE_TO_OFF,
@@ -32,7 +33,7 @@ from custom_components.mqtt_actions.const import (
     SUBENTRY_SWITCH,
 )
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY
-from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, state_topic
+from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -528,7 +529,12 @@ async def test_issue_and_log_do_not_leak_action_data(
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
 ) -> None:
-    """T-01-10: a canary in the action data reaches neither the log nor the issue variables."""
+    """
+    T-01-10: a canary in the action data reaches neither this integration's log nor the issue variables.
+
+    The config document (SYN-01) carries the actions by design, so core MQTT's own debug line for the publish is not
+    part of what this integration logs.
+    """
     canary = "CANARY-7f3a91-secret"
     _register_failing_service(hass, "boom")
     sub = make_switch_subentry("Lamp", on=[{"action": "test.fail", "data": {"message": canary}}])
@@ -537,7 +543,11 @@ async def test_issue_and_log_do_not_leak_action_data(
         await _fire(hass, entry, _device_id(sub), "ON", retain=False)
 
     (issue,) = _issues(hass)
-    assert canary not in caplog.text
+    own_log = "\n".join(
+        record.getMessage() for record in caplog.records if record.name.startswith("custom_components.mqtt_actions")
+    )
+    assert own_log
+    assert canary not in own_log
     assert canary not in repr(issue.translation_placeholders)
 
 
@@ -854,22 +864,29 @@ async def test_reconcile_change_clears_or_reraises_setup_issue(
 # --- explicit delete (DSC-02, D-16) --------------------------------------------------------------------------------
 
 
-async def test_delete_device_clears_discovery_then_state(
+async def test_delete_clears_discovery_then_unsubscribes_then_config_tombstone_then_state(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
 ) -> None:
-    """D-16: discovery is cleared first, then the subscription ends, then the retained state is cleared."""
+    """D-16: discovery is cleared first, then the subscription ends, then the config tombstone, then the state."""
     sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
     device_id = _device_id(sub)
     entry = await _setup(hass, make_hub_entry([sub]))
     events = _record_events(entry)
     discovery = discovery_topic("homeassistant", device_id)
+    config = config_topic(STATE_TOPIC_BASE, device_id)
     state = state_topic(STATE_TOPIC_BASE, device_id)
 
     hass.config_entries.async_remove_subentry(entry, _only_subentry(entry).subentry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    assert events == [("publish", discovery, ""), ("unsubscribe",), ("publish", state, "")]
+    assert events == [
+        ("publish", discovery, ""),
+        ("unsubscribe",),
+        ("publish", config, ""),
+        ("publish", state, ""),
+    ]
     assert _publishes(mqtt_mock, discovery)[-1] == ("", 1, True)
+    assert _publishes(mqtt_mock, config)[-1] == ("", 1, True)
     assert _publishes(mqtt_mock, state)[-1] == ("", 1, True)
     assert device_id not in entry.runtime_data.devices
     # The mocked client skips a second retained message per topic and subscription, a real broker forwards the
@@ -996,11 +1013,11 @@ async def test_remove_entry_clears_all_owned_topics(
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
 ) -> None:
-    """D-15: removing the hub clears discovery, state and availability of every published and current device."""
+    """D-11: removing the hub with the delete option clears every published and current device and the availability."""
     sub = make_switch_subentry("Lamp", on=[{"not_an_action": True}])
     device_id = _device_id(sub)
     _preload_store(hass_storage, published=[ORPHAN_ID])
-    entry = await _setup(hass, make_hub_entry([sub]))
+    entry = await _setup(hass, make_hub_entry([sub], options={CONF_DELETE_DEVICES_ON_REMOVE: True}))
     instance_id = entry.data[CONF_INSTANCE_ID]
     assert _issue(hass, device_id) is not None
 
@@ -1028,7 +1045,10 @@ async def test_remove_entry_survives_unavailable_mqtt(
     make_switch_subentry: Callable,
 ) -> None:
     """T-01-14: with MQTT unavailable the removal still completes and only logs a warning."""
-    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+    entry = await _setup(
+        hass,
+        make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)], options={CONF_DELETE_DEVICES_ON_REMOVE: True}),
+    )
     assert await hass.config_entries.async_unload(entry.entry_id)
 
     with patch(
@@ -1050,7 +1070,7 @@ async def test_remove_entry_survives_mqtt_not_loaded(
 ) -> None:
     """An MQTT entry that exists but is not loaded (broker down at start) must not block the removal either."""
     MockConfigEntry(domain="mqtt", data={"broker": "mock-broker"}).add_to_hass(hass)
-    entry = make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)])
+    entry = make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)], options={CONF_DELETE_DEVICES_ON_REMOVE: True})
     entry.add_to_hass(hass)
     _preload_store(hass_storage, published=[ORPHAN_ID])
 

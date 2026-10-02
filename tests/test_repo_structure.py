@@ -112,6 +112,73 @@ def test_readme_documents_phase2_behavior() -> None:
     assert "only switch and select devices exist" in lowered
 
 
+def test_readme_documents_phase3_behavior() -> None:
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    lowered = text.lower()
+    phrases = (
+        "mirror",
+        "approval",
+        "repairs",
+        "denylist",
+        "tombstone",
+        "orphan",
+        "all connected instances",
+        "docs/broker-acl.md",
+        "no hub-wide switch",
+        # Phrases the Phase 1 and Phase 2 checks rely on
+        "5 runs in 10 seconds",
+        "only switch and select devices exist",
+        "test button",
+        "/test",
+        "acl",
+    )
+    for phrase in phrases:
+        assert phrase in lowered, f"README never mentions {phrase}"
+    headings = [line.lstrip("#").strip().lower() for line in text.splitlines() if line.startswith("#")]
+    for section in ("installation", "limitations", "security", "multiple instances", "trust model", "deleting devices"):
+        assert any(heading.startswith(section) for heading in headings), f"README has no {section} section"
+
+
+def test_readme_lists_every_denied_and_residual_service() -> None:
+    """The README names exactly what const.py denies or flags, so the documented trust boundary cannot drift (WR-03)."""
+    from custom_components.mqtt_actions.const import DENIED_DOMAINS, DENIED_SERVICES, RESIDUAL_SERVICES
+
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    for name in (*DENIED_DOMAINS, *DENIED_SERVICES, *RESIDUAL_SERVICES):
+        assert f"`{name}`" in text, f"README never lists {name}"
+    assert "best effort" in " ".join(text.lower().split())
+
+
+def test_docs_examples_use_no_device_id_targets() -> None:
+    fence = re.compile(r"^```[^\n]*\n(.*?)^```$", re.DOTALL | re.MULTILINE)
+    for document in (ROOT / "README.md", ROOT / "docs" / "broker-acl.md"):
+        blocks = fence.findall(document.read_text(encoding="utf-8"))
+        assert blocks, f"{document.name} has no fenced example at all"
+        for block in blocks:
+            assert "device_id" not in block, f"{document.name} has a device_id in a fenced example"
+
+
+def test_readme_no_longer_claims_single_instance_or_broker_never_supplies_actions() -> None:
+    lowered = " ".join((ROOT / "README.md").read_text(encoding="utf-8").lower().split())
+    stale = (
+        "works on a single home assistant instance",
+        "this release works on a single instance",
+        "there is no synchronization between instances",
+        "deletes all discovery and state topics this instance published",
+        "never taken from a broker message",
+    )
+    for sentence in stale:
+        assert sentence not in lowered, f"README still says: {sentence}"
+
+
+def test_acl_document_states_the_limits() -> None:
+    text = (ROOT / "docs" / "broker-acl.md").read_text(encoding="utf-8")
+    lowered = text.lower()
+    for phrase in ("cooperative", "approval", "/test", "discovery prefix", "secrets", "tls"):
+        assert phrase in lowered, f"docs/broker-acl.md never mentions {phrase}"
+    assert len(re.findall(r"^```acl$", text, re.MULTILINE)) == 1
+
+
 @workflow_files
 def test_workflows_have_empty_permissions(filename: str) -> None:
     workflow = _load_workflow(filename)

@@ -19,6 +19,8 @@ class IncomingMessage:
 
     payload: str
     retain: bool
+    # Empty for a message built without a topic; wildcard subscriptions identify the device or instance by it
+    topic: str = ""
 
 
 class MqttGateway:
@@ -44,7 +46,7 @@ class MqttGateway:
         @callback
         def _forward(msg: mqtt.ReceiveMessage) -> None:
             payload = msg.payload if isinstance(msg.payload, str) else msg.payload.decode(errors="replace")
-            message_callback(IncomingMessage(payload=payload, retain=msg.retain))
+            message_callback(IncomingMessage(payload=payload, retain=msg.retain, topic=msg.topic))
 
         return await mqtt.async_subscribe(self._hass, topic, _forward, qos)
 
@@ -73,6 +75,11 @@ class MqttGateway:
         if not entries:
             return {}
         return dict(entries[0].data | entries[0].options)
+
+    def mqtt_entry_id(self) -> str | None:
+        """Return the entry id of the first MQTT config entry, or None when there is none."""
+        entries = self._hass.config_entries.async_entries(mqtt.DOMAIN)
+        return entries[0].entry_id if entries else None
 
     def discovery_prefix(self) -> str:
         """Return the discovery prefix configured in the MQTT integration (D-04)."""

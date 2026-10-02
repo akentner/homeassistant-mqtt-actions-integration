@@ -9,10 +9,12 @@ import probatio
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentry,
     ConfigSubentryFlow,
+    OptionsFlow,
     SubentryFlowResult,
 )
 from homeassistant.core import callback
@@ -24,6 +26,7 @@ from .const import (
     CONF_BASE_TOPIC,
     CONF_BREAKER_MAX_RUNS,
     CONF_BREAKER_WINDOW,
+    CONF_DELETE_DEVICES_ON_REMOVE,
     CONF_DEVICE_ID,
     CONF_FRIENDLY_NAME,
     CONF_INSTANCE_ID,
@@ -45,7 +48,8 @@ from .const import (
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
-from .model import validate_breaker, validate_option
+from .document import escape_markdown
+from .model import invalid_name, validate_breaker, validate_option
 from .topics import InvalidBaseTopic, validate_base_topic
 
 if TYPE_CHECKING:
@@ -73,7 +77,9 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
     """
     Hub flow: one entry per Home Assistant instance, requires MQTT (D-11).
 
-    There is deliberately no reconfigure step: the base topic is baked into retained broker messages (D-01).
+    There is deliberately no reconfigure step: the base topic is baked into retained broker messages (D-01). What
+    happens to the devices when the hub is removed is chosen in the options flow beforehand, because Home Assistant
+    offers no hook or dialog during the removal itself (D-11).
     """
 
     VERSION = 1
@@ -93,6 +99,9 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors[CONF_BASE_TOPIC] = "invalid_base_topic"
             if not instance_name:
                 errors[CONF_INSTANCE_NAME] = "instance_name_required"
+            elif invalid_name(instance_name):
+                # The same rule the parser applies: a longer name would make every document of this instance unreadable
+                errors[CONF_INSTANCE_NAME] = "instance_name_invalid"
             if not errors:
                 return self.async_create_entry(
                     title=instance_name,
@@ -113,11 +122,41 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
             schema = self.add_suggested_values_to_schema(schema, user_input)
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> HubOptionsFlow:  # noqa: ARG004
+        """Return the options flow of the hub: the keep-or-delete choice for its removal (D-11)."""
+        return HubOptionsFlow()
+
     @classmethod
     @callback
     def async_get_supported_subentry_types(cls, config_entry: ConfigEntry) -> dict[str, type[ConfigSubentryFlow]]:  # noqa: ARG003
         """Return the subentry types this integration supports."""
         return {SUBENTRY_SWITCH: SwitchSubentryFlow, SUBENTRY_SELECT: SelectSubentryFlow}
+
+
+class HubOptionsFlow(OptionsFlow):
+    """
+    Choose what removing the hub does to the devices on the broker (D-11).
+
+    A plain options flow, not a reload-on-change one: saving the option triggers the update listener, whose reconcile
+    finds nothing to do. Nothing is published here; the choice is only read when the entry is removed.
+    """
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Show the delete choice, off by default, and store it."""
+        if user_input is not None:
+            return self.async_create_entry(
+                data={CONF_DELETE_DEVICES_ON_REMOVE: bool(user_input.get(CONF_DELETE_DEVICES_ON_REMOVE, False))}
+            )
+        schema = probatio.Schema(
+            {probatio.Optional(CONF_DELETE_DEVICES_ON_REMOVE, default=False): selector.BooleanSelector()}
+        )
+        stored = bool(self.config_entry.options.get(CONF_DELETE_DEVICES_ON_REMOVE, False))
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(schema, {CONF_DELETE_DEVICES_ON_REMOVE: stored}),
+        )
 
 
 class _DeviceSubentryFlow(ConfigSubentryFlow):
@@ -151,6 +190,34 @@ class _DeviceSubentryFlow(ConfigSubentryFlow):
                 self._confirmed_fingerprint = fingerprint
                 return {"base": "device_id_warning"}, {"device_ids": ", ".join(device_ids)}
         return {}, {}
+
+    def _online_instance_count(self) -> int:
+        """Return the number of other instances currently online; 0 while the hub entry is not loaded."""
+        entry = self._get_entry()
+        if entry.state is not ConfigEntryState.LOADED:
+            return 0
+        return int(entry.runtime_data.online_instance_count())
+
+    async def async_step_delete_device(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """
+        Ask whether the device really goes, on every connected instance and not only on this one (D-16, SYN-06).
+
+        This is the only door to `delete_confirmed`: a menu accepts only its own options, so the removal cannot be
+        reached without passing here. The generic Home Assistant delete cannot be vetoed and ends in the same removal.
+        """
+        return self.async_show_menu(
+            step_id="delete_device",
+            menu_options=["delete_confirmed", "keep_device"],
+            description_placeholders={
+                "name": escape_markdown(self._get_reconfigure_subentry().title),
+                "count": str(self._online_instance_count()),
+            },
+        )
+
+    async def async_step_delete_confirmed(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """Remove the subentry; the reconcile that follows clears the broker topics in the delete order (D-16)."""
+        self.hass.config_entries.async_remove_subentry(self._get_entry(), self._get_reconfigure_subentry().subentry_id)
+        return self.async_abort(reason="device_deleted")
 
     @staticmethod
     def _settings_fields() -> dict[Any, Any]:
@@ -200,9 +267,21 @@ class SwitchSubentryFlow(_DeviceSubentryFlow):
         """Ask for a name and the two action lists."""
         return await self._async_handle_form("user", user_input, None)
 
-    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """
+        Offer to edit or delete an existing switch (D-16).
+
+        The presence of this step is what makes Home Assistant offer reconfigure.
+        """
+        return self.async_show_menu(step_id="reconfigure", menu_options=["edit_device", "delete_device"])
+
+    async def async_step_edit_device(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         """Edit name, actions and startup flag of an existing switch; the device id stays."""
-        return await self._async_handle_form("reconfigure", user_input, self._get_reconfigure_subentry())
+        return await self._async_handle_form("edit_device", user_input, self._get_reconfigure_subentry())
+
+    async def async_step_keep_device(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """Leave the device alone and go back to the reconfigure menu."""
+        return await self.async_step_reconfigure()
 
     async def _async_handle_form(
         self,
@@ -218,6 +297,8 @@ class SwitchSubentryFlow(_DeviceSubentryFlow):
             name = user_input[CONF_NAME].strip()
             if not name:
                 errors[CONF_NAME] = "name_required"
+            elif invalid_name(name):
+                errors[CONF_NAME] = "name_invalid"
             errors.update(self._validate_settings(user_input))
             if not errors:
                 errors, placeholders = await self._async_check_actions(
@@ -328,6 +409,8 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
             name = user_input[CONF_NAME].strip()
             if not name:
                 errors[CONF_NAME] = "name_required"
+            elif invalid_name(name):
+                errors[CONF_NAME] = "name_invalid"
             errors.update(self._validate_settings(user_input))
             if not errors:
                 self._draft.update({CONF_NAME: name, **self._coerce_settings(user_input)})
@@ -358,14 +441,18 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
         menu_options.append("settings")
         if len(options) >= MIN_OPTIONS:
             menu_options.append("done")
+        # Deleting needs a stored device, so only the reconfigure menu offers it (D-16)
+        if self.source == SOURCE_RECONFIGURE:
+            menu_options.append("delete_device")
         return self.async_show_menu(
             step_id="menu",
             menu_options=menu_options,
             description_placeholders={
-                "name": self._draft[CONF_NAME],
+                "name": escape_markdown(self._draft[CONF_NAME]),
                 "count": str(len(options)),
                 "options": "\n".join(
-                    f"- {option[CONF_FRIENDLY_NAME]} ({option[CONF_STATE_VALUE]})" for option in options
+                    f"- {escape_markdown(option[CONF_FRIENDLY_NAME])} ({escape_markdown(option[CONF_STATE_VALUE])})"
+                    for option in options
                 ),
             },
         )
@@ -485,7 +572,7 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
             step_id="edit_option_details",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
             errors=errors,
-            description_placeholders={**placeholders, "state_value": option[CONF_STATE_VALUE]},
+            description_placeholders={**placeholders, "state_value": escape_markdown(option[CONF_STATE_VALUE])},
         )
 
     async def async_step_remove_option(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
@@ -506,8 +593,8 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
             step_id="remove_confirm",
             menu_options=["remove_confirmed", "keep_option"],
             description_placeholders={
-                "friendly_name": option[CONF_FRIENDLY_NAME],
-                "state_value": option[CONF_STATE_VALUE],
+                "friendly_name": escape_markdown(option[CONF_FRIENDLY_NAME]),
+                "state_value": escape_markdown(option[CONF_STATE_VALUE]),
             },
         )
 
@@ -522,6 +609,10 @@ class SelectSubentryFlow(_DeviceSubentryFlow):
     async def async_step_keep_option(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
         """Leave the option alone and go back to the menu."""
         self._selected = None
+        return await self.async_step_menu()
+
+    async def async_step_keep_device(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:  # noqa: ARG002
+        """Leave the device alone and go back to the menu with the draft as it was."""
         return await self.async_step_menu()
 
     async def async_step_done(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:

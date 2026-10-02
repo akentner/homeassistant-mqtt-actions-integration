@@ -28,6 +28,7 @@ SWITCH_FORM_FIELDS = (
 SELECT_SETTINGS_FIELDS = ("name", "run_on_startup", "run_mode", "breaker_max_runs", "breaker_window")
 SELECT_ERROR_KEYS = (
     "name_required",
+    "name_invalid",
     "invalid_actions",
     "device_id_warning",
     "state_value_required",
@@ -41,6 +42,40 @@ SELECT_ERROR_KEYS = (
     "breaker_window_range",
 )
 
+# Issue translation keys of the central config (owner and follower side) and the variables each description may use
+NEW_ISSUES = {
+    "doc_overwritten": {"device"},
+    "ownership_claim": {"device", "claimant"},
+    "discovery_removed": {"device", "count"},
+    "owner_conflict": {"device", "owner", "claimant"},
+    "schema_too_new": {"device", "version", "supported"},
+    "approval_required": {"device", "owner", "hash"},
+    "mirror_blocked": {"device", "owner", "services"},
+    "denied_service_call": {"device", "trigger", "service"},
+}
+
+# The approval fix flow (plan 03-06): the confirm step and the three reasons it can abort
+APPROVAL_FLOW = "issues.approval_required.fix_flow"
+APPROVAL_FLOW_KEYS = (
+    f"{APPROVAL_FLOW}.step.confirm.title",
+    f"{APPROVAL_FLOW}.step.confirm.description",
+    f"{APPROVAL_FLOW}.abort.changed",
+    f"{APPROVAL_FLOW}.abort.too_large",
+    f"{APPROVAL_FLOW}.abort.not_loaded",
+)
+FENCED_YAML = re.compile(r"```yaml\s*\{actions\}\s*```")
+
+# Flow descriptions whose user-text placeholders the flow escapes with escape_markdown (G-03-2). A translation must use
+# them as bare words: wrapped in code, emphasis, link or quote markup they would render wrong or be escaped twice.
+ESCAPED_FLOW_PLACEHOLDERS = {
+    "config_subentries.switch.step.delete_device.description": ("name",),
+    "config_subentries.select.step.delete_device.description": ("name",),
+    "config_subentries.select.step.menu.description": ("name", "options"),
+    "config_subentries.select.step.edit_option_details.description": ("state_value",),
+    "config_subentries.select.step.remove_confirm.description": ("friendly_name", "state_value"),
+}
+MARKDOWN_CONTROL = r"\\`*_\[\]<>|~#"
+
 REQUIRED_KEYS = (
     "config.step.user.title",
     "config.step.user.description",
@@ -50,13 +85,31 @@ REQUIRED_KEYS = (
     "config.step.user.data_description.instance_name",
     "config.error.invalid_base_topic",
     "config.error.instance_name_required",
+    "config.error.instance_name_invalid",
     "config.abort.mqtt_required",
     "config.abort.single_instance_allowed",
     "config_subentries.switch.initiate_flow.user",
     "config_subentries.switch.entry_type",
     "config_subentries.switch.step.user.title",
     "config_subentries.switch.step.reconfigure.title",
+    "config_subentries.switch.step.reconfigure.description",
+    "config_subentries.switch.step.reconfigure.menu_options.edit_device",
+    "config_subentries.switch.step.reconfigure.menu_options.delete_device",
+    "config_subentries.switch.step.edit_device.title",
+    "config_subentries.switch.step.edit_device.description",
+    *(
+        f"config_subentries.{kind}.step.delete_device.{part}"
+        for kind in ("switch", "select")
+        for part in ("title", "description", "menu_options.delete_confirmed", "menu_options.keep_device")
+    ),
+    *(f"config_subentries.{kind}.abort.device_deleted" for kind in ("switch", "select")),
+    "config_subentries.select.step.menu.menu_options.delete_device",
+    "options.step.init.title",
+    "options.step.init.description",
+    "options.step.init.data.delete_devices_on_remove",
+    "options.step.init.data_description.delete_devices_on_remove",
     "config_subentries.switch.error.name_required",
+    "config_subentries.switch.error.name_invalid",
     "config_subentries.switch.error.invalid_actions",
     "config_subentries.switch.error.device_id_warning",
     "config_subentries.switch.abort.reconfigure_successful",
@@ -66,16 +119,18 @@ REQUIRED_KEYS = (
     "issues.mqtt_discovery_disabled.description",
     "issues.circuit_breaker_tripped.title",
     "issues.circuit_breaker_tripped.description",
+    *(f"issues.{issue}.{part}" for issue in NEW_ISSUES for part in ("title", "description")),
+    *APPROVAL_FLOW_KEYS,
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
-        for step in ("user", "reconfigure")
+        for step in ("user", "edit_device")
         for field in SWITCH_FORM_FIELDS
     ),
     "config_subentries.switch.error.breaker_max_runs_range",
     "config_subentries.switch.error.breaker_window_range",
     *(
         f"config_subentries.switch.step.{step}.data_description.{field}"
-        for step in ("user", "reconfigure")
+        for step in ("user", "edit_device")
         for field in SWITCH_FORM_FIELDS
     ),
     "config_subentries.select.initiate_flow.user",
@@ -165,12 +220,49 @@ def test_issue_strings_use_expected_variables(language: str) -> None:
     flat = _load(language)
     assert _variables(flat["issues.action_failed.description"]) == {"device", "trigger", "time", "error"}
     assert _variables(flat["issues.circuit_breaker_tripped.description"]) == {"device", "max_runs", "window"}
+    assert _variables(flat["issues.owner_conflict.description"]) == {"device", "owner", "claimant"}
+    assert _variables(flat["issues.schema_too_new.description"]) == {"device", "version", "supported"}
+    assert _variables(flat["issues.approval_required.description"]) == {"device", "owner", "hash"}
+    assert _variables(flat[f"{APPROVAL_FLOW}.step.confirm.description"]) == {
+        "device",
+        "owner",
+        "hash",
+        "actions",
+        "startup",
+        "templated",
+        "residual",
+        "invalid",
+    }
+    assert _variables(flat["issues.mirror_blocked.description"]) == {"device", "owner", "services"}
+    assert _variables(flat["issues.denied_service_call.description"]) == {"device", "trigger", "service"}
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_confirm_description_contains_a_fenced_yaml_block(language: str) -> None:
+    """The actions are shown as code: the placeholder sits alone inside a fenced yaml block."""
+    assert FENCED_YAML.search(_load(language)[f"{APPROVAL_FLOW}.step.confirm.description"])
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_issue_texts_exist_in_both_languages(language: str) -> None:
+    """The owner-side issues have a title and a description in every language, using exactly their placeholders."""
+    flat = _load(language)
+    for issue, variables in NEW_ISSUES.items():
+        assert flat[f"issues.{issue}.title"]
+        assert _variables(flat[f"issues.{issue}.description"]) == variables
 
 
 def test_error_placeholders_are_the_ones_the_flow_supplies() -> None:
     en = _load("en")
     assert _variables(en["config_subentries.switch.error.invalid_actions"]) == {"field", "error"}
     assert _variables(en["config_subentries.switch.error.device_id_warning"]) == {"device_ids"}
+
+
+def test_delete_placeholders_are_the_ones_the_flow_supplies() -> None:
+    """The delete confirmation of both device types is given exactly the device name and the online count."""
+    en = _load("en")
+    for kind in ("switch", "select"):
+        assert _variables(en[f"config_subentries.{kind}.step.delete_device.description"]) == {"name", "count"}
 
 
 def test_select_placeholders_are_the_ones_the_flow_supplies() -> None:
@@ -196,3 +288,19 @@ def test_discovery_issue_speaks_of_entities_not_switch_entities(language: str) -
 def test_no_strings_json_exists() -> None:
     """Custom integrations use translations/en.json; strings.json is core-only."""
     assert not (TRANSLATIONS_DIR.parent / "strings.json").exists()
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_escaped_flow_placeholders_are_not_wrapped_in_markup(language: str) -> None:
+    """A single escape pass renders right only if the placeholder is a bare word (T-03-39)."""
+    flat = _load(language)
+    offenders = []
+    for key, names in ESCAPED_FLOW_PLACEHOLDERS.items():
+        text = flat[key]
+        if "```" in text:
+            offenders.append((key, "fenced block"))
+        for name in names:
+            variable = re.escape("{" + name + "}")
+            if re.search(f"[{MARKDOWN_CONTROL}]{variable}|{variable}[{MARKDOWN_CONTROL}]", text):
+                offenders.append((key, name))
+    assert offenders == []

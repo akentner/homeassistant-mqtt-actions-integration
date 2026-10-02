@@ -16,7 +16,8 @@
     },
     "error": {
       "invalid_base_topic": "The base topic must not be empty, must not contain # or +, must not start or end with a slash, must not contain empty levels, and must not start with $.",
-      "instance_name_required": "The instance name must not be empty."
+      "instance_name_required": "The instance name must not be empty.",
+      "instance_name_invalid": "The instance name must be printable and at most 64 characters long."
     },
     "abort": {
       "mqtt_required": "The MQTT integration must be set up first.",
@@ -53,6 +54,14 @@
           }
         },
         "reconfigure": {
+          "title": "Switch device",
+          "description": "Edit the actions and settings of this switch device, or delete the device.",
+          "menu_options": {
+            "edit_device": "Edit the device",
+            "delete_device": "Delete the device"
+          }
+        },
+        "edit_device": {
           "title": "Edit switch device",
           "description": "Changing the actions replaces the old ones. The device itself and its topics stay the same.",
           "data": {
@@ -73,17 +82,27 @@
             "breaker_max_runs": "The circuit breaker pauses the device when it would run its actions more often than this within the window. Releasing means changing the device or reloading the integration. Whole number from 1 to 100.",
             "breaker_window": "Length of the circuit breaker window in seconds. Whole number from 1 to 3600."
           }
+        },
+        "delete_device": {
+          "title": "Delete the device?",
+          "description": "Delete the device {name}? It is removed on all connected instances, not only on this one. Other instances currently online: {count}. They lose the device as well, and instances that are offline lose it as soon as they are connected again. The retained configuration, discovery and state of the device are deleted from the broker. This cannot be undone.",
+          "menu_options": {
+            "delete_confirmed": "Yes, delete the device on all instances",
+            "keep_device": "No, keep the device"
+          }
         }
       },
       "error": {
         "name_required": "The name must not be empty.",
+        "name_invalid": "The name must be printable and at most 64 characters long.",
         "invalid_actions": "The actions are invalid in {field}: {error}",
         "device_id_warning": "These device IDs exist only on this Home Assistant instance: {device_ids}. Other instances cannot resolve them, so the actions would fail there. Submit again to save anyway, or switch to entity, area or label targets.",
         "breaker_max_runs_range": "Enter a whole number from 1 to 100.",
         "breaker_window_range": "Enter a whole number of seconds from 1 to 3600."
       },
       "abort": {
-        "reconfigure_successful": "The switch device was updated."
+        "reconfigure_successful": "The switch device was updated.",
+        "device_deleted": "The device was deleted. Connected instances remove it as well."
       }
     },
     "select": {
@@ -136,7 +155,8 @@
             "edit_option": "Edit an option",
             "remove_option": "Remove an option",
             "settings": "Edit name and settings",
-            "done": "Save the device"
+            "done": "Save the device",
+            "delete_device": "Delete the device"
           }
         },
         "add_option": {
@@ -186,10 +206,19 @@
             "remove_confirmed": "Yes, remove the option",
             "keep_option": "No, keep the option"
           }
+        },
+        "delete_device": {
+          "title": "Delete the device?",
+          "description": "Delete the device {name}? It is removed on all connected instances, not only on this one. Other instances currently online: {count}. They lose the device as well, and instances that are offline lose it as soon as they are connected again. The retained configuration, discovery and state of the device are deleted from the broker. This cannot be undone.",
+          "menu_options": {
+            "delete_confirmed": "Yes, delete the device on all instances",
+            "keep_device": "No, keep the device"
+          }
         }
       },
       "error": {
         "name_required": "The name must not be empty.",
+        "name_invalid": "The name must be printable and at most 64 characters long.",
         "invalid_actions": "The actions are invalid in {field}: {error}",
         "device_id_warning": "These device IDs exist only on this Home Assistant instance: {device_ids}. Other instances cannot resolve them, so the actions would fail there. Submit again to save anyway, or switch to entity, area or label targets.",
         "state_value_required": "The state value must not be empty.",
@@ -203,7 +232,22 @@
         "breaker_window_range": "Enter a whole number of seconds from 1 to 3600."
       },
       "abort": {
-        "reconfigure_successful": "The select device was updated."
+        "reconfigure_successful": "The select device was updated.",
+        "device_deleted": "The device was deleted. Connected instances remove it as well."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MQTT Actions options",
+        "description": "Choose what happens to your devices when you remove this integration. The choice is read at the moment of removal, so set it before you remove the integration.",
+        "data": {
+          "delete_devices_on_remove": "Delete all devices when this integration is removed"
+        },
+        "data_description": {
+          "delete_devices_on_remove": "Off by default: removing this integration leaves all its devices and their retained messages on the broker, and other instances keep them as orphans that show as unavailable. On: removing this integration deletes all devices created on this instance from the broker and from every connected instance."
+        }
       }
     }
   },
@@ -219,6 +263,51 @@
     "circuit_breaker_tripped": {
       "title": "A device was paused by the circuit breaker",
       "description": "{device} ran its actions more than {max_runs} times within {window} seconds. This usually means an action changes the state of its own device and keeps triggering itself, so MQTT Actions stopped the running actions and paused the device. Changes on the state topic still update the entity, but no actions run until the device is released. To release it, change the settings of the device or reload the integration. Saving the device without changing anything does not release it."
+    },
+    "doc_overwritten": {
+      "title": "The shared configuration of a device was overwritten",
+      "description": "Something other than this instance changed or cleared the shared configuration of {device} on the MQTT broker. This instance is the owner of {device}, so it published its own configuration again. Check who can write to the topics of MQTT Actions on the broker and restrict write access to the owning instance."
+    },
+    "ownership_claim": {
+      "title": "Another instance claims a device that you own",
+      "description": "The instance {claimant} published a configuration for {device}, which is owned by this instance. This instance remains the owner and published its own configuration again. There is no takeover: only the owner can edit or delete a device."
+    },
+    "discovery_removed": {
+      "title": "The entities of a device were removed repeatedly",
+      "description": "The entities of {device} were removed {count} times recently, for example by deleting an entity on another Home Assistant instance. Each time, this instance published the discovery again. Deleting an entity on one instance removes it on every instance, so delete the device itself if you no longer want it."
+    },
+    "owner_conflict": {
+      "title": "Another instance claims a device that you follow",
+      "description": "The device {device} is owned by {owner}. Another instance named {claimant} also published a configuration for it. This instance keeps following {owner} and ignores the other claim. Check the access rights of the instances on the MQTT broker, so that each instance can only write its own devices."
+    },
+    "schema_too_new": {
+      "title": "A shared device configuration needs a newer integration",
+      "description": "The shared configuration of {device} uses format version {version}, but this integration understands up to version {supported}. The device keeps its last known settings. Update MQTT Actions on this instance to receive changes."
+    },
+    "approval_required": {
+      "title": "A device from another instance wants to run actions here",
+      "description": "The device {device} from {owner} wants to run actions on this instance (hash prefix {hash}). The actions do not run until you approve them. Open this repair to review them.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Approve the actions of a device from another instance",
+            "description": "You are about to approve the device **{device}** from the instance **{owner}**.\n\nThe actions below run on this Home Assistant instance, with its full access, whenever the state of the device changes. If run on startup is true, they also run on the first state received after every start of Home Assistant, every reload of the integration and every reconnect to the broker.\n\nRun on startup: **{startup}**\n\n```yaml\n{actions}\n```\n\nTemplated service names (the real service is only known when the action runs):\n\n{templated}\n\nSteps that call scripts, automations, scenes, buttons, device actions or events, or turn something on or off generically (these are not restricted):\n\n{residual}\n\nTriggers whose actions do not validate on this instance:\n\n{invalid}\n\nThis approval is bound to the hash {hash}. It lapses when the owner changes the actions, and you are asked again. Nothing runs until you submit."
+          }
+        },
+        "abort": {
+          "changed": "The actions changed while this dialog was open, so nothing was approved. Open the new request in Repairs to review the changed actions.",
+          "too_large": "The actions are too long to review here, so nothing was approved and the device stays paused.",
+          "not_loaded": "MQTT Actions is not loaded, so nothing can be approved. Try again when the integration is running."
+        }
+      }
+    },
+    "mirror_blocked": {
+      "title": "A device from another instance is blocked",
+      "description": "The device {device} from {owner} uses services that are never allowed for actions received from other instances ({services}). It is paused and cannot be approved. Ask the owner to remove these services from the device."
+    },
+    "denied_service_call": {
+      "title": "An action from another instance was stopped",
+      "description": "A run of {trigger} of {device} was stopped because a templated service name resolved to the forbidden service {service}. Actions received from other instances may never call this service."
     }
   },
   "selector": {

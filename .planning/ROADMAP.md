@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Walking Skeleton - Installable Switch** - HACS-installable integration where a Switch created in the UI runs its actions on MQTT state changes, safely across restarts (completed 2026-09-29)
 - [x] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection (completed 2026-09-30)
-- [ ] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely
+- [x] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely (completed 2026-10-02)
 - [ ] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation
 
 ## Phase Details
@@ -103,7 +103,32 @@ Plans:
   4. Only a device's owner can edit or delete it; followers pin the owner and raise a Repairs issue on conflicting ownership claims, and if a follower removes the discovered entity the owner republishes its discovery.
   5. Deleting a device requires an explicit confirmation stating that it is removed on all connected instances, after which its central config and discovery are unpublished and the device disappears everywhere.
 
-**Plans**: TBD
+**Plans:** 8/8 plans complete
+
+Plans:
+- [x] 03-08-PLAN.md
+
+**Wave 1**
+- [x] 03-01-PLAN.md — Wire contract: config document, strict parsing, denylist walker, owner publish, FakeBroker and gateway seams (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 03-02-PLAN.md — Owner lifecycle: delete order with config tombstone, echo and foreign-write healing, ownership claims, discovery healing (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 03-03-PLAN.md — Owner flows: all-instances delete confirmation with instance presence, hub removal keep or delete option (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 03-04-PLAN.md — Follower: read-only mirrors, owner pinning, schema gate, Store persistence (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 03-05-PLAN.md — Follower removal: tombstone, grace-window prune gated by owner availability, registry cleanup (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 03-06-PLAN.md — Trust gate: hash-bound approval via Repairs, guarded Script, blocked state, execution-time denylist (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 03-07-PLAN.md — Tested broker ACL document, multi-instance acceptance scenarios, README (wave 7)
+
 **UI hint**: yes
 
 ### Phase 4: Operations, Recovery and Release
@@ -130,5 +155,16 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
-| 3. Trust, Central Config and Ownership | 0/0 | Not started | - |
+| 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 0/0 | Not started | - |
+
+## Backlog
+
+### Phase 999.1: Per-instance local actions on mirrored devices (followers add own actions, relates to MAP-01) (BACKLOG)
+
+**Goal:** [Captured for future planning] A follower instance can add its own local actions to a mirrored device, on top of the owner's document (for example different entities per instance). Found during Phase 3 UAT: mirrors are read-only today.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)

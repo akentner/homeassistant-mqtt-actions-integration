@@ -49,15 +49,29 @@ NEW_ISSUES = {
     "discovery_removed": {"device", "count"},
     "owner_conflict": {"device", "owner", "claimant"},
     "schema_too_new": {"device", "version", "supported"},
-    "approval_required": {"device", "owner", "hash"},
     "mirror_blocked": {"device", "owner", "services"},
     "denied_service_call": {"device", "trigger", "service"},
-    "transferred": {"device", "claimant"},
 }
 
 # Fixable issues show their text in the confirm step of the fix flow (hassfest rejects an issue-level description next
 # to a fix_flow); issue key to the variables of that step
-FIXABLE_ISSUES = {"duplicate_instance_id": {"instance", "devices"}}
+FIXABLE_ISSUES = {
+    "approval_required": {
+        "device",
+        "owner",
+        "hash",
+        "actions",
+        "startup",
+        "run_mode",
+        "breaker_max_runs",
+        "breaker_window",
+        "templated",
+        "residual",
+        "invalid",
+    },
+    "duplicate_instance_id": {"instance", "devices"},
+    "transferred": {"device", "claimant"},
+}
 
 # The approval fix flow (plan 03-06): the confirm step and the three reasons it can abort
 APPROVAL_FLOW = "issues.approval_required.fix_flow"
@@ -111,7 +125,6 @@ ESCAPED_FLOW_PLACEHOLDERS = {
     "config_subentries.select.step.edit_option_details.description": ("state_value",),
     "config_subentries.select.step.remove_confirm.description": ("friendly_name", "state_value"),
     f"{DUPLICATE_FLOW}.step.confirm.description": ("instance",),
-    "issues.transferred.description": ("device", "claimant"),
     f"{TRANSFERRED_FLOW}.step.confirm.description": ("device", "claimant"),
 }
 MARKDOWN_CONTROL = r"\\`*_\[\]<>|~#"
@@ -355,7 +368,6 @@ def test_issue_strings_use_expected_variables(language: str) -> None:
     assert _variables(flat["issues.circuit_breaker_tripped.description"]) == {"device", "max_runs", "window"}
     assert _variables(flat["issues.owner_conflict.description"]) == {"device", "owner", "claimant"}
     assert _variables(flat["issues.schema_too_new.description"]) == {"device", "version", "supported"}
-    assert _variables(flat["issues.approval_required.description"]) == {"device", "owner", "hash"}
     assert _variables(flat[f"{APPROVAL_FLOW}.step.confirm.description"]) == {
         "device",
         "owner",
@@ -530,7 +542,6 @@ def test_required_transferred_keys_exist_in_both_languages(language: str) -> Non
     flat = _load(language)
     assert [key for key in TRANSFERRED_FLOW_KEYS if not flat.get(key)] == []
     assert flat["issues.transferred.title"]
-    assert _variables(flat["issues.transferred.description"]) == {"device", "claimant"}
     assert _variables(flat[f"{TRANSFERRED_FLOW}.step.confirm.description"]) == {"device", "claimant"}
     assert not _variables(flat[f"{TRANSFERRED_FLOW}.abort.not_loaded"])
     assert not _variables(flat[f"{TRANSFERRED_FLOW}.abort.changed"])

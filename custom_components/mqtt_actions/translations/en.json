@@ -316,7 +316,6 @@
     },
     "approval_required": {
       "title": "A device from another instance wants to run actions here",
-      "description": "The device {device} from {owner} wants to run actions on this instance (hash prefix {hash}). The actions do not run until you approve them. Open this repair to review them.",
       "fix_flow": {
         "step": {
           "confirm": {
@@ -356,12 +355,11 @@
     },
     "transferred": {
       "title": "A device you own was adopted by another instance",
-      "description": "The instance {claimant} adopted the device {device}, which this instance owned, and published it with itself as the new owner. This instance stopped publishing {device} so that the two instances do not overwrite each other. It still owns the device locally and runs its own actions for it until you release it. Nothing is removed automatically. Open this repair to let this instance follow {claimant} instead.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Follow the new owner of a device",
-            "description": "You are about to let this instance stop owning the device {device} and follow {claimant} instead.\n\nThis instance forgets the device locally. Nothing is changed or cleared on the MQTT broker: the configuration, the discovery and the state of the device stay exactly as {claimant} published them. Afterwards {device} shows up here as a read-only mirror of {claimant}, with the same entities. Because its actions now come from another instance, you have to approve them here before they run.\n\nIf you dismiss this repair instead, the device stays untouched and this instance stays silent about it until the next start. After a start this instance publishes the device once more, the new owner publishes it again, and this repair comes back. The Resync button of the new owner restores the discovery if it is needed. Nothing happens until you submit."
+            "description": "The instance {claimant} adopted the device {device}, which this instance owned, and published it with itself as the new owner. This instance stopped publishing {device} so that the two instances do not overwrite each other. It still owns the device locally and runs its own actions for it until you release it. Nothing is removed automatically.\n\nYou are about to let this instance stop owning the device {device} and follow {claimant} instead.\n\nThis instance forgets the device locally. Nothing is changed or cleared on the MQTT broker: the configuration, the discovery and the state of the device stay exactly as {claimant} published them. Afterwards {device} shows up here as a read-only mirror of {claimant}, with the same entities. Because its actions now come from another instance, you have to approve them here before they run.\n\nIf you dismiss this repair instead, the device stays untouched and this instance stays silent about it until the next start. After a start this instance publishes the device once more, the new owner publishes it again, and this repair comes back. The Resync button of the new owner restores the discovery if it is needed. Nothing happens until you submit."
           }
         },
         "abort": {

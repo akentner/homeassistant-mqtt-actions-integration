@@ -664,3 +664,72 @@ def test_validate_actions_structure(hass: HomeAssistant) -> None:
     ):
         with pytest.raises(ActionsInvalid):
             validate_actions_structure(invalid)
+
+
+# --- transfer marker of an adopted device (D-09, T-04-49, T-04-52) ------------------------------------------------
+
+
+def test_transferred_from_roundtrip() -> None:
+    """The marker is a list of previous owners, newest last, and parses back to the same tuple."""
+    spec = _switch()
+    document = _document(spec, transferred_from=["inst-a", "inst-b"])
+    assert document["transferred_from"] == ["inst-a", "inst-b"]
+    parsed = parse_document("dev-1", serialize_document(document))
+    assert parsed.transferred_from == ("inst-a", "inst-b")
+
+
+def test_transferred_from_is_bookkeeping_and_not_hashed() -> None:
+    """D-09: the marker changes neither hash and not the schema version, and a document without it is unchanged."""
+    spec = _switch(on=LIGHT_ON, off=LIGHT_OFF)
+    plain = _document(spec)
+    marked = _document(spec, transferred_from=["inst-a"])
+    assert marked["hash"] == plain["hash"]
+    assert marked["schema_version"] == plain["schema_version"] == SCHEMA_VERSION == 1
+    plain_parsed = parse_document("dev-1", serialize_document(plain))
+    marked_parsed = parse_document("dev-1", serialize_document(marked))
+    assert marked_parsed.content_hash == plain_parsed.content_hash
+    assert marked_parsed.actions_hash == plain_parsed.actions_hash
+    # No marker, no key: the text is the one a Phase 3 owner publishes, and an empty marker is never written
+    assert "transferred_from" not in serialize_document(plain)
+    assert "transferred_from" not in serialize_document(_document(spec, transferred_from=()))
+    assert plain_parsed.transferred_from == ()
+
+
+def test_absent_and_null_marker_mean_no_transfer() -> None:
+    """A document of an older owner has no marker, and a null marker is the same."""
+    document = _document(_switch())
+    assert parse_document("dev-1", serialize_document(document)).transferred_from == ()
+    document["transferred_from"] = None
+    assert parse_document("dev-1", serialize_document(document)).transferred_from == ()
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "inst-a",
+        {"inst-a": 1},
+        ["inst-a", 7],
+        ["inst-a", None],
+        ["has space"],
+        ["with/slash"],
+        ["x" * 65],
+        [f"inst-{number}" for number in range(9)],
+        ["inst-a", ""],
+    ],
+    ids=["string", "dict", "non-string", "null-entry", "space", "slash", "too-long-id", "nine-entries", "empty-entry"],
+)
+def test_transferred_from_rejects_malformed_markers(marker: Any) -> None:
+    """T-04-52: a malformed marker rejects the whole document with a fixed reason and no content."""
+    document = _document(_switch())
+    document["transferred_from"] = marker
+    with pytest.raises(DocumentRejectedError) as error:
+        parse_document("dev-1", serialize_document(document))
+    assert error.value.reason == "bad_transfer"
+    assert len(str(error.value)) < 200
+
+
+def test_transferred_from_accepts_the_maximum_length() -> None:
+    """Eight entries are the limit and still parse."""
+    marker = [f"inst-{number}" for number in range(8)]
+    document = _document(_switch(), transferred_from=marker)
+    assert parse_document("dev-1", serialize_document(document)).transferred_from == tuple(marker)

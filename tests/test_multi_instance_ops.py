@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
@@ -16,13 +17,18 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from custom_components.mqtt_actions import retrigger as retrigger_module
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
+    CONF_ON_CHANGE_TO_ON,
+    DOMAIN,
     HEARTBEAT_INTERVAL_SECONDS,
     HEARTBEAT_OFFLINE_SECONDS,
+    ISSUE_OWNER_CONFLICT_PREFIX,
     SIGNAL_ROSTER_UPDATED,
 )
 from custom_components.mqtt_actions.topics import (
     acks_topic,
     availability_topic,
+    config_topic,
+    discovery_topic,
     heartbeat_topic,
     retrigger_topic,
     state_topic,
@@ -476,3 +482,159 @@ async def test_acknowledgements_per_request_are_capped(
     # The caller's own answer and its roster entries come first; the cap counts answers, so at most two extras fit
     assert len(flood) <= 2
     await _settle(a)
+
+
+# --- adoption of an orphaned device (SYN-07, D-09, D-10) ----------------------------------------------------------
+
+
+async def _adoption_trio(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    *,
+    approve: bool = True,
+) -> tuple[Instance, Instance, Instance, str, dict[str, list]]:
+    """
+    Start owner A and followers B and C of one switch; B approved the mirror, the baseline is ON, heartbeats are out.
+
+    The returned dict holds the `test.on` call list of every instance by name.
+    """
+    sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}], off=[{"action": "test.off"}])
+    device_id = sub["data"][CONF_DEVICE_ID]
+    a = await make_instance("alpha", hass=hass, subentries=[sub])
+    b = await make_instance("beta")
+    c = await make_instance("gamma")
+    on_calls = {instance.name: async_mock_service(instance.hass, "test", "on") for instance in (a, b, c)}
+    await _settle(a, b, c)
+    if approve:
+        mirror = b.manager.mirrors[device_id].mirror
+        assert mirror is not None
+        assert await b.manager.async_approve(device_id, mirror.actions_hash) is True
+    fake_broker.publish(state_topic(BASE, device_id), "ON", retain=True)
+    for instance in (a, b, c):
+        await instance.manager.presence.async_publish_heartbeat()
+    await _settle(a, b, c)
+    assert len(on_calls["alpha"]) == 1
+    assert len(on_calls["beta"]) == (1 if approve else 0)
+    return a, b, c, device_id, on_calls
+
+
+def _retained_document(fake_broker: FakeBroker, device_id: str) -> dict:
+    return json.loads(fake_broker.retained[config_topic(BASE, device_id)])
+
+
+async def test_adoption_end_to_end(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: B adopts the device of the stopped owner A under the same uuid, and C re-pins to B without a conflict."""
+    a, b, c, device_id, on_calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    old = _retained_document(fake_broker, device_id)
+    await a.stop()
+    await _settle(a, b, c)
+    assert fake_broker.retained[availability_topic(BASE, a.manager.instance_id)] == "offline"
+    baseline = b.manager.mirrors[device_id].tracker.last_acted
+    assert baseline == "ON"
+    ran_before = len(on_calls["beta"])
+
+    previous = await b.manager.async_adopt(device_id)
+    await _settle(a, b, c)
+
+    assert previous == "alpha"
+    assert device_id in b.manager.devices
+    assert device_id not in b.manager.mirrors
+    document = _retained_document(fake_broker, device_id)
+    assert document["owner"] == b.manager.instance_id
+    assert document["owner_name"] == "beta"
+    assert document["transferred_from"] == [a.manager.instance_id]
+    assert document["rev"] == old["rev"] + 1
+    assert document["hash"] == old["hash"]
+    discovery = json.loads(fake_broker.retained[discovery_topic("homeassistant", device_id)])
+    assert discovery["availability"] == [{"topic": availability_topic(BASE, b.manager.instance_id)}]
+    assert b.manager.devices[device_id].tracker.last_acted == baseline
+    assert len(on_calls["beta"]) == ran_before
+    mirror = c.manager.mirrors[device_id].mirror
+    assert mirror is not None
+    assert mirror.owner == b.manager.instance_id
+    assert mirror.transferred_from == (a.manager.instance_id,)
+    assert ir.async_get(c.hass).async_get_issue(DOMAIN, f"{ISSUE_OWNER_CONFLICT_PREFIX}{device_id}") is None
+
+
+async def test_adoption_clears_nothing_on_the_broker(
+    hass: HomeAssistant,
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-04-53: no empty payload goes to the config, discovery or state topic of the device, and the state stays."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    await a.stop()
+    await _settle(a, b, c)
+    state = fake_broker.retained[state_topic(BASE, device_id)]
+    published: list[tuple[str, str, bool]] = []
+    original = fake_broker.publish
+
+    def _spy(topic: str, payload: str, *, retain: bool) -> None:
+        published.append((topic, payload, retain))
+        original(topic, payload, retain=retain)
+
+    monkeypatch.setattr(fake_broker, "publish", _spy)
+
+    await b.manager.async_adopt(device_id)
+    await _settle(a, b, c)
+
+    device_topics = {
+        config_topic(BASE, device_id),
+        discovery_topic("homeassistant", device_id),
+        state_topic(BASE, device_id),
+    }
+    assert [item for item in published if item[0] in device_topics and item[1] == ""] == []
+    assert any(item[0] == config_topic(BASE, device_id) for item in published)
+    assert fake_broker.retained[state_topic(BASE, device_id)] == state
+
+
+async def test_marker_survives_a_restart_of_the_adopter(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: every later republish carries the marker, so a follower that was offline still learns the transfer."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    await a.stop()
+    await _settle(a, b, c)
+    await b.manager.async_adopt(device_id)
+    await _settle(a, b, c)
+    adopted = _retained_document(fake_broker, device_id)
+
+    await b.restart()
+    await _settle(a, b, c)
+
+    again = _retained_document(fake_broker, device_id)
+    assert again["transferred_from"] == [a.manager.instance_id]
+    assert again["rev"] == adopted["rev"]
+    assert again["owner"] == b.manager.instance_id
+    assert device_id in b.manager.devices
+
+
+async def test_adopter_edits_after_adoption_keep_the_history(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """A later edit of the adopted device changes the hash, raises the rev again and keeps the marker."""
+    a, b, c, device_id, _calls = await _adoption_trio(hass, fake_broker, make_instance, make_switch_subentry)
+    await a.stop()
+    await _settle(a, b, c)
+    await b.manager.async_adopt(device_id)
+    await _settle(a, b, c)
+    adopted = _retained_document(fake_broker, device_id)
+    subentry = next(iter(b.entry.subentries.values()))
+
+    b.hass.config_entries.async_update_subentry(
+        b.entry, subentry, data={**subentry.data, CONF_ON_CHANGE_TO_ON: [{"action": "test.on2"}]}
+    )
+    await b.manager.async_reconcile()
+    await _settle(a, b, c)
+
+    edited = _retained_document(fake_broker, device_id)
+    assert edited["hash"] != adopted["hash"]
+    assert edited["rev"] == adopted["rev"] + 1
+    assert edited["transferred_from"] == [a.manager.instance_id]
+    assert edited["owner"] == b.manager.instance_id

@@ -14,6 +14,6 @@ markers = ["broker: needs a real mosquitto broker on PATH (skipped when it is no
 
 [dependency-groups]
 dev = [
-    "pytest-homeassistant-custom-component==0.13.367",
+    "pytest-homeassistant-custom-component==0.13.368",
     "ruff==0.16.10",
 ]

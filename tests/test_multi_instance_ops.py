@@ -1381,3 +1381,26 @@ async def test_invalid_foreign_document_never_creates_the_transfer_issue(
     assert device_id not in a.manager.sync.transferred_away
     assert ir.async_get(a.hass).async_get_issue(DOMAIN, f"{ISSUE_DOC_OVERWRITTEN_PREFIX}{device_id}") is not None
     assert config_topic(BASE, device_id) in [item[0] for item in a.gateway.published[mark:]]
+
+
+async def test_deleting_a_transferred_away_device_clears_nothing_on_the_broker(
+    hass: HomeAssistant, fake_broker: FakeBroker, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-56: the old owner deleting the device it lost must not tombstone the adopter's document or discovery."""
+    a, b, c, lamp_id, other_id = await _adopted_and_returned(hass, fake_broker, make_instance, make_switch_subentry)
+    before = dict(fake_broker.retained)
+    mark = len(a.gateway.published)
+    subentry_id = a.manager.subentry_id_of(lamp_id)
+    assert subentry_id is not None
+
+    a.hass.config_entries.async_remove_subentry(a.entry, subentry_id)
+    await a.manager.async_reconcile()
+    await _settle(a, b, c)
+
+    assert lamp_id not in a.manager.devices
+    assert other_id in a.manager.devices
+    assert [item for item in a.gateway.published[mark:] if item[1] == ""] == []
+    assert dict(fake_broker.retained) == before
+    assert _transferred_issue(a, lamp_id) is None
+    assert lamp_id not in a.manager.sync.transferred_away
+    assert lamp_id not in a.manager._published

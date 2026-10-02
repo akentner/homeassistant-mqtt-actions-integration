@@ -1105,8 +1105,22 @@ class Manager:
         self._delete_breaker_issue(device.device_id)
         if self._tripped.pop(device.device_id, None) is not None:
             self._schedule_save()
+        self._rename_companion(device.device_id, spec.name)
         await self.async_publish_config(device, changed_only=True)
         await self.async_publish_discovery(device)
+
+    @callback
+    def _rename_companion(self, device_id: str, name: str) -> None:
+        """
+        Give the companion device of an owned device its new name, unless the user chose a name of their own (D-13).
+
+        Only the device registry entry of this integration is touched: the core MQTT device of the discovery payload
+        is a different entry and follows its own retained payload.
+        """
+        device_registry = dr.async_get(self._hass)
+        companion = device_registry.async_get_device_by_identifier((DOMAIN, device_id), self._entry.entry_id)
+        if companion is not None and companion.name_by_user is None and companion.name != name:
+            device_registry.async_update_device(companion.id, name=name)
 
     async def _async_remove_device(self, device_id: str) -> None:
         """

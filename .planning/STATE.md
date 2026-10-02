@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: operations-recovery-and-release
-status: executing
-stopped_at: Completed 04-13-PLAN.md
-last_updated: "2026-10-02T19:00:46.143Z"
+status: verifying
+stopped_at: Completed 04-14-PLAN.md
+last_updated: "2026-10-02T19:32:34.509Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 19ae5d6c6702aeb295475f1ef524aaa9b405326e
+state_head: e6d69cdd90bf607350fa3322ae220e0cdaa52319
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 33
-  completed_plans: 32
+  completed_plans: 33
   percent: 75
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 
 Phase: 04 (operations-recovery-and-release) — READY TO EXECUTE
 Plan: 13 of 13
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-02 — Phase 04 execution started
 
 Progress: [████████░░] 75% of Phase 01 plans
@@ -85,6 +85,7 @@ Progress: [████████░░] 75% of Phase 01 plans
 | Phase 04 P11 | 17 min | 3 tasks | 14 files |
 | Phase 04 P12 | 21 min | 3 tasks | 11 files |
 | Phase 04 P13 | 11 min | 3 tasks | 6 files |
+| Phase 04 P14 | 15 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Documentation is pinned to the code by tests: services.yaml, const.py, translations and the tested diagnostics key sets are read by tests/test_docs.py
 - [Phase 04]: A fenced documentation example may carry device_id only as the data field of an mqtt_actions service call, next to the instance-specific warning; responses use the key uuid
 - [Phase 04]: The pages state the known limits as they are: imports and adoption are owned content without approval, returning-owner recognition is in memory only, the new instance id is not in a per-instance ACL
+- [Phase 04]: 04-14: issue-level description removed from the three fixable Repairs issues; explanation lives in the confirm step (hassfest exclusion group fixable)
+- [Phase 04]: 04-14: ISSUES in tests/test_translations.py is read from en.json so every new issue is guarded against description plus fix_flow
 
 ### Pending Todos
 
@@ -188,6 +191,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T17:46:39.538Z
-Stopped at: Completed 04-13-PLAN.md
+Last session: 2026-10-02T19:32:34.423Z
+Stopped at: Completed 04-14-PLAN.md
 Resume file: None

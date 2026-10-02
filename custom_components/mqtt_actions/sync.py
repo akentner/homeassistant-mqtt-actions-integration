@@ -295,6 +295,8 @@ class SyncManager:
             if status == PRESENCE_ONLINE and previous != PRESENCE_ONLINE:
                 # An owner that was offline or unknown when this instance started may have deleted devices meanwhile
                 self.arm_prune()
+        # A clean shutdown shows in the roster at once, without waiting for the heartbeat timeout (D-05)
+        self._manager.presence.on_availability_changed()
 
     @callback
     def note_published(self, device_id: str, digest: str) -> None:

@@ -154,7 +154,7 @@ def test_parse_export_accepts_the_export_envelope() -> None:
     """D-11: format, version and a devices list give the item list; anything else is a fixed reason code."""
     items = [build_content(make_spec(name="Lamp", on=SWITCH_ACTIONS))]
     assert portability.parse_export(_envelope(devices=items)) == items
-    assert portability.parse_export(_envelope([])) == []
+    assert portability.parse_export(_envelope()) == []
 
     for broken in (
         [],

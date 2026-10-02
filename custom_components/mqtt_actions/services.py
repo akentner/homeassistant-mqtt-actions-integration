@@ -13,31 +13,58 @@ through the `(DOMAIN, uuid)` identifier of the companion device.
 
 import json
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 import probatio
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntryState, ConfigSubentry
 from homeassistant.core import SupportsResponse, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.service import async_register_admin_service
 
-from .const import CONF_DEVICE_ID, DOMAIN, EXPORT_DIRECTORY, LOGGER, SERVICE_EXPORT_DEVICES, SERVICE_RESYNC
-from .portability import PortabilityError, build_export, export_file_path, write_export
+from .actions import ActionsInvalid, async_validate_actions
+from .const import (
+    CONF_DEVICE_ID,
+    DOMAIN,
+    EXPORT_DIRECTORY,
+    LOGGER,
+    SERVICE_EXPORT_DEVICES,
+    SERVICE_IMPORT_DEVICES,
+    SERVICE_RESYNC,
+)
+from .portability import (
+    REASON_INVALID_ACTIONS,
+    PortabilityError,
+    build_export,
+    export_file_path,
+    parse_export,
+    prepare_import,
+    write_export,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
 
     from .manager import Manager
+    from .portability import PreparedDevice
 
 CONF_FILE_NAME = "file_name"
+CONF_DATA = "data"
 
 RESYNC_SCHEMA = probatio.Schema({})
 # The file name is only a string here; its rules are checked by the handler so a bad name is a translated error
 EXPORT_SCHEMA = probatio.Schema(
     {
         probatio.Optional(CONF_DEVICE_ID): probatio.All(cv.ensure_list, [str]),
+        probatio.Optional(CONF_FILE_NAME): str,
+    }
+)
+# The export is a JSON object; its structure is checked by the handler, so a flaw is a translated error with a position
+IMPORT_SCHEMA = probatio.Schema(
+    {
+        probatio.Optional(CONF_DATA): dict,
         probatio.Optional(CONF_FILE_NAME): str,
     }
 )
@@ -119,6 +146,61 @@ async def _async_handle_export(call: ServiceCall) -> dict[str, Any]:
     return {"export": document, "file": f"{EXPORT_DIRECTORY}/{file_name}"}
 
 
+def _import_rejected(err: PortabilityError) -> ServiceValidationError:
+    """
+    Return the translated rejection of an import: a fixed reason code and a position, never any content.
+
+    The log carries the same two values and nothing else (T-04-41).
+    """
+    position = str(err.index) if err.index is not None else "-"
+    LOGGER.warning("An import was rejected: reason %s, position %s", err.reason, position)
+    return ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key="import_rejected",
+        translation_placeholders={"index": position, "reason": err.reason},
+    )
+
+
+async def _async_validate_deeply(hass: HomeAssistant, device: PreparedDevice) -> None:
+    """Validate the actions of every trigger on this instance, as the UI flows do; a flaw names the item only."""
+    for trigger in device.spec.triggers.values():
+        try:
+            await async_validate_actions(hass, trigger.actions)
+        except ActionsInvalid as err:
+            raise PortabilityError(REASON_INVALID_ACTIONS, device.index) from err
+
+
+async def _async_handle_import(call: ServiceCall) -> dict[str, Any]:
+    """
+    Create one owned device for every item of an export, or none at all.
+
+    Every item is validated before the first device is created. Creating the subentries afterwards is not
+    transactional: a failure halfway would leave the earlier devices, which is rare and documented. The update
+    listener of the entry reconciles, so the manager publishes the document and the discovery of each new device.
+    """
+    hass = call.hass
+    manager = async_get_loaded_manager(hass)
+    try:
+        items = parse_export(call.data.get(CONF_DATA))
+        prepared = prepare_import(items, owner=manager.instance_id, owner_name=manager.instance_name)
+        for device in prepared:
+            await _async_validate_deeply(hass, device)
+    except PortabilityError as err:
+        raise _import_rejected(err) from err
+    for device in prepared:
+        hass.config_entries.async_add_subentry(
+            manager.entry,
+            ConfigSubentry(
+                data=MappingProxyType(device.data),
+                subentry_type=device.kind,
+                title=device.name,
+                unique_id=device.device_id,
+            ),
+        )
+    LOGGER.info("Imported %d devices", len(prepared))
+    return {"imported": [{"index": d.index, "uuid": d.device_id, "name": d.name} for d in prepared]}
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the services of the integration; called once from `async_setup`."""
@@ -127,4 +209,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     async_register_admin_service(
         hass, DOMAIN, SERVICE_EXPORT_DEVICES, _async_handle_export, EXPORT_SCHEMA, SupportsResponse.OPTIONAL
+    )
+    async_register_admin_service(
+        hass, DOMAIN, SERVICE_IMPORT_DEVICES, _async_handle_import, IMPORT_SCHEMA, SupportsResponse.OPTIONAL
     )

@@ -1,8 +1,9 @@
 """
-Export of owned devices as a document and as a private file (SYN-08, D-11).
+Export and import of owned devices as a document and as a private file (SYN-08, D-11).
 
-Pure module: no Home Assistant import. The document carries the shared content of each device and never an identity
-or a bookkeeping value, because an import always assigns new ids:
+Almost pure module: the only Home Assistant import is the JSON parser of core, through `document`. The document carries
+the shared content of each device and never an identity or a bookkeeping value, because an import always assigns new
+ids:
 
     {"format": "mqtt_actions_export", "export_version": 1, "devices": [<content>, ...]}
 
@@ -11,6 +12,11 @@ contract once released. The file lives only in `<config>/mqtt_actions/`: never i
 without authentication, and never at a path the user chooses. The user gives a bare name matching a fixed pattern. The
 directory is 0700, the file 0600, a symlink is refused and the file is replaced atomically. The functions that touch
 the disk block and belong into the executor.
+
+An import is the most security-relevant way text becomes devices: every item becomes a throw-away document and runs
+through `parse_document`, the same strict path as a document received from the broker, then the structure check of the
+script schema and the static denylist. Nothing of the item that is bookkeeping survives: the new device gets a new
+uuid, this instance as owner and revision 1. Rejections carry a fixed reason code and a position, never content.
 """
 
 import contextlib
@@ -18,11 +24,27 @@ import os
 import re
 import stat
 import tempfile
+import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
-from .const import EXPORT_DIRECTORY, EXPORT_FORMAT, EXPORT_VERSION
-from .document import build_content
+from .actions import ActionsInvalid, validate_spec_structure
+from .const import (
+    CONF_DEVICE_ID,
+    EXPORT_DIRECTORY,
+    EXPORT_FORMAT,
+    EXPORT_VERSION,
+    SCHEMA_VERSION,
+)
+from .document import (
+    DocumentRejectedError,
+    RejectReason,
+    analyze_spec,
+    build_content,
+    parse_document,
+    serialize_document,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -37,17 +59,32 @@ REASON_BAD_FILE_NAME: Final = "bad_file_name"
 REASON_SYMLINK: Final = "symlink"
 REASON_NOT_A_DIRECTORY: Final = "not_a_directory"
 REASON_DIRECTORY_NOT_PRIVATE: Final = "directory_not_private"
+# Reason codes of a rejected import; each is also the key of a placeholder value in the translated error
+REASON_BAD_FORMAT: Final = "bad_format"
+REASON_TOO_NEW: Final = "too_new"
+REASON_INVALID_DEVICE: Final = "invalid_device"
+REASON_INVALID_ACTIONS: Final = "invalid_actions"
+REASON_DENIED_SERVICE: Final = "denied_service"
+REASON_TOO_LARGE: Final = "too_large"
+# The keys of the content that identify the device kind and name; they are the title and type of a subentry, not data
+NON_DATA_KEYS: Final = frozenset({"kind", "name"})
 DIRECTORY_MODE = 0o700
 FILE_MODE = 0o600
 
 
 class PortabilityError(ValueError):
-    """An export file cannot be written; `reason` is a short code and the text never carries user content."""
+    """
+    An export file cannot be written or an import is refused.
 
-    def __init__(self, reason: str) -> None:
-        """Remember the code and use it as the message."""
+    `reason` is a short code and `index` the 1-based position of the offending item (None when the whole file is
+    meant); the text is the code and never carries user content.
+    """
+
+    def __init__(self, reason: str, index: int | None = None) -> None:
+        """Remember the code and the position and use the code as the message."""
         super().__init__(reason)
         self.reason = reason
+        self.index = index
 
 
 def build_export(specs: Iterable[DeviceSpec]) -> dict[str, Any]:
@@ -109,3 +146,99 @@ def write_export(config_dir: Path, name: str, text: str) -> Path:
             Path(temporary).unlink()
         raise
     return target
+
+
+# --- import (D-11) ---------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedDevice:
+    """A validated import item: the new device with its new id, the subentry data and the spec built from it."""
+
+    index: int
+    device_id: str
+    kind: str
+    name: str
+    data: dict[str, Any]
+    spec: DeviceSpec
+
+
+def parse_export(value: Any) -> list[Any]:
+    """Check the envelope of an export and return its item list; raise PortabilityError with a fixed reason code."""
+    if not isinstance(value, dict) or value.get("format") != EXPORT_FORMAT:
+        raise PortabilityError(REASON_BAD_FORMAT)
+    version = value.get("export_version")
+    if type(version) is not int or version < 1:
+        raise PortabilityError(REASON_BAD_FORMAT)
+    if version > EXPORT_VERSION:
+        raise PortabilityError(REASON_TOO_NEW)
+    devices = value.get("devices")
+    if not isinstance(devices, list):
+        raise PortabilityError(REASON_BAD_FORMAT)
+    return devices
+
+
+def subentry_payload(content: dict[str, Any], device_id: str) -> dict[str, Any]:
+    """Return the subentry data of shared content: no kind and no name (they are type and title), plus the device id."""
+    payload = {key: value for key, value in content.items() if key not in NON_DATA_KEYS}
+    payload[CONF_DEVICE_ID] = device_id
+    return payload
+
+
+def _prepare_item(index: int, item: Any, *, owner: str, owner_name: str) -> PreparedDevice:
+    """
+    Turn one item into a new owned device through the strict path of a document from the broker.
+
+    The throw-away document is the item overlaid with the bookkeeping of this instance, so a forged owner, device id,
+    rev, hash or schema version of the item loses. The checks follow the order of a received document: size, depth and
+    field rules by `parse_document`, the structure of the actions, then the static denylist.
+    """
+    if not isinstance(item, dict):
+        raise PortabilityError(REASON_INVALID_DEVICE, index)
+    device_id = str(uuid.uuid4())
+    document = {
+        **item,
+        "schema_version": SCHEMA_VERSION,
+        CONF_DEVICE_ID: device_id,
+        "owner": owner,
+        "owner_name": owner_name,
+        "rev": 1,
+    }
+    document.pop("hash", None)
+    try:
+        payload = serialize_document(document)
+    except (TypeError, ValueError) as err:
+        # Mixed key types, NaN and the like: the item is not plain JSON
+        raise PortabilityError(REASON_INVALID_DEVICE, index) from err
+    try:
+        parsed = parse_document(device_id, payload)
+    except DocumentRejectedError as err:
+        reason = REASON_TOO_LARGE if err.reason is RejectReason.TOO_LARGE else REASON_INVALID_DEVICE
+        raise PortabilityError(reason, index) from err
+    try:
+        validate_spec_structure(parsed.spec)
+    except ActionsInvalid as err:
+        raise PortabilityError(REASON_INVALID_ACTIONS, index) from err
+    try:
+        denied = analyze_spec(parsed.spec).denied
+    except DocumentRejectedError as err:
+        raise PortabilityError(REASON_INVALID_DEVICE, index) from err
+    if denied:
+        raise PortabilityError(REASON_DENIED_SERVICE, index)
+    return PreparedDevice(
+        index=index,
+        device_id=device_id,
+        kind=parsed.spec.kind,
+        name=parsed.spec.name,
+        data=subentry_payload(parsed.content, device_id),
+        spec=parsed.spec,
+    )
+
+
+def prepare_import(items: Iterable[Any], *, owner: str, owner_name: str) -> list[PreparedDevice]:
+    """
+    Validate every item and return the new devices; the first flaw raises PortabilityError with its 1-based position.
+
+    Nothing is created here, so a caller creates devices only after the whole list passed.
+    """
+    return [_prepare_item(index, item, owner=owner, owner_name=owner_name) for index, item in enumerate(items, start=1)]

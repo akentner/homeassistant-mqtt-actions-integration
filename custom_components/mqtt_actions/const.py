@@ -171,6 +171,11 @@ EXPORT_FORMAT: Final = "mqtt_actions_export"
 EXPORT_VERSION: Final = 1
 EXPORT_DIRECTORY: Final = "mqtt_actions"
 
+# Limits of one import call (D-11, T-04-38): the device count matches MAX_MIRRORS, the byte cap holds for the whole JSON
+# and each device is still capped by MAX_DOCUMENT_BYTES
+MAX_IMPORT_DEVICES: Final = 100
+MAX_IMPORT_BYTES: Final = 4 * 1024 * 1024
+
 # Minimum time between two accepted resyncs (D-12): a held button or a looping automation cannot queue unbounded
 # republishes; measured on Manager.clock
 RESYNC_MIN_INTERVAL_SECONDS: Final = 5.0

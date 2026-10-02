@@ -366,6 +366,20 @@
           "description": "Schreibt den Export zusätzlich in diese Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses. Nur Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, mit der Endung .json und höchstens 64 Zeichen vor der Endung."
         }
       }
+    },
+    "import_devices": {
+      "name": "Geräte importieren",
+      "description": "Legt die Geräte eines Exports als neue Geräte an, die dieser Instanz gehören. Der Export wird als Daten übergeben oder als Name einer Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses, aber nicht beides. Jedes Gerät bekommt eine neue ID und wird so streng geprüft wie ein Gerät vom Broker; Aktionen, die einen für Importe gesperrten Dienst aufrufen, werden abgelehnt. Wird ein Gerät abgelehnt, wird nichts angelegt. Importierte Geräte werden an alle verbundenen Instanzen veröffentlicht und brauchen dort eine Freigabe, bevor sie laufen.",
+      "fields": {
+        "data": {
+          "name": "Export",
+          "description": "Der Export als JSON-Objekt, zum Beispiel die Antwort der Export-Aktion."
+        },
+        "file_name": {
+          "name": "Dateiname",
+          "description": "Liest den Export stattdessen aus dieser Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses. Erlaubt ist nur ein reiner Dateiname mit der Endung .json."
+        }
+      }
     }
   },
   "exceptions": {
@@ -389,6 +403,9 @@
     },
     "export_write_failed": {
       "message": "Die Exportdatei konnte nicht geschrieben werden. Den Grund zeigt das Home-Assistant-Protokoll."
+    },
+    "import_rejected": {
+      "message": "Der Import wurde abgelehnt (Position {index}, Grund: {reason}). Es wurde nichts angelegt. Die Position ist die Nummer des Geräts im Export, ein Strich steht für den Export als Ganzes. Gründe: bad_format (kein Export dieser Integration), too_new (Export einer neueren Version), too_many (mehr als 100 Geräte), too_large (der Import oder ein Gerät ist zu groß), not_json (der Text ist kein JSON), invalid_device (ein Feld des Geräts ist ungültig), invalid_actions (die Aktionen sind auf dieser Instanz ungültig), denied_service (die Aktionen rufen einen Dienst auf, den Importe nicht verwenden dürfen)."
     }
   }
 }

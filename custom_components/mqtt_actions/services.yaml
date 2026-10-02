@@ -14,3 +14,15 @@ export_devices:
       example: backup.json
       selector:
         text:
+
+import_devices:
+  fields:
+    data:
+      required: false
+      selector:
+        object:
+    file_name:
+      required: false
+      example: backup.json
+      selector:
+        text:

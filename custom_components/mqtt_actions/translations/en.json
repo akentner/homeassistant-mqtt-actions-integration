@@ -366,6 +366,20 @@
           "description": "Also write the export to this file in the mqtt_actions folder of the configuration directory. Letters, digits, dot, dash and underscore only, ending in .json, at most 64 characters before the extension."
         }
       }
+    },
+    "import_devices": {
+      "name": "Import devices",
+      "description": "Creates the devices of an export as new devices owned by this instance. Pass the export as data, or the name of a file in the mqtt_actions folder of the configuration directory, but not both. Every device gets a new id and is checked as strictly as a device received from the broker; actions that call a service which imports may not use are refused. If one device is refused, nothing is created. Imported devices are published to every connected instance, where they need approval before they run.",
+      "fields": {
+        "data": {
+          "name": "Export",
+          "description": "The export as a JSON object, for example the response of the export action."
+        },
+        "file_name": {
+          "name": "File name",
+          "description": "Read the export from this file in the mqtt_actions folder of the configuration directory instead. Only a bare file name ending in .json is accepted."
+        }
+      }
     }
   },
   "exceptions": {
@@ -389,6 +403,9 @@
     },
     "export_write_failed": {
       "message": "The export file could not be written. See the Home Assistant log for the reason."
+    },
+    "import_rejected": {
+      "message": "The import was rejected (position {index}, reason: {reason}). Nothing was created. The position is the number of the device in the export, a dash means the export as a whole. Reasons: bad_format (not an export of this integration), too_new (export of a newer version), too_many (more than 100 devices), too_large (the import or a device is too large), not_json (the text is not JSON), invalid_device (a field of the device is not valid), invalid_actions (the actions are not valid on this instance), denied_service (the actions call a service that imports may not use)."
     }
   }
 }

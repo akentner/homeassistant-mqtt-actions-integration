@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 type MqttActionsConfigEntry = ConfigEntry[Manager]
 
 # Forwarded after the manager started and unloaded before it stops (D-13)
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.SELECT]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) -> bool:

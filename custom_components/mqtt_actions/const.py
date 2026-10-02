@@ -118,6 +118,10 @@ STORE_REVS: Final = "revs"
 STORE_MIRRORS: Final = "mirrors"
 # device id -> the actions hash the user approved on this instance; separate from the mirror records (D-02, A10)
 STORE_APPROVALS: Final = "approvals"
+# The mode of this instance and the modes of single devices (D-14): local words, only entries other than run are saved,
+# never part of a config document or a hash
+STORE_INSTANCE_MODE: Final = "instance_mode"
+STORE_DEVICE_MODES: Final = "device_modes"
 STORE_SAVE_DELAY: Final = 5.0
 
 # Owner-side defense of the published truth (D-15, D-17, D-18): how many published content hashes per device count as
@@ -143,6 +147,18 @@ MAX_BROKER_MESSAGE_BYTES: Final = 1024
 MAX_HEARTBEAT_DEVICES: Final = 10000
 # Dispatcher signal sent when the roster changed; formatted with the config entry id (D-05, D-06)
 SIGNAL_ROSTER_UPDATED: Final = f"{DOMAIN}_roster_updated_{{}}"
+
+# Per-device and per-instance mode (D-14): run is normal, observe tracks the baseline and logs what would have run, and
+# disabled ignores the state topic completely. The effective mode is the most restrictive of the two. The existing
+# run_mode (serial or restart) is a different thing and is untouched.
+MODE_RUN: Final = "run"
+MODE_OBSERVE: Final = "observe"
+MODE_DISABLED: Final = "disabled"
+MODES: Final = (MODE_RUN, MODE_OBSERVE, MODE_DISABLED)
+# Dispatcher signals formatted with the config entry id: a mode changed (selects write their state again), and an owned
+# device appeared or disappeared (the select platform adds or forgets its entity) (D-14, D-15)
+SIGNAL_MODES_CHANGED: Final = f"{DOMAIN}_modes_changed_{{}}"
+SIGNAL_DEVICES_CHANGED: Final = f"{DOMAIN}_devices_changed_{{}}"
 
 # Minimum time between two accepted resyncs (D-12): a held button or a looping automation cannot queue unbounded
 # republishes; measured on Manager.clock

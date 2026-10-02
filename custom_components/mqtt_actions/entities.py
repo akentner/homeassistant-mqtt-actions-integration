@@ -7,13 +7,15 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
 
-from .const import DOMAIN
+from .const import DOMAIN, SUBENTRY_SELECT
 
 if TYPE_CHECKING:
     from .manager import Manager
 
 HUB_MANUFACTURER = "MQTT Actions"
 HUB_MODEL = "Hub"
+SWITCH_DEVICE_MODEL = "Switch device"
+SELECT_DEVICE_MODEL = "Select device"
 
 
 def hub_device_info(manager: Manager) -> DeviceInfo:
@@ -29,6 +31,24 @@ def hub_device_info(manager: Manager) -> DeviceInfo:
         model=HUB_MODEL,
         sw_version=manager.version,
         entry_type=DeviceEntryType.SERVICE,
+    )
+
+
+def companion_device_info(device_id: str, name: str, kind: str, *, mirror: bool = False, sw_version: str) -> DeviceInfo:
+    """
+    Return the device info of the companion device of an owned or mirrored device (D-13 revised).
+
+    The companion is a device of this integration, keyed by the device uuid. The discovery device with the same uuid is
+    registered by core MQTT under the MQTT config entry and never shares a registry entry with it. For an owned device
+    the entity platform attaches it to the subentry of the device; a mirror has no subentry.
+    """
+    model = SELECT_DEVICE_MODEL if kind == SUBENTRY_SELECT else SWITCH_DEVICE_MODEL
+    return DeviceInfo(
+        identifiers={(DOMAIN, device_id)},
+        name=name,
+        manufacturer=HUB_MANUFACTURER,
+        model=f"{model} (mirror)" if mirror else model,
+        sw_version=sw_version,
     )
 
 

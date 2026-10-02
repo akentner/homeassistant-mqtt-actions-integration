@@ -20,6 +20,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 
@@ -42,8 +43,14 @@ from .const import (
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
+    MODE_OBSERVE,
+    MODE_RUN,
     RESYNC_MIN_INTERVAL_SECONDS,
+    SIGNAL_DEVICES_CHANGED,
+    SIGNAL_MODES_CHANGED,
     STORE_APPROVALS,
+    STORE_DEVICE_MODES,
+    STORE_INSTANCE_MODE,
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_MIRRORS,
@@ -67,7 +74,8 @@ from .document import (
     serialize_document,
     spec_has_actions,
 )
-from .model import DeviceSpec, spec_from_subentry, trigger_key
+from .model import DeviceSpec, shown, spec_from_subentry, trigger_key
+from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .presence import PresenceManager
 from .runner import ActionRunner
@@ -189,6 +197,20 @@ def _parse_approvals(stored: dict[str, Any]) -> dict[str, str]:
     if not isinstance(approvals, dict):
         return {}
     return {key: value for key, value in approvals.items() if isinstance(key, str) and isinstance(value, str)}
+
+
+def _parse_instance_mode(stored: dict[str, Any]) -> str:
+    """Return the instance mode from a loaded Store payload; anything that is not a mode word becomes run (D-14)."""
+    mode = stored.get(STORE_INSTANCE_MODE)
+    return mode if is_mode(mode) else MODE_RUN
+
+
+def _parse_device_modes(stored: dict[str, Any]) -> dict[str, str]:
+    """Return the device modes from a loaded Store payload; a malformed entry and a run entry are dropped (D-14)."""
+    modes = stored.get(STORE_DEVICE_MODES)
+    if not isinstance(modes, dict):
+        return {}
+    return {key: value for key, value in modes.items() if isinstance(key, str) and is_mode(value) and value != MODE_RUN}
 
 
 def _parse_mirrors(stored: dict[str, Any]) -> dict[str, ParsedDocument]:
@@ -341,6 +363,10 @@ class Manager:
         self._version = ""
         # When the last accepted resync happened on `clock`; None until the first one (D-12)
         self._last_resync: float | None = None
+        # The mode of this instance and the modes of single devices, only entries other than run; local to this
+        # instance, kept in the Store and never part of a document or a hash (D-14)
+        self._instance_mode = MODE_RUN
+        self._device_modes: dict[str, str] = {}
 
     @property
     def hass(self) -> HomeAssistant:
@@ -391,6 +417,55 @@ class Manager:
         known = self._revs.get(device_id)
         return 0 if known is None else int(known["rev"])
 
+    @property
+    def instance_mode(self) -> str:
+        """Return the mode of the whole instance (D-14)."""
+        return self._instance_mode
+
+    def device_mode(self, device_id: str) -> str:
+        """Return the mode of one device itself, run when none is stored (D-14)."""
+        return self._device_modes.get(device_id, MODE_RUN)
+
+    def effective_mode(self, device_id: str) -> str:
+        """Return the mode that counts for a device: the most restrictive of the instance and the device (D-14)."""
+        return most_restrictive(self._instance_mode, self.device_mode(device_id))
+
+    def subentry_id_of(self, device_id: str) -> str | None:
+        """Return the id of the subentry of an owned device, None for a mirror or an unknown id (D-13)."""
+        for subentry in _device_subentries(self._entry):
+            if subentry.data[CONF_DEVICE_ID] == device_id:
+                return subentry.subentry_id
+        return None
+
+    def has_device(self, device_id: str) -> bool:
+        """Return whether the id belongs to an owned device or a mirror."""
+        return self._device(device_id) is not None
+
+    async def async_set_device_mode(self, device_id: str, mode: str) -> None:
+        """
+        Set the mode of one owned or mirrored device; local only, nothing is published (D-14, T-04-21).
+
+        Raises ValueError for a word that is no mode and for an id that is neither owned nor mirrored. Run removes the
+        entry, so the Store only holds the deviations.
+        """
+        if not is_mode(mode):
+            msg = "Not a mode"
+            raise ValueError(msg)
+        if self._device(device_id) is None:
+            msg = "Unknown device"
+            raise ValueError(msg)
+        if mode == MODE_RUN:
+            self._device_modes.pop(device_id, None)
+        else:
+            self._device_modes[device_id] = mode
+        self._schedule_save()
+        async_dispatcher_send(self._hass, SIGNAL_MODES_CHANGED.format(self._entry.entry_id))
+
+    @callback
+    def _notify_devices_changed(self) -> None:
+        """Tell the select platform that an owned device appeared or disappeared (D-15)."""
+        async_dispatcher_send(self._hass, SIGNAL_DEVICES_CHANGED.format(self._entry.entry_id))
+
     async def async_start(self) -> None:
         """Load the persisted state, clear orphans, start every configured device and publish availability online."""
         await self._async_load_store()
@@ -412,6 +487,7 @@ class Manager:
             device_id: value for device_id, value in self._approvals.items() if device_id in self.mirrors
         }
         self._revs = {device_id: value for device_id, value in self._revs.items() if device_id in current}
+        self._device_modes = {device_id: value for device_id, value in self._device_modes.items() if device_id in kept}
         # The lock is held from the first subscribe until the owned devices are registered and published: a retained
         # document replayed while the subscribes are awaited queues its ingest on this lock, and by the time it runs
         # the owned ids are in `devices`, so a foreign claim for an owned id can never become a mirror (CR-02)
@@ -572,6 +648,8 @@ class Manager:
         self._revs = _parse_revs(stored)
         self._stored_mirrors = _parse_mirrors(stored)
         self._approvals = _parse_approvals(stored)
+        self._instance_mode = _parse_instance_mode(stored)
+        self._device_modes = _parse_device_modes(stored)
 
     @callback
     def _data_to_save(self) -> dict[str, Any]:
@@ -589,6 +667,8 @@ class Manager:
             STORE_PUBLISHED: sorted(self._published),
             STORE_TRIPPED: dict(self._tripped),
             STORE_REVS: {device_id: dict(value) for device_id, value in self._revs.items()},
+            STORE_INSTANCE_MODE: self._instance_mode,
+            STORE_DEVICE_MODES: dict(self._device_modes),
         }
 
     @callback
@@ -931,6 +1011,7 @@ class Manager:
             await self.async_publish_discovery(device)
         self._published.add(device_id)
         self._schedule_save()
+        self._notify_devices_changed()
 
     async def _async_change_device(self, device: Device, subentry: ConfigSubentry) -> None:
         """
@@ -994,9 +1075,11 @@ class Manager:
         self._stored_last_acted.pop(device_id, None)
         self._tripped.pop(device_id, None)
         self._revs.pop(device_id, None)
+        self._device_modes.pop(device_id, None)
         if discovery_cleared and config_cleared and state_cleared:
             self._published.discard(device_id)
         self._schedule_save()
+        self._notify_devices_changed()
 
     async def _async_orphan_cleanup(self) -> None:
         """
@@ -1092,8 +1175,22 @@ class Manager:
         if not decision.act:
             return
         assert decision.value is not None  # noqa: S101
-        trigger = device.spec.triggers.get(trigger_key(decision.value))
+        self._run_trigger(device, decision.value)
+
+    @callback
+    def _run_trigger(self, device: Device, value: str) -> None:
+        """Run the actions of the trigger of a real change, unless the mode or the circuit breaker stops it."""
+        device_id = device.device_id
+        trigger = device.spec.triggers.get(trigger_key(value))
         if trigger is None or not self.runner.can_run(device_id, trigger.key):
+            return
+        # Observe tracks the baseline in the caller and stops here; it is not a run, so no breaker counts it (D-14)
+        if self.effective_mode(device_id) == MODE_OBSERVE:
+            LOGGER.info(
+                "Observe mode: device %s would have run %s, no actions were run",
+                shown(device.name),
+                shown(trigger.label),
+            )
             return
         # Only a real change that would run counts; a paused device tracks its baseline and runs nothing (D-15)
         if device.breaker.tripped:
@@ -1108,7 +1205,7 @@ class Manager:
             device.name,
             trigger.label,
             trigger.key,
-            {"device_id": device_id, "state": decision.value},
+            {"device_id": device_id, "state": value},
         )
 
     def _new_breaker(self, spec: DeviceSpec) -> CircuitBreaker:
@@ -1225,5 +1322,4 @@ class Manager:
         if not payload:
             LOGGER.debug("Ignoring empty payload for device %s", device.name)
             return
-        shown = repr(payload[:MAX_LOGGED_PAYLOAD_LENGTH]) + ("..." if len(payload) > MAX_LOGGED_PAYLOAD_LENGTH else "")
-        LOGGER.warning("Ignoring unknown payload %s for device %s", shown, device.name)
+        LOGGER.warning("Ignoring unknown payload %s for device %s", shown(payload), device.name)

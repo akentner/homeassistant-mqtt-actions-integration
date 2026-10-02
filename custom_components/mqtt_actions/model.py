@@ -21,6 +21,7 @@ from .const import (
     CONF_STATE_VALUE,
     DEFAULT_BREAKER_MAX_RUNS,
     DEFAULT_BREAKER_WINDOW,
+    MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_TEXT_LENGTH,
     PAYLOAD_OFF,
     PAYLOAD_ON,
@@ -37,6 +38,16 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from homeassistant.config_entries import ConfigSubentry
+
+
+def shown(text: str) -> str:
+    """
+    Return text from the broker or from a name as it may appear in a log line: quoted, capped, cut marked with dots.
+
+    The repr keeps a newline or a control character inside the quotes, so a payload or a name cannot forge a log line,
+    and the cap keeps one line short (T-04-22).
+    """
+    return repr(text[:MAX_LOGGED_PAYLOAD_LENGTH]) + ("..." if len(text) > MAX_LOGGED_PAYLOAD_LENGTH else "")
 
 
 def trigger_key(value: str) -> str:

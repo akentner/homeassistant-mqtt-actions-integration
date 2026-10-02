@@ -165,6 +165,12 @@ SERVICE_RESYNC: Final = "resync"
 SERVICE_EXPORT_DEVICES: Final = "export_devices"
 SERVICE_IMPORT_DEVICES: Final = "import_devices"
 
+# Export document (D-11): the format name and version let a later reader tell versions apart; the file lives only in
+# this directory below the configuration directory, never in www, which Home Assistant serves without authentication
+EXPORT_FORMAT: Final = "mqtt_actions_export"
+EXPORT_VERSION: Final = 1
+EXPORT_DIRECTORY: Final = "mqtt_actions"
+
 # Minimum time between two accepted resyncs (D-12): a held button or a looping automation cannot queue unbounded
 # republishes; measured on Manager.clock
 RESYNC_MIN_INTERVAL_SECONDS: Final = 5.0

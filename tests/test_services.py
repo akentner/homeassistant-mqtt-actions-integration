@@ -1,6 +1,9 @@
 """The service layer: registration at setup, admin-only access, device resolution and the resync service (D-12)."""
 
 import inspect
+import json
+import stat
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -14,6 +17,7 @@ from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     DOMAIN,
+    EXPORT_DIRECTORY,
     RESYNC_MIN_INTERVAL_SECONDS,
     SERVICE_EXPORT_DEVICES,
     SERVICE_RESYNC,
@@ -31,6 +35,12 @@ if TYPE_CHECKING:
 
 BASE = "mqtt_actions"
 ON_ACTIONS = [{"action": "test.on"}]
+
+
+@pytest.fixture
+def hass_config_dir(hass_tmp_config_dir: str) -> str:
+    """Give every test of this module a temporary configuration directory, so export files never leave the test."""
+    return hass_tmp_config_dir
 
 
 async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> MockConfigEntry:
@@ -210,6 +220,113 @@ async def test_resolve_device_maps_the_companion_device_to_the_uuid(
     assert stranger_error.value.translation_key == "not_a_device"
 
 
-def test_export_service_name_is_a_constant() -> None:
-    """The export service name is part of the user-facing contract."""
-    assert SERVICE_EXPORT_DEVICES == "export_devices"
+def _export_dir(hass: HomeAssistant) -> Path:
+    return Path(hass.config.path(EXPORT_DIRECTORY))
+
+
+async def test_export_returns_all_owned_devices_as_a_response(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """D-11: without fields the response holds the content of every owned device and no file name."""
+    lamp = make_switch_subentry("Lamp", on=ON_ACTIONS, run_on_startup=True)
+    scene = make_select_subentry("Scene", [("a", "A", ON_ACTIONS), ("b", "B", [])])
+    await _setup(hass, make_hub_entry([lamp, scene]))
+
+    result = await _call(hass, SERVICE_EXPORT_DEVICES, response=True)
+
+    assert result["file"] is None
+    document = result["export"]
+    assert (document["format"], document["export_version"]) == ("mqtt_actions_export", 1)
+    assert {item["name"] for item in document["devices"]} == {"Lamp", "Scene"}
+    for item in document["devices"]:
+        assert {"device_id", "owner", "rev", "hash"}.isdisjoint(item)
+    assert not _export_dir(hass).exists()
+
+
+async def test_export_selection_by_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """With the registry id of one companion device only that device is exported; two ids export two."""
+    subs = [make_switch_subentry(name, on=ON_ACTIONS) for name in ("One", "Two", "Three")]
+    entry = await _setup(hass, make_hub_entry(subs))
+    ids = [_companion_id(hass, entry, sub["data"][CONF_DEVICE_ID]) for sub in subs]
+
+    one = await _call(hass, SERVICE_EXPORT_DEVICES, {"device_id": [ids[1]]}, response=True)
+    assert [item["name"] for item in one["export"]["devices"]] == ["Two"]
+
+    two = await _call(hass, SERVICE_EXPORT_DEVICES, {"device_id": [ids[0], ids[2]]}, response=True)
+    assert [item["name"] for item in two["export"]["devices"]] == ["One", "Three"]
+
+
+async def test_export_refuses_a_mirror_and_the_hub_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A mirror is never exported, and neither is the hub device; nothing is written."""
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+    foreign = make_spec(name="Foreign lamp", on=ON_ACTIONS)
+    async_fire_mqtt_message(hass, config_topic(BASE, foreign.device_id), document_payload(foreign), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    mirror_id = _companion_id(hass, entry, foreign.device_id)
+    hub = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
+    assert hub is not None
+
+    with pytest.raises(ServiceValidationError) as mirror_error:
+        await _call(hass, SERVICE_EXPORT_DEVICES, {"device_id": [mirror_id], "file_name": "backup.json"}, response=True)
+    assert mirror_error.value.translation_key == "export_not_owned"
+
+    with pytest.raises(ServiceValidationError) as hub_error:
+        await _call(hass, SERVICE_EXPORT_DEVICES, {"device_id": [hub.id], "file_name": "backup.json"}, response=True)
+    assert hub_error.value.translation_key == "not_a_device"
+
+    assert not _export_dir(hass).exists()
+
+
+async def test_export_writes_a_file_in_the_private_directory(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-11, A7: the file sits in <config>/mqtt_actions/, is private and holds what the response holds."""
+    await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+
+    result = await _call(hass, SERVICE_EXPORT_DEVICES, {"file_name": "backup.json"}, response=True)
+
+    assert result["file"] == "mqtt_actions/backup.json"
+    path = _export_dir(hass) / "backup.json"
+    assert path.is_file()
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+    assert json.loads(path.read_text(encoding="utf-8")) == result["export"]
+
+
+async def test_export_is_admin_only(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    hass_read_only_user: User,
+) -> None:
+    """T-04-31: a read-only user cannot export and nothing is written."""
+    await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+
+    with pytest.raises(Unauthorized):
+        await _call(hass, SERVICE_EXPORT_DEVICES, {"file_name": "backup.json"}, user=hass_read_only_user, response=True)
+
+    assert not _export_dir(hass).exists()
+
+
+@pytest.mark.parametrize("name", ["../x.json", "a/b.json", ".hidden.json", "x.txt", "", "x" * 65 + ".json"])
+async def test_export_bad_file_name_is_rejected(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable, name: str
+) -> None:
+    """T-04-32: a bad name is a translated validation error and writes nothing."""
+    await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+
+    with pytest.raises(ServiceValidationError) as raised:
+        await _call(hass, SERVICE_EXPORT_DEVICES, {"file_name": name}, response=True)
+
+    assert raised.value.translation_domain == DOMAIN
+    assert raised.value.translation_key == "bad_file_name"
+    assert not _export_dir(hass).exists()

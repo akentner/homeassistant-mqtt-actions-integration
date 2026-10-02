@@ -68,7 +68,7 @@
 - [ ] **OPS-03**: User can see the connected instances (roster with presence heartbeat)
 - [ ] **OPS-04**: Diagnostics export with sensitive data redacted
 - [ ] **OPS-05**: README and docs cover setup, trust model, limitations; releases are automated with manifest version in step with the tag
-- [ ] **OPS-06**: Test suite covers unit level, a real-Mosquitto tier, and multi-instance scenarios via an in-memory fake broker
+- [x] **OPS-06**: Test suite covers unit level, a real-Mosquitto tier, and multi-instance scenarios via an in-memory fake broker
 
 ## v2 Requirements
 
@@ -153,7 +153,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPS-03 | Phase 4 | Pending |
 | OPS-04 | Phase 4 | Pending |
 | OPS-05 | Phase 4 | Pending |
-| OPS-06 | Phase 4 | Pending |
+| OPS-06 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 44 total

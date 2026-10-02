@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 04
-current_phase_name: operations-recovery-and-release
-status: "Phase 3 shipped — PR #8"
-stopped_at: Phase 4 context gathered
-last_updated: "2026-10-02T07:18:23.596Z"
+current_phase_name: Operations, Recovery and Release
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-10-02T07:29:15.876Z"
 last_activity: 2026-10-02
-last_activity_desc: Phase 04 planning complete
-state_head: ded86658cee040ce5dfccd63d54b05250ae60f1b
+last_activity_desc: Phase 04 execution started
+state_head: 7ce454d2cb5c77c4946f01aaa0b46653e06e67fa
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 19
-  percent: 59
+  completed_plans: 20
+  percent: 63
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-28)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 03 — trust-central-config-and-ownership
+**Current focus:** Phase 04 — Operations, Recovery and Release
 
 ## Current Position
 
-Phase: 04 (operations-recovery-and-release) — READY TO EXECUTE
-Plan: Not started
-Status: Phase 3 shipped — PR #8
-Last activity: 2026-10-02 — Phase 04 planning complete
+Phase: 04 (Operations, Recovery and Release) — EXECUTING
+Plan: 2 of 13
+Status: Ready to execute
+Last activity: 2026-10-02 — Phase 04 execution started
 
-Progress: [██████░░░░] 59% of Phase 01 plans
+Progress: [██████░░░░] 63% of Phase 01 plans
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [██████░░░░] 59% of Phase 01 plans
 | Phase 03 P06 | 55 min | 3 tasks | 13 files |
 | Phase 03 P07 | 10 min | 3 tasks | 6 files |
 | Phase 03 P08 | 20min | 2 tasks | 3 files |
+| Phase 04 P01 | 7 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,7 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-07: The documented acl block is the block the broker test enforces (the test reads docs/broker-acl.md); the external publisher gets state-topic access only
 - [Phase 03]: 03-07: owner_conflict issue is transient with an online owner (cleared when the owner's healing republish is re-seen); flagged for user review
 - [Phase 03]: 03-08: escape_markdown only on Markdown-rendered flow description placeholders; chooser labels and suggested values stay raw
+- [Phase 04]: 04-01: --strict-markers in pytest addopts; release requires hassfest/HACS validation via reusable validate.yml; ci and validate jobs in release.yml need check-version so a mismatching tag stops early; hyphenated tags are prereleases
 
 ### Pending Todos
 
@@ -143,6 +145,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T06:04:49.545Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-operations-recovery-and-release/04-CONTEXT.md
+Last session: 2026-10-02T07:29:15.797Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None

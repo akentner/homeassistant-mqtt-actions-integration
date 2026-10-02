@@ -144,11 +144,11 @@ Plans:
   4. User can set per instance and device whether actions run, are only observed, or are disabled, and can download diagnostics with sensitive data redacted.
   5. README and docs cover setup, trust model and limitations; a tagged release is built automatically with the manifest version matching the tag; CI runs the unit, real-Mosquitto and multi-instance fake-broker test tiers.
 
-**Plans:** 13 plans
+**Plans:** 1/13 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 04-01-PLAN.md — Test tiers by marker, CI job per tier, reusable CI and the tag-triggered release workflow (wave 1)
+- [x] 04-01-PLAN.md — Test tiers by marker, CI job per tier, reusable CI and the tag-triggered release workflow (wave 1)
 - [ ] 04-02-PLAN.md — Approval hash binds run mode and breaker limits (WR-04), dialog and README (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -192,7 +192,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
-| 4. Operations, Recovery and Release | 0/0 | Not started | - |
+| 4. Operations, Recovery and Release | 1/13 | In Progress|  |
 
 ## Backlog
 

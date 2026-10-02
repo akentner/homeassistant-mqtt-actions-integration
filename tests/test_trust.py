@@ -789,3 +789,31 @@ def test_view_removes_control_characters_and_fence_runs() -> None:
     assert chr(7) not in view.actions_yaml
     assert chr(0x202E) not in view.actions_yaml
     assert "abc" in view.actions_yaml
+
+
+# --- the approval words (D-17, OPS-04) ----------------------------------------------------------------------------
+
+
+async def test_approval_state_words(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Every device has one public answer: owned, approved, pending, blocked, no_actions or unknown."""
+    sub = make_switch_subentry("Own lamp", on=ON_ACTIONS)
+    owned_id = sub["data"]["device_id"]
+    pending = make_spec(on=ON_ACTIONS, name="Pending")
+    blocked = make_spec(on=DENIED_ACTIONS, name="Blocked")
+    plain = make_spec(name="Plain")
+    entry = await _setup(hass, make_hub_entry([sub]))
+    for spec in (pending, blocked, plain):
+        await _deliver(hass, spec.device_id, document_payload(spec))
+    manager = _manager(entry)
+
+    assert manager.approval_state(owned_id) == "owned"
+    assert manager.approval_state(pending.device_id) == "pending"
+    assert manager.approval_state(blocked.device_id) == "blocked"
+    assert manager.approval_state(plain.device_id) == "no_actions"
+    assert manager.approval_state("not-a-device") == "unknown"
+
+    assert await _approve(entry, pending.device_id)
+
+    assert manager.approval_state(pending.device_id) == "approved"

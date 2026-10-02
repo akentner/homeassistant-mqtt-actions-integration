@@ -347,5 +347,28 @@
         "restart": "Restart (cancel the running run)"
       }
     }
+  },
+  "services": {
+    "resync": {
+      "name": "Resync",
+      "description": "Publishes everything this instance owns to the broker again: the config documents, the discovery and the online status. A second call within a few seconds is refused."
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "MQTT Actions is not loaded. Check that the integration is set up and that MQTT is available."
+    },
+    "resync_throttled": {
+      "message": "A resync just ran. Wait a few seconds and try again."
+    },
+    "unknown_device": {
+      "message": "This device does not exist in the device registry."
+    },
+    "not_a_device": {
+      "message": "This is not a device of MQTT Actions. Pick the device of a Switch or Select."
+    },
+    "export_not_owned": {
+      "message": "Only devices owned by this instance can be used here. A mirror of another instance cannot."
+    }
   }
 }

@@ -347,5 +347,28 @@
         "restart": "Neustart (laufende Ausführung abbrechen)"
       }
     }
+  },
+  "services": {
+    "resync": {
+      "name": "Neu synchronisieren",
+      "description": "Veröffentlicht alles, was diese Instanz besitzt, erneut auf dem Broker: die Konfigurationsdokumente, die Discovery und den Online-Status. Ein zweiter Aufruf innerhalb weniger Sekunden wird abgelehnt."
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "MQTT Actions ist nicht geladen. Prüfe, ob die Integration eingerichtet und MQTT verfügbar ist."
+    },
+    "resync_throttled": {
+      "message": "Eine Neusynchronisierung ist gerade gelaufen. Warte ein paar Sekunden und versuche es erneut."
+    },
+    "unknown_device": {
+      "message": "Dieses Gerät existiert nicht in der Geräteregistrierung."
+    },
+    "not_a_device": {
+      "message": "Das ist kein Gerät von MQTT Actions. Wähle das Gerät eines Schalters oder einer Auswahl."
+    },
+    "export_not_owned": {
+      "message": "Hier können nur Geräte verwendet werden, die dieser Instanz gehören. Ein Spiegel einer anderen Instanz geht nicht."
+    }
   }
 }

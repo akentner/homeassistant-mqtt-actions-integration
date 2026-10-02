@@ -5,18 +5,30 @@ from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
+from homeassistant.helpers import config_validation as cv
 
-from .const import CONF_DELETE_DEVICES_ON_REMOVE
+from .const import CONF_DELETE_DEVICES_ON_REMOVE, DOMAIN
 from .manager import Manager, async_remove_all_devices, async_remove_local_state
 from .mqtt_gateway import MqttGateway
+from .services import async_setup_services
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.typing import ConfigType
 
 type MqttActionsConfigEntry = ConfigEntry[Manager]
 
 # Forwarded after the manager started and unloaded before it stops (D-13)
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.SELECT]
+
+# The integration is configured through the UI only; hassfest requires this once `async_setup` exists
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa: ARG001
+    """Register the services once per Home Assistant start; the entry setup registers none (D-12)."""
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry) -> bool:

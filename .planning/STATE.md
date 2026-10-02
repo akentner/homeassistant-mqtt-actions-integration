@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: Operations, Recovery and Release
 status: executing
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-10-02T08:18:37.363Z"
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-10-02T08:25:26.572Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 04 execution started
-state_head: 20fe59c8b0876392722fd5dd883736fcc446a60f
+state_head: 83cdb306e65b00f0402eac3c10334a8b7c83579e
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 32
-  completed_plans: 24
+  completed_plans: 25
   percent: 75
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 04 (Operations, Recovery and Release) — EXECUTING
-Plan: 6 of 13
+Plan: 7 of 13
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 04 execution started
 
@@ -77,6 +77,7 @@ Progress: [████████░░] 75% of Phase 01 plans
 | Phase 04 P03 | 12min | 3 tasks | 11 files |
 | Phase 04 P04 | 10 min | 3 tasks | 11 files |
 | Phase 04 P05 | 15 min | 3 tasks | 14 files |
+| Phase 04 P06 | 7 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,7 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-05: mode gate sits between can_run and the circuit breaker; observe is logged through model.shown and never counted, disabled returns before the tracker
 - [Phase 04]: 04-05: leaving disabled re-baselines (baseline and startup window cleared, state topic resubscribed); the test topic obeys the effective mode
 - [Phase 04]: 04-05: companion devices are looked up with async_get_device_by_identifier (async_get_device is deprecated and raises in tests); mode keys are additive Store keys without a version bump
+- [Phase 04]: 04-06: mirrors share the owned devices' select add loop (config_subentry_id None for a mirror); _remove_companion removes only the (mqtt_actions, id) device and never the core MQTT device
 
 ### Pending Todos
 
@@ -159,6 +161,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T08:18:37.283Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-10-02T08:25:26.492Z
+Stopped at: Completed 04-06-PLAN.md
 Resume file: None

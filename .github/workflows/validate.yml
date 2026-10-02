@@ -2,8 +2,12 @@ name: Validate
 
 on:
   push:
+    # A version tag runs these checks once, through release.yml
+    tags-ignore:
+      - "v*.*.*"
   pull_request:
   workflow_dispatch:
+  workflow_call:
   schedule:
     - cron: "0 0 * * *"
 

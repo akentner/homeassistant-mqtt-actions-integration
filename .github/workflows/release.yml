@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions: {}
+
+jobs:
+  check-version:
+    name: Tag matches manifest version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compare the tag with manifest.json
+        run: |
+          set -euo pipefail
+          # The tag name is attacker-influenced text: read it as a shell variable and validate it before any output
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::The tag is not a semantic version with a v prefix"
+            exit 1
+          fi
+          manifest_version=$(jq -r .version custom_components/mqtt_actions/manifest.json)
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$tag_version" != "$manifest_version" ]; then
+            echo "::error::Tag version $tag_version differs from manifest.json version $manifest_version"
+            exit 1
+          fi
+
+  ci:
+    name: CI
+    needs: check-version
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  validate:
+    name: Validate
+    needs: check-version
+    permissions:
+      contents: read
+    uses: ./.github/workflows/validate.yml
+
+  release:
+    name: Create GitHub release
+    needs: [check-version, ci, validate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release with generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          flags=(--verify-tag --generate-notes)
+          # A version with a hyphen suffix (for example v0.2.0-rc1) is a prerelease
+          case "$GITHUB_REF_NAME" in
+            *-*) flags+=(--prerelease) ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "${flags[@]}"

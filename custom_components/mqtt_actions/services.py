@@ -26,6 +26,9 @@ from homeassistant.helpers.service import async_register_admin_service
 
 from .actions import ActionsInvalid, async_validate_actions
 from .const import (
+    ADOPT_NOT_A_MIRROR,
+    ADOPT_NOT_APPROVED,
+    ADOPT_OWNER_NOT_OFFLINE,
     CONF_DEVICE_ID,
     DOMAIN,
     EXPORT_DIRECTORY,
@@ -34,11 +37,13 @@ from .const import (
     REASON_BAD_STATE,
     REASON_NO_STATE,
     REASON_RATE_LIMITED,
+    SERVICE_ADOPT_DEVICE,
     SERVICE_EXPORT_DEVICES,
     SERVICE_IMPORT_DEVICES,
     SERVICE_RESYNC,
     SERVICE_RETRIGGER,
 )
+from .manager import AdoptionError
 from .portability import (
     REASON_BAD_FILE_NAME,
     REASON_BAD_FORMAT,
@@ -65,6 +70,7 @@ if TYPE_CHECKING:
 CONF_FILE_NAME = "file_name"
 CONF_DATA = "data"
 CONF_STATE = "state"
+CONF_FORCE = "force"
 
 RESYNC_SCHEMA = probatio.Schema({})
 # The file name is only a string here; its rules are checked by the handler so a bad name is a translated error
@@ -88,6 +94,19 @@ RETRIGGER_SCHEMA = probatio.Schema(
         probatio.Optional(CONF_STATE): str,
     }
 )
+# The device is named by its registry id; force only overrides the owner-online check, never the approval (D-10)
+ADOPT_SCHEMA = probatio.Schema(
+    {
+        probatio.Required(CONF_DEVICE_ID): str,
+        probatio.Optional(CONF_FORCE, default=False): cv.boolean,
+    }
+)
+# The placeholders each refusal of an adoption fills in its message; a broker-supplied name is plain text (D-10)
+ADOPT_PLACEHOLDERS = {
+    ADOPT_OWNER_NOT_OFFLINE: ("device", "owner"),
+    ADOPT_NOT_APPROVED: ("device",),
+    ADOPT_NOT_A_MIRROR: (),
+}
 # The refusals of the caller that have a message of their own; anything else means the device vanished meanwhile
 RETRIGGER_REFUSALS = frozenset({REASON_BAD_STATE, REASON_NO_STATE, REASON_RATE_LIMITED})
 
@@ -265,6 +284,35 @@ async def _async_handle_retrigger(call: ServiceCall) -> dict[str, Any]:
         raise ServiceValidationError(translation_domain=DOMAIN, translation_key=key) from err
 
 
+def _adoption_refused(manager: Manager, device_id: str, err: AdoptionError) -> ServiceValidationError:
+    """Return the translated refusal of an adoption: the key is `adopt_<reason>`, the message names force: true."""
+    device = manager.device(device_id)
+    values = {"device": device.name if device is not None else "", "owner": err.owner_name or ""}
+    names = ADOPT_PLACEHOLDERS.get(err.reason, ())
+    return ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key=f"adopt_{err.reason}",
+        translation_placeholders={name: values[name] for name in names},
+    )
+
+
+async def _async_handle_adopt(call: ServiceCall) -> dict[str, Any]:
+    """
+    Take over an approved mirror whose owner is offline, or on `force`, and return the old owner's name.
+
+    The device may be owned or a mirror here; the manager refuses anything that is not a mirror, an unapproved or
+    blocked mirror even with `force`, and an owner that is not known to be offline without it (D-10, T-04-50).
+    """
+    hass = call.hass
+    manager = async_get_loaded_manager(hass)
+    device_id = resolve_device(hass, manager, call.data[CONF_DEVICE_ID])
+    try:
+        previous_owner = await manager.async_adopt(device_id, force=call.data[CONF_FORCE])
+    except AdoptionError as err:
+        raise _adoption_refused(manager, device_id, err) from err
+    return {"uuid": device_id, "adopted": True, "previous_owner": previous_owner}
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the services of the integration; called once from `async_setup`."""
@@ -279,4 +327,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     async_register_admin_service(
         hass, DOMAIN, SERVICE_RETRIGGER, _async_handle_retrigger, RETRIGGER_SCHEMA, SupportsResponse.OPTIONAL
+    )
+    async_register_admin_service(
+        hass, DOMAIN, SERVICE_ADOPT_DEVICE, _async_handle_adopt, ADOPT_SCHEMA, SupportsResponse.OPTIONAL
     )

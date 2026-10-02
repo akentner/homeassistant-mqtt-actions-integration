@@ -394,6 +394,20 @@
           "description": "The state whose actions are run, for example ON, or the value of a Select option. Capitalization is ignored. Leave empty to use the last state this instance acted on."
         }
       }
+    },
+    "adopt_device": {
+      "name": "Adopt device",
+      "description": "Takes over a device of another instance whose owner is gone. This instance becomes the owner under the same device uuid, keeps the entities and the last known state, and publishes the device with a transfer marker so the other instances follow. The actions of the device must be approved on this instance first (a device without actions needs no approval); a device blocked by the service denylist cannot be adopted. The call is refused while the owner may still be online, unless force is set.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The device to take over: a device that this instance mirrors from another instance."
+        },
+        "force": {
+          "name": "Force",
+          "description": "Adopt even though the owner is not known to be offline. Use this only when you are sure the other instance is gone for good, because two owners of one device overwrite each other's document. The approval is still required."
+        }
+      }
     }
   },
   "exceptions": {
@@ -435,6 +449,15 @@
     },
     "retrigger_rate_limited": {
       "message": "This device was just re-triggered. Wait a few seconds and try again."
+    },
+    "adopt_owner_not_offline": {
+      "message": "{owner} is not known to be offline, so {device} was not adopted. Wait until that instance is offline (a clean shutdown shows at once, a crash after 90 seconds), or call the service again with force: true to adopt anyway."
+    },
+    "adopt_not_approved": {
+      "message": "The actions of {device} are not approved on this instance, or the device is blocked. Approve it first in Repairs. A device that the service denylist blocks cannot be adopted, not even with force."
+    },
+    "adopt_not_a_mirror": {
+      "message": "This device does not come from another instance, so there is nothing to adopt. Pick a device that this instance mirrors from another instance."
     }
   }
 }

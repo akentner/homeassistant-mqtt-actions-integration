@@ -394,6 +394,20 @@
           "description": "Der Zustand, dessen Aktionen ausgeführt werden, zum Beispiel ON, oder der Wert einer Option einer Auswahl. Groß- und Kleinschreibung wird ignoriert. Leer lassen, um den Zustand zu verwenden, auf den diese Instanz zuletzt reagiert hat."
         }
       }
+    },
+    "adopt_device": {
+      "name": "Gerät übernehmen",
+      "description": "Übernimmt ein Gerät einer anderen Instanz, deren Besitzer weg ist. Diese Instanz wird unter derselben Geräte-UUID zum Besitzer, behält die Entitäten und den zuletzt bekannten Zustand und veröffentlicht das Gerät mit einer Übergabemarkierung, damit die anderen Instanzen folgen. Die Aktionen des Geräts müssen vorher auf dieser Instanz freigegeben sein (ein Gerät ohne Aktionen braucht keine Freigabe); ein Gerät, das von der Dienst-Sperrliste blockiert wird, kann nicht übernommen werden. Der Aufruf wird abgelehnt, solange der Besitzer noch online sein könnte, außer force ist gesetzt.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Das Gerät, das übernommen wird: ein Gerät, das diese Instanz von einer anderen Instanz spiegelt."
+        },
+        "force": {
+          "name": "Erzwingen",
+          "description": "Auch übernehmen, wenn der Besitzer nicht als offline bekannt ist. Nur verwenden, wenn die andere Instanz sicher dauerhaft weg ist, weil zwei Besitzer eines Geräts gegenseitig ihr Dokument überschreiben. Die Freigabe ist weiterhin nötig."
+        }
+      }
     }
   },
   "exceptions": {
@@ -435,6 +449,15 @@
     },
     "retrigger_rate_limited": {
       "message": "Dieses Gerät wurde gerade erst erneut ausgelöst. Warte ein paar Sekunden und versuche es erneut."
+    },
+    "adopt_owner_not_offline": {
+      "message": "{owner} ist nicht als offline bekannt, deshalb wurde {device} nicht übernommen. Warte, bis diese Instanz offline ist (ein sauberes Herunterfahren zeigt sich sofort, ein Absturz nach 90 Sekunden), oder rufe den Dienst erneut mit force: true auf, um trotzdem zu übernehmen."
+    },
+    "adopt_not_approved": {
+      "message": "Die Aktionen von {device} sind auf dieser Instanz nicht freigegeben, oder das Gerät ist blockiert. Gib es zuerst in den Reparaturen frei. Ein Gerät, das die Sperrliste der Dienste blockiert, kann nicht übernommen werden, auch nicht mit force."
+    },
+    "adopt_not_a_mirror": {
+      "message": "Dieses Gerät stammt nicht von einer anderen Instanz, es gibt also nichts zu übernehmen. Wähle ein Gerät, das diese Instanz von einer anderen Instanz spiegelt."
     }
   }
 }

@@ -352,6 +352,20 @@
     "resync": {
       "name": "Resync",
       "description": "Publishes everything this instance owns to the broker again: the config documents, the discovery and the online status. A second call within a few seconds is refused."
+    },
+    "export_devices": {
+      "name": "Export devices",
+      "description": "Returns the devices this instance owns as a JSON document, and optionally writes the document to a private file in the mqtt_actions folder of the configuration directory. The export holds the actions and no device ids, so an import always creates new devices. Devices mirrored from other instances are never exported.",
+      "fields": {
+        "device_id": {
+          "name": "Devices",
+          "description": "The devices to export. Leave empty to export all devices of this instance."
+        },
+        "file_name": {
+          "name": "File name",
+          "description": "Also write the export to this file in the mqtt_actions folder of the configuration directory. Letters, digits, dot, dash and underscore only, ending in .json, at most 64 characters before the extension."
+        }
+      }
     }
   },
   "exceptions": {
@@ -369,6 +383,12 @@
     },
     "export_not_owned": {
       "message": "Only devices owned by this instance can be used here. A mirror of another instance cannot."
+    },
+    "bad_file_name": {
+      "message": "The file name is not allowed. Use letters, digits, dot, dash and underscore only, start with a letter or digit, end in .json and keep it to 64 characters before the extension."
+    },
+    "export_write_failed": {
+      "message": "The export file could not be written. See the Home Assistant log for the reason."
     }
   }
 }

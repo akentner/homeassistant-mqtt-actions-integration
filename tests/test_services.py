@@ -8,8 +8,9 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from homeassistant.core import Context
-from homeassistant.exceptions import ServiceValidationError, Unauthorized
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError, Unauthorized
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.service import async_get_all_descriptions
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message
 
 import custom_components.mqtt_actions as integration
@@ -330,3 +331,44 @@ async def test_export_bad_file_name_is_rejected(
     assert raised.value.translation_domain == DOMAIN
     assert raised.value.translation_key == "bad_file_name"
     assert not _export_dir(hass).exists()
+
+
+def _plant_symlink(hass: HomeAssistant) -> Path:
+    """Prepare an export directory with `link.json` pointing at another file, and return that file."""
+    other = Path(hass.config.path("precious.txt"))
+    other.write_text("precious", encoding="utf-8")
+    _export_dir(hass).mkdir(mode=0o700)
+    (_export_dir(hass) / "link.json").symlink_to(other)
+    return other
+
+
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+async def test_export_write_failure_is_a_translated_error(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-04-32: a symlink as target is refused with a translated error and the linked file is untouched."""
+    await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+    other = _plant_symlink(hass)
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await _call(hass, SERVICE_EXPORT_DEVICES, {"file_name": "link.json"}, response=True)
+
+    assert raised.value.translation_key == "export_write_failed"
+    assert _read(other) == "precious"
+
+
+async def test_services_yaml_describes_both_services(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """services.yaml loads and describes the export fields: a device selector of this integration and a text field."""
+    await _setup(hass, make_hub_entry())
+
+    descriptions = (await async_get_all_descriptions(hass))[DOMAIN]
+
+    assert SERVICE_RESYNC in descriptions
+    fields = descriptions[SERVICE_EXPORT_DEVICES]["fields"]
+    assert fields[CONF_DEVICE_ID]["selector"] == {"device": {"integration": DOMAIN, "multiple": True}}
+    assert "text" in fields["file_name"]["selector"]

@@ -352,6 +352,20 @@
     "resync": {
       "name": "Neu synchronisieren",
       "description": "Veröffentlicht alles, was diese Instanz besitzt, erneut auf dem Broker: die Konfigurationsdokumente, die Discovery und den Online-Status. Ein zweiter Aufruf innerhalb weniger Sekunden wird abgelehnt."
+    },
+    "export_devices": {
+      "name": "Geräte exportieren",
+      "description": "Gibt die Geräte dieser Instanz als JSON-Dokument zurück und schreibt es auf Wunsch in eine private Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses. Der Export enthält die Aktionen und keine Geräte-IDs, ein Import legt also immer neue Geräte an. Geräte, die von anderen Instanzen gespiegelt sind, werden nie exportiert.",
+      "fields": {
+        "device_id": {
+          "name": "Geräte",
+          "description": "Die zu exportierenden Geräte. Leer lassen, um alle Geräte dieser Instanz zu exportieren."
+        },
+        "file_name": {
+          "name": "Dateiname",
+          "description": "Schreibt den Export zusätzlich in diese Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses. Nur Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, mit der Endung .json und höchstens 64 Zeichen vor der Endung."
+        }
+      }
     }
   },
   "exceptions": {
@@ -369,6 +383,12 @@
     },
     "export_not_owned": {
       "message": "Hier können nur Geräte verwendet werden, die dieser Instanz gehören. Ein Spiegel einer anderen Instanz geht nicht."
+    },
+    "bad_file_name": {
+      "message": "Der Dateiname ist nicht erlaubt. Verwende nur Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, beginne mit einem Buchstaben oder einer Ziffer, ende mit .json und bleibe bei höchstens 64 Zeichen vor der Endung."
+    },
+    "export_write_failed": {
+      "message": "Die Exportdatei konnte nicht geschrieben werden. Den Grund zeigt das Home-Assistant-Protokoll."
     }
   }
 }

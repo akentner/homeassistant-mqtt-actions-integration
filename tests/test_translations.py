@@ -84,6 +84,7 @@ SERVICE_EXCEPTIONS = (
     "not_a_device",
     "export_not_owned",
     "bad_file_name",
+    "export_write_failed",
 )
 
 REQUIRED_KEYS = (

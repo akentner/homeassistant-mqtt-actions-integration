@@ -5,10 +5,10 @@ import stat
 from typing import TYPE_CHECKING
 
 import pytest
-from custom_components.mqtt_actions.portability import PortabilityError, build_export, export_file_path, write_export
 
 from custom_components.mqtt_actions.const import EXPORT_DIRECTORY, EXPORT_FORMAT, EXPORT_VERSION, SUBENTRY_SELECT
 from custom_components.mqtt_actions.document import build_content
+from custom_components.mqtt_actions.portability import PortabilityError, build_export, export_file_path, write_export
 from tests.documents import make_spec
 
 if TYPE_CHECKING:
@@ -47,7 +47,7 @@ def test_build_export_of_nothing_is_an_empty_list() -> None:
     assert build_export([])["devices"] == []
 
 
-@pytest.mark.parametrize("name", ["backup.json", "a-b_c.1.json", "A.json", f"{'a' * 64}.json", f"{'a' * 63}.b.json"])
+@pytest.mark.parametrize("name", ["backup.json", "a-b_c.1.json", "A.json", f"{'a' * 64}.json", f"{'a' * 62}.b.json"])
 def test_export_file_name_accepts(name: str, tmp_path: Path) -> None:
     """Names made of letters, digits, dot, dash and underscore with the json extension are accepted."""
     assert export_file_path(tmp_path, name) == tmp_path / EXPORT_DIRECTORY / name

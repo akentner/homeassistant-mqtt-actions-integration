@@ -11,23 +11,36 @@ produces. It is an instance-local value and never part of synced content. `resol
 through the `(DOMAIN, uuid)` identifier of the companion device.
 """
 
+import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import probatio
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import SupportsResponse, callback
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.service import async_register_admin_service
 
-from .const import DOMAIN, SERVICE_RESYNC
+from .const import CONF_DEVICE_ID, DOMAIN, EXPORT_DIRECTORY, LOGGER, SERVICE_EXPORT_DEVICES, SERVICE_RESYNC
+from .portability import PortabilityError, build_export, export_file_path, write_export
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
 
     from .manager import Manager
 
+CONF_FILE_NAME = "file_name"
+
 RESYNC_SCHEMA = probatio.Schema({})
+# The file name is only a string here; its rules are checked by the handler so a bad name is a translated error
+EXPORT_SCHEMA = probatio.Schema(
+    {
+        probatio.Optional(CONF_DEVICE_ID): probatio.All(cv.ensure_list, [str]),
+        probatio.Optional(CONF_FILE_NAME): str,
+    }
+)
 
 
 def async_get_loaded_manager(hass: HomeAssistant) -> Manager:
@@ -72,9 +85,46 @@ async def _async_handle_resync(call: ServiceCall) -> dict[str, Any]:
     return {"resynced": True}
 
 
+async def _async_handle_export(call: ServiceCall) -> dict[str, Any]:
+    """
+    Return the export of the owned devices as the response and write it to a private file when a name is given.
+
+    Without a device all owned devices are exported; a selected device must be owned (a mirror, the hub device and
+    foreign devices are refused). The directory comes from `hass.config.path()` and never from the user (T-04-32).
+    """
+    hass = call.hass
+    manager = async_get_loaded_manager(hass)
+    config_dir = Path(hass.config.path())
+    file_name: str | None = call.data.get(CONF_FILE_NAME)
+    if file_name is not None:
+        try:
+            export_file_path(config_dir, file_name)
+        except PortabilityError as err:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="bad_file_name") from err
+    selected: list[str] = call.data.get(CONF_DEVICE_ID, [])
+    if selected:
+        device_ids = list(dict.fromkeys(resolve_device(hass, manager, item, owned_only=True) for item in selected))
+    else:
+        device_ids = list(manager.devices)
+    document = build_export(manager.devices[device_id].spec for device_id in device_ids)
+    if file_name is None:
+        return {"export": document, "file": None}
+    text = json.dumps(document, indent=2, ensure_ascii=False) + "\n"
+    try:
+        await hass.async_add_executor_job(write_export, config_dir, file_name, text)
+    except (PortabilityError, OSError) as err:
+        # Only the reason code or the OS error class is logged: the file name is user input and the text holds actions
+        LOGGER.warning("The export file could not be written: %s", getattr(err, "reason", type(err).__name__))
+        raise HomeAssistantError(translation_domain=DOMAIN, translation_key="export_write_failed") from err
+    return {"export": document, "file": f"{EXPORT_DIRECTORY}/{file_name}"}
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the services of the integration; called once from `async_setup`."""
     async_register_admin_service(
         hass, DOMAIN, SERVICE_RESYNC, _async_handle_resync, RESYNC_SCHEMA, SupportsResponse.OPTIONAL
+    )
+    async_register_admin_service(
+        hass, DOMAIN, SERVICE_EXPORT_DEVICES, _async_handle_export, EXPORT_SCHEMA, SupportsResponse.OPTIONAL
     )

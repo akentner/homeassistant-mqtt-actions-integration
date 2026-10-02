@@ -272,3 +272,114 @@ def test_security_limits_are_stated() -> None:
     )
     assert "advisory" in _normalize(troubleshooting)
     assert "cooperative" in _normalize(troubleshooting)
+
+
+def _section(text: str, heading: str) -> str:
+    """Return the body of the markdown section whose heading starts with the given words, up to the next heading."""
+    lines = text.splitlines()
+    for start, line in enumerate(lines):
+        if line.startswith("#") and line.lstrip("#").strip().lower().startswith(heading):
+            level = len(line) - len(line.lstrip("#"))
+            body: list[str] = []
+            for follower in lines[start + 1 :]:
+                if follower.startswith("#") and len(follower) - len(follower.lstrip("#")) <= level:
+                    break
+                body.append(follower)
+            return "\n".join(body)
+    return ""
+
+
+def test_readme_documents_phase4_behavior() -> None:
+    text = README.read_text(encoding="utf-8")
+    lowered = _normalize(text)
+    for phrase in (
+        "re-trigger",
+        "roster",
+        "heartbeat",
+        "observe",
+        "adopt",
+        "export",
+        "import",
+        "diagnostics",
+        "resync",
+        "companion device",
+        "docs/operations.md",
+        "docs/diagnostics.md",
+        "docs/troubleshooting.md",
+    ):
+        assert phrase in lowered, f"README never mentions {phrase}"
+    headings = _headings(text)
+    for section in (
+        "installation",
+        "limitations",
+        "security",
+        "multiple instances",
+        "trust model",
+        "deleting devices",
+        "operations",
+        "releases",
+    ):
+        assert any(heading.startswith(section) for heading in headings), f"README has no {section} section"
+
+
+def test_readme_documents_the_release_process() -> None:
+    text = README.read_text(encoding="utf-8")
+    releases = _section(text, "releases")
+    assert releases, "the README has no Releases section"
+    lowered = _normalize(releases).replace("`", "")
+    assert "v*.*.*" in lowered or "vx.y.z" in lowered, "the Releases section never names the tag pattern"
+    sentences = _sentences(releases)
+    assert any("tag" in sentence and "manifest.json" in sentence and "equal" in sentence for sentence in sentences), (
+        "the Releases section never says that the tag must equal the version of manifest.json"
+    )
+    for job in ("lint", "unit", "real mosquitto", "multi-instance", "hassfest", "hacs"):
+        assert job in lowered, f"the Releases section never names the gating job {job}"
+    assert any("hyphen" in sentence and "prerelease" in sentence for sentence in sentences), (
+        "the Releases section never says that a hyphen suffix makes a prerelease"
+    )
+    assert "no zip" in lowered, "the Releases section never says that no zip is built"
+
+
+def test_readme_documents_the_test_tiers() -> None:
+    development = _section(README.read_text(encoding="utf-8"), "development")
+    assert development, "the README has no Development section"
+    for selection in ('-m "not broker and not multi_instance"', "-m broker", "-m multi_instance"):
+        assert selection in development, f"the Development section never names {selection}"
+    assert "MQTT_ACTIONS_REQUIRE_BROKER" in development
+
+
+def test_acl_document_names_every_topic_family() -> None:
+    text = _page(BROKER_ACL)
+    rows = [line for line in _section(text, "topics").splitlines() if line.startswith("| `")]
+    first_cells = [row.split("|")[1].strip().strip("`") for row in rows]
+    families = {
+        "config": lambda topic: topic.startswith("<base topic>/") and topic.endswith("/config"),
+        "state": lambda topic: topic.endswith("/state"),
+        "test": lambda topic: topic.endswith("/test"),
+        "availability": lambda topic: topic.endswith("/availability"),
+        "heartbeat": lambda topic: topic.endswith("/heartbeat"),
+        "retrigger": lambda topic: topic.endswith("/retrigger"),
+        "acks": lambda topic: topic.endswith("/acks"),
+        "discovery": lambda topic: topic.startswith("<discovery prefix>/"),
+    }
+    for family, matches in families.items():
+        assert any(matches(topic) for topic in first_cells), f"the topic table of the ACL page has no {family} row"
+    block = re.search(r"^```acl\n(.*?)^```$", text, re.DOTALL | re.MULTILINE)
+    assert block is not None
+    for word in ("heartbeat", "retrigger", "acks"):
+        assert word in block.group(1), f"the ACL block never mentions {word}"
+    assert "acknowledgements are advisory" in _normalize(_section(text, "limits"))
+
+
+def test_readme_limitations_are_current() -> None:
+    limitations = _normalize(_section(README.read_text(encoding="utf-8"), "limitations")).replace("`", "")
+    for phrase in (
+        "turns offline in the roster after 90 seconds",
+        "retained availability can stay online",
+        "adoption needs an approved mirror",
+        "older versions ignore the transfer marker",
+        "a re-trigger reaches only instances that are connected and approved",
+        "acknowledgements are advisory",
+        "at least once",
+    ):
+        assert phrase in limitations, f"the Limitations section never says: {phrase}"

@@ -168,3 +168,12 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 Plans:
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.2: Evaluate native switch/select entities instead of MQTT Discovery (BACKLOG)
+
+**Goal:** [Captured for future planning] Entities owned by the MQTT Actions config entry would show the full device and entity count on our integration page (incl. mirrored devices on other instances), remove discovery healing/ghost-entity handling and DSC-04. Costs: breaks the PROJECT.md Discovery constraint, rewrite of phase 1-3 publishing, loses non-HA consumers. Origin: Phase 4 research on D-13 (a device belongs to exactly one config entry); Phase 4 uses companion devices meanwhile.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)

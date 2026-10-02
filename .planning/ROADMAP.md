@@ -144,7 +144,43 @@ Plans:
   4. User can set per instance and device whether actions run, are only observed, or are disabled, and can download diagnostics with sensitive data redacted.
   5. README and docs cover setup, trust model and limitations; a tagged release is built automatically with the manifest version matching the tag; CI runs the unit, real-Mosquitto and multi-instance fake-broker test tiers.
 
-**Plans**: TBD
+**Plans:** 13 plans
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — Test tiers by marker, CI job per tier, reusable CI and the tag-triggered release workflow (wave 1)
+- [ ] 04-02-PLAN.md — Approval hash binds run mode and breaker limits (WR-04), dialog and README (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-03-PLAN.md — Tracer: heartbeat, roster, owner-offline answer and the tested ACL lines (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-04-PLAN.md — Hub device with the roster sensor and the resync button, platform plumbing (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 04-05-PLAN.md — Run, observe and disabled modes for owned devices and the instance, companion devices with select entities (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 04-06-PLAN.md — Companion devices and mode selects for mirrored devices, safe life cycle (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 04-07-PLAN.md — Redacted diagnostics from an allow-list (wave 6)
+- [ ] 04-08-PLAN.md — Admin service layer with resync and export, private export files (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 04-09-PLAN.md — Import service: strict, all-or-nothing, bounded (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 04-10-PLAN.md — Re-trigger protocol, acknowledgements, service response and ACL lines (wave 8)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 04-11-PLAN.md — Adoption of orphaned devices with the transfer marker and the narrow pin rule (wave 9)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 04-12-PLAN.md — Duplicate instance id: detection, local release and fix flow; returning old owner flow (wave 10)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 04-13-PLAN.md — README, operations, diagnostics and troubleshooting pages tied to the code by tests (wave 11)
 
 ## Progress
 

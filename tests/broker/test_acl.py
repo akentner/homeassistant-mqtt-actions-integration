@@ -144,6 +144,10 @@ def _availability(instance_id: str) -> str:
     return f"{BASE}/v1/instances/{instance_id}/availability"
 
 
+def _heartbeat(instance_id: str) -> str:
+    return f"{BASE}/v1/instances/{instance_id}/heartbeat"
+
+
 READ_EVERYTHING = (
     f"{BASE}/v1/devices/+/config",
     f"{BASE}/v1/devices/+/state",
@@ -255,3 +259,53 @@ def test_denied_publish_leaves_no_trace(clients: Callable[[str], AclClient]) -> 
     reader.subscribe(_config("denied"), f"{BASE}/v1/devices/+/config")
 
     assert reader.collect() == set()
+
+
+def test_instance_cannot_write_another_instances_heartbeat(
+    clients: Callable[[str], AclClient], instance_ids: dict[str, str]
+) -> None:
+    """D-05: an instance writes only its own heartbeat topic, and every instance reads all of them."""
+    reader = clients("ha_one")
+    reader.subscribe(f"{BASE}/v1/instances/+/heartbeat")
+    other = clients("ha_two")
+
+    other.publish(_heartbeat(instance_ids["ha_two"]), "beat-two", retain=False)
+    assert reader.collect() == {(_heartbeat(instance_ids["ha_two"]), "beat-two", False)}
+
+    other.publish(_heartbeat(instance_ids["ha_one"]), "forged", retain=False)
+    assert reader.collect() == set()
+
+
+def test_heartbeat_is_not_replayed_to_late_subscribers(
+    clients: Callable[[str], AclClient], instance_ids: dict[str, str]
+) -> None:
+    """D-05: a heartbeat is live only; a late subscriber gets nothing, so a crashed instance cannot look current."""
+    live = clients("ha_one")
+    live.subscribe(f"{BASE}/v1/instances/+/heartbeat")
+    writer = clients("ha_two")
+
+    writer.publish(_heartbeat(instance_ids["ha_two"]), "beat", retain=False)
+    assert live.collect() == {(_heartbeat(instance_ids["ha_two"]), "beat", False)}
+
+    late = clients("ha_one")
+    late.subscribe(f"{BASE}/v1/instances/+/heartbeat")
+    assert late.collect() == set()
+
+
+def test_external_publisher_has_no_heartbeat_access(
+    clients: Callable[[str], AclClient], instance_ids: dict[str, str]
+) -> None:
+    """The bridge user neither reads a heartbeat nor makes one reach a Home Assistant user."""
+    ha = clients("ha_two")
+    ha.subscribe(f"{BASE}/v1/instances/+/heartbeat")
+    bridge = clients("bridge")
+    bridge.subscribe(f"{BASE}/v1/instances/+/heartbeat")
+    owner = clients("ha_one")
+
+    owner.publish(_heartbeat(instance_ids["ha_one"]), "beat", retain=False)
+    assert ha.collect() == {(_heartbeat(instance_ids["ha_one"]), "beat", False)}
+    assert bridge.collect() == set()
+
+    bridge.publish(_heartbeat(instance_ids["ha_one"]), "forged", retain=False)
+    bridge.publish(_heartbeat(str(uuid.uuid4())), "made-up", retain=False)
+    assert ha.collect() == set()

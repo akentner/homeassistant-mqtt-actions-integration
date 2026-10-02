@@ -15,6 +15,7 @@ fails loudly; the documented fallback is to reject templated service names in mi
 import re
 import unicodedata
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import callback
@@ -38,6 +39,23 @@ _ITEM_MAX_CHARS = 200
 # paragraph separators; newline and tab survive only inside the YAML
 _DROPPED_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
 _FENCE_RUN = re.compile(r"`{3,}")
+
+
+class ApprovalState(StrEnum):
+    """
+    The public answer of the manager to "may this device run its actions here?", in words (D-17).
+
+    Diagnostics and the later re-trigger acknowledgements use the same words. `BLOCKED` is a statically denied mirror,
+    `NO_ACTIONS` a device with nothing to approve and `UNKNOWN` an id that is neither owned nor mirrored.
+    """
+
+    OWNED = "owned"
+    APPROVED = "approved"
+    PENDING = "pending"
+    BLOCKED = "blocked"
+    NO_ACTIONS = "no_actions"
+    UNKNOWN = "unknown"
+
 
 # Keys whose Template value is a service name; `service` is the legacy spelling that validation renames to `action`
 GUARDED_KEYS = ("action", "service", "service_template")

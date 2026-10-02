@@ -83,7 +83,7 @@ from .runner import ActionRunner
 from .state import StateTracker
 from .sync import SyncManager
 from .topics import state_topic, test_topic
-from .trust import build_approval_view
+from .trust import ApprovalState, build_approval_view
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -797,6 +797,25 @@ class Manager:
             await self._async_refresh_mirror_script(mirror)
             LOGGER.info("The actions of mirrored device %r were approved", mirror.name[:MAX_LOGGED_PAYLOAD_LENGTH])
             return True
+
+    def approval_state(self, device_id: str) -> ApprovalState:
+        """
+        Return the approval state of a device as one public word (D-17).
+
+        An owned device is `owned`. A mirror is `blocked` when its recorded analysis denies a service, `no_actions` when
+        there is nothing to approve, `approved` when the stored approval equals its actions hash and `pending` if not.
+        """
+        if device_id in self.devices:
+            return ApprovalState.OWNED
+        if (mirror := self.mirrors.get(device_id)) is None or (info := mirror.mirror) is None:
+            return ApprovalState.UNKNOWN
+        if info.denied:
+            return ApprovalState.BLOCKED
+        if not spec_has_actions(mirror.spec):
+            return ApprovalState.NO_ACTIONS
+        if self._approvals.get(device_id) == info.actions_hash:
+            return ApprovalState.APPROVED
+        return ApprovalState.PENDING
 
     async def async_approval_view(self, device_id: str) -> ApprovalView | None:
         """

@@ -398,3 +398,27 @@ def test_required_retrigger_keys_exist_in_both_languages() -> None:
         flat = _load(language)
         assert [key for key in RETRIGGER_KEYS if not flat.get(key)] == [], language
         assert all(not _variables(flat[key]) for key in RETRIGGER_KEYS), language
+
+
+ADOPT_KEYS = (
+    "services.adopt_device.name",
+    "services.adopt_device.description",
+    "services.adopt_device.fields.device_id.name",
+    "services.adopt_device.fields.device_id.description",
+    "services.adopt_device.fields.force.name",
+    "services.adopt_device.fields.force.description",
+    "exceptions.adopt_owner_not_offline.message",
+    "exceptions.adopt_not_approved.message",
+    "exceptions.adopt_not_a_mirror.message",
+)
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_adopt_keys_exist_in_both_languages(language: str) -> None:
+    """The adoption service texts and its three refusals exist; the owner-not-offline text names force: true."""
+    flat = _load(language)
+    assert [key for key in ADOPT_KEYS if not flat.get(key)] == []
+    assert _variables(flat["exceptions.adopt_owner_not_offline.message"]) == {"device", "owner"}
+    assert _variables(flat["exceptions.adopt_not_approved.message"]) == {"device"}
+    assert _variables(flat["exceptions.adopt_not_a_mirror.message"]) == set()
+    assert "force: true" in flat["exceptions.adopt_owner_not_offline.message"]

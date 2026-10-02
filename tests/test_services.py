@@ -11,6 +11,7 @@ import pytest
 from homeassistant.core import Context
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError, Unauthorized
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.service import async_get_all_descriptions
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_mqtt_message, async_mock_service
 
@@ -23,6 +24,7 @@ from custom_components.mqtt_actions.const import (
     MAX_IMPORT_BYTES,
     RESYNC_MIN_INTERVAL_SECONDS,
     RETRIGGER_DEVICE_INTERVAL_SECONDS,
+    SERVICE_ADOPT_DEVICE,
     SERVICE_EXPORT_DEVICES,
     SERVICE_IMPORT_DEVICES,
     SERVICE_RESYNC,
@@ -30,6 +32,7 @@ from custom_components.mqtt_actions.const import (
     SUBENTRY_SELECT,
 )
 from custom_components.mqtt_actions.document import build_content, content_hash
+from custom_components.mqtt_actions.portability import subentry_payload
 from custom_components.mqtt_actions.topics import (
     availability_topic,
     config_topic,
@@ -37,7 +40,7 @@ from custom_components.mqtt_actions.topics import (
     retrigger_topic,
     state_topic,
 )
-from tests.documents import document_payload, make_spec
+from tests.documents import FOREIGN_OWNER, FOREIGN_OWNER_NAME, document_payload, make_spec
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -727,3 +730,148 @@ async def test_services_yaml_describes_retrigger(hass: HomeAssistant, mqtt_mock:
     assert fields[CONF_DEVICE_ID]["selector"] == {"device": {"integration": DOMAIN, "multiple": False}}
     assert not fields["state"].get("required")
     assert "text" in fields["state"]["selector"]
+
+
+# --- adopt_device (SYN-07, D-10) ---------------------------------------------------------------------------------
+
+
+async def _foreign_mirror(
+    hass: HomeAssistant, entry: MockConfigEntry, *, owner_state: str | None = "offline", approve: bool = True
+) -> Any:
+    """Deliver the document of a device of another instance and its owner's retained availability; approve it."""
+    foreign = make_spec(name="Foreign lamp", on=ON_ACTIONS)
+    if owner_state is not None:
+        async_fire_mqtt_message(hass, availability_topic(BASE, FOREIGN_OWNER), owner_state, retain=True)
+    async_fire_mqtt_message(hass, config_topic(BASE, foreign.device_id), document_payload(foreign), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    manager: Manager = entry.runtime_data
+    assert foreign.device_id in manager.mirrors
+    if approve:
+        info = manager.mirrors[foreign.device_id].mirror
+        assert info is not None
+        assert await manager.async_approve(foreign.device_id, info.actions_hash) is True
+    return foreign
+
+
+async def test_adopt_service_promotes_a_mirror(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """D-10: the call turns the approved mirror of an offline owner into an owned device under the same uuid."""
+    entry = await _setup(hass, make_hub_entry())
+    manager: Manager = entry.runtime_data
+    foreign = await _foreign_mirror(hass, entry)
+    device_id = foreign.device_id
+    mirror_companion = _companion_id(hass, entry, device_id)
+    mqtt_mock.async_publish.reset_mock()
+
+    result = await _call(hass, SERVICE_ADOPT_DEVICE, {"device_id": mirror_companion}, response=True)
+
+    assert result == {"uuid": device_id, "adopted": True, "previous_owner": FOREIGN_OWNER_NAME}
+    assert device_id in manager.devices
+    assert device_id not in manager.mirrors
+    subentry = next(item for item in entry.subentries.values() if item.unique_id == device_id)
+    assert subentry.subentry_type == "switch"
+    assert subentry.title == "Foreign lamp"
+    assert dict(subentry.data) == subentry_payload(build_content(foreign), device_id)
+    document = _published_documents(mqtt_mock, device_id)[-1]
+    assert document["owner"] == entry.data[CONF_INSTANCE_ID]
+    assert document["transferred_from"] == [FOREIGN_OWNER]
+    assert document["rev"] == 2
+    assert discovery_topic("homeassistant", device_id) in _published_topics(mqtt_mock)
+    assert "" not in [call.args[1] for call in mqtt_mock.async_publish.call_args_list]
+    companion = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, device_id), entry.entry_id)
+    assert companion is not None
+    assert subentry.subentry_id in companion.config_entries_subentries[entry.entry_id]
+    registry = er.async_get(hass)
+    select_id = registry.async_get_entity_id("select", DOMAIN, f"{device_id}_mode")
+    assert select_id is not None
+    select = registry.async_get(select_id)
+    assert select is not None
+    assert (select.device_id, select.config_subentry_id) == (companion.id, subentry.subentry_id)
+    assert hass.states.get(select_id) is not None
+    assert hass.states.get(select_id).state == "run"
+
+
+async def test_adopt_service_errors_are_translated(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-10: every refusal is a translated validation error; the online owner's names the device and the owner."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    owned_id = sub["data"][CONF_DEVICE_ID]
+    online = await _foreign_mirror(hass, entry, owner_state="online")
+    pending = make_spec(name="Pending lamp", on=ON_ACTIONS)
+    async_fire_mqtt_message(hass, config_topic(BASE, pending.device_id), document_payload(pending), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    hub = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
+    assert hub is not None
+    mqtt_mock.async_publish.reset_mock()
+
+    async def _error(registry_id: str, **extra: Any) -> ServiceValidationError:
+        with pytest.raises(ServiceValidationError) as raised:
+            await _call(hass, SERVICE_ADOPT_DEVICE, {"device_id": registry_id, **extra}, response=True)
+        assert raised.value.translation_domain == DOMAIN
+        return raised.value
+
+    online_error = await _error(_companion_id(hass, entry, online.device_id))
+    assert online_error.translation_key == "adopt_owner_not_offline"
+    assert online_error.translation_placeholders == {"device": "Foreign lamp", "owner": FOREIGN_OWNER_NAME}
+    pending_error = await _error(_companion_id(hass, entry, pending.device_id), force=True)
+    assert pending_error.translation_key == "adopt_not_approved"
+    assert pending_error.translation_placeholders == {"device": "Pending lamp"}
+    assert (await _error(_companion_id(hass, entry, owned_id))).translation_key == "adopt_not_a_mirror"
+    assert (await _error(hub.id)).translation_key == "not_a_device"
+    assert config_topic(BASE, online.device_id) not in _published_topics(mqtt_mock)
+    assert {online.device_id, pending.device_id} <= set(entry.runtime_data.mirrors)
+
+
+async def test_adopt_force_with_an_online_owner_works(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-10: `force: true` overrides the owner-online check for an approved mirror."""
+    entry = await _setup(hass, make_hub_entry())
+    foreign = await _foreign_mirror(hass, entry, owner_state="online")
+
+    result = await _call(
+        hass,
+        SERVICE_ADOPT_DEVICE,
+        {"device_id": _companion_id(hass, entry, foreign.device_id), "force": True},
+        response=True,
+    )
+
+    assert result["adopted"] is True
+    assert foreign.device_id in entry.runtime_data.devices
+
+
+async def test_adopt_service_is_admin_only(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, hass_read_only_user: User
+) -> None:
+    """T-04-50: a read-only user cannot adopt and nothing changes."""
+    entry = await _setup(hass, make_hub_entry())
+    foreign = await _foreign_mirror(hass, entry)
+    mqtt_mock.async_publish.reset_mock()
+
+    with pytest.raises(Unauthorized):
+        await _call(
+            hass,
+            SERVICE_ADOPT_DEVICE,
+            {"device_id": _companion_id(hass, entry, foreign.device_id)},
+            user=hass_read_only_user,
+            response=True,
+        )
+
+    assert foreign.device_id in entry.runtime_data.mirrors
+    assert entry.subentries == {}
+    assert config_topic(BASE, foreign.device_id) not in _published_topics(mqtt_mock)
+
+
+async def test_services_yaml_describes_adopt_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """services.yaml describes the adoption: a required device selector of this integration and a boolean."""
+    await _setup(hass, make_hub_entry())
+
+    fields = (await async_get_all_descriptions(hass))[DOMAIN][SERVICE_ADOPT_DEVICE]["fields"]
+
+    assert fields[CONF_DEVICE_ID]["required"] is True
+    assert fields[CONF_DEVICE_ID]["selector"] == {"device": {"integration": DOMAIN, "multiple": False}}
+    assert not fields["force"].get("required")
+    assert "boolean" in fields["force"]["selector"]

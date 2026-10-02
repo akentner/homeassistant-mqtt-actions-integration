@@ -31,9 +31,13 @@ from .const import (
     EXPORT_DIRECTORY,
     LOGGER,
     MAX_IMPORT_BYTES,
+    REASON_BAD_STATE,
+    REASON_NO_STATE,
+    REASON_RATE_LIMITED,
     SERVICE_EXPORT_DEVICES,
     SERVICE_IMPORT_DEVICES,
     SERVICE_RESYNC,
+    SERVICE_RETRIGGER,
 )
 from .portability import (
     REASON_BAD_FILE_NAME,
@@ -50,6 +54,7 @@ from .portability import (
     read_import,
     write_export,
 )
+from .retrigger import RetriggerError
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
@@ -59,6 +64,7 @@ if TYPE_CHECKING:
 
 CONF_FILE_NAME = "file_name"
 CONF_DATA = "data"
+CONF_STATE = "state"
 
 RESYNC_SCHEMA = probatio.Schema({})
 # The file name is only a string here; its rules are checked by the handler so a bad name is a translated error
@@ -75,6 +81,15 @@ IMPORT_SCHEMA = probatio.Schema(
         probatio.Optional(CONF_FILE_NAME): str,
     }
 )
+# The device is named by its registry id, the state is free text that the caller matches against the device
+RETRIGGER_SCHEMA = probatio.Schema(
+    {
+        probatio.Required(CONF_DEVICE_ID): str,
+        probatio.Optional(CONF_STATE): str,
+    }
+)
+# The refusals of the caller that have a message of their own; anything else means the device vanished meanwhile
+RETRIGGER_REFUSALS = frozenset({REASON_BAD_STATE, REASON_NO_STATE, REASON_RATE_LIMITED})
 
 
 def async_get_loaded_manager(hass: HomeAssistant) -> Manager:
@@ -233,6 +248,23 @@ async def _async_handle_import(call: ServiceCall) -> dict[str, Any]:
     return {"imported": [{"index": d.index, "uuid": d.device_id, "name": d.name} for d in prepared]}
 
 
+async def _async_handle_retrigger(call: ServiceCall) -> dict[str, Any]:
+    """
+    Run the actions of one device again on every instance that approved it and return who answered how.
+
+    The device may be owned or a mirror. A refusal of the caller (unusable state, no baseline, a repeat inside the
+    interval) is a translated validation error and sends nothing (D-01, D-04).
+    """
+    hass = call.hass
+    manager = async_get_loaded_manager(hass)
+    device_id = resolve_device(hass, manager, call.data[CONF_DEVICE_ID])
+    try:
+        return await manager.retrigger.async_retrigger(device_id, call.data.get(CONF_STATE))
+    except RetriggerError as err:
+        key = f"retrigger_{err.reason}" if err.reason in RETRIGGER_REFUSALS else "unknown_device"
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key=key) from err
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the services of the integration; called once from `async_setup`."""
@@ -244,4 +276,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     async_register_admin_service(
         hass, DOMAIN, SERVICE_IMPORT_DEVICES, _async_handle_import, IMPORT_SCHEMA, SupportsResponse.OPTIONAL
+    )
+    async_register_admin_service(
+        hass, DOMAIN, SERVICE_RETRIGGER, _async_handle_retrigger, RETRIGGER_SCHEMA, SupportsResponse.OPTIONAL
     )

@@ -380,6 +380,20 @@
           "description": "Liest den Export stattdessen aus dieser Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses. Erlaubt ist nur ein reiner Dateiname mit der Endung .json."
         }
       }
+    },
+    "retrigger": {
+      "name": "Erneut auslösen",
+      "description": "Führt die Aktionen eines Geräts erneut auf jeder Instanz aus, die es freigegeben hat, diese eingeschlossen, und gibt zurück, wer sie ausgeführt hat. Ausgelöst wird der Zustand, auf den diese Instanz zuletzt reagiert hat, oder der angegebene Zustand. Der Gerätezustand, der Ausgangszustand und der Schutzschalter bleiben unverändert. Ein zweiter Aufruf für dasselbe Gerät innerhalb weniger Sekunden wird abgelehnt. Der Aufruf wartet bis zu fünf Sekunden auf die Antworten der verbundenen Instanzen.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Das Gerät, dessen Aktionen erneut ausgeführt werden: ein Schalter oder eine Auswahl dieser Instanz oder eine von einer anderen Instanz gespiegelte."
+        },
+        "state": {
+          "name": "Zustand",
+          "description": "Der Zustand, dessen Aktionen ausgeführt werden, zum Beispiel ON, oder der Wert einer Option einer Auswahl. Groß- und Kleinschreibung wird ignoriert. Leer lassen, um den Zustand zu verwenden, auf den diese Instanz zuletzt reagiert hat."
+        }
+      }
     }
   },
   "exceptions": {
@@ -412,6 +426,15 @@
     },
     "file_unreadable": {
       "message": "Die Importdatei konnte nicht gelesen werden. Sie muss eine normale UTF-8-Textdatei im Ordner mqtt_actions des Konfigurationsverzeichnisses sein, kein Link, und höchstens 4 MiB groß. Den Grund-Code zeigt das Home-Assistant-Protokoll."
+    },
+    "retrigger_bad_state": {
+      "message": "Dieser Zustand gehört nicht zum Gerät. Verwende ON oder OFF für einen Schalter oder den Wert einer der Optionen einer Auswahl."
+    },
+    "retrigger_no_state": {
+      "message": "Diese Instanz hat auf noch keinen Zustand des Geräts reagiert, es gibt also nichts erneut auszuführen. Gib den Zustand im Aufruf an."
+    },
+    "retrigger_rate_limited": {
+      "message": "Dieses Gerät wurde gerade erst erneut ausgelöst. Warte ein paar Sekunden und versuche es erneut."
     }
   }
 }

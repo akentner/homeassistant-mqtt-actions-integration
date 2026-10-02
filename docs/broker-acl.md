@@ -14,6 +14,9 @@ denied ones reach nobody. The text you copy is the text that was tested.
   instance that approved the device.
 - The **test topic** (`<base topic>/v1/devices/<device uuid>/test`) is a second way to trigger them: a message there
   runs the actions of a trigger without changing the state. Every instance that approved the device runs them.
+- The **re-trigger topic** (`<base topic>/v1/devices/<device uuid>/retrigger`) is a third way: a message there runs the
+  actions of a device again on every instance that approved it, like the test topic, and every instance answers on the
+  acknowledgement topic of the requester. It carries a state of the device, never actions.
 - Anyone who can write a **config topic** can make a device appear on the other instances. A foreign device is only a
   read-only mirror that runs nothing until a user approved its exact actions on that instance, but the user still
   gets an approval request they never expected.
@@ -28,8 +31,10 @@ denied ones reach nobody. The text you copy is the text that was tested.
 | `<base topic>/v1/devices/<device uuid>/config` | the owner instance only (a tombstone is an empty retained message) | yes | every instance |
 | `<base topic>/v1/devices/<device uuid>/state` | any instance, and external publishers you trust | yes | every instance |
 | `<base topic>/v1/devices/<device uuid>/test` | any instance (test buttons) | no | every instance |
+| `<base topic>/v1/devices/<device uuid>/retrigger` | any instance (the re-trigger service) | no | every instance |
 | `<base topic>/v1/instances/<instance id>/availability` | that instance only | yes | every instance |
 | `<base topic>/v1/instances/<instance id>/heartbeat` | that instance only (every 30 seconds) | no | every instance |
+| `<base topic>/v1/instances/<requester id>/acks` | any instance (its answer to a re-trigger of that requester) | no | the requester only |
 | `<discovery prefix>/device/<device uuid>/config` | the owner instance, and core MQTT of any instance that deletes the entity | yes | every instance |
 
 The base topic is `mqtt_actions` by default, the discovery prefix is `homeassistant` by default. Adjust both lines if you
@@ -49,22 +54,28 @@ user ha_one
 topic readwrite mqtt_actions/v1/devices/+/config
 topic readwrite mqtt_actions/v1/devices/+/state
 topic readwrite mqtt_actions/v1/devices/+/test
+topic readwrite mqtt_actions/v1/devices/+/retrigger
 topic readwrite homeassistant/#
 topic read mqtt_actions/v1/instances/+/availability
 topic write mqtt_actions/v1/instances/<instance-id-one>/availability
 topic read mqtt_actions/v1/instances/+/heartbeat
 topic write mqtt_actions/v1/instances/<instance-id-one>/heartbeat
+topic read mqtt_actions/v1/instances/<instance-id-one>/acks
+topic write mqtt_actions/v1/instances/+/acks
 
 # Home Assistant instance two
 user ha_two
 topic readwrite mqtt_actions/v1/devices/+/config
 topic readwrite mqtt_actions/v1/devices/+/state
 topic readwrite mqtt_actions/v1/devices/+/test
+topic readwrite mqtt_actions/v1/devices/+/retrigger
 topic readwrite homeassistant/#
 topic read mqtt_actions/v1/instances/+/availability
 topic write mqtt_actions/v1/instances/<instance-id-two>/availability
 topic read mqtt_actions/v1/instances/+/heartbeat
 topic write mqtt_actions/v1/instances/<instance-id-two>/heartbeat
+topic read mqtt_actions/v1/instances/<instance-id-two>/acks
+topic write mqtt_actions/v1/instances/+/acks
 
 # External publisher: may set a device state and nothing else
 user bridge
@@ -79,9 +90,12 @@ What it enforces:
 - Each instance writes only its own availability topic: `ha_two` cannot announce `ha_one` online or offline.
 - Each instance writes only its own heartbeat topic and reads all of them. The external publisher has no access to any
   heartbeat topic, in either direction.
-- The external publisher can write the state topic and read it back. It cannot write config, test, discovery or any
-  availability topic, and it cannot read the config documents that carry the actions.
-- Only Home Assistant users reach the test topic and the discovery prefix.
+- The external publisher can write the state topic and read it back. It cannot write config, test, re-trigger,
+  discovery or any availability topic, and it cannot read the config documents that carry the actions.
+- Only Home Assistant users reach the test topic, the re-trigger topic and the discovery prefix.
+- Each instance reads only the acknowledgement topic of its own instance id, so the answers to a re-trigger of
+  `ha_one` are readable by `ha_one` and not by `ha_two`. Every instance may write the acknowledgement topic of any
+  requester, because it has to answer whoever asked. The external publisher has no access to any acknowledgement topic.
 
 ## Limits
 
@@ -105,6 +119,13 @@ The ACL cannot do everything, and the example does not pretend to:
   without a heartbeat. Do not grant the heartbeat topics to external publishers.
 - **The test topic is a trigger source** next to the state topic. Do not grant it to external publishers unless you
   want them to run actions.
+- **The re-trigger topic is a trigger source** too. It is not retained, so a late subscriber receives nothing and a
+  stale request cannot run later; a receiver also drops requests older than 60 seconds, repeated request ids and more
+  than one request per device every 5 seconds, and it runs only what its own approval, mode and circuit breaker allow.
+  Do not grant it to external publishers.
+- **Acknowledgements are advisory.** Any Home Assistant user of the group can write the acknowledgement topic of any
+  requester and so can forge an answer. An acknowledgement only shows the requester who answered; it never causes an
+  action to run.
 - **A denied publish is not reported visibly.** A broker may acknowledge a denied QoS 1 publish like an accepted one, and
   Home Assistant shows nothing in its log. When you verify your ACL, read the retained state back with a second client
   instead of waiting for an error.

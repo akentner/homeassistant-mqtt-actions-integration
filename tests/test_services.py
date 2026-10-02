@@ -724,6 +724,6 @@ async def test_services_yaml_describes_retrigger(hass: HomeAssistant, mqtt_mock:
     fields = (await async_get_all_descriptions(hass))[DOMAIN][SERVICE_RETRIGGER]["fields"]
 
     assert fields[CONF_DEVICE_ID]["required"] is True
-    assert fields[CONF_DEVICE_ID]["selector"] == {"device": {"integration": DOMAIN}}
+    assert fields[CONF_DEVICE_ID]["selector"] == {"device": {"integration": DOMAIN, "multiple": False}}
     assert not fields["state"].get("required")
     assert "text" in fields["state"]["selector"]

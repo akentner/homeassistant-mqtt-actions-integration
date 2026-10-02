@@ -26,3 +26,16 @@ import_devices:
       example: backup.json
       selector:
         text:
+
+retrigger:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: mqtt_actions
+    state:
+      required: false
+      example: "ON"
+      selector:
+        text:

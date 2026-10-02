@@ -380,6 +380,20 @@
           "description": "Read the export from this file in the mqtt_actions folder of the configuration directory instead. Only a bare file name ending in .json is accepted."
         }
       }
+    },
+    "retrigger": {
+      "name": "Re-trigger",
+      "description": "Runs the actions of one device again on every instance that approved it, this one included, and returns who executed them. The trigger is the last state this instance acted on, or the state you name. The device state, the baseline and the circuit breaker are not changed. A second call for the same device within a few seconds is refused. The call waits up to five seconds for the answers of the connected instances.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The device whose actions are run again: a Switch or Select of this instance, or one mirrored from another instance."
+        },
+        "state": {
+          "name": "State",
+          "description": "The state whose actions are run, for example ON, or the value of a Select option. Capitalization is ignored. Leave empty to use the last state this instance acted on."
+        }
+      }
     }
   },
   "exceptions": {
@@ -412,6 +426,15 @@
     },
     "file_unreadable": {
       "message": "The import file could not be read. It must be a regular UTF-8 text file in the mqtt_actions folder of the configuration directory, not a link, and at most 4 MiB. See the Home Assistant log for the reason code."
+    },
+    "retrigger_bad_state": {
+      "message": "This state does not belong to the device. Use ON or OFF for a Switch, or the value of one of the options of a Select."
+    },
+    "retrigger_no_state": {
+      "message": "This instance has not acted on a state of the device yet, so there is nothing to run again. Name the state in the call."
+    },
+    "retrigger_rate_limited": {
+      "message": "This device was just re-triggered. Wait a few seconds and try again."
     }
   }
 }

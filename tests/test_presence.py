@@ -1,14 +1,26 @@
 """Heartbeat parsing and the heartbeat of one instance on the MQTT mock (OPS-03, D-05)."""
 
 import json
+import logging
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
-from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
+import pytest
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
-from custom_components.mqtt_actions.const import CONF_INSTANCE_ID, CONF_INSTANCE_NAME
-from custom_components.mqtt_actions.presence import Heartbeat, parse_heartbeat
+from custom_components.mqtt_actions.const import (
+    CONF_INSTANCE_ID,
+    CONF_INSTANCE_NAME,
+    HEARTBEAT_INTERVAL_SECONDS,
+    HEARTBEAT_OFFLINE_SECONDS,
+    MAX_BROKER_MESSAGE_BYTES,
+    MAX_HEARTBEAT_DEVICES,
+)
+from custom_components.mqtt_actions.presence import Heartbeat, Roster, parse_heartbeat
 from custom_components.mqtt_actions.topics import availability_topic, heartbeat_topic
 
 if TYPE_CHECKING:
@@ -98,3 +110,235 @@ async def test_own_echo_is_not_a_peer(hass: HomeAssistant, mqtt_mock: Any, make_
 
     assert presence.online_count() == 1
     assert [row["id"] for row in presence.rows()] == [entry.data[CONF_INSTANCE_ID]]
+
+
+# --- strict validation (T-04-11) ----------------------------------------------------------------------------------
+
+
+def _raw(data: dict[str, Any]) -> str:
+    """Serialize with real characters, so a payload can be short in characters and long in UTF-8 bytes."""
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _data(**overrides: Any) -> dict[str, Any]:
+    data: dict[str, Any] = json.loads(_message())
+    data.update(overrides)
+    return data
+
+
+def _without(key: str) -> str:
+    data = _data()
+    del data[key]
+    return _raw(data)
+
+
+GOOD_TOPIC = heartbeat_topic(BASE, "inst-a")
+INVALID_MESSAGES = {
+    "not json": (GOOD_TOPIC, "nope"),
+    "json list": (GOOD_TOPIC, "[1, 2]"),
+    "json scalar": (GOOD_TOPIC, "7"),
+    "too many characters": (GOOD_TOPIC, _raw(_data(pad="x" * (MAX_BROKER_MESSAGE_BYTES + 1)))),
+    "too many bytes": (GOOD_TOPIC, _raw(_data(pad="\u00e4" * (MAX_BROKER_MESSAGE_BYTES // 2 + 1)))),
+    "availability topic": (availability_topic(BASE, "inst-a"), _message()),
+    "other base topic": (heartbeat_topic("other", "inst-a"), _message()),
+    "id with a space": (heartbeat_topic(BASE, "inst a"), _message(instance_id="inst a")),
+    "id with a wildcard": (heartbeat_topic(BASE, "inst+a"), _message(instance_id="inst+a")),
+    "id too long": (heartbeat_topic(BASE, "i" * 65), _message(instance_id="i" * 65)),
+    "payload id differs": (GOOD_TOPIC, _message(instance_id="inst-b")),
+    "missing instance id": (GOOD_TOPIC, _without("instance_id")),
+    "missing name": (GOOD_TOPIC, _without("name")),
+    "missing version": (GOOD_TOPIC, _without("version")),
+    "missing devices": (GOOD_TOPIC, _without("devices")),
+    "missing session": (GOOD_TOPIC, _without("session")),
+    "blank name": (GOOD_TOPIC, _message(name="   ")),
+    "name with a newline": (GOOD_TOPIC, _message(name="a\nb")),
+    "name over 64 characters": (GOOD_TOPIC, _message(name="n" * 65)),
+    "name not a string": (GOOD_TOPIC, _message(name=5)),
+    "blank version": (GOOD_TOPIC, _message(version=" ")),
+    "version over 64 characters": (GOOD_TOPIC, _message(version="1" * 65)),
+    "version not a string": (GOOD_TOPIC, _message(version=1)),
+    "negative devices": (GOOD_TOPIC, _message(devices=-1)),
+    "bool devices": (GOOD_TOPIC, _message(devices=True)),
+    "float devices": (GOOD_TOPIC, _message(devices=1.5)),
+    "string devices": (GOOD_TOPIC, _message(devices="2")),
+    "too many devices": (GOOD_TOPIC, _message(devices=MAX_HEARTBEAT_DEVICES + 1)),
+    "upper case session": (GOOD_TOPIC, _message(session=SESSION.upper())),
+    "session without dashes": (GOOD_TOPIC, _message(session=SESSION.replace("-", ""))),
+    "session not a uuid": (GOOD_TOPIC, _message(session="abc")),
+    "session not a string": (GOOD_TOPIC, _message(session=5)),
+}
+
+
+@pytest.mark.parametrize(("topic", "payload"), list(INVALID_MESSAGES.values()), ids=list(INVALID_MESSAGES))
+def test_parse_heartbeat_rejects_invalid_messages(topic: str, payload: str) -> None:
+    assert parse_heartbeat(BASE, topic, payload) is None
+
+
+def test_parse_heartbeat_accepts_the_limits() -> None:
+    """The boundary values are valid: a zero device count, the maximum count and 64 character texts."""
+    message = _message(name="n" * 64, version="1" * 64, devices=MAX_HEARTBEAT_DEVICES)
+    assert parse_heartbeat(BASE, GOOD_TOPIC, message) is not None
+    assert parse_heartbeat(BASE, GOOD_TOPIC, _message(devices=0)) is not None
+
+
+async def test_retained_heartbeat_is_ignored(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """T-04-10: a retained heartbeat never creates a row; a live one afterwards does."""
+    entry = await _setup(hass, make_hub_entry())
+    presence = entry.runtime_data.presence
+
+    async_fire_mqtt_message(hass, GOOD_TOPIC, _message(), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert [row["id"] for row in presence.rows()] == [entry.data[CONF_INSTANCE_ID]]
+
+    async_fire_mqtt_message(hass, GOOD_TOPIC, _message(), retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert [row["id"] for row in presence.rows()][1:] == ["inst-a"]
+
+
+async def test_rejected_heartbeats_log_nothing_from_the_payload(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, caplog: pytest.LogCaptureFixture
+) -> None:
+    """T-04-14: whatever a heartbeat carries, no field of it reaches a log line."""
+    caplog.set_level(logging.DEBUG, logger="custom_components.mqtt_actions")
+    entry = await _setup(hass, make_hub_entry())
+    hostile = [
+        _message(name="LONGNAME" + "x" * 80),
+        _message(name="FORGED\nWARNING mqtt_actions: injected"),
+        _message(name="<script>MARKUPNAME</script>"),
+        _message(version="VERSIONTEXT" + "9" * 80),
+        _message(session="SESSIONTEXT"),
+        _message(instance_id="OTHERID"),
+        "RAWNONJSON{",
+    ]
+
+    for payload in hostile:
+        async_fire_mqtt_message(hass, GOOD_TOPIC, payload)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert entry.runtime_data.presence.online_count() >= 1
+    # Core MQTT logs every received payload at debug level; only the lines of this integration are the subject here
+    ours = "\n".join(
+        record.getMessage() for record in caplog.records if record.name.startswith("custom_components.mqtt_actions")
+    )
+    for text in ("LONGNAME", "FORGED", "injected", "MARKUPNAME", "VERSIONTEXT", "SESSIONTEXT", "OTHERID", "RAWNONJSON"):
+        assert text not in ours
+
+
+async def test_heartbeat_tick_publishes_every_30_seconds(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-05: a tick publishes a heartbeat; after the manager stopped no tick publishes anything."""
+    entry = await _setup(hass, make_hub_entry())
+    topic = heartbeat_topic(BASE, entry.data[CONF_INSTANCE_ID])
+    assert len(_publishes(mqtt_mock, topic)) == 1
+
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=HEARTBEAT_INTERVAL_SECONDS + 1))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(_publishes(mqtt_mock, topic)) == 2
+    assert all(item[1:] == (0, False) for item in _publishes(mqtt_mock, topic))
+
+    await entry.runtime_data.async_stop()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=3 * HEARTBEAT_INTERVAL_SECONDS))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(_publishes(mqtt_mock, topic)) == 2
+
+
+async def test_peer_cap(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, caplog: pytest.LogCaptureFixture
+) -> None:
+    """T-04-12: with the cap patched small, further instance ids are not tracked and the overflow is logged once."""
+    entry = await _setup(hass, make_hub_entry())
+    presence = entry.runtime_data.presence
+
+    with patch("custom_components.mqtt_actions.presence.MAX_TRACKED_INSTANCES", 2):
+        for number in range(5):
+            instance_id = f"peer-{number}"
+            async_fire_mqtt_message(
+                hass, heartbeat_topic(BASE, instance_id), _message(instance_id=instance_id, name=f"Peer {number}")
+            )
+        await hass.async_block_till_done(wait_background_tasks=True)
+        # A tracked peer keeps updating
+        async_fire_mqtt_message(
+            hass, heartbeat_topic(BASE, "peer-0"), _message(instance_id="peer-0", name="Peer 0 renamed")
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    peers = presence.rows()[1:]
+    assert [row["id"] for row in peers] == ["peer-0", "peer-1"]
+    assert peers[0]["name"] == "Peer 0 renamed"
+    assert caplog.text.count("further instances are not tracked") == 1
+
+
+# --- the owner-offline answer (D-09, assumption A10) --------------------------------------------------------------
+
+
+class _Clock:
+    now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _roster() -> tuple[Roster, _Clock, dict[str, str]]:
+    clock = _Clock()
+    availability: dict[str, str] = {}
+    roster = Roster(clock, availability.get)
+    roster.restart_listening()
+    return roster, clock, availability
+
+
+def _hb(instance_id: str = "owner") -> Heartbeat:
+    return Heartbeat(instance_id=instance_id, name="Owner", version="0.1.0", devices=1, session=SESSION)
+
+
+def test_owner_offline_when_the_owner_announced_offline() -> None:
+    roster, _clock, availability = _roster()
+    availability["owner"] = "offline"
+    assert roster.owner_offline("owner") is True
+    roster.observe(_hb())
+    assert roster.owner_offline("owner") is True
+    assert roster.status("owner") == "offline"
+
+
+def test_owner_offline_when_the_heartbeat_is_stale() -> None:
+    roster, clock, availability = _roster()
+    availability["owner"] = "online"
+    roster.observe(_hb())
+    clock.now += HEARTBEAT_OFFLINE_SECONDS - 1
+    assert roster.owner_offline("owner") is False
+    assert roster.status("owner") == "online"
+    clock.now += 2
+    assert roster.owner_offline("owner") is True
+    assert roster.status("owner") == "offline"
+
+
+def test_owner_with_a_fresh_heartbeat_is_not_offline() -> None:
+    roster, _clock, _availability = _roster()
+    roster.observe(_hb())
+    assert roster.owner_offline("owner") is False
+
+
+def test_owner_that_announced_online_without_a_heartbeat_is_never_offline() -> None:
+    roster, clock, availability = _roster()
+    availability["owner"] = "online"
+    clock.now += 600
+    assert roster.owner_offline("owner") is False
+    assert roster.status("owner") is None
+
+
+def test_unknown_owner_is_offline_only_after_listening_long_enough() -> None:
+    roster, clock, _availability = _roster()
+    clock.now += HEARTBEAT_OFFLINE_SECONDS - 1
+    assert roster.owner_offline("owner") is False
+    clock.now += 1
+    assert roster.owner_offline("owner") is True
+
+
+def test_a_reconnect_restarts_the_listening_time() -> None:
+    roster, clock, _availability = _roster()
+    clock.now += 2 * HEARTBEAT_OFFLINE_SECONDS
+    assert roster.owner_offline("owner") is True
+    roster.restart_listening()
+    assert roster.owner_offline("owner") is False
+    clock.now += HEARTBEAT_OFFLINE_SECONDS
+    assert roster.owner_offline("owner") is True

@@ -2,6 +2,7 @@
 
 import inspect
 import json
+import logging
 import stat
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,6 +20,7 @@ from custom_components.mqtt_actions.const import (
     CONF_INSTANCE_ID,
     DOMAIN,
     EXPORT_DIRECTORY,
+    MAX_IMPORT_BYTES,
     RESYNC_MIN_INTERVAL_SECONDS,
     SERVICE_EXPORT_DEVICES,
     SERVICE_IMPORT_DEVICES,
@@ -465,3 +467,124 @@ async def test_import_is_admin_only(
     )
     assert len(result["imported"]) == 1
     assert len(entry.subentries) == 1
+
+
+async def _import_error(hass: HomeAssistant, data: dict[str, Any]) -> ServiceValidationError:
+    """Call the import with data that must be refused and return the raised error."""
+    with pytest.raises(ServiceValidationError) as raised:
+        await _call(hass, SERVICE_IMPORT_DEVICES, data, response=True)
+    return raised.value
+
+
+async def test_import_is_all_or_nothing(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """T-04-36: a bad second item rejects the call with its position and creates nothing, not even the first item."""
+    entry = await _setup(hass, make_hub_entry())
+    document = _export_of(_item("Lamp"), _item("Broken", kind="timer"), _item("Third"))
+    mqtt_mock.async_publish.reset_mock()
+
+    error = await _import_error(hass, {"data": document})
+
+    assert error.translation_domain == DOMAIN
+    assert error.translation_key == "import_rejected"
+    assert error.translation_placeholders == {"index": "2", "reason": "invalid_device"}
+    assert len(entry.subentries) == 0
+    assert not entry.runtime_data.devices
+    assert _published_topics(mqtt_mock) == []
+
+
+async def test_import_envelope_problem_has_no_position(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """A flaw of the export as a whole is reported with a dash instead of a position."""
+    await _setup(hass, make_hub_entry())
+
+    error = await _import_error(hass, {"data": {"format": "other", "export_version": 1, "devices": []}})
+
+    assert error.translation_placeholders == {"index": "-", "reason": "bad_format"}
+
+
+async def test_deep_validation_rejects_an_unresolved_device_action(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """The deep check of the UI flows runs on this instance: a device action that cannot be resolved is refused."""
+    entry = await _setup(hass, make_hub_entry())
+    unresolved = [{"device_id": "0123456789abcdef", "domain": "no_such_integration", "type": "turn_on"}]
+
+    error = await _import_error(hass, {"data": _export_of(_item("Lamp"), _item("Device", on_change_to_on=unresolved))})
+
+    assert error.translation_placeholders == {"index": "2", "reason": "invalid_actions"}
+    assert len(entry.subentries) == 0
+
+
+SENTINEL = "SENTINEL-4f9c2b-secret"
+
+
+@pytest.mark.parametrize(
+    "actions",
+    [
+        [{"action": "light.turn_on", "target": {"entity_id": SENTINEL}, "data": {"note": SENTINEL}, "bogus": SENTINEL}],
+        [{"device_id": SENTINEL, "domain": SENTINEL, "type": SENTINEL, "entity_id": SENTINEL}],
+        [{"action": "shell_command.run", "data": {"command": SENTINEL}}],
+    ],
+    ids=["structure", "deep", "denied"],
+)
+async def test_import_errors_never_echo_content(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    caplog: pytest.LogCaptureFixture,
+    actions: list[dict[str, Any]],
+) -> None:
+    """T-04-41: neither the raised error nor the log carries action content, however the item failed."""
+    caplog.set_level(logging.DEBUG)
+    await _setup(hass, make_hub_entry())
+
+    error = await _import_error(hass, {"data": _export_of(_item("Lamp", on_change_to_on=actions))})
+
+    assert SENTINEL not in str(error)
+    assert SENTINEL not in repr(error)
+    assert SENTINEL not in json.dumps(error.translation_placeholders)
+    assert SENTINEL not in caplog.text
+
+
+def _write_import_file(hass: HomeAssistant, name: str, text: str) -> None:
+    directory = Path(hass.config.path(EXPORT_DIRECTORY))
+    directory.mkdir(mode=0o700, exist_ok=True)
+    (directory / name).write_text(text, encoding="utf-8")
+
+
+async def test_import_from_file_and_source_rules(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """A file name imports like data; both sources or neither are refused; an oversized object is too_large."""
+    entry = await _setup(hass, make_hub_entry())
+    document = _export_of(_item("Lamp"))
+    await hass.async_add_executor_job(_write_import_file, hass, "backup.json", json.dumps(document))
+
+    from_file = await _call(hass, SERVICE_IMPORT_DEVICES, {"file_name": "backup.json"}, response=True)
+    assert [row["name"] for row in from_file["imported"]] == ["Lamp"]
+    assert {sub.title for sub in entry.subentries.values()} == {"Lamp"}
+
+    for data in ({"data": document, "file_name": "backup.json"}, {}):
+        error = await _import_error(hass, data)
+        assert error.translation_key == "import_needs_exactly_one_source"
+    assert len(entry.subentries) == 1
+
+    oversized = {**document, "padding": "x" * (MAX_IMPORT_BYTES + 1)}
+    error = await _import_error(hass, {"data": oversized})
+    assert error.translation_key == "import_rejected"
+    assert error.translation_placeholders == {"index": "-", "reason": "too_large"}
+    assert len(entry.subentries) == 1
+
+
+async def test_import_file_problems_have_their_own_errors(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """A bad name, a missing file and a file that is not JSON are translated errors and create nothing."""
+    entry = await _setup(hass, make_hub_entry())
+    await hass.async_add_executor_job(_write_import_file, hass, "text.json", "this is not json")
+
+    assert (await _import_error(hass, {"file_name": "../etc.json"})).translation_key == "bad_file_name"
+    assert (await _import_error(hass, {"file_name": "missing.json"})).translation_key == "file_unreadable"
+    error = await _import_error(hass, {"file_name": "text.json"})
+    assert error.translation_key == "import_rejected"
+    assert error.translation_placeholders == {"index": "-", "reason": "not_json"}
+    assert len(entry.subentries) == 0

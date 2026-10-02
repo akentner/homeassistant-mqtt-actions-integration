@@ -1,6 +1,7 @@
 """Export document and the private export file: no ids in the content, a bare file name, 0700 and 0600 (D-11)."""
 
 import json
+import os
 import stat
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -13,6 +14,10 @@ from custom_components.mqtt_actions.const import (
     EXPORT_DIRECTORY,
     EXPORT_FORMAT,
     EXPORT_VERSION,
+    MAX_ACTION_DEPTH,
+    MAX_DOCUMENT_BYTES,
+    MAX_IMPORT_BYTES,
+    MAX_IMPORT_DEVICES,
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
@@ -241,3 +246,188 @@ def test_subentry_payload_drops_kind_and_name_and_adds_the_device_id() -> None:
     assert payload == {**{k: v for k, v in content.items() if k not in {"kind", "name"}}, CONF_DEVICE_ID: "new-id"}
     assert "kind" in content
     assert "name" in content
+
+
+# --- import: hostile input, denied services and the private file (D-11, T-04-36 to T-04-38) ---------------------
+
+
+def _valid_item(name: str = "Lamp") -> dict[str, Any]:
+    return build_content(make_spec(name=name, on=SWITCH_ACTIONS))
+
+
+def _item_with(**changes: Any) -> dict[str, Any]:
+    return {**_valid_item("Second"), **changes}
+
+
+def _nested(depth: int) -> list[dict[str, Any]]:
+    """Return an action list whose nesting is deeper than `depth` container levels."""
+    actions: list[dict[str, Any]] = [{"action": "test.on"}]
+    for _ in range(depth):
+        actions = [{"if": [], "then": actions}]
+    return actions
+
+
+def _run(value: Any) -> list[portability.PreparedDevice]:
+    """Run the whole pure pipeline of an import: text parser, envelope, preparation."""
+    if isinstance(value, str):
+        value = portability.parse_import_text(value)
+    items = portability.parse_export(value)
+    return portability.prepare_import(items, owner=OWNER, owner_name=OWNER_NAME)
+
+
+def _doc(*devices: Any) -> dict[str, Any]:
+    return _envelope(devices=list(devices))
+
+
+HOSTILE = [
+    pytest.param("{this is not json", "not_json", None, id="not-json"),
+    pytest.param("", "not_json", None, id="empty-text"),
+    pytest.param([_valid_item()], "bad_format", None, id="json-list"),
+    pytest.param(_doc(_valid_item(), "a string"), "invalid_device", 2, id="item-not-a-dict"),
+    pytest.param(_doc(_valid_item(), _item_with(kind="timer")), "invalid_device", 2, id="unknown-kind"),
+    pytest.param(_doc(_item_with(kind=["switch"])), "invalid_device", 1, id="unhashable-kind"),
+    pytest.param(
+        _doc(_valid_item(), _item_with(kind=SUBENTRY_SELECT, options="none")),
+        "invalid_device",
+        2,
+        id="select-no-options",
+    ),
+    pytest.param(
+        _doc(_valid_item(), _item_with(on_change_to_on=[{"bogus": 1}])), "invalid_actions", 2, id="bad-action-structure"
+    ),
+    pytest.param(
+        _doc(_item_with(on_change_to_on=_nested(MAX_ACTION_DEPTH))), "invalid_device", 1, id="nested-too-deep"
+    ),
+    pytest.param(
+        _doc(_valid_item(), _item_with(name="x" * (MAX_DOCUMENT_BYTES + 1))), "too_large", 2, id="item-too-large"
+    ),
+    pytest.param(_doc(*[_valid_item()] * (MAX_IMPORT_DEVICES + 1)), "too_many", None, id="too-many-items"),
+    pytest.param(_doc(_item_with(run_mode="sideways")), "invalid_device", 1, id="bad-run-mode"),
+    pytest.param(_doc(_item_with(breaker_window=float("nan"))), "invalid_device", 1, id="nan"),
+]
+
+
+@pytest.mark.parametrize(("value", "reason", "index"), HOSTILE)
+def test_parse_and_prepare_reject_hostile_input(value: Any, reason: str, index: int | None) -> None:
+    """T-04-36, T-04-38: hostile input is refused with a fixed reason code and the position of the offending item."""
+    with pytest.raises(PortabilityError) as raised:
+        _run(value)
+
+    assert raised.value.reason == reason
+    assert raised.value.index == index
+    assert str(raised.value) == reason
+
+
+def test_the_maximum_number_of_items_is_accepted() -> None:
+    """The cap is inclusive: exactly MAX_IMPORT_DEVICES items parse."""
+    items = portability.parse_export(_doc(*[_valid_item()] * MAX_IMPORT_DEVICES))
+    assert len(items) == MAX_IMPORT_DEVICES
+
+
+@pytest.mark.parametrize(
+    "actions",
+    [
+        [{"action": "shell_command.run"}],
+        [{"action": "homeassistant.restart"}],
+        [
+            {
+                "choose": [
+                    {
+                        "conditions": [{"condition": "state", "entity_id": "light.lamp", "state": "on"}],
+                        "sequence": [{"action": "python_script.run"}],
+                    }
+                ]
+            }
+        ],
+    ],
+    ids=["denied-domain", "denied-service", "nested-in-choose"],
+)
+def test_denied_services_are_rejected(actions: list[dict[str, Any]]) -> None:
+    """T-04-36: an item that statically calls a denied service is refused, also when nested in a choose."""
+    with pytest.raises(PortabilityError) as raised:
+        _run(_doc(_valid_item(), _item_with(on_change_to_off=actions)))
+
+    assert raised.value.reason == "denied_service"
+    assert raised.value.index == 2
+
+
+def test_a_templated_service_name_is_accepted() -> None:
+    """Imports are owned, and a template cannot be judged statically, so it is not refused."""
+    (device,) = _run(_doc(_item_with(on_change_to_on=[{"action": "{{ 'shell_' ~ 'command.run' }}"}])))
+    assert device.name == "Second"
+
+
+def test_parse_import_text_returns_the_value() -> None:
+    assert portability.parse_import_text('{"a": [1, 2]}') == {"a": [1, 2]}
+
+
+def _write_import_file(directory: Path, name: str, content: bytes) -> Path:
+    directory.mkdir(mode=0o700, exist_ok=True)
+    path = directory / name
+    path.write_bytes(content)
+    return path
+
+
+def test_read_import_reads_a_regular_file(tmp_path: Path) -> None:
+    """A regular file below mqtt_actions/ is read as text."""
+    _write_import_file(tmp_path / EXPORT_DIRECTORY, "backup.json", '{"é": 1}'.encode())
+
+    assert portability.read_import(tmp_path, "backup.json") == '{"é": 1}'
+
+
+@pytest.mark.parametrize("name", ["../x.json", "a/b.json", ".hidden.json", "x.txt", "", "x\n.json"])
+def test_read_import_refuses_a_bad_name(tmp_path: Path, name: str) -> None:
+    """T-04-37: only a bare name of the fixed pattern reaches the disk."""
+    with pytest.raises(PortabilityError) as raised:
+        portability.read_import(tmp_path, name)
+    assert raised.value.reason == "bad_file_name"
+
+
+def test_read_import_refuses_what_is_not_a_plain_file(tmp_path: Path) -> None:
+    """T-04-37: a missing file or directory, a directory in place of a file, a symlink and bad UTF-8 are unreadable."""
+    directory = tmp_path / EXPORT_DIRECTORY
+
+    # No directory at all
+    with pytest.raises(PortabilityError) as no_directory:
+        portability.read_import(tmp_path, "backup.json")
+    assert no_directory.value.reason == "file_unreadable"
+
+    _write_import_file(directory, "plain.json", b"{}")
+    (directory / "dir.json").mkdir()
+    other = tmp_path / "other.json"
+    other.write_text("{}", encoding="utf-8")
+    (directory / "link.json").symlink_to(other)
+    _write_import_file(directory, "binary.json", b"\xff\xfe{}")
+
+    for name in ("missing.json", "dir.json", "link.json", "binary.json"):
+        with pytest.raises(PortabilityError) as raised:
+            portability.read_import(tmp_path, name)
+        assert raised.value.reason == "file_unreadable", name
+    assert portability.read_import(tmp_path, "plain.json") == "{}"
+
+
+def test_read_import_refuses_a_symlinked_directory(tmp_path: Path) -> None:
+    """The private directory must be a real directory, as for the export."""
+    elsewhere = tmp_path / "elsewhere"
+    _write_import_file(elsewhere, "backup.json", b"{}")
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / EXPORT_DIRECTORY).symlink_to(elsewhere, target_is_directory=True)
+
+    with pytest.raises(PortabilityError) as raised:
+        portability.read_import(config, "backup.json")
+    assert raised.value.reason == "file_unreadable"
+
+
+def test_read_import_refuses_a_file_above_the_cap_before_reading(tmp_path: Path) -> None:
+    """T-04-38: the size is checked on the opened file; the cap itself is still accepted."""
+    directory = tmp_path / EXPORT_DIRECTORY
+    path = _write_import_file(directory, "big.json", b"")
+    os.truncate(path, MAX_IMPORT_BYTES + 1)
+
+    with pytest.raises(PortabilityError) as raised:
+        portability.read_import(tmp_path, "big.json")
+    assert raised.value.reason == "too_large"
+
+    os.truncate(path, MAX_IMPORT_BYTES)
+    assert len(portability.read_import(tmp_path, "big.json")) == MAX_IMPORT_BYTES

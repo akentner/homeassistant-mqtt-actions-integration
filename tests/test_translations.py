@@ -85,6 +85,8 @@ SERVICE_EXCEPTIONS = (
     "export_not_owned",
     "bad_file_name",
     "export_write_failed",
+    "import_needs_exactly_one_source",
+    "file_unreadable",
 )
 
 # The message of a rejected import: exactly the position and the fixed reason code
@@ -287,6 +289,15 @@ def test_required_import_keys_exist_in_both_languages(language: str) -> None:
     assert flat["services.import_devices.name"]
     assert flat["services.import_devices.description"]
     assert _variables(flat["exceptions.import_rejected.message"]) == IMPORT_REJECTED_VARIABLES
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_import_error_keys_exist_in_both_languages(language: str) -> None:
+    """The source rule and the unreadable file have a fixed message without placeholders."""
+    flat = _load(language)
+    for key in ("import_needs_exactly_one_source", "file_unreadable"):
+        assert flat[f"exceptions.{key}.message"]
+        assert _variables(flat[f"exceptions.{key}.message"]) == set()
 
 
 @pytest.mark.parametrize("language", LANGUAGES)

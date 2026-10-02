@@ -261,6 +261,24 @@
       "resync": {
         "name": "Resync"
       }
+    },
+    "select": {
+      "device_mode": {
+        "name": "Mode",
+        "state": {
+          "run": "Run",
+          "observe": "Observe",
+          "disabled": "Disabled"
+        }
+      },
+      "instance_mode": {
+        "name": "Instance mode",
+        "state": {
+          "run": "Run",
+          "observe": "Observe",
+          "disabled": "Disabled"
+        }
+      }
     }
   },
   "issues": {

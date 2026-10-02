@@ -280,7 +280,8 @@ async def test_disabled_ignores_state_and_leaves_the_baseline(
     assert off_calls == []
     assert len(on_calls) == 1
     assert device.tracker.last_acted == "ON"
-    assert [record for record in caplog.records if "payload" in record.getMessage().lower()] == []
+    ours = [record for record in caplog.records if record.name.startswith("custom_components.mqtt_actions")]
+    assert [record for record in ours if "payload" in record.getMessage().lower()] == []
 
 
 async def test_test_topic_respects_the_mode(

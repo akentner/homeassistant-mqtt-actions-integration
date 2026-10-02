@@ -261,6 +261,24 @@
       "resync": {
         "name": "Neu synchronisieren"
       }
+    },
+    "select": {
+      "device_mode": {
+        "name": "Modus",
+        "state": {
+          "run": "Ausführen",
+          "observe": "Beobachten",
+          "disabled": "Deaktiviert"
+        }
+      },
+      "instance_mode": {
+        "name": "Instanzmodus",
+        "state": {
+          "run": "Ausführen",
+          "observe": "Beobachten",
+          "disabled": "Deaktiviert"
+        }
+      }
     }
   },
   "issues": {

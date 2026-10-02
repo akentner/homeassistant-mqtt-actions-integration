@@ -104,7 +104,9 @@ class ApprovalView:
 
     Names are markdown-escaped, `actions_yaml` has no control character and no run of three backticks, and `truncated`
     says the YAML was cut at the cap, which the flow answers with a refusal instead of showing a partial review.
-    `run_on_startup` is part of what the approval hash binds, so the dialog states it next to the actions.
+    `run_on_startup`, `run_mode`, `breaker_max_runs` and `breaker_window` are part of what the approval hash binds, so
+    the dialog states them next to the actions (D-16). The run mode is one of two validated words and the limits are
+    validated integers, so none of them needs escaping.
     """
 
     device_id: str
@@ -114,6 +116,9 @@ class ApprovalView:
     short_hash: str
     actions_yaml: str
     run_on_startup: bool
+    run_mode: str
+    breaker_max_runs: int
+    breaker_window: int
     truncated: bool
     templated: str
     residual: str
@@ -178,6 +183,9 @@ def build_approval_view(spec: DeviceSpec, info: MirrorInfo, deep_invalid_labels:
         short_hash=info.actions_hash[:APPROVAL_HASH_PREFIX_LENGTH],
         actions_yaml=actions,
         run_on_startup=spec.run_on_startup,
+        run_mode=spec.run_mode,
+        breaker_max_runs=spec.breaker_max_runs,
+        breaker_window=spec.breaker_window,
         truncated=truncated,
         templated=_bullets(info.templated, APPROVAL_TEMPLATED_MAX_LINES),
         residual=_bullets(info.residual, APPROVAL_TEMPLATED_MAX_LINES),

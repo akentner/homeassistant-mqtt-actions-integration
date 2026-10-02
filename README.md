@@ -139,8 +139,11 @@ Actions from another instance run with the full access of your Home Assistant, s
 - A mirror tracks the state of the device, but it runs nothing until you **approve** its actions on this instance. The
   approval request appears in Home Assistant Repairs and shows the device, the owner, the full YAML of the actions and
   a hash. Approving does not run anything retroactively; only a later change of the state runs the actions.
-- The approval is bound to the hash of the actions. If the owner changes them, the approval lapses, the mirror stops
-  running, and Repairs asks again with the new YAML. A tombstone or a pruned mirror also drops the approval. A forged tombstone from anyone with write access to the config topic therefore forces a new approval
+- The approval is bound to the hash of the actions, the startup flag, the run mode and the circuit breaker limits (the
+  maximum number of runs and the window); the dialog shows all of them. If the owner changes any of them, the approval
+  lapses, the mirror stops running, and Repairs asks again with the new YAML. A rename does not change the hash.
+  Approvals made before the run mode and the breaker limits were bound lapse once after the upgrade: every approved
+  mirror stops running and Repairs asks again, with no migration. A tombstone or a pruned mirror also drops the approval. A forged tombstone from anyone with write access to the config topic therefore forces a new approval
   and cannot run an action.
 - There is no hub-wide switch: no ask or auto mode and no extra opt-in setting. The per-device, per-instance approval
   is the opt-in (the "local opt-in flag" of the project notes). Devices you own never need an approval.

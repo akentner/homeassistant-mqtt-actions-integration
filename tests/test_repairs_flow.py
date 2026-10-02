@@ -272,6 +272,9 @@ async def test_flow_shows_device_owner_yaml_hash_and_templates(
         "hash",
         "actions",
         "startup",
+        "run_mode",
+        "breaker_max_runs",
+        "breaker_window",
         "templated",
         "residual",
         "invalid",
@@ -297,6 +300,22 @@ async def test_flow_states_the_startup_flag_the_hash_binds(
     result = await _start_flow(hass, device_id)
 
     assert result["description_placeholders"]["startup"] == "true"
+
+
+async def test_confirm_form_placeholders_include_settings(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """The confirm form also supplies the run mode and both breaker limits the approval hash binds (D-16)."""
+    _entry, device_id, _spec = await _pending(
+        hass, make_hub_entry, run_mode="restart", breaker_max_runs=3, breaker_window=7
+    )
+
+    result = await _start_flow(hass, device_id)
+
+    placeholders = result["description_placeholders"]
+    assert placeholders["run_mode"] == "restart"
+    assert placeholders["breaker_max_runs"] == "3"
+    assert placeholders["breaker_window"] == "7"
 
 
 async def test_residual_and_invalid_actions_are_listed(

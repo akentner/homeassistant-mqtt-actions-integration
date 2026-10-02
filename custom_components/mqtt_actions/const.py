@@ -144,6 +144,10 @@ MAX_HEARTBEAT_DEVICES: Final = 10000
 # Dispatcher signal sent when the roster changed; formatted with the config entry id (D-05, D-06)
 SIGNAL_ROSTER_UPDATED: Final = f"{DOMAIN}_roster_updated_{{}}"
 
+# Minimum time between two accepted resyncs (D-12): a held button or a looping automation cannot queue unbounded
+# republishes; measured on Manager.clock
+RESYNC_MIN_INTERVAL_SECONDS: Final = 5.0
+
 # A mirror whose config document was not seen again within this window after setup, a reconnect or the owner coming
 # online is pruned, but only when its owner's availability says online (D-10, A2)
 PRUNE_GRACE_SECONDS: Final = 30.0

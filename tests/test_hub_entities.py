@@ -12,13 +12,13 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
-from custom_components.mqtt_actions import const as const_module
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     DOMAIN,
     HEARTBEAT_OFFLINE_SECONDS,
     MAX_TRACKED_INSTANCES,
+    RESYNC_MIN_INTERVAL_SECONDS,
 )
 from custom_components.mqtt_actions.sensor import RosterSensor
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, heartbeat_topic
@@ -262,7 +262,7 @@ async def test_resync_is_throttled(
     await _press(hass, entity_id)
     assert _published_topics(mqtt_mock).count(document) == 1
 
-    now[0] += const_module.RESYNC_MIN_INTERVAL_SECONDS - 1
+    now[0] += RESYNC_MIN_INTERVAL_SECONDS - 1
     mqtt_mock.async_publish.reset_mock()
     await _press(hass, entity_id)
     assert _published_topics(mqtt_mock) == []

@@ -256,6 +256,11 @@
       "instances_online": {
         "name": "Instances online"
       }
+    },
+    "button": {
+      "resync": {
+        "name": "Resync"
+      }
     }
   },
   "issues": {

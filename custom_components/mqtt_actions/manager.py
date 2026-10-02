@@ -42,6 +42,7 @@ from .const import (
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
+    RESYNC_MIN_INTERVAL_SECONDS,
     STORE_APPROVALS,
     STORE_KEY,
     STORE_LAST_ACTED,
@@ -338,6 +339,8 @@ class Manager:
         self.presence = PresenceManager(self)
         # The integration version, read at the start; announced in the heartbeat
         self._version = ""
+        # When the last accepted resync happened on `clock`; None until the first one (D-12)
+        self._last_resync: float | None = None
 
     @property
     def hass(self) -> HomeAssistant:
@@ -489,6 +492,24 @@ class Manager:
             self.sync.on_reconnect()
             self.presence.on_reconnect()
             self._entry.async_create_background_task(self._hass, self._async_republish(), name=f"{DOMAIN} republish")
+
+    async def async_resync(self) -> bool:
+        """
+        Publish everything this instance owns again on request: documents, discovery, then online (D-12, DSC-04).
+
+        Returns False and publishes nothing when the manager is not running or when the last accepted resync is less
+        than RESYNC_MIN_INTERVAL_SECONDS ago on `clock` (T-04-15); True after it republished. The time is remembered
+        before the publish is awaited, so a second request during a running resync is throttled as well, and the
+        republish itself takes the manager lock, so work cannot queue up.
+        """
+        if not self._running:
+            return False
+        now = self.clock()
+        if self._last_resync is not None and now - self._last_resync < RESYNC_MIN_INTERVAL_SECONDS:
+            return False
+        self._last_resync = now
+        await self._async_republish()
+        return True
 
     async def _async_republish(self) -> None:
         """

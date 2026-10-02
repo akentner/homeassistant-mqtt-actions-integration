@@ -256,6 +256,11 @@
       "instances_online": {
         "name": "Verbundene Instanzen"
       }
+    },
+    "button": {
+      "resync": {
+        "name": "Neu synchronisieren"
+      }
     }
   },
   "issues": {

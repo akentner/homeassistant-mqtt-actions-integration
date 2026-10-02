@@ -2,6 +2,7 @@
 
 import logging
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -11,7 +12,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions import topics
-from custom_components.mqtt_actions.const import CONF_DEVICE_ID, DOMAIN, STORE_KEY
+from custom_components.mqtt_actions.const import CONF_DEVICE_ID, DOMAIN, STORE_KEY, STORE_VERSION
 from custom_components.mqtt_actions.document import build_content, build_document
 
 if TYPE_CHECKING:
@@ -438,3 +439,141 @@ async def test_hub_mode_persists_across_restart(
     assert hass.states.get(entity_id).state == "observe"
     await _fire(hass, entry, _device_id(sub), "ON", retain=False)
     assert on_calls == []
+
+
+# --- the companion device follows its owned device (D-13, D-14) --------------------------------------------------
+
+
+def _companion(hass: HomeAssistant, entry: MockConfigEntry, device_id: str) -> dr.DeviceEntry | None:
+    return dr.async_get(hass).async_get_device_by_identifier((DOMAIN, device_id), entry.entry_id)
+
+
+async def test_rename_updates_the_companion_device_name(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-13: a new title of the subentry is the new name of the companion device."""
+    sub = _switch(make_switch_subentry)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    device_id = _device_id(sub)
+    (subentry,) = entry.subentries.values()
+    assert _companion(hass, entry, device_id).name == "Lamp"
+
+    hass.config_entries.async_update_subentry(entry, subentry, title="Floor lamp")
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _companion(hass, entry, device_id).name == "Floor lamp"
+
+
+async def test_rename_keeps_a_name_the_user_chose(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-13: a name the user gave the companion device is not overwritten by a rename of the device."""
+    sub = _switch(make_switch_subentry)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    device_id = _device_id(sub)
+    (subentry,) = entry.subentries.values()
+    registry = dr.async_get(hass)
+    registry.async_update_device(_companion(hass, entry, device_id).id, name_by_user="My lamp")
+
+    hass.config_entries.async_update_subentry(entry, subentry, title="Floor lamp")
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _companion(hass, entry, device_id).name_by_user == "My lamp"
+
+
+async def test_deleted_device_loses_companion_entity_and_mode(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-13, D-14: removing the subentry removes the companion device, its select and the stored mode."""
+    sub = _switch(make_switch_subentry)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    device_id = _device_id(sub)
+    (subentry,) = entry.subentries.values()
+    entity_id = _mode_entity_id(hass, device_id)
+    assert entity_id is not None
+    await _select_mode(hass, device_id, "observe")
+    assert entry.runtime_data.device_mode(device_id) == "observe"
+
+    hass.config_entries.async_remove_subentry(entry, subentry.subentry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _companion(hass, entry, device_id) is None
+    assert _mode_entity_id(hass, device_id) is None
+    assert hass.states.get(entity_id) is None
+    assert entry.runtime_data.device_mode(device_id) == "run"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert hass_storage[STORE_KEY]["data"]["device_modes"] == {}
+
+
+@pytest.mark.parametrize(
+    ("device_modes", "instance_mode", "kept_device_mode", "kept_instance"),
+    [
+        ({"unknown-device": "observe", "OWNED": "observe"}, "observe", "observe", "observe"),
+        ({"OWNED": "paused", "other": 5, 7: "observe"}, "bogus", None, "run"),
+        ({"OWNED": "run"}, 5, None, "run"),
+        ("junk", ["observe"], None, "run"),
+        (None, None, None, "run"),
+    ],
+)
+async def test_orphan_mode_entries_are_pruned_at_start(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    device_modes: Any,
+    instance_mode: Any,
+    kept_device_mode: str | None,
+    kept_instance: str,
+) -> None:
+    """D-14: stored modes of unknown ids and malformed values are dropped and never break the start."""
+    sub = _switch(make_switch_subentry)
+    device_id = _device_id(sub)
+
+    def _own(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {device_id if key == "OWNED" else key: item for key, item in value.items()}
+        return value
+
+    data: dict[str, Any] = {"published": []}
+    if device_modes is not None:
+        data["device_modes"] = _own(device_modes)
+    if instance_mode is not None:
+        data["instance_mode"] = instance_mode
+    hass_storage[STORE_KEY] = {"version": STORE_VERSION, "minor_version": 1, "key": STORE_KEY, "data": data}
+
+    entry = await _setup(hass, make_hub_entry([sub]))
+    assert entry.state is ConfigEntryState.LOADED
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    saved = hass_storage[STORE_KEY]["data"]
+    assert saved["device_modes"] == ({} if kept_device_mode is None else {device_id: kept_device_mode})
+    assert saved["instance_mode"] == kept_instance
+
+
+async def test_mode_select_unavailable_for_unknown_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """The select of a device that is gone reports unavailable, and the manager refuses to set its mode."""
+    sub = _switch(make_switch_subentry)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    device_id = _device_id(sub)
+    (subentry,) = entry.subentries.values()
+    entity_id = _mode_entity_id(hass, device_id)
+    assert entity_id is not None
+
+    # The registries keep their entries for this moment, as when the removal of the entity is still pending
+    with (
+        patch.object(dr.DeviceRegistry, "async_clear_config_subentry"),
+        patch.object(er.EntityRegistry, "async_clear_config_subentry"),
+    ):
+        hass.config_entries.async_remove_subentry(entry, subentry.subentry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert hass.states.get(entity_id).state == "unavailable"
+    with pytest.raises(ValueError, match="device"):
+        await entry.runtime_data.async_set_device_mode(device_id, "observe")

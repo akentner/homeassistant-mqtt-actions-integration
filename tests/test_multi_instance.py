@@ -49,6 +49,8 @@ if TYPE_CHECKING:
 
     from tests.fake_broker import FakeBroker, Instance
 
+pytestmark = pytest.mark.multi_instance
+
 BASE = "mqtt_actions"
 PREFIX = "homeassistant"
 

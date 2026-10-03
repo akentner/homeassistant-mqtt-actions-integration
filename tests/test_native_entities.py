@@ -4,11 +4,13 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
+from custom_components.mqtt_actions import topics
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     CONF_FRIENDLY_NAME,
@@ -18,6 +20,7 @@ from custom_components.mqtt_actions.const import (
     STORE_KEY,
     STORE_VERSION,
 )
+from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY, trigger_key
 from custom_components.mqtt_actions.topics import discovery_topic, state_topic
 
 if TYPE_CHECKING:
@@ -427,3 +430,159 @@ async def test_the_mode_select_shares_the_device_of_the_native_entities(
     assert (DOMAIN, device_id) in device.identifiers
     assert device.model == "Select device"
     assert _manager(entry).device_mode(device_id) == "run"
+
+
+# --- Task 3: native test buttons -------------------------------------------------------------------------------------
+
+
+def _button_id(hass: HomeAssistant, device_id: str, key: str) -> str | None:
+    return _entity_id(hass, "button", f"{device_id}_test_{key}")
+
+
+async def _press(hass: HomeAssistant, device_id: str, key: str) -> None:
+    entity_id = _button_id(hass, device_id, key)
+    assert entity_id is not None
+    await hass.services.async_call("button", "press", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _all_publishes(mqtt_mock: Any, device_id: str) -> list[tuple]:
+    """Return what was published on the state or the test topic of a device."""
+    watched = {state_topic(BASE, device_id), topics.test_topic(BASE, device_id)}
+    return [call.args[:4] for call in mqtt_mock.async_publish.call_args_list if call.args[0] in watched]
+
+
+async def test_native_test_buttons_exist_per_trigger(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """MIG-03: one native button per trigger with the unique id, name and category of the legacy button."""
+    entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    registry = er.async_get(hass)
+    (subentry_id,) = entry.subentries
+
+    for key, name in ((SWITCH_ON_KEY, "Test ON"), (SWITCH_OFF_KEY, "Test OFF")):
+        entity_id = _button_id(hass, device_id, key)
+        assert entity_id is not None
+        registered = registry.async_get(entity_id)
+        assert registered is not None
+        assert registered.platform == DOMAIN
+        assert registered.original_name == name
+        assert registered.entity_category is EntityCategory.CONFIG
+        assert registered.config_subentry_id == subentry_id
+        device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, device_id), entry.entry_id)
+        assert device is not None
+        assert registered.device_id == device.id
+
+
+async def test_pressing_a_test_button_runs_that_trigger_once_and_changes_nothing(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """MIG-03: a press runs the actions of its trigger once, publishes nothing and leaves value and baseline alone."""
+    on_calls = async_mock_service(hass, "test", "on")
+    off_calls = async_mock_service(hass, "test", "off")
+    entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    await _state(hass, device_id, "OFF", retain=True)
+    device = _manager(entry).devices[device_id]
+    mqtt_mock.async_publish.reset_mock()
+
+    await _press(hass, device_id, SWITCH_ON_KEY)
+
+    assert (len(on_calls), len(off_calls)) == (1, 0)
+    assert _all_publishes(mqtt_mock, device_id) == []
+    assert device.value == "OFF"
+    assert device.tracker.last_acted == "OFF"
+    assert _switch_state(hass, device_id) == "off"
+
+
+async def test_observe_and_disabled_modes_block_the_press(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-14: a press runs no actions in observe or disabled mode and runs them again in run mode."""
+    on_calls = async_mock_service(hass, "test", "on")
+    entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    manager = _manager(entry)
+
+    await manager.async_set_device_mode(device_id, "observe")
+    await _press(hass, device_id, SWITCH_ON_KEY)
+    await manager.async_set_device_mode(device_id, "disabled")
+    await _press(hass, device_id, SWITCH_ON_KEY)
+    assert on_calls == []
+
+    await manager.async_set_device_mode(device_id, "run")
+    await _press(hass, device_id, SWITCH_ON_KEY)
+    assert len(on_calls) == 1
+
+
+async def test_removing_an_option_removes_its_native_button_entry(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """A removed option leaves no unavailable button behind; the other buttons stay."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    keys = {value: trigger_key(value) for value, _friendly, _actions in SELECT_OPTIONS}
+    assert all(_button_id(hass, device_id, key) is not None for key in keys.values())
+
+    subentry = next(iter(entry.subentries.values()))
+    kept = [option for option in subentry.data[CONF_OPTIONS] if option[CONF_STATE_VALUE] != "c"]
+    hass.config_entries.async_update_subentry(entry, subentry, data={**subentry.data, CONF_OPTIONS: kept})
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _button_id(hass, device_id, keys["c"]) is None
+    assert _button_id(hass, device_id, keys["a"]) is not None
+    assert _button_id(hass, device_id, keys["Mixed Case"]) is not None
+
+
+@pytest.mark.parametrize("native", [True, False])
+async def test_a_native_device_subscribes_no_test_topic(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    native: bool,
+) -> None:
+    """MIG-03: a native device has no test-topic subscription, a legacy device still has one."""
+    if native:
+        _seed_native(hass_storage)
+    subentry = make_switch_subentry("Lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry([subentry]))
+
+    device = _manager(entry).devices[_device_id(subentry)]
+
+    assert (device.unsubscribe_test is None) is native
+    assert device.unsubscribe is not None
+
+
+async def test_press_of_an_unknown_trigger_does_nothing(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """An unknown device id or trigger key returns without error and runs nothing."""
+    on_calls = async_mock_service(hass, "test", "on")
+    off_calls = async_mock_service(hass, "test", "off")
+    entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    manager = _manager(entry)
+
+    await manager.async_press_test("no-such-device", SWITCH_ON_KEY)
+    await manager.async_press_test(device_id, "no-such-key")
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert (on_calls, off_calls) == ([], [])

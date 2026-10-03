@@ -72,12 +72,12 @@
 
 ### Native entities (Phase 5)
 
-- [ ] **ENT-01**: Switch, Select and test-button entities are native entities of the hub entry: owned devices sit under their subentry, mirrors directly under the entry, unique ids unchanged
-- [ ] **ENT-02**: Native entity state comes from the shared state topic, commands publish retained at QoS 1 to it, availability follows the owner
+- [x] **ENT-01**: Switch, Select and test-button entities are native entities of the hub entry: owned devices sit under their subentry, mirrors directly under the entry, unique ids unchanged
+- [x] **ENT-02**: Native entity state comes from the shared state topic, commands publish retained at QoS 1 to it, availability follows the owner
 - [ ] **ENT-03**: MQTT Discovery is an optional export for external consumers: off by default, `enabled_by_default` false, configurable prefix, documented duplicate warning
 - [x] **MIG-01**: Existing entities are taken over with entity id, registry id, device id, area, name and history intact, with no manual step
 - [ ] **MIG-02**: Mixed versions: the owner keeps the legacy path while an online peer is not native-capable; documents and heartbeats carry additive unhashed markers
-- [ ] **MIG-03**: Healing, ghost cleanup, the discovery-disabled and discovery-removed issues and the test topic apply only to devices still on the legacy path
+- [x] **MIG-03**: Healing, ghost cleanup, the discovery-disabled and discovery-removed issues and the test topic apply only to devices still on the legacy path
 - [x] **DEC-01**: An ADR records the Go/No-Go evaluation against the four criteria
 
 ## v2 Requirements
@@ -164,12 +164,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPS-04 | Phase 4 | Complete |
 | OPS-05 | Phase 4 | Complete |
 | OPS-06 | Phase 4 | Complete |
-| ENT-01 | Phase 5 | Pending |
-| ENT-02 | Phase 5 | Pending |
+| ENT-01 | Phase 5 | Complete |
+| ENT-02 | Phase 5 | Complete |
 | ENT-03 | Phase 5 | Pending |
 | MIG-01 | Phase 5 | Complete |
 | MIG-02 | Phase 5 | Pending |
-| MIG-03 | Phase 5 | Pending |
+| MIG-03 | Phase 5 | Complete |
 | DEC-01 | Phase 5 | Complete |
 
 **Coverage:**

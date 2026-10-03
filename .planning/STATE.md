@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Evaluate native switch/select entities instead of MQTT Discovery
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-10-03T10:52:53.184Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-10-03T11:14:01.536Z"
 last_activity: 2026-10-03
 last_activity_desc: Phase 05 execution started
-state_head: a8d69a4631b0436fbfdce237fb1f275a781d45af
+state_head: 771ca3368a3c94db3ae29e269aec7290692f996a
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 42
-  completed_plans: 35
+  completed_plans: 36
   percent: 80
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 05 (Evaluate native switch/select entities instead of MQTT Discovery) — EXECUTING
-Plan: 3 of 9
+Plan: 4 of 9
 Status: Ready to execute
 Last activity: 2026-10-03 — Phase 05 execution started
 
@@ -89,6 +89,7 @@ Progress: [████████░░] 80% of Phase 01 plans
 | Phase 04 P14 | 15 min | 2 tasks | 3 files |
 | Phase 05 P01 | 24min | 3 tasks | 4 files |
 | Phase 05 P02 | 30min | 2 tasks | 2 files |
+| Phase 05 P03 | 40min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -173,6 +174,8 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-14: ISSUES in tests/test_translations.py is read from en.json so every new issue is guarded against description plus fix_flow
 - [Phase 05]: Go: replace MQTT-Discovery entities with native switch/select platforms (ADR 0001 Accepted)
 - [Phase 05]: Takeover removes the emptied legacy device only when nothing moved and the native device exists; otherwise the device is moved and the companion merged
+- [Phase 05]: Native Store key written only when non-default, so legacy instances keep their persisted data unchanged
+- [Phase 05]: device_info_for replaces companion_device_info as the single device info builder shared by mode select and native entities
 
 ### Pending Todos
 
@@ -196,6 +199,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T10:52:53.056Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-10-03T11:14:01.419Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None

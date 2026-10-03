@@ -1507,6 +1507,8 @@ class Manager:
         self._rename_companion(device.device_id, spec.name)
         await self.async_publish_config(device, changed_only=True)
         await self.async_publish_discovery(device)
+        # A native select re-reads its options and its current option; a legacy device ignores the signal
+        self._notify_devices_changed()
 
     @callback
     def _rename_companion(self, device_id: str, name: str) -> None:

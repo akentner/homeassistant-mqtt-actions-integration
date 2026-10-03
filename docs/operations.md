@@ -185,6 +185,8 @@ hub device with the roster, the resync button and the instance mode, and one dev
 entities. The `device_id` field of the services is the registry id of this device.
 
 The test buttons are in the Diagnostic category and disabled by default; enable one on its entity page when needed.
+The entity ids of the new entities end in short English suffixes such as `_mode`, `_restore` and `_test_<StateValue>`;
+see the [upgrade notes](#upgrade-notes).
 The **Restore previous state** button of a Select is a normal, visible button. It publishes the value that was shown
 before the current one, which the Select also shows as its attribute `previous_state`, to the same state topic a
 choice does, so the broker ACL needs no new line. The previous state is local to the instance, kept in its Store, and
@@ -359,6 +361,11 @@ Fixed in the code, not configurable. The page and the test suite use the constan
   hint. See the [README](../README.md#upgrading-from-01x).
 - **Test buttons.** New native test buttons are diagnostic and disabled by default. An existing entry, including one
   moved from core MQTT, keeps its category and enabled state: nothing is migrated.
+- **Entity ids.** Ids of entities that exist are never renamed. Entities created from 0.2.0 on get a short English id
+  part whatever the language of Home Assistant: `_mode`, `_restore`, `_resync`, `_instances`, `_instance_mode` and
+  `_test_<StateValue>` (for example `_test_on`), after the area and device parts that Home Assistant adds according to
+  its own entity ID setting. The displayed names stay translated. To get the short ids for old entities, rename them by
+  hand or use the Home Assistant function that regenerates entity ids; that is your choice.
 - **Discovery is optional.** MQTT Discovery stays only for a device on the legacy path and as an optional export for
   other consumers (see the [README](../README.md#mqtt-discovery-export)); the export has no healing and no test
   buttons.

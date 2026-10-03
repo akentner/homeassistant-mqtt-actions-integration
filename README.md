@@ -65,6 +65,11 @@ automatic and one-way: there is no setting and no step to take.
   [docs/troubleshooting.md](docs/troubleshooting.md).
 - **Test buttons.** A test button that exists already, including the ones moved from core MQTT, keeps its category and
   enabled state. Only new test buttons are diagnostic and disabled by default; nothing is migrated.
+- **Entity ids.** Ids of entities that exist are never renamed. Entities created from 0.2.0 on get a short English id
+  part whatever the language of Home Assistant: `_mode`, `_restore`, `_resync`, `_instances`, `_instance_mode` and
+  `_test_<StateValue>` (for example `_test_on`), after the area and device parts that Home Assistant adds according to
+  its own entity ID setting. The displayed names stay translated. To get the short ids for old entities, rename them by
+  hand or use the Home Assistant function that regenerates entity ids; that is your choice.
 - **Removal.** Removing the integration removes the entities, because they belong to it; with core MQTT they belonged to
   the MQTT integration and stayed.
 - **Adoption.** Adoption between an old and a new instance should not run concurrently: a native device stays native
@@ -134,7 +139,8 @@ Every device, Switch and Select, has these settings in its dialog:
   configurable, from 1 to 100 runs and from 1 to 3600 seconds.
 
 Test buttons: every trigger of a device gets a button entity, `Test ON` and `Test OFF` for a Switch and one
-`Test <friendly name>` per option for a Select. Pressing a test button runs that trigger's actions, and never changes
+`Test <friendly name>` per option for a Select. The id of a test button ends in `_test_<StateValue>`, for example
+`_test_on`, and does not change when the option is renamed. Pressing a test button runs that trigger's actions, and never changes
 the state, the baseline or the state topic. It follows the run mode of the device and passes through the queue and the
 circuit breaker like any other run. Test buttons are a tool, not a daily control: a new test button is in the
 Diagnostic category and disabled by default, so enable it on its entity page when you need it. This holds for owned

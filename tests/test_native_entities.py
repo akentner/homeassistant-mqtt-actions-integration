@@ -1,6 +1,7 @@
 """Native Switch, Select and test button entities of owned devices and mirrors (ENT-01, ENT-02, MIG-03, D-07)."""
 
 import json
+import uuid
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
@@ -23,6 +24,7 @@ from custom_components.mqtt_actions.const import (
     STORE_KEY,
     STORE_MIRRORS,
     STORE_VERSION,
+    SUBENTRY_SELECT,
 )
 from custom_components.mqtt_actions.discovery import build_discovery
 from custom_components.mqtt_actions.document import parse_document
@@ -40,6 +42,8 @@ if TYPE_CHECKING:
     from custom_components.mqtt_actions.manager import Manager
 
 BASE = "mqtt_actions"
+# The literal Store key, pinned here so a rename of the constant cannot go unnoticed
+STORE_PREVIOUS_STATES = "previous_states"
 ON_ACTIONS = [{"action": "test.on"}]
 OFF_ACTIONS = [{"action": "test.off"}]
 
@@ -1024,3 +1028,330 @@ async def test_the_history_tracks_changes_only(
     await _state(hass, device_id, "c")
     assert manager.previous_value(device_id) == "Mixed Case"
     assert manager.previous_value("unknown-device") is None
+
+
+def _seed_previous(hass_storage: dict[str, Any], previous_states: Any) -> None:
+    """Add a `previous_states` value to the Store that `_seed_native` wrote."""
+    hass_storage[STORE_KEY]["data"][STORE_PREVIOUS_STATES] = previous_states
+
+
+async def _seeded_select(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+    previous_states: Any,
+) -> tuple[MockConfigEntry, str]:
+    """Set up a native instance whose Store carries `previous_states` (a callable gets the device id)."""
+    device_id = str(uuid.uuid4())
+    _seed_native(hass_storage)
+    _seed_previous(hass_storage, previous_states(device_id) if callable(previous_states) else previous_states)
+    subentry = make_select_subentry("Mode", SELECT_OPTIONS, device_id=device_id)
+    return await _setup(hass, make_hub_entry([subentry])), device_id
+
+
+def _previous_state(hass: HomeAssistant, device_id: str) -> str | None:
+    state = hass.states.get(_select_entity_id(hass, device_id))
+    assert state is not None
+    assert "previous_state" in state.attributes
+    return state.attributes["previous_state"]
+
+
+async def test_the_select_shows_the_previous_state_and_follows_renames_and_removals(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """Q-02, P-04: the attribute is the friendly name, computed live; a removed option gives None and no restore."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    assert _previous_state(hass, device_id) is None
+
+    await _state(hass, device_id, "a", retain=True)
+    assert _previous_state(hass, device_id) is None
+    await _state(hass, device_id, "Mixed Case")
+    assert _previous_state(hass, device_id) == "Alpha"
+
+    subentry = next(iter(entry.subentries.values()))
+    renamed = [
+        {**option, CONF_FRIENDLY_NAME: "Omega"} if option[CONF_STATE_VALUE] == "a" else option
+        for option in subentry.data[CONF_OPTIONS]
+    ]
+    hass.config_entries.async_update_subentry(entry, subentry, data={**subentry.data, CONF_OPTIONS: renamed})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _previous_state(hass, device_id) == "Omega"
+
+    subentry = next(iter(entry.subentries.values()))
+    kept = [option for option in subentry.data[CONF_OPTIONS] if option[CONF_STATE_VALUE] != "a"]
+    hass.config_entries.async_update_subentry(entry, subentry, data={**subentry.data, CONF_OPTIONS: kept})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _previous_state(hass, device_id) is None
+    await _press_restore(hass, device_id)
+    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == []
+
+
+async def test_the_previous_states_are_persisted_only_when_there_is_history(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """P-01: an additive key with last and previous, absent without history, for a Switch and for the legacy path."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    manager = _manager(entry)
+    await _state(hass, device_id, "a", retain=True)
+    assert STORE_PREVIOUS_STATES not in manager._data_to_save()
+    await _state(hass, device_id, "Mixed Case")
+    assert manager._data_to_save()[STORE_PREVIOUS_STATES] == {device_id: {"last": "Mixed Case", "previous": "a"}}
+
+
+async def test_a_native_switch_has_no_history(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """A Switch device keeps its Store key set whatever it shows."""
+    entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    await _state(hass, device_id, "ON", retain=True)
+    await _state(hass, device_id, "OFF")
+
+    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+
+
+async def test_a_legacy_select_has_no_history(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_select_subentry: Callable
+) -> None:
+    """The legacy path is untouched: no native flag, no history, no key."""
+    subentry = make_select_subentry("Mode", SELECT_OPTIONS)
+    entry = await _setup(hass, make_hub_entry([subentry]))
+    device_id = _device_id(subentry)
+    await _state(hass, device_id, "a", retain=True)
+    await _state(hass, device_id, "Mixed Case")
+    await _state(hass, device_id, "c")
+
+    assert not _manager(entry).is_native(device_id)
+    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+
+
+async def test_a_stored_history_survives_a_restart_and_keeps_its_previous_value(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """P-01: the history shows at the first state write; a retained echo equal to `last` changes nothing."""
+    entry, device_id = await _seeded_select(
+        hass,
+        hass_storage,
+        make_hub_entry,
+        make_select_subentry,
+        lambda device_id: {device_id: {"last": "Mixed Case", "previous": "a"}},
+    )
+    assert _previous_state(hass, device_id) == "Alpha"
+
+    await _state(hass, device_id, "Mixed Case", retain=True)
+
+    assert _manager(entry).previous_value(device_id) == "a"
+    assert _previous_state(hass, device_id) == "Alpha"
+
+
+async def test_a_change_during_downtime_makes_the_old_last_the_previous_value(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """P-01: the first retained echo is compared with the stored `last`, not with nothing."""
+    entry, device_id = await _seeded_select(
+        hass,
+        hass_storage,
+        make_hub_entry,
+        make_select_subentry,
+        lambda device_id: {device_id: {"last": "Mixed Case", "previous": "a"}},
+    )
+
+    await _state(hass, device_id, "c", retain=True)
+
+    assert _manager(entry).previous_value(device_id) == "Mixed Case"
+    assert _previous_state(hass, device_id) == "Bravo"
+    assert _manager(entry)._data_to_save()[STORE_PREVIOUS_STATES] == {
+        device_id: {"last": "c", "previous": "Mixed Case"}
+    }
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "text",
+        ["a"],
+        {"not a valid id!": {"last": "a", "previous": "c"}},
+        {"DEVICE": "text"},
+        {"DEVICE": {"last": 1, "previous": "a"}},
+        {"DEVICE": {"last": "a", "previous": ""}},
+        {"DEVICE": {"last": "", "previous": "a"}},
+        {"DEVICE": {"last": "a", "previous": "a"}},
+        {"DEVICE": {"last": "a"}},
+        {str(uuid.uuid4()): {"last": "a", "previous": "c"}},
+    ],
+    ids=[
+        "string",
+        "list",
+        "bad-id",
+        "non-dict-entry",
+        "non-string-value",
+        "empty-previous",
+        "empty-last",
+        "equal-values",
+        "missing-previous",
+        "unknown-device",
+    ],
+)
+async def test_a_malformed_stored_history_is_ignored(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+    stored: Any,
+) -> None:
+    """T-261003-02: nothing wrong is trusted and nothing wrong is written back."""
+
+    def build(device_id: str) -> Any:
+        if isinstance(stored, dict):
+            return {(device_id if key == "DEVICE" else key): value for key, value in stored.items()}
+        return stored
+
+    entry, device_id = await _seeded_select(hass, hass_storage, make_hub_entry, make_select_subentry, build)
+
+    assert _manager(entry).previous_value(device_id) is None
+    assert _previous_state(hass, device_id) is None
+    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+
+
+async def test_deleting_a_device_drops_its_history(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """The history does not outlive its device."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    await _state(hass, device_id, "a", retain=True)
+    await _state(hass, device_id, "Mixed Case")
+    assert STORE_PREVIOUS_STATES in _manager(entry)._data_to_save()
+
+    (subentry_id,) = entry.subentries
+    assert hass.config_entries.async_remove_subentry(entry, subentry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+
+
+async def test_a_local_release_drops_the_history(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """A device released here leaves no history behind."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    await _state(hass, device_id, "a", retain=True)
+    await _state(hass, device_id, "Mixed Case")
+
+    assert await _manager(entry).async_release_locally([device_id]) == [device_id]
+
+    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+
+
+def _select_mirror_spec(*, actions: bool = True) -> Any:
+    options = SELECT_OPTIONS if actions else [(value, friendly, []) for value, friendly, _actions in SELECT_OPTIONS]
+    return make_spec(SUBENTRY_SELECT, name="Foreign mode", options=options)
+
+
+async def test_a_native_select_mirror_tracks_and_restores_like_a_choice(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """P-03, T-261003-01: an unapproved mirror in observe mode publishes exactly what select_option publishes."""
+    spec = _select_mirror_spec()
+    entry = await _setup(hass, make_hub_entry())
+    await _presence(hass, "online")
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    await _manager(entry).async_set_device_mode(spec.device_id, "observe")
+    await _state(hass, spec.device_id, "a", retain=True)
+    await _state(hass, spec.device_id, "Mixed Case")
+    assert _previous_state(hass, spec.device_id) == "Alpha"
+    topic = state_topic(BASE, spec.device_id)
+
+    await _press_restore(hass, spec.device_id)
+    assert _publishes(mqtt_mock, topic) == [("a", 1, True)]
+
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": _select_entity_id(hass, spec.device_id), "option": "Alpha"},
+        blocking=True,
+    )
+    assert _publishes(mqtt_mock, topic) == [("a", 1, True), ("a", 1, True)]
+
+
+async def test_the_restore_button_of_a_mirror_is_unavailable_while_its_owner_is_offline(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """The availability of the mirror entities is the one of its owner."""
+    spec = _select_mirror_spec()
+    await _setup(hass, make_hub_entry())
+    await _presence(hass, "online")
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    entity_id = _restore_id(hass, spec.device_id)
+    assert entity_id is not None
+    assert hass.states.get(entity_id).state != "unavailable"
+
+    await _presence(hass, "offline", retain=False)
+
+    assert hass.states.get(entity_id).state == "unavailable"
+
+
+async def test_the_tombstone_of_a_mirror_drops_its_history(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """The history of a mirror ends with the mirror."""
+    spec = _select_mirror_spec()
+    entry = await _setup(hass, make_hub_entry())
+    await _presence(hass, "online")
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    await _state(hass, spec.device_id, "a", retain=True)
+    await _state(hass, spec.device_id, "Mixed Case")
+    assert STORE_PREVIOUS_STATES in _manager(entry)._data_to_save()
+
+    await _deliver(hass, spec.device_id, "", retain=False)
+
+    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+
+
+async def test_an_adoption_keeps_the_history_of_a_native_mirror(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """P-01: the map is keyed by device id, so the owned device that replaces the mirror keeps it."""
+    spec = _select_mirror_spec(actions=False)
+    entry = await _setup(hass, make_hub_entry())
+    await _presence(hass, "online")
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    await _state(hass, spec.device_id, "a", retain=True)
+    await _state(hass, spec.device_id, "Mixed Case")
+    assert STORE_PREVIOUS_STATES in _manager(entry)._data_to_save()
+
+    await _manager(entry).async_adopt(spec.device_id, force=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert spec.device_id in _manager(entry).devices
+    assert _manager(entry)._data_to_save()[STORE_PREVIOUS_STATES] == {
+        spec.device_id: {"last": "Mixed Case", "previous": "a"}
+    }

@@ -9,6 +9,10 @@ per device is published at `<base>/<TOPIC_VERSION>/devices/<device_id>/config` b
   MAX_TRANSFER_HISTORY). The marker is bookkeeping like `owner` and `rev`: it is never hashed, an absent marker leaves
   the document byte-identical to one published before adoption existed, and SCHEMA_VERSION stays 1, so a reader that
   does not know the key ignores it (D-09)
+- for an owner whose entities are native the optional `entities` marker with the value `native`. It is bookkeeping in
+  the same way: never hashed, never written for an owner that is not native, SCHEMA_VERSION stays 1, and the parser
+  reads it strictly (only the exact value counts) and never rejects a document because of it, so a reader that does not
+  know the key ignores it and a future value cannot break this reader (D-09)
 - the shared content (D-13): `kind`, `name`, `run_on_startup`, `run_mode`, `breaker_max_runs`, `breaker_window` and the
   actions, as `on_change_to_on` and `on_change_to_off` for a Switch or as `options` for a Select
 
@@ -38,7 +42,7 @@ import json
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.util.json import json_loads
 
@@ -79,6 +83,9 @@ if TYPE_CHECKING:
 
 # Top-level key of the transfer marker of an adopted device
 TRANSFER_KEY = "transferred_from"
+# Top-level key and value of the marker of an owner with native entities; bookkeeping, never part of the content (D-09)
+NATIVE_KEY: Final = "entities"
+NATIVE_VALUE: Final = "native"
 
 
 def canonical_json(value: Any) -> str:
@@ -145,19 +152,21 @@ def actions_hash(spec: DeviceSpec) -> str:
     )
 
 
-def build_document(
+def build_document(  # noqa: PLR0913
     spec: DeviceSpec,
     *,
     owner: str,
     owner_name: str,
     rev: int,
     transferred_from: Sequence[str] = (),
+    native: bool = False,
 ) -> dict[str, Any]:
     """
     Return the document of a device: identity and bookkeeping, the content hash and the shared content.
 
     `transferred_from` is the transfer marker of an adopted device (D-09). It is written only when it is not empty and
-    is not part of the content, so it never changes a hash.
+    is not part of the content, so it never changes a hash. `native` writes the `entities` marker of an owner whose
+    entities are native, under the same rules: only when set and never part of the content.
     """
     content = build_content(spec)
     document: dict[str, Any] = {
@@ -171,6 +180,8 @@ def build_document(
     }
     if transferred_from:
         document[TRANSFER_KEY] = list(transferred_from)
+    if native:
+        document[NATIVE_KEY] = NATIVE_VALUE
     return document
 
 
@@ -244,6 +255,8 @@ class ParsedDocument:
     payload: str
     # The ids of the previous owners of an adopted device, newest last; empty when the device was never adopted (D-09)
     transferred_from: tuple[str, ...] = ()
+    # True when the owner marked the document as one of native entities; never a reason to reject a document (D-09)
+    native: bool = False
 
 
 def migrate(document: dict[str, Any]) -> dict[str, Any]:
@@ -424,6 +437,7 @@ def parse_document(topic_device_id: str, payload: str) -> ParsedDocument:
         actions_hash=approval,
         payload=payload,
         transferred_from=transferred_from,
+        native=document.get(NATIVE_KEY) == NATIVE_VALUE,
     )
 
 

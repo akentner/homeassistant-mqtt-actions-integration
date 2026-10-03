@@ -1,4 +1,4 @@
-"""The buttons: the resync button of the hub device and the native test buttons of owned devices (DSC-04, MIG-03)."""
+"""The buttons: the resync button of the hub device and the native test buttons of owned and mirrored devices."""
 
 from typing import TYPE_CHECKING
 
@@ -77,7 +77,7 @@ async def async_setup_entry(
     entry: ConfigEntry[Manager],
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add the resync button and the test button of every trigger of every native device, now and later."""
+    """Add the resync button and the test button of every trigger of every native device or mirror, now and later."""
     manager = entry.runtime_data
     async_add_entities([ResyncButton(manager)])
     added: set[tuple[str, str]] = set()
@@ -86,7 +86,7 @@ async def async_setup_entry(
     def _sync_test_buttons() -> None:
         expected = {
             (device_id, key): trigger
-            for device_id, device in manager.devices.items()
+            for device_id, device in [*manager.devices.items(), *manager.mirrors.items()]
             if manager.is_native(device_id)
             for key, trigger in device.spec.triggers.items()
         }

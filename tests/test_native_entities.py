@@ -659,3 +659,33 @@ async def test_an_unmarked_mirror_stays_on_the_legacy_path(
     companion = _companion(hass, entry, spec.device_id)
     assert companion is not None
     assert companion.model == "Switch device (mirror)"
+
+
+async def test_a_native_mirror_has_test_buttons_that_run_locally_once_approved(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """MIG-03: the buttons of a native mirror run the trigger here, behind the approval, and publish nothing."""
+    on_calls = async_mock_service(hass, "test", "on")
+    spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _presence(hass, "online")
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+
+    on_button = _button_id(hass, spec.device_id, SWITCH_ON_KEY)
+    assert on_button is not None
+    assert _button_id(hass, spec.device_id, SWITCH_OFF_KEY) is not None
+    registered = er.async_get(hass).async_get(on_button)
+    assert registered is not None
+    assert registered.config_subentry_id is None
+    assert registered.device_id == _companion(hass, entry, spec.device_id).id
+    assert _manager(entry).mirrors[spec.device_id].unsubscribe_test is None
+
+    await _press(hass, spec.device_id, SWITCH_ON_KEY)
+    assert on_calls == []
+
+    info = _manager(entry).mirrors[spec.device_id].mirror
+    assert info is not None
+    assert await _manager(entry).async_approve(spec.device_id, info.actions_hash)
+    await _press(hass, spec.device_id, SWITCH_ON_KEY)
+    assert len(on_calls) == 1
+    assert _all_publishes(mqtt_mock, spec.device_id) == []

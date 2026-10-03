@@ -130,6 +130,8 @@ class MirrorInfo:
     residual: tuple[str, ...] = ()
     # The previous owners the document names when the device was adopted, newest last (D-09)
     transferred_from: tuple[str, ...] = ()
+    # True when the pinned owner marked its document as one of native entities; the mirror is then a native entity here
+    native: bool = False
 
 
 class AdoptionError(Exception):
@@ -538,9 +540,11 @@ class Manager:
         """
         Return whether a device is a native entity of this integration instead of an MQTT discovery entity (D-03).
 
-        True for an owned device that is listed as native or while the instance flag is set; False for a mirror and an
-        unknown id.
+        True for an owned device that is listed as native or while the instance flag is set, and for a mirror whose
+        pinned owner marked its document as native (D-07, D-09); False for an unknown id.
         """
+        if (mirror := self.mirrors.get(device_id)) is not None:
+            return mirror.mirror is not None and mirror.mirror.native
         return device_id in self.devices and (self._native.instance or device_id in self._native.devices)
 
     def has_device(self, device_id: str) -> bool:
@@ -1363,6 +1367,7 @@ class Manager:
             templated=analysis.templated,
             residual=analysis.residual,
             transferred_from=parsed.transferred_from,
+            native=parsed.native,
         )
 
     def _build_mirror(self, parsed: ParsedDocument, *, startup: bool) -> Device:
@@ -1416,9 +1421,11 @@ class Manager:
             device.unsubscribe = await self.gateway.async_subscribe(
                 state_topic(self._base_topic, device_id), partial(self._on_message, device_id)
             )
-            device.unsubscribe_test = await self.gateway.async_subscribe(
-                test_topic(self._base_topic, device_id), partial(self._on_test_message, device_id)
-            )
+            # A native mirror has test buttons that run the trigger here, so it needs no test topic (MIG-03)
+            if not self.is_native(device_id):
+                device.unsubscribe_test = await self.gateway.async_subscribe(
+                    test_topic(self._base_topic, device_id), partial(self._on_test_message, device_id)
+                )
         except BaseException:
             self.mirrors.pop(device_id, None)
             if device.unsubscribe is not None:

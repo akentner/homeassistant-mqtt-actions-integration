@@ -45,11 +45,14 @@ def device_info_for(manager: Manager, device_id: str) -> DeviceInfo:
     device = manager.device(device_id)
     assert device is not None  # noqa: S101
     model = SELECT_DEVICE_MODEL if device.spec.kind == SUBENTRY_SELECT else SWITCH_DEVICE_MODEL
+    if device.mirror is not None:
+        # A native mirror names its owner (D-07); the name is plain text, bounded by the parser of the document
+        model = f"{model} (mirror of {device.mirror.owner_name})" if device.mirror.native else f"{model} (mirror)"
     return DeviceInfo(
         identifiers={(DOMAIN, device_id)},
         name=device.name,
         manufacturer=HUB_MANUFACTURER,
-        model=f"{model} (mirror)" if device.mirror is not None else model,
+        model=model,
         sw_version=manager.version,
     )
 

@@ -1,6 +1,8 @@
 """
 Characterization of the Home Assistant core behavior the native-entity takeover depends on (D-05, MIG-01).
 
+The second half of the file tests the takeover module itself against the same real core MQTT discovery.
+
 These tests exercise real core MQTT discovery and the registries of the installed Home Assistant, not new code of this
 integration. They are green by design; their value is that a core bump which changes one of the ordering rules fails
 here before it can corrupt a user's registry. The rules: the migrate payload comes before the platform move, entities
@@ -8,6 +10,7 @@ move before their device, and the plain empty discovery payload comes last. The 
 takeover module tests of the later plans.
 """
 
+import asyncio
 import json
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -24,6 +27,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN
+from custom_components.mqtt_actions.takeover import TakeoverStatus, TakeoverTarget, async_take_over
 from custom_components.mqtt_actions.topics import availability_topic, discovery_topic
 
 if TYPE_CHECKING:
@@ -366,3 +370,134 @@ async def test_user_disabled_entity_survives_the_migrate(
     assert after_clear is not None
     assert after_clear.platform == "mqtt"
     assert after_clear.disabled_by is er.RegistryEntryDisabler.USER
+
+
+# --- the takeover module: tracer (D-05, D-07, D-12) --------------------------------------------------------------
+
+
+def _target(legacy: LegacyDevice) -> TakeoverTarget:
+    return TakeoverTarget(device_id=legacy.device_id, subentry_id=_subentry(legacy.entry).subentry_id)
+
+
+def _start_take_over(
+    hass: HomeAssistant, legacy: LegacyDevice, *, unload_timeout: float = 5.0, retry_interval: float = 0.05
+) -> asyncio.Task[TakeoverStatus]:
+    """
+    Start the takeover as a plain loop task.
+
+    A task created through hass would be awaited by every `async_block_till_done` of the test helpers, which would
+    make the migrate delivery wait for the very takeover it is supposed to release.
+    """
+    return asyncio.get_running_loop().create_task(
+        async_take_over(
+            hass,
+            legacy.entry,
+            _target(legacy),
+            mqtt_entry_id=_mqtt_entry_id(hass),
+            unload_timeout=unload_timeout,
+            retry_interval=retry_interval,
+        )
+    )
+
+
+def _mqtt_entry_state(hass: HomeAssistant) -> tuple[list[tuple[str, str, str | None]], list[tuple[str, str]]]:
+    """Return a comparable snapshot of every entity (id, platform, device) and device (id, entry) of the registries."""
+    entities = sorted(
+        (entry.entity_id, entry.platform, entry.device_id) for entry in er.async_get(hass).entities.values()
+    )
+    device_registry = dr.async_get(hass)
+    devices = sorted(
+        (device.id, device.config_entry_id)
+        for config_entry in hass.config_entries.async_entries()
+        for device in dr.async_entries_for_config_entry(device_registry, config_entry.entry_id)
+    )
+    return entities, devices
+
+
+async def test_take_over_moves_a_loaded_owned_switch_after_the_migrate(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Tracer: the module waits for the live migrate, then moves entities, device and companion with every identity."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    device_id = legacy.device_id
+    customize_mqtt_device(hass, device_id, area_id="kitchen", name_by_user="Stehlampe")
+    mqtt_device = _mqtt_device(hass, device_id)
+    legacy_ids = legacy_entity_ids(hass, device_id)
+    assert len(legacy_ids) == 3
+    mode_id = entity_registry.async_get_entity_id("select", DOMAIN, f"{device_id}_mode")
+    assert mode_id is not None
+    before = {entity_id: entity_registry.async_get(entity_id) for entity_id in [*legacy_ids, mode_id]}
+    switch_id = entity_registry.async_get_entity_id("switch", "mqtt", device_id)
+    assert switch_id is not None
+
+    task = _start_take_over(hass, legacy)
+    await asyncio.sleep(0.2)
+    assert not task.done()  # the entities are loaded: nothing may move yet
+
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+    assert await asyncio.wait_for(task, timeout=5) is TakeoverStatus.DONE
+
+    sub_id = _subentry(legacy.entry).subentry_id
+    for entity_id, old in before.items():
+        moved = entity_registry.async_get(entity_id)
+        assert moved is not None
+        assert moved.id == old.id
+        assert moved.platform == DOMAIN
+        assert moved.device_id == mqtt_device.id
+        assert (moved.config_entry_id, moved.config_subentry_id) == (legacy.entry.entry_id, sub_id)
+    devices = [
+        device
+        for device in dr.async_entries_for_config_entry(dr.async_get(hass), legacy.entry.entry_id)
+        if (DOMAIN, device_id) in device.identifiers
+    ]
+    assert [device.id for device in devices] == [mqtt_device.id]
+    assert (devices[0].area_id, devices[0].name_by_user) == ("kitchen", "Stehlampe")
+    assert (devices[0].config_entry_id, devices[0].config_subentry_id) == (legacy.entry.entry_id, sub_id)
+    assert ("mqtt", f"{DOMAIN}_{device_id}") not in devices[0].identifiers
+
+    await _deliver(hass, legacy.topic, CLEAR_PAYLOAD)
+    await _forward_native_switch(hass, legacy)
+    assert entity_registry.async_get_entity_id("switch", DOMAIN, device_id) == switch_id
+    assert hass.states.get(switch_id) is not None
+
+
+async def test_take_over_does_nothing_without_a_legacy_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A device id without a core MQTT device is NOTHING and changes no registry entry."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    snapshot = _mqtt_entry_state(hass)
+
+    status = await async_take_over(
+        hass,
+        legacy.entry,
+        TakeoverTarget(device_id="no-such-device", subentry_id=None),
+        mqtt_entry_id=_mqtt_entry_id(hass),
+        unload_timeout=0.1,
+        retry_interval=0.05,
+    )
+
+    assert status is TakeoverStatus.NOTHING
+    assert _mqtt_entry_state(hass) == snapshot
+
+
+async def test_take_over_defers_and_moves_nothing_while_an_entity_stays_loaded(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Without a migrate payload the wait times out: DEFERRED, every legacy entry and the device stay where they are."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    legacy_ids = legacy_entity_ids(hass, legacy.device_id)
+    assert len(legacy_ids) == 3
+    snapshot = _mqtt_entry_state(hass)
+
+    status = await _start_take_over(hass, legacy, unload_timeout=0.3, retry_interval=0.05)
+
+    assert status is TakeoverStatus.DEFERRED
+    entity_registry = er.async_get(hass)
+    for entity_id in legacy_ids:
+        entry = entity_registry.async_get(entity_id)
+        assert entry is not None
+        assert (entry.platform, entry.config_entry_id) == ("mqtt", _mqtt_entry_id(hass))
+    assert _mqtt_device(hass, legacy.device_id).config_entry_id == _mqtt_entry_id(hass)
+    assert _mqtt_entry_state(hass) == snapshot

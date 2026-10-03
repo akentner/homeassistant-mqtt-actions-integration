@@ -1,14 +1,14 @@
 ---
-status: partial
+status: complete
 phase: 05-evaluate-native-switch-select-entities-instead-of-mqtt-disco
 source: [05-VERIFICATION.md]
 started: 2026-10-03T13:38:23Z
-updated: 2026-10-03T17:48:34Z
+updated: 2026-10-03T19:07:37Z
 ---
 
 ## Current Test
 
-[testing paused - 4 skipped items outstanding (tests 4, 5, 6, 7); test 3 accepted without reproduction]
+[testing complete - owner accepted the 4 skipped items (tests 4, 5, 6, 7); test 6 is covered by the production rollout]
 
 ## Tests
 

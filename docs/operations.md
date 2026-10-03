@@ -179,10 +179,16 @@ never runs. The run mode of a device (serial or restart) is a different setting 
 
 The mode is chosen with a select entity: **Instance mode** on the hub device and **Mode** on the device of each
 device. Since 0.2 the companion concept has ended for native devices: the device of MQTT Actions carries the Switch or
-Select, the test buttons and the **Mode** select together, under its subentry for an owned device and directly under
+Select, the test buttons, for a Select the **Restore previous state** button, and the **Mode** select together, under its subentry for an owned device and directly under
 the config entry for a mirror (a device without an edit dialog, marked with its owner). The integration page shows the
 hub device with the roster, the resync button and the instance mode, and one device for each device, with all of its
 entities. The `device_id` field of the services is the registry id of this device.
+
+The test buttons are in the Diagnostic category and disabled by default; enable one on its entity page when needed.
+The **Restore previous state** button of a Select is a normal, visible button. It publishes the value that was shown
+before the current one, which the Select also shows as its attribute `previous_state`, to the same state topic a
+choice does, so the broker ACL needs no new line. The previous state is local to the instance, kept in its Store, and
+not part of a config document.
 
 A device that is still on the legacy path (see [Upgrade notes](#upgrade-notes)) keeps a **companion device**: the
 entities of the device itself sit on a device of the core MQTT integration with the same name, and the companion
@@ -351,6 +357,8 @@ Fixed in the code, not configurable. The page and the test suite use the constan
   switches when no online instance runs an older version, and Repairs shows `native_cutover_waiting` while it waits.
   There is no rollback, and an older instance that comes online later loses the entities of migrated devices without a
   hint. See the [README](../README.md#upgrading-from-01x).
+- **Test buttons.** New native test buttons are diagnostic and disabled by default. An existing entry, including one
+  moved from core MQTT, keeps its category and enabled state: nothing is migrated.
 - **Discovery is optional.** MQTT Discovery stays only for a device on the legacy path and as an optional export for
   other consumers (see the [README](../README.md#mqtt-discovery-export)); the export has no healing and no test
   buttons.

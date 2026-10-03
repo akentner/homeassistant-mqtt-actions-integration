@@ -63,6 +63,8 @@ automatic and one-way: there is no setting and no step to take.
 - **No rollback.** Rollback to 0.1.x is not supported. After a downgrade, core MQTT creates new entities that cannot
   take the old entity ids and the migrated ones are left behind, so a downgrade creates duplicate `_2` entities. See
   [docs/troubleshooting.md](docs/troubleshooting.md).
+- **Test buttons.** A test button that exists already, including the ones moved from core MQTT, keeps its category and
+  enabled state. Only new test buttons are diagnostic and disabled by default; nothing is migrated.
 - **Removal.** Removing the integration removes the entities, because they belong to it; with core MQTT they belonged to
   the MQTT integration and stayed.
 - **Adoption.** Adoption between an old and a new instance should not run concurrently: a native device stays native
@@ -112,6 +114,13 @@ How it works:
 - After you rename or remove the option that is currently selected, the entity shows `unknown` until the next valid
   state message arrives. The last acted state is kept: a message that repeats it is not a change. A removed state
   value is treated as unknown from then on.
+- The attribute `previous_state` of the Select holds the friendly name of the value that was shown before the current
+  one. It is tracked per instance on every change of the shown value, from this instance or another, and kept across
+  restarts. It is empty until the value changed once, and when that option was removed.
+- The button **Restore previous state** is visible by default and publishes that value exactly like choosing the option:
+  retained, at QoS 1, on the shared state topic, so every instance reacts. It does nothing without a previous state.
+  Pressing it twice toggles between the two values. It exists for native devices only. On a mirror it needs the owner
+  online and no approval, because approval gates only the running of actions on this instance.
 
 ## Run mode, test buttons and the circuit breaker
 
@@ -125,10 +134,12 @@ Every device, Switch and Select, has these settings in its dialog:
   configurable, from 1 to 100 runs and from 1 to 3600 seconds.
 
 Test buttons: every trigger of a device gets a button entity, `Test ON` and `Test OFF` for a Switch and one
-`Test <friendly name>` per option for a Select (listed under Configuration). Pressing a test button runs that trigger's
-actions, and never changes the state, the baseline or the state topic. It follows the run mode of the device and
-passes through the queue and the circuit breaker like any other run. Existing Switch devices get their two test
-buttons after the upgrade; there is no opt-out.
+`Test <friendly name>` per option for a Select. Pressing a test button runs that trigger's actions, and never changes
+the state, the baseline or the state topic. It follows the run mode of the device and passes through the queue and the
+circuit breaker like any other run. Test buttons are a tool, not a daily control: a new test button is in the
+Diagnostic category and disabled by default, so enable it on its entity page when you need it. This holds for owned
+devices and for mirrors. A test button that already exists, including the ones migrated from 0.1.x, keeps its category
+and its enabled state: nothing is migrated.
 
 - **Native devices (the default since 0.2.0):** a press runs the actions only on this instance and publishes nothing.
   Pressed on a mirror, it runs the mirrored actions only if this instance approved the device (see

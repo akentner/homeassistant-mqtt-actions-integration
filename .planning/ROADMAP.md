@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection (completed 2026-09-30)
 - [x] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely (completed 2026-10-02)
 - [x] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation (completed 2026-10-03)
+- [ ] **Phase 5: Evaluate native switch/select entities instead of MQTT Discovery** - Decide whether entities owned by the config entry replace MQTT Discovery; scope to be rediscussed
 
 ## Phase Details
 
@@ -185,10 +186,20 @@ Plans:
 **Wave 12** *(gap closure, blocked on Wave 11 completion)*
 - [x] 04-14-PLAN.md — Gap closure: fixable Repairs issues keep their text in the fix flow step so hassfest passes and the release gate can go green (wave 12)
 
+### Phase 5: Evaluate native switch/select entities instead of MQTT Discovery
+
+**Goal:** [To be redefined in discuss-phase] Decide whether switch and select entities owned by the MQTT Actions config entry should replace MQTT Discovery. Context carried over from backlog item 999.2: native entities would show the full device and entity count on our integration page (including mirrored devices on other instances) and remove discovery healing, ghost-entity handling and DSC-04. Costs: it breaks the PROJECT.md Discovery constraint, needs a rewrite of the publishing from phases 1-3, and loses non-HA consumers. Origin: Phase 4 research on D-13 (a device belongs to exactly one config entry); Phase 4 uses companion devices meanwhile.
+**Requirements**: TBD
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 5 to break down)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -196,21 +207,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
+| 5. Evaluate native switch/select entities instead of MQTT Discovery | 0/0 | Not started | - |
 
 ## Backlog
 
 ### Phase 999.1: Per-instance local actions on mirrored devices (followers add own actions, relates to MAP-01) (BACKLOG)
 
 **Goal:** [Captured for future planning] A follower instance can add its own local actions to a mirrored device, on top of the owner's document (for example different entities per instance). Found during Phase 3 UAT: mirrors are read-only today.
-**Requirements:** TBD
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (promote with /gsd-review-backlog when ready)
-
-### Phase 999.2: Evaluate native switch/select entities instead of MQTT Discovery (BACKLOG)
-
-**Goal:** [Captured for future planning] Entities owned by the MQTT Actions config entry would show the full device and entity count on our integration page (incl. mirrored devices on other instances), remove discovery healing/ghost-entity handling and DSC-04. Costs: breaks the PROJECT.md Discovery constraint, rewrite of phase 1-3 publishing, loses non-HA consumers. Origin: Phase 4 research on D-13 (a device belongs to exactly one config entry); Phase 4 uses companion devices meanwhile.
 **Requirements:** TBD
 **Plans:** 0 plans
 

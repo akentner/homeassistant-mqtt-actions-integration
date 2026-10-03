@@ -441,3 +441,56 @@ async def test_duplicate_observations_are_bounded(
 
     assert presence.duplicate_detected is True
     assert len(presence._duplicate_seen) <= const.MAX_DUPLICATE_OBSERVATIONS
+
+
+# --- the roster as a gate: forged capability and flooding must not open it (WR-03) -------------------------------
+
+
+def _capable(instance_id: str = "owner") -> Heartbeat:
+    return Heartbeat(instance_id=instance_id, name="Owner", version="0.2.0", devices=1, session=SESSION, native=True)
+
+
+def test_a_capability_claim_never_replaces_a_fresh_legacy_row() -> None:
+    """WR-03: a forged native heartbeat under the id of an online legacy peer must not make it stop blocking."""
+    roster, clock, availability = _roster()
+    availability["owner"] = "online"
+    roster.observe(_hb())
+
+    assert roster.observe(_capable()) is True
+
+    assert roster.legacy_online_names() == ["Owner"]
+    # The forgery does not even keep the legacy row fresh: its own heartbeats do
+    clock.now += HEARTBEAT_OFFLINE_SECONDS + 1
+    assert roster.legacy_online_names() == []
+
+
+@pytest.mark.parametrize("how", ["stale", "announced_offline"])
+def test_a_capability_claim_replaces_a_legacy_row_that_no_longer_blocks(how: str) -> None:
+    """WR-03: the same peer upgraded and restarted; once its old row stopped blocking, the new heartbeat counts."""
+    roster, clock, availability = _roster()
+    availability["owner"] = "online"
+    roster.observe(_hb())
+    if how == "stale":
+        clock.now += HEARTBEAT_OFFLINE_SECONDS + 1
+    else:
+        availability["owner"] = "offline"
+
+    roster.observe(_capable())
+    availability["owner"] = "online"
+
+    assert roster.legacy_online_names() == []
+    assert roster.status("owner") == "online"
+
+
+def test_a_full_roster_is_saturated_for_the_timeout_after_it_dropped_a_new_peer() -> None:
+    """WR-03: a dropped new peer may be a legacy instance, so the roster says so for as long as the drop counts."""
+    roster, clock, _availability = _roster()
+    for number in range(const.MAX_TRACKED_INSTANCES):
+        assert roster.observe(_capable(f"peer-{number}")) is True
+    assert roster.saturated() is False
+
+    assert roster.observe(_hb("late-legacy-peer")) is False
+
+    assert roster.saturated() is True
+    clock.now += HEARTBEAT_OFFLINE_SECONDS + 1
+    assert roster.saturated() is False

@@ -54,6 +54,8 @@ if TYPE_CHECKING:
 HEARTBEAT_QOS = 0
 # The expiry is strict (a peer is online up to and including the timeout), so its timer fires this much later
 EXPIRY_MARGIN_SECONDS = 1.0
+# Shown in the cutover hint while the roster had no room for a peer, in place of a name (WR-03)
+UNTRACKED_PEERS_LABEL = "more instances than can be tracked"
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +162,8 @@ class Roster:
         self._instance_status = instance_status
         self._peers: dict[str, _Peer] = {}
         self._listening_since = clock()
+        # When a new peer was last dropped because every row was fresh; None until it happened (WR-03)
+        self._dropped_at: float | None = None
 
     def listening_seconds(self) -> float:
         """Return how long this instance has listened for heartbeats, on the roster clock."""
@@ -175,17 +179,33 @@ class Roster:
     def _online(self, peer: _Peer) -> bool:
         return self._fresh(peer) and self._instance_status(peer.heartbeat.instance_id) != PRESENCE_OFFLINE
 
+    def saturated(self) -> bool:
+        """
+        Return whether a new peer was dropped within the offline timeout because every row was fresh (WR-03).
+
+        The dropped peer may be a legacy instance, so a gate that depends on the roster must not trust it while this
+        holds.
+        """
+        return self._dropped_at is not None and self._clock() - self._dropped_at <= HEARTBEAT_OFFLINE_SECONDS
+
     def observe(self, heartbeat: Heartbeat) -> bool:
         """
         Record a heartbeat of a peer as heard now; False when the peer is new and the roster is full.
 
         At the cap a new peer replaces the stalest row that is already past the timeout, so random ids cannot block a
-        real instance for good; when every row is fresh the new peer is not tracked (T-04-12).
+        real instance for good; when every row is fresh the new peer is not tracked (T-04-12) and the roster is
+        saturated for a while (WR-03). A capability claim never replaces the row of a legacy peer that still blocks: a
+        heartbeat is not authenticated, so anyone on the broker could claim it for a peer it wants out of the gate. The
+        claim counts once that row stopped blocking, which is when a peer that was upgraded and restarted is accepted.
         """
         instance_id = heartbeat.instance_id
-        if instance_id not in self._peers and len(self._peers) >= MAX_TRACKED_INSTANCES:
+        existing = self._peers.get(instance_id)
+        if existing is not None and heartbeat.native and self._online(existing) and not existing.heartbeat.native:
+            return True
+        if existing is None and len(self._peers) >= MAX_TRACKED_INSTANCES:
             expired = [key for key, peer in self._peers.items() if not self._fresh(peer)]
             if not expired:
+                self._dropped_at = self._clock()
                 return False
             del self._peers[min(expired, key=lambda key: self._peers[key].seen)]
         self._peers[instance_id] = _Peer(heartbeat, self._clock(), dt_util.utcnow())
@@ -489,7 +509,8 @@ class PresenceManager:
         A peer blocks when its heartbeat is fresh, it is not announced offline and its heartbeat lacks the capability
         key. An instance that is announced online but never sent a heartbeat blocks too, by its shortened id, until
         this instance listened for the offline timeout. Offline peers, stale heartbeats and long-silent instances never
-        block.
+        block. A roster that is saturated blocks as well: a peer it had no room for cannot be told from a legacy one
+        (WR-03).
         """
         names = self._roster.legacy_online_names()
         silent = [
@@ -499,7 +520,8 @@ class PresenceManager:
         ]
         if self._roster.listening_seconds() >= HEARTBEAT_OFFLINE_SECONDS:
             silent = []
-        return [*names, *silent]
+        untracked = [UNTRACKED_PEERS_LABEL] if self._roster.saturated() else []
+        return [*names, *silent, *untracked]
 
     def peer_status(self, instance_id: str) -> str | None:
         """Return `online` or `offline` for a peer that sent a heartbeat, None for any other instance."""

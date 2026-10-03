@@ -25,6 +25,7 @@ from custom_components.mqtt_actions.const import (
     HEARTBEAT_INTERVAL_SECONDS,
     HEARTBEAT_OFFLINE_SECONDS,
     ISSUE_NATIVE_CUTOVER_WAITING,
+    MAX_TRACKED_INSTANCES,
     STORE_KEY,
     STORE_MIRRORS,
     SUBENTRY_SWITCH,
@@ -212,6 +213,58 @@ async def test_an_online_legacy_peer_blocks_the_cutover(
     published = _discovery_publishes(mqtt_mock, _device_id(subentry))
     assert published
     assert all(payload and "migrate_discovery" not in payload for payload, _retain in published)
+
+
+async def test_a_forged_capability_heartbeat_does_not_unblock_the_cutover(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    """WR-03: anyone on the broker can claim the capability under a legacy peer's id; the claim must not count."""
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    _peer(hass, "legacy-peer", native=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _peer(hass, "legacy-peer", native=True, availability=None)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    await _settle(hass)
+
+    assert _stored_native(hass_storage) is None
+    assert _manager(entry).presence.blocking_peers() == ["Peer"]
+
+
+async def test_a_flooded_roster_keeps_the_cutover_waiting(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    """WR-03: random capable ids fill the roster, a real legacy peer is dropped; the gate must fail closed."""
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    now = _use_clock(_manager(entry))
+    # Past the window in which a silent instance counts; the flood below is fresh at this point
+    now[0] += HEARTBEAT_OFFLINE_SECONDS + 1
+    for number in range(MAX_TRACKED_INSTANCES):
+        _peer(hass, f"flood-{number}", native=True, availability=None)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _peer(hass, "legacy-peer", native=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    await _settle(hass)
+
+    assert _stored_native(hass_storage) is None
+    assert _manager(entry).presence.blocking_peers() != []
+    # The flood ends and its rows expire: the roster has room again, the legacy peer is tracked and blocks by its row
+    now[0] += HEARTBEAT_OFFLINE_SECONDS + 1
+    _peer(hass, "legacy-peer", native=False, availability=None)
+    await _settle(hass, HEARTBEAT_INTERVAL_SECONDS + 5)
+    assert _stored_native(hass_storage) is None
+    assert _manager(entry).presence.blocking_peers() == ["Peer"]
 
 
 async def test_a_capable_peer_does_not_block(

@@ -3,23 +3,23 @@ status: testing
 phase: 05-evaluate-native-switch-select-entities-instead-of-mqtt-disco
 source: [05-VERIFICATION.md]
 started: 2026-10-03T13:38:23Z
-updated: 2026-10-03T13:38:23Z
+updated: 2026-10-03T17:41:24Z
 ---
 
 ## Current Test
 
-number: 1
-name: Upgrade path on a real 0.1.0 instance (ha-one)
+number: 2
+name: Integration page counting (A1) on the follower
 expected: |
-  Entity ids, registry ids and device ids unchanged; area and name kept; recorder history continuous;
-  entities listed on the MQTT Actions integration page; no retained discovery topic left for the device
+  All devices and entities of the other instance appear, owner named in the model text, counts match
 awaiting: user response
 
 ## Tests
 
 ### 1. Upgrade path on a real 0.1.0 instance (ha-one)
 expected: Entity ids, registry ids, device ids, area, name and history intact; no retained discovery topic left
-result: [pending]
+result: pass
+note: fresh 0.1.0 -> 0.2.0 run on ha-a/ha-b; registry ids, entity ids, names, areas kept; discovery topics cleared; mode selects moved to the main device by design
 
 ### 2. Integration page counting (A1) on the follower
 expected: All devices and entities of the other instance appear, owner named in the model text, counts match
@@ -56,9 +56,9 @@ result: [pending]
 ## Summary
 
 total: 9
-passed: 0
+passed: 1
 issues: 0
-pending: 9
+pending: 8
 skipped: 0
 blocked: 0
 

@@ -3,15 +3,15 @@ status: testing
 phase: 05-evaluate-native-switch-select-entities-instead-of-mqtt-disco
 source: [05-VERIFICATION.md]
 started: 2026-10-03T13:38:23Z
-updated: 2026-10-03T17:44:51Z
+updated: 2026-10-03T17:45:43Z
 ---
 
 ## Current Test
 
-number: 6
-name: Commands across two real instances
+number: 7
+name: Discovery export on/off and homeassistant prefix
 expected: |
-  Actions run exactly once on every approved instance; unknown payload ignored, state unchanged
+  enabled_by_default false, no buttons; core prefix yields only disabled duplicates; off clears topics
 awaiting: user response
 
 ## Tests
@@ -42,7 +42,8 @@ reason: user skipped; IN-03 stays open
 
 ### 6. Commands across two real instances
 expected: Actions run exactly once on every approved instance; unknown payload ignored, state unchanged
-result: [pending]
+result: skipped
+reason: user skipped; will be tested on the production instances
 
 ### 7. Discovery export on/off and homeassistant prefix
 expected: enabled_by_default false, no buttons; core prefix yields only disabled duplicates; off clears topics
@@ -61,8 +62,8 @@ result: [pending]
 total: 9
 passed: 3
 issues: 0
-pending: 4
-skipped: 2
+pending: 3
+skipped: 3
 blocked: 0
 
 ## Gaps

@@ -73,6 +73,7 @@ from .const import (
     STORE_LAST_ACTED,
     STORE_MIRRORS,
     STORE_NATIVE,
+    STORE_PREVIOUS_STATES,
     STORE_PUBLISHED,
     STORE_REVS,
     STORE_SAVE_DELAY,
@@ -340,6 +341,22 @@ def _parse_native(stored: dict[str, Any]) -> NativeState:
         if isinstance(devices, list)
         else set(),
     )
+
+
+def _parse_previous_states(stored: dict[str, Any]) -> dict[str, SelectHistory]:
+    """Return the select histories from a loaded Store payload; every malformed item is dropped (T-261003-02)."""
+    raw = stored.get(STORE_PREVIOUS_STATES)
+    if not isinstance(raw, dict):
+        return {}
+    histories: dict[str, SelectHistory] = {}
+    for device_id, item in raw.items():
+        if not isinstance(device_id, str) or not is_valid_device_id(device_id) or not isinstance(item, dict):
+            continue
+        last = item.get("last")
+        previous = item.get("previous")
+        if isinstance(last, str) and isinstance(previous, str) and last and previous and last != previous:
+            histories[device_id] = SelectHistory(last=last, previous=previous)
+    return histories
 
 
 async def _async_attempt(action: Callable[[], Awaitable[None]], description: str) -> bool:
@@ -755,6 +772,7 @@ class Manager:
         self._revs = {device_id: value for device_id, value in self._revs.items() if device_id in current}
         self._transfers = {device_id: value for device_id, value in self._transfers.items() if device_id in current}
         self._device_modes = {device_id: value for device_id, value in self._device_modes.items() if device_id in kept}
+        self._previous = {device_id: value for device_id, value in self._previous.items() if device_id in kept}
         # The lock is held from the first subscribe until the owned devices are registered and published: a retained
         # document replayed while the subscribes are awaited queues its ingest on this lock, and by the time it runs
         # the owned ids are in `devices`, so a foreign claim for an owned id can never become a mirror (CR-02)
@@ -1194,6 +1212,7 @@ class Manager:
         self._instance_mode = _parse_instance_mode(stored)
         self._device_modes = _parse_device_modes(stored)
         self._native = _parse_native(stored)
+        self._previous = _parse_previous_states(stored)
 
     @callback
     def _data_to_save(self) -> dict[str, Any]:
@@ -1205,6 +1224,12 @@ class Manager:
                 "instance": self._native.instance,
                 "pending": sorted(self._native.pending),
                 "devices": sorted(self._native.devices),
+            }
+        # Same pattern: a Store without any history keeps its exact key set
+        if self._previous:
+            data[STORE_PREVIOUS_STATES] = {
+                device_id: {"last": history.last, "previous": history.previous}
+                for device_id, history in sorted(self._previous.items())
             }
         return data
 
@@ -1502,6 +1527,7 @@ class Manager:
         self.sync.forget(device_id)
         if device.tracker.last_acted is not None:
             self._stored_last_acted[device_id] = device.tracker.last_acted
+        self._previous.pop(device_id, None)
         self._released.add(device_id)
         self._published.discard(device_id)
         self._revs.pop(device_id, None)
@@ -1685,6 +1711,7 @@ class Manager:
         self._approvals.pop(device_id, None)
         # Neither a mode nor a companion device outlives its mirror (T-04-26)
         self._device_modes.pop(device_id, None)
+        self._previous.pop(device_id, None)
         self._remove_companion(device_id)
         self._clean_registry(device_id)
         self._schedule_save()
@@ -2024,6 +2051,7 @@ class Manager:
         self._revs.pop(device_id, None)
         self._transfers.pop(device_id, None)
         self._device_modes.pop(device_id, None)
+        self._previous.pop(device_id, None)
         self._forget_native(device_id)
         if discovery_cleared and config_cleared and state_cleared:
             self._published.discard(device_id)
@@ -2188,6 +2216,7 @@ class Manager:
             before = existing.last
         if before is not None and before != value:
             self._previous[device.device_id] = SelectHistory(last=value, previous=before)
+            self._schedule_save()
 
     def previous_value(self, device_id: str) -> str | None:
         """Return the StateValue shown before the current one, None when unknown or no option any more."""

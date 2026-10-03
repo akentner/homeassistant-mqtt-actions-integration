@@ -138,6 +138,9 @@ STORE_TRANSFERS: Final = "transfers"
 # native), `pending` (owned device ids whose takeover is still to run) and `devices` (owned device ids that are native
 # although the instance flag is not set); local to this instance, never part of a document
 STORE_NATIVE: Final = "native"
+# device id -> the last shown and the previous StateValue of a native Select (`last`, `previous`); local to this
+# instance, written only while a device has a history, never part of a document or a hash
+STORE_PREVIOUS_STATES: Final = "previous_states"
 STORE_SAVE_DELAY: Final = 5.0
 
 # Owner-side defense of the published truth (D-15, D-17, D-18): how many published content hashes per device count as

@@ -101,6 +101,21 @@ class DeviceSelect(NativeDeviceEntity, SelectEntity):
             None,
         )
 
+    @property
+    def extra_state_attributes(self) -> dict[str, str | None]:
+        """Return the friendly name of the value shown before the current one, None when unknown (P-04)."""
+        device = self._manager.device(self._device_id)
+        previous = self._manager.previous_value(self._device_id)
+        name = (
+            None
+            if device is None or previous is None
+            else next(
+                (trigger.friendly_name for trigger in device.spec.triggers.values() if trigger.value == previous),
+                None,
+            )
+        )
+        return {"previous_state": name}
+
     async def async_select_option(self, option: str) -> None:
         """Publish the StateValue of the chosen friendly name; the state changes with the broker echo."""
         device = self._manager.device(self._device_id)

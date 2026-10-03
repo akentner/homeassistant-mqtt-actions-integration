@@ -16,8 +16,10 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 from homeassistant import loader
+from homeassistant.config_entries import ConfigEntryState
 from paho.mqtt.client import topic_matches_sub
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_test_home_assistant
 
@@ -95,8 +97,9 @@ class FakeGateway(MqttGateway):
         super().__init__(hass)
         self.broker = broker
         self.hass = hass
-        # (topic, payload, retain) in publish order
+        # (topic, payload, retain) in publish order, and the QoS of each publish at the same index
         self.published: list[tuple[str, str, bool]] = []
+        self.qos: list[int] = []
         self._status_callbacks: list[Callable[[bool], None]] = []
 
     async def async_wait_ready(self) -> bool:
@@ -133,6 +136,7 @@ class FakeGateway(MqttGateway):
     async def async_publish(self, topic: str, payload: str, *, retain: bool, qos: int = 1) -> None:
         """Record the publish and hand it to the broker."""
         self.published.append((topic, payload, retain))
+        self.qos.append(qos)
         self.broker.publish(topic, payload, retain=retain)
 
     def discovery_prefix(self) -> str:
@@ -162,26 +166,43 @@ class FakeGateway(MqttGateway):
 
 @dataclass
 class Instance:
-    """One Home Assistant instance with its hub entry, its unmodified Manager and its gateway."""
+    """
+    One Home Assistant instance with its hub entry, its Manager and its gateway.
+
+    A bare instance runs a Manager built by hand. A `real_setup` instance runs the real setup of the integration, so its
+    platforms exist and a reload of the entry builds the next manager on the same gateway.
+    """
 
     hass: HomeAssistant
     entry: MockConfigEntry
-    manager: Manager
     gateway: FakeGateway
     name: str
     store_key: str = STORE_KEY
     extra: dict[str, Any] = field(default_factory=dict)
+    real_setup: bool = False
+
+    @property
+    def manager(self) -> Manager:
+        """Return the manager that runs now: the runtime data of the entry, which a reload replaces."""
+        return self.entry.runtime_data
 
     async def stop(self) -> None:
-        """Stop the current manager unless it already stopped; the broker keeps what was published."""
-        if self.manager.running:
+        """Stop the instance unless it already stopped; the broker keeps what was published."""
+        if self.real_setup:
+            if self.entry.state is ConfigEntryState.LOADED:
+                await self.hass.config_entries.async_unload(self.entry.entry_id)
+                await self.hass.async_block_till_done(wait_background_tasks=True)
+        elif self.manager.running:
             await self.manager.async_stop()
 
     async def start(self) -> None:
-        """Start a new Manager on the same hass, entry, gateway and store key, as after a restart of Home Assistant."""
+        """Start again on the same hass, entry, gateway and store key, as after a restart of Home Assistant."""
+        if self.real_setup:
+            await self.hass.config_entries.async_setup(self.entry.entry_id)
+            await self.hass.async_block_till_done(wait_background_tasks=True)
+            return
         manager = Manager(self.hass, self.entry, gateway=self.gateway, store_key=self.store_key)
         self.entry.runtime_data = manager
-        self.manager = manager
         await manager.async_start()
 
     async def restart(self) -> None:
@@ -198,6 +219,8 @@ class InstanceFactory:
         self._broker = broker
         self._stack = AsyncExitStack()
         self.instances: list[Instance] = []
+        # The gateway and the store key of each hass that runs the real setup; the patched constructors read them
+        self._real: dict[HomeAssistant, tuple[FakeGateway, str]] = {}
 
     async def __call__(
         self,
@@ -206,12 +229,15 @@ class InstanceFactory:
         hass: HomeAssistant | None = None,
         subentries: Sequence[ConfigSubentryData] = (),
         data: dict[str, Any] | None = None,
+        real_setup: bool = False,
     ) -> Instance:
         """
         Create and start an instance.
 
         Without `hass` a second Home Assistant is created, which gives the instance its own service registry, issue
-        registry and entity registry. The first instance of a test may use the test's own hass.
+        registry and entity registry. The first instance of a test may use the test's own hass. With `real_setup` the
+        entry is set up through Home Assistant, so the platforms are forwarded and the entry can be reloaded; the
+        default starts a bare Manager and changes nothing for the tests that rely on it.
         """
         if hass is None:
             hass = await self._stack.enter_async_context(async_test_home_assistant())
@@ -234,14 +260,48 @@ class InstanceFactory:
         entry.add_to_hass(hass)
         gateway = FakeGateway(self._broker, hass)
         store_key = f"{STORE_KEY}.{name}"
-        manager = Manager(hass, entry, gateway=gateway, store_key=store_key)
-        entry.runtime_data = manager
-        await manager.async_start()
-        instance = Instance(hass=hass, entry=entry, manager=manager, gateway=gateway, name=name, store_key=store_key)
+        instance = Instance(
+            hass=hass, entry=entry, gateway=gateway, name=name, store_key=store_key, real_setup=real_setup
+        )
+        if real_setup:
+            self._patch_gateways()
+            self._real[hass] = (gateway, store_key)
+            # The manifest depends on mqtt, whose client the fake gateway replaces; core MQTT itself is never set up
+            hass.config.components.add("mqtt")
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done(wait_background_tasks=True)
+        else:
+            manager = Manager(hass, entry, gateway=gateway, store_key=store_key)
+            entry.runtime_data = manager
+            await manager.async_start()
         # Stops whichever manager the instance runs at the end, so a restart inside a test is not stopped twice
         self._stack.push_async_callback(instance.stop)
         self.instances.append(instance)
         return instance
+
+    def _patch_gateways(self) -> None:
+        """
+        Make the real setup of every hass use its fake gateway and its own store key; done once, undone at the close.
+
+        The patches replace the constructors the setup and the manager call, and the dispatch is by the hass they get,
+        so a reload builds its manager on the same gateway and the same Store. They are entered first, so they end last.
+        """
+        if self._real:
+            return
+
+        def _gateway(hass: HomeAssistant) -> FakeGateway:
+            return self._real[hass][0]
+
+        def _manager(hass: HomeAssistant, entry: MockConfigEntry) -> Manager:
+            gateway, store_key = self._real[hass]
+            return Manager(hass, entry, gateway=gateway, store_key=store_key)
+
+        for target, replacement in (
+            ("custom_components.mqtt_actions.MqttGateway", _gateway),
+            ("custom_components.mqtt_actions.manager.MqttGateway", _gateway),
+            ("custom_components.mqtt_actions.Manager", _manager),
+        ):
+            self._stack.enter_context(patch(target, replacement))
 
     async def async_close(self) -> None:
         """Stop every manager and every extra hass, last created first."""

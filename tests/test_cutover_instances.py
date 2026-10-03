@@ -33,7 +33,7 @@ pytestmark = pytest.mark.multi_instance
 BASE = "mqtt_actions"
 PREFIX = "homeassistant"
 SETTLE_PASSED = 6.0  # a little more than CUTOVER_SETTLE_SECONDS
-MIGRATE = json.dumps({"migrate_discovery": True})
+MIGRATE = '{"migrate_discovery":true}'  # the compact text json_dumps of Home Assistant writes
 
 
 async def _settle(*instances: Instance) -> None:
@@ -71,7 +71,7 @@ async def _owner_and_follower(
 
 
 async def _cut_over(owner: Instance, follower: Instance, device_id: str) -> list[tuple[str, bool]]:
-    """Let the settle time pass, so the owner switches and the follower follows; return the owner's discovery publishes."""
+    """Let the settle time pass; the owner switches and the follower follows. Return the owner's discovery publishes."""
     start = len(owner.gateway.published)
     reloads = patch.object(
         follower.hass.config_entries, "async_schedule_reload", wraps=follower.hass.config_entries.async_schedule_reload

@@ -129,6 +129,10 @@ STORE_DEVICE_MODES: Final = "device_modes"
 # device id -> the instance ids that owned an adopted device before, newest last; published as `transferred_from` with
 # every document of the device so a follower that missed the adoption learns it (D-09)
 STORE_TRANSFERS: Final = "transfers"
+# The native entity switch of Phase 5 (D-03): a dict with `instance` (bool, the owned devices of this instance are
+# native), `pending` (owned device ids whose takeover is still to run) and `devices` (owned device ids that are native
+# although the instance flag is not set); local to this instance, never part of a document
+STORE_NATIVE: Final = "native"
 STORE_SAVE_DELAY: Final = 5.0
 
 # Owner-side defense of the published truth (D-15, D-17, D-18): how many published content hashes per device count as
@@ -171,6 +175,9 @@ MODES: Final = (MODE_RUN, MODE_OBSERVE, MODE_DISABLED)
 # device appeared or disappeared (the select platform adds or forgets its entity) (D-14, D-15)
 SIGNAL_MODES_CHANGED: Final = f"{DOMAIN}_modes_changed_{{}}"
 SIGNAL_DEVICES_CHANGED: Final = f"{DOMAIN}_devices_changed_{{}}"
+# The accepted state of one device changed (native entities write their state); formatted with the entry id and the
+# device id
+SIGNAL_DEVICE_STATE: Final = f"{DOMAIN}_device_state_{{}}_{{}}"
 
 # Names of the services of the integration, registered once at the integration setup (D-12)
 SERVICE_RESYNC: Final = "resync"

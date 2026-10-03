@@ -9,7 +9,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import MODES, SIGNAL_DEVICES_CHANGED, SIGNAL_MODES_CHANGED
-from .entities import MqttActionsEntity, companion_device_info
+from .entities import MqttActionsEntity, device_info_for
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -51,12 +51,9 @@ class DeviceModeSelect(_ModeSelect):
     def __init__(self, manager: Manager, device_id: str) -> None:
         """Initialize the select of an owned or mirrored device; its unique id is bound to the device."""
         super().__init__(manager)
-        device = manager.devices.get(device_id) or manager.mirrors[device_id]
         self._device_id = device_id
         self._attr_unique_id = f"{device_id}_mode"
-        self._attr_device_info = companion_device_info(
-            device_id, device.name, device.spec.kind, mirror=device.mirror is not None, sw_version=manager.version
-        )
+        self._attr_device_info = device_info_for(manager, device_id)
 
     @property
     def available(self) -> bool:

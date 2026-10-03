@@ -165,6 +165,8 @@ async def _forward_native_switch(hass: HomeAssistant, legacy: LegacyDevice) -> N
     async def _async_setup_entry(_hass: HomeAssistant, _entry: Any, async_add_entities: Any) -> None:
         async_add_entities([_NativeSwitch(legacy.device_id)], config_subentry_id=_subentry(legacy.entry).subentry_id)
 
+    # The entry forwards the real switch platform at setup (plan 05-03); it is unloaded so the mock stands in for it
+    assert await hass.config_entries.async_unload_platforms(legacy.entry, [Platform.SWITCH])
     mock_platform(hass, f"{DOMAIN}.switch", MockPlatform(async_setup_entry=_async_setup_entry))
     await hass.config_entries.async_forward_entry_setups(legacy.entry, [Platform.SWITCH])
     await hass.async_block_till_done(wait_background_tasks=True)

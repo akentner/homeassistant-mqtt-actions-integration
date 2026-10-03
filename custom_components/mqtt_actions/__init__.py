@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 type MqttActionsConfigEntry = ConfigEntry[Manager]
 
 # Forwarded after the manager started and unloaded before it stops (D-13)
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.SELECT]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.SELECT, Platform.SWITCH]
 
 # The integration is configured through the UI only; hassfest requires this once `async_setup` exists
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)

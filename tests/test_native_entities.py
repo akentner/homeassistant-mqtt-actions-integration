@@ -1,6 +1,7 @@
 """Native Switch, Select and test button entities of owned devices (ENT-01, ENT-02, MIG-03, D-03, D-07, D-08)."""
 
 from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, patch
 
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -111,7 +112,7 @@ async def test_native_switch_is_registered_under_the_subentry(
     assert registered.unique_id == device_id
     (subentry_id,) = entry.subentries
     assert registered.config_subentry_id == subentry_id
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, device_id)})
+    device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, device_id), entry.entry_id)
     assert device is not None
     assert registered.device_id == device.id
     assert device.name == "Lamp"
@@ -172,23 +173,25 @@ async def test_turn_on_publishes_the_exact_value_retained_at_qos_1(
     make_switch_subentry: Callable,
 ) -> None:
     """D-07, ENT-02, STA-01: the command goes retained at QoS 1 and the state waits for the echo."""
-    _entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
     entity_id = _entity_id(hass, "switch", device_id)
     assert entity_id is not None
     topic = state_topic(BASE, device_id)
 
-    await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
-    await hass.async_block_till_done(wait_background_tasks=True)
-
-    assert _publishes(mqtt_mock, topic) == [("ON", 1, True)]
+    # The mocked MQTT client loops a publish back, so the first command is held at the gateway to see the state wait
+    with patch.object(_manager(entry).gateway, "async_publish", new=AsyncMock()) as publish:
+        await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    publish.assert_awaited_once_with(topic, "ON", retain=True, qos=1)
     assert _switch_state(hass, device_id) == "unknown"
 
     await _state(hass, device_id, "ON")
     assert _switch_state(hass, device_id) == "on"
 
+    # Through the real gateway the publish reaches the MQTT client with the same flags
     await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
-    assert _publishes(mqtt_mock, topic)[-1] == ("OFF", 1, True)
-    assert _switch_state(hass, device_id) == "on"
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _publishes(mqtt_mock, topic) == [("OFF", 1, True)]
 
 
 async def test_the_echo_runs_the_actions_once(

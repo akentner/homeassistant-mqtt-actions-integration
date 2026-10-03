@@ -55,6 +55,7 @@ from .const import (
     MODE_OBSERVE,
     MODE_RUN,
     RESYNC_MIN_INTERVAL_SECONDS,
+    SIGNAL_DEVICE_STATE,
     SIGNAL_DEVICES_CHANGED,
     SIGNAL_MODES_CHANGED,
     STORE_APPROVALS,
@@ -63,6 +64,7 @@ from .const import (
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_MIRRORS,
+    STORE_NATIVE,
     STORE_PUBLISHED,
     STORE_REVS,
     STORE_SAVE_DELAY,
@@ -165,6 +167,8 @@ class Device:
     retired_components: set[str] = field(default_factory=set)
     # Set for a mirror of a foreign device, None for an owned device
     mirror: MirrorInfo | None = None
+    # The last accepted canonical StateValue of the state topic, None until one arrived; what a native entity shows
+    value: str | None = None
 
     @property
     def name(self) -> str:
@@ -288,6 +292,34 @@ def _parse_mirrors(stored: dict[str, Any]) -> dict[str, ParsedDocument]:
             continue
         mirrors[device_id] = parsed
     return mirrors
+
+
+@dataclass(slots=True)
+class NativeState:
+    """The persisted native switch of this instance (D-03): the instance flag and two sets of owned device ids."""
+
+    instance: bool = False
+    pending: set[str] = field(default_factory=set)
+    devices: set[str] = field(default_factory=set)
+
+
+def _parse_native(stored: dict[str, Any]) -> NativeState:
+    """Return the native state from a loaded Store payload; anything malformed means the defaults (D-03)."""
+    native = stored.get(STORE_NATIVE)
+    if not isinstance(native, dict):
+        return NativeState()
+    instance = native.get("instance")
+    pending = native.get("pending")
+    devices = native.get("devices")
+    return NativeState(
+        instance=instance if isinstance(instance, bool) else False,
+        pending={item for item in pending if isinstance(item, str) and is_valid_device_id(item)}
+        if isinstance(pending, list)
+        else set(),
+        devices={item for item in devices if isinstance(item, str) and is_valid_device_id(item)}
+        if isinstance(devices, list)
+        else set(),
+    )
 
 
 async def _async_attempt(action: Callable[[], Awaitable[None]], description: str) -> bool:
@@ -430,6 +462,8 @@ class Manager:
         # instance, kept in the Store and never part of a document or a hash (D-14)
         self._instance_mode = MODE_RUN
         self._device_modes: dict[str, str] = {}
+        # Which owned devices are native entities instead of MQTT discovery entities; local, kept in the Store (D-03)
+        self._native = NativeState()
 
     @property
     def hass(self) -> HomeAssistant:
@@ -499,6 +533,15 @@ class Manager:
             if subentry.data[CONF_DEVICE_ID] == device_id:
                 return subentry.subentry_id
         return None
+
+    def is_native(self, device_id: str) -> bool:
+        """
+        Return whether a device is a native entity of this integration instead of an MQTT discovery entity (D-03).
+
+        True for an owned device that is listed as native or while the instance flag is set; False for a mirror and an
+        unknown id.
+        """
+        return device_id in self.devices and (self._native.instance or device_id in self._native.devices)
 
     def has_device(self, device_id: str) -> bool:
         """Return whether the id belongs to an owned device or a mirror."""
@@ -790,10 +833,23 @@ class Manager:
         self._approvals = _parse_approvals(stored)
         self._instance_mode = _parse_instance_mode(stored)
         self._device_modes = _parse_device_modes(stored)
+        self._native = _parse_native(stored)
 
     @callback
     def _data_to_save(self) -> dict[str, Any]:
         """Return the persisted state; devices without a baseline are omitted (D-07)."""
+        data = self._base_data_to_save()
+        # The native key is only written once it carries something, so an instance that never used it keeps its Store
+        if self._native != NativeState():
+            data[STORE_NATIVE] = {
+                "instance": self._native.instance,
+                "pending": sorted(self._native.pending),
+                "devices": sorted(self._native.devices),
+            }
+        return data
+
+    def _base_data_to_save(self) -> dict[str, Any]:
+        """Return the persisted state of every key that is always written."""
         live = {**self.devices, **self.mirrors}
         return {
             STORE_LAST_ACTED: {
@@ -1406,10 +1462,12 @@ class Manager:
             state_topic(self._base_topic, device_id),
             partial(self._on_message, device_id),
         )
-        device.unsubscribe_test = await self.gateway.async_subscribe(
-            test_topic(self._base_topic, device_id),
-            partial(self._on_test_message, device_id),
-        )
+        # A native device has a test button that runs the trigger directly, so no test topic round trip exists (MIG-03)
+        if not self.is_native(device_id):
+            device.unsubscribe_test = await self.gateway.async_subscribe(
+                test_topic(self._base_topic, device_id),
+                partial(self._on_test_message, device_id),
+            )
         # The start publishes all documents first, then all discovery (D-15); only a later add publishes per device
         if not startup:
             await self.async_publish_config(device)
@@ -1578,7 +1636,8 @@ class Manager:
     async def async_publish_discovery(self, device: Device) -> None:
         """Publish the retained discovery of a device; an unavailable MQTT client is logged, the next start retries."""
         assert self._publisher is not None  # noqa: S101
-        if device.device_id in self.sync.transferred_away:
+        # A native device has entities of its own and needs no discovery (D-03)
+        if device.device_id in self.sync.transferred_away or self.is_native(device.device_id):
             return
         await _async_attempt(
             partial(
@@ -1592,9 +1651,13 @@ class Manager:
 
     @callback
     def _on_message(self, device_id: str, msg: IncomingMessage) -> None:
-        """Handle a state message: separate baseline from edge and enqueue the matching script."""
+        """Handle a state message: record the value, separate baseline from edge and enqueue the matching script."""
+        if (device := self._device(device_id)) is None:
+            return
+        # The shown state is recorded before the mode gate: a disabled device still shows what the broker says (STA-07)
+        self._record_value(device, msg.payload)
         # Disabled processes nothing: the baseline stays where it was and no payload is looked at (D-14)
-        if (device := self._device(device_id)) is None or self.effective_mode(device_id) == MODE_DISABLED:
+        if self.effective_mode(device_id) == MODE_DISABLED:
             return
         previous = device.tracker.last_acted
         decision = device.tracker.handle(msg.retain, msg.payload)
@@ -1607,6 +1670,28 @@ class Manager:
             return
         assert decision.value is not None  # noqa: S101
         self._run_trigger(device, decision.value)
+
+    @callback
+    def _record_value(self, device: Device, payload: str) -> None:
+        """Remember the StateValue of an accepted payload and tell the native entity; other payloads change nothing."""
+        value = device.spec.accepted.get(payload.strip().lower())
+        if value is None or value == device.value:
+            return
+        device.value = value
+        async_dispatcher_send(self._hass, SIGNAL_DEVICE_STATE.format(self._entry.entry_id, device.device_id))
+
+    async def async_send_state(self, device_id: str, value: str) -> None:
+        """
+        Publish a StateValue to the shared state topic of a device, retained at QoS 1 (D-07, T-5-10).
+
+        Nothing is changed locally: the echo of the broker is the single state source. Raises ValueError for an unknown
+        device and for a value that is not exactly one of its StateValues; the HomeAssistantError of an unavailable
+        MQTT client propagates.
+        """
+        if (device := self._device(device_id)) is None or value not in device.spec.accepted.values():
+            msg = "Unknown device or state value"
+            raise ValueError(msg)
+        await self.gateway.async_publish(state_topic(self._base_topic, device_id), value, retain=True, qos=1)
 
     @callback
     def _run_trigger(self, device: Device, value: str) -> None:

@@ -161,6 +161,19 @@ class DiscoveryPublisher:
             retain=True,
         )
 
+    async def async_publish_migrate(self, device_id: str) -> None:
+        """
+        Publish the live migrate payload that makes every core MQTT instance unload the entities of a device (D-12).
+
+        Not retained, so a later subscriber never replays it. It goes out before the registry takeover; the empty
+        retained clear follows only after, because on a loaded entity the clear alone deletes its registry entry.
+        """
+        await self._gateway.async_publish(
+            discovery_topic(self._gateway.discovery_prefix(), device_id),
+            json_dumps({"migrate_discovery": True}),
+            retain=False,
+        )
+
     async def async_clear_device(self, device_id: str) -> None:
         """Remove the device: an empty retained discovery payload makes core MQTT drop the entity (DSC-02)."""
         await self._gateway.async_publish(discovery_topic(self._gateway.discovery_prefix(), device_id), "", retain=True)

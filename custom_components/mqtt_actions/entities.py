@@ -47,8 +47,11 @@ def device_info_for(manager: Manager, device_id: str) -> DeviceInfo:
     assert device is not None  # noqa: S101
     model = SELECT_DEVICE_MODEL if device.spec.kind == SUBENTRY_SELECT else SWITCH_DEVICE_MODEL
     if device.mirror is not None:
-        # A native mirror names its owner (D-07); the name is plain text, bounded by the parser of the document
-        model = f"{model} (mirror of {device.mirror.owner_name})" if device.mirror.native else f"{model} (mirror)"
+        # A native mirror names its owner (D-07); the name is plain text, bounded by the parser of the document. A
+        # mirror that could not be taken over yet is not native for this run and keeps the legacy name
+        model = (
+            f"{model} (mirror of {device.mirror.owner_name})" if manager.is_native(device_id) else f"{model} (mirror)"
+        )
     return DeviceInfo(
         identifiers={(DOMAIN, device_id)},
         name=device.name,

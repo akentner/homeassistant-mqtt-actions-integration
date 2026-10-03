@@ -27,6 +27,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 
+from . import takeover
 from .actions import ActionsInvalid, async_validate_actions, validate_spec_structure
 from .breaker import CircuitBreaker
 from .const import (
@@ -468,6 +469,19 @@ class Manager:
         self._device_modes: dict[str, str] = {}
         # Which owned devices are native entities instead of MQTT discovery entities; local, kept in the Store (D-03)
         self._native = NativeState()
+        # Owned or mirrored devices whose takeover could not run yet; they use the legacy path for this run only and
+        # their id stays pending in the Store, so the next setup retries (T-5-08)
+        self._legacy_this_run: set[str] = set()
+
+    @property
+    def _native_pending(self) -> set[str]:
+        """Return the owned device ids that still wait for the takeover pass; the persisted set itself, not a copy."""
+        return self._native.pending
+
+    @property
+    def _native_devices(self) -> set[str]:
+        """Return the owned device ids that are native although the instance flag is not set; the persisted set."""
+        return self._native.devices
 
     @property
     def hass(self) -> HomeAssistant:
@@ -543,11 +557,19 @@ class Manager:
         Return whether a device is a native entity of this integration instead of an MQTT discovery entity (D-03).
 
         True for an owned device that is listed as native or while the instance flag is set, and for a mirror whose
-        pinned owner marked its document as native (D-07, D-09); False for an unknown id.
+        pinned owner marked its document as native (D-07, D-09); False for an unknown id. A device that still waits for
+        the takeover pass, or whose takeover was deferred for this run, is not native: its legacy entities exist, so a
+        native one next to them would be a duplicate (T-5-08).
         """
+        if device_id in self._legacy_this_run:
+            return False
         if (mirror := self.mirrors.get(device_id)) is not None:
             return mirror.mirror is not None and mirror.mirror.native
-        return device_id in self.devices and (self._native.instance or device_id in self._native.devices)
+        return (
+            device_id in self.devices
+            and device_id not in self._native_pending
+            and (self._native.instance or device_id in self._native_devices)
+        )
 
     def has_device(self, device_id: str) -> bool:
         """Return whether the id belongs to an owned device or a mirror."""
@@ -678,9 +700,120 @@ class Manager:
             await self.retrigger.async_start()
             await self._async_orphan_cleanup()
             await self._async_reconcile_locked(startup=True)
+            # Before the platform forward and before any document: the entities move first, then the retained clear
+            await self._async_native_takeover()
             await self._async_publish_owned()
         await self._async_publish_availability(AvailabilityState.ONLINE)
         await self.presence.async_publish_heartbeat()
+
+    async def _async_native_takeover(self) -> None:
+        """
+        Move the legacy MQTT entities of pending owned devices and native mirrors here (D-05, D-09, D-12, MIG-01).
+
+        The order for an owned device is fixed: the live migrate payload, then the registry takeover, then the
+        retained clear. A device whose legacy entities stay loaded is deferred: nothing moves, nothing is cleared, it
+        stays pending and runs on the legacy path for this run (T-5-08). Only ids that are owned devices are ever
+        published for (T-5-02). A follower publishes nothing. The caller holds the lock; the platforms are not
+        forwarded yet.
+        """
+        assert self._publisher is not None  # noqa: S101
+        owned = sorted(self._native_pending & self.devices.keys())
+        stale = self._native_pending - set(owned)
+        self._native_pending.difference_update(stale)
+        mqtt_entry_id = self.gateway.mqtt_entry_id()
+        mirrors = sorted(
+            device_id
+            for device_id, mirror in self.mirrors.items()
+            if mirror.mirror is not None
+            and mirror.mirror.native
+            and mqtt_entry_id is not None
+            and takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is not None
+        )
+        if not owned and not mirrors:
+            if stale:
+                await self._store.async_save(self._data_to_save())
+            return
+        # Published for every pending device, even without a legacy device of our own: another instance's core MQTT
+        # may have its entities loaded, and the clear alone would delete their registry entries
+        migrated = {
+            device_id
+            for device_id in owned
+            if await _async_attempt(
+                partial(self._publisher.async_publish_migrate, device_id),
+                f"publish the migrate payload of device {device_id}",
+            )
+        }
+        targets = [takeover.TakeoverTarget(device_id, self.subentry_id_of(device_id)) for device_id in owned]
+        targets += [takeover.TakeoverTarget(device_id, None) for device_id in mirrors]
+        results = await asyncio.gather(
+            *(self._async_take_over_one(target, mqtt_entry_id, skip=set(owned) - migrated) for target in targets),
+            return_exceptions=True,
+        )
+        for target, status in zip(targets, results, strict=True):
+            deferred = status is takeover.TakeoverStatus.DEFERRED
+            if isinstance(status, BaseException):
+                # No registry or broker content in the log: a registry surprise must never keep the start from finishing
+                LOGGER.warning("The native takeover of a device failed unexpectedly, so it stays on the legacy path")
+                LOGGER.debug("The native takeover failed with %s", type(status).__name__)
+                deferred = True
+            if deferred or not await self._async_finish_takeover(target.device_id, set(owned)):
+                await self._async_defer_takeover(target.device_id)
+        await self._store.async_save(self._data_to_save())
+
+    async def _async_take_over_one(
+        self, target: takeover.TakeoverTarget, mqtt_entry_id: str | None, *, skip: set[str]
+    ) -> takeover.TakeoverStatus:
+        """Take one device over; a device in `skip`, whose migrate payload did not go out, is deferred untouched."""
+        if target.device_id in skip:
+            return takeover.TakeoverStatus.DEFERRED
+        if mqtt_entry_id is None:
+            return takeover.TakeoverStatus.NOTHING
+        return await takeover.async_take_over(
+            self._hass,
+            self._entry,
+            target,
+            mqtt_entry_id=mqtt_entry_id,
+            unload_timeout=takeover.TAKEOVER_UNLOAD_TIMEOUT,
+            retry_interval=takeover.TAKEOVER_RETRY_INTERVAL,
+        )
+
+    async def _async_finish_takeover(self, device_id: str, owned: set[str]) -> bool:
+        """
+        Finish a taken-over device; False when the retained clear of an owned device could not be published.
+
+        The owner clears the retained discovery last and ends the stale test-topic subscription of the legacy path. A
+        follower has nothing to clear.
+        """
+        if device_id not in owned:
+            return True
+        assert self._publisher is not None  # noqa: S101
+        if not await _async_attempt(
+            partial(self._publisher.async_clear_device, device_id), f"clear the discovery of device {device_id}"
+        ):
+            return False
+        self._native_pending.discard(device_id)
+        if (device := self.devices.get(device_id)) is not None and device.unsubscribe_test is not None:
+            device.unsubscribe_test()
+            device.unsubscribe_test = None
+        return True
+
+    async def _async_defer_takeover(self, device_id: str) -> None:
+        """
+        Keep a device that could not be taken over on the legacy path for this run, with everything as in 0.1.0.
+
+        A native mirror was built without the test-topic subscription of the legacy path, so it gets it now: its legacy
+        test buttons are still the entities of the device.
+        """
+        LOGGER.info("The native takeover of a device is postponed to the next start; it stays as it is until then")
+        self._legacy_this_run.add(device_id)
+        if (mirror := self.mirrors.get(device_id)) is None or mirror.unsubscribe_test is not None:
+            return
+        try:
+            mirror.unsubscribe_test = await self.gateway.async_subscribe(
+                test_topic(self._base_topic, device_id), partial(self._on_test_message, device_id)
+            )
+        except HomeAssistantError as err:
+            LOGGER.warning("MQTT could not subscribe to the test topic of device %s: %s", mirror.name, err)
 
     async def async_reconcile(self, *, startup: bool = False) -> None:
         """
@@ -1131,6 +1264,14 @@ class Manager:
         self._tripped.pop(device_id, None)
         self._transfers.pop(device_id, None)
         self._unpublishable.discard(device_id)
+        self._forget_native(device_id)
+
+    @callback
+    def _forget_native(self, device_id: str) -> None:
+        """Forget the native bookkeeping of an owned device that is deleted or released here."""
+        self._native_pending.discard(device_id)
+        self._native_devices.discard(device_id)
+        self._legacy_this_run.discard(device_id)
 
     async def async_release_device_locally(self, device_id: str) -> bool:
         """
@@ -1601,6 +1742,7 @@ class Manager:
         self._revs.pop(device_id, None)
         self._transfers.pop(device_id, None)
         self._device_modes.pop(device_id, None)
+        self._forget_native(device_id)
         if discovery_cleared and config_cleared and state_cleared:
             self._published.discard(device_id)
         self._schedule_save()
@@ -1643,6 +1785,8 @@ class Manager:
                 rev=1,
                 # An adopted device carries its previous owners in every document, so a late follower learns it (D-09)
                 transferred_from=tuple(self._transfers.get(device_id, ())),
+                # The marker only while the device is native, so a deferred or legacy device publishes none
+                native=self.is_native(device_id),
             )
             digest: str = document["hash"]
             changed = known is None or known["hash"] != digest

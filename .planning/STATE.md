@@ -1,11 +1,11 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 5
-status: "Phase 5 shipped — PR #12"
+status: "Phase 5 merged (PR #12), v1.0.0 tagged"
 stopped_at: Phase 5 complete — all phases complete
-last_updated: "2026-10-03T20:07:05.814Z"
+last_updated: "2026-10-03T20:19:58.389Z"
 last_activity: 2026-10-03
-state_head: 5effddbadceef704c2b2c5b93a729021b16e1615
+state_head: b6e958997d222cc5ff6687f571522a4ed39b394b
 progress:
   total_phases: 5
   completed_phases: 5
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 
 Phase: 5
 Plan: Not started
-Status: Phase 5 shipped — PR #12
+Status: Phase 5 merged (PR #12), v1.0.0 tagged
 Last activity: 2026-10-03
 
 Progress: [██████████] 100% of Phase 01 plans

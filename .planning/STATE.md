@@ -209,6 +209,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261003-rmy | Native Select restore-previous-state button and previous_state attribute; new native test buttons diagnostic and disabled by default | 2026-10-03 | c7a537c | [261003-rmy-native-entities-test-buttons-disabled-by](./quick/261003-rmy-native-entities-test-buttons-disabled-by/) |
+| 261003-sfb | New native entities get short English entity id parts (_restore, _test_<StateValue>, _mode, _resync, _instances, _instance_mode) in every UI language; existing ids never renamed | 2026-10-03 | 89019df | [261003-sfb-native-entity-ids-shorter-and-english](./quick/261003-sfb-native-entity-ids-shorter-and-english/) |
 
 ## Deferred Items
 

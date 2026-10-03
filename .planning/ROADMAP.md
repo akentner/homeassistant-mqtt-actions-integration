@@ -198,7 +198,7 @@ Plans:
   5. MQTT Discovery is published only as an optional export and the documentation, ACL page and translations say so.
 
 **Depends on:** Phase 4
-**Plans:** 3/9 plans executed
+**Plans:** 4/9 plans executed
 
 Plans:
 **Wave 1**
@@ -209,7 +209,7 @@ Plans:
 - [x] 05-03-PLAN.md — Native Switch, Select and test-button entities of owned devices, state from the echo, retained QoS 1 commands (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 05-04-PLAN.md — Additive document marker, native mirrors directly under the entry, availability parity, one-way native status (wave 3)
+- [x] 05-04-PLAN.md — Additive document marker, native mirrors directly under the entry, availability parity, one-way native status (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 05-05-PLAN.md — Takeover pass at start before the platform forward, deferral fallback, adoption between native and legacy devices (wave 4)
@@ -237,7 +237,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
-| 5. Evaluate native switch/select entities instead of MQTT Discovery | 3/9 | In Progress|  |
+| 5. Evaluate native switch/select entities instead of MQTT Discovery | 4/9 | In Progress|  |
 
 ## Backlog
 

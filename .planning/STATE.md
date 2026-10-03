@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Evaluate native switch/select entities instead of MQTT Discovery
 status: executing
-stopped_at: Completed 05-07-PLAN.md
-last_updated: "2026-10-03T12:08:59.767Z"
+stopped_at: Completed 05-08-PLAN.md
+last_updated: "2026-10-03T12:23:59.042Z"
 last_activity: 2026-10-03
 last_activity_desc: Phase 05 execution started
-state_head: a420c3ff09b925a15b743b659d1d9493651d4736
+state_head: 764bc4b44d50e6db29735701fb3ff6fa38654cf9
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 42
-  completed_plans: 40
+  completed_plans: 41
   percent: 80
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 05 (Evaluate native switch/select entities instead of MQTT Discovery) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-10-03 — Phase 05 execution started
 
@@ -94,6 +94,7 @@ Progress: [████████░░] 80% of Phase 01 plans
 | Phase 05 P05 | 75min | 3 tasks | 4 files |
 | Phase 5 P06 | 60min | 2 tasks | 11 files |
 | Phase 05 P07 | 45min | 2 tasks | 6 files |
+| Phase 05 P08 | 60min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,8 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-05: adoption keeps a native mirror native via the persisted devices set; a legacy mirror on a native instance is queued as pending and reloads the entry
 - [Phase 5]: 05-06: hint rebuilt only when the set of blocking peers changes; a silent announced-online peer is released by the heartbeat tick; natively listed devices are not made pending at the flip
 - [Phase 05]: A running legacy mirror that flips to native is parked in _legacy_this_run and the entry reloads once, so the takeover keeps every entity identity (05-07)
+- [Phase 05]: 05-08: heals_discovery gates healing to owned legacy devices; a deferred device is legacy again (in _legacy_this_run), only the pass window is excluded
+- [Phase 05]: 05-08: the discovery export is a best-effort second publish path (disabled by default, own prefix, no subscription, no healing); option changes apply from async_reconcile without reload
 
 ### Pending Todos
 
@@ -209,6 +212,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T12:08:59.656Z
-Stopped at: Completed 05-07-PLAN.md
+Last session: 2026-10-03T12:23:58.941Z
+Stopped at: Completed 05-08-PLAN.md
 Resume file: None

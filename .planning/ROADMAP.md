@@ -191,10 +191,33 @@ Plans:
 **Goal:** [To be redefined in discuss-phase] Decide whether switch and select entities owned by the MQTT Actions config entry should replace MQTT Discovery. Context carried over from backlog item 999.2: native entities would show the full device and entity count on our integration page (including mirrored devices on other instances) and remove discovery healing, ghost-entity handling and DSC-04. Costs: it breaks the PROJECT.md Discovery constraint, needs a rewrite of the publishing from phases 1-3, and loses non-HA consumers. Origin: Phase 4 research on D-13 (a device belongs to exactly one config entry); Phase 4 uses companion devices meanwhile.
 **Requirements**: TBD
 **Depends on:** Phase 4
-**Plans:** 0 plans
+**Plans:** 9 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 5 to break down)
+**Wave 1**
+- [ ] 05-01-PLAN.md — ADR with the four D-02 criteria, spike scenarios pinned as regression tests, requirement registration and the blocking-human Go gate (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-02-PLAN.md — Registry takeover module: fixed order, identity check, bounded unload wait, duplicate guard (wave 2)
+- [ ] 05-03-PLAN.md — Native Switch, Select and test-button entities of owned devices, state from the echo, retained QoS 1 commands (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 05-04-PLAN.md — Additive document marker, native mirrors directly under the entry, availability parity, one-way native status (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 05-05-PLAN.md — Takeover pass at start before the platform forward, deferral fallback, adoption between native and legacy devices (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 05-06-PLAN.md — Cutover decision: heartbeat capability, roster gate, settle timer, Repairs hint for blocking peers (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 05-07-PLAN.md — Live follower flip with automatic reload, real-setup multi-instance harness and cutover acceptance scenarios (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 05-08-PLAN.md — Optional Discovery export with hub options, legacy-only healing, issues and test topic, native delete lifecycle (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 05-09-PLAN.md — README, docs and ACL page, project record amendments, release 0.2.0 preparation and the real-instance UAT (wave 8)
 
 ## Progress
 
@@ -207,7 +230,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
-| 5. Evaluate native switch/select entities instead of MQTT Discovery | 0/0 | Not started | - |
+| 5. Evaluate native switch/select entities instead of MQTT Discovery | 0/9 | Not started | - |
 
 ## Backlog
 

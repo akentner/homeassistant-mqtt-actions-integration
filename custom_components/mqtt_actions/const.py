@@ -164,6 +164,14 @@ MAX_HEARTBEAT_DEVICES: Final = 10000
 # Dispatcher signal sent when the roster changed; formatted with the config entry id (D-05, D-06)
 SIGNAL_ROSTER_UPDATED: Final = f"{DOMAIN}_roster_updated_{{}}"
 
+# Native cutover (D-09, D-10, MIG-02): this long after the start, and again whenever the roster changes, an instance
+# that still uses MQTT Discovery checks whether any online peer is a legacy instance. The time only has to cover the
+# replay of the retained availability messages at subscribe; the capability itself is read from the heartbeats
+CUTOVER_SETTLE_SECONDS: Final = 5.0
+# One warning issue on the waiting instance names the peers that keep it from switching; at most this many are named
+ISSUE_NATIVE_CUTOVER_WAITING: Final = "native_cutover_waiting"
+CUTOVER_HINT_MAX_NAMES: Final = 5
+
 # Per-device and per-instance mode (D-14): run is normal, observe tracks the baseline and logs what would have run, and
 # disabled ignores the state topic completely. The effective mode is the most restrictive of the two. The existing
 # run_mode (serial or restart) is a different thing and is untouched.

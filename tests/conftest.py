@@ -7,6 +7,8 @@ import pytest
 from homeassistant.config_entries import ConfigSubentryData
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.mqtt_actions import const
+from custom_components.mqtt_actions import manager as manager_module
 from custom_components.mqtt_actions.const import (
     CONF_ACTIONS,
     CONF_BASE_TOPIC,
@@ -38,6 +40,22 @@ if TYPE_CHECKING:
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Allow Home Assistant to load integrations from custom_components in every test."""
+
+
+@pytest.fixture(autouse=True)
+def disable_native_cutover(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Arm no cutover timer in any test, so every test keeps the legacy path it asserts (D-09).
+
+    Only the cutover tests turn the settle timer on, through `enable_native_cutover`.
+    """
+    monkeypatch.setattr(manager_module, "CUTOVER_SETTLE_SECONDS", None, raising=False)
+
+
+@pytest.fixture
+def enable_native_cutover(disable_native_cutover: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Restore the real settle time for the tests of the cutover; it depends on the autouse fixture for the order."""
+    monkeypatch.setattr(manager_module, "CUTOVER_SETTLE_SECONDS", const.CUTOVER_SETTLE_SECONDS, raising=False)
 
 
 @pytest.fixture

@@ -1,8 +1,10 @@
 # ADR 0001: Native switch and select entities instead of MQTT Discovery
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-10-03
+
+Accepted: 2026-10-03 (Go confirmed by the user at the blocking-human gate of plan 05-01)
 
 ## Context
 

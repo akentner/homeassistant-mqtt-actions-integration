@@ -3,15 +3,15 @@ status: testing
 phase: 05-evaluate-native-switch-select-entities-instead-of-mqtt-disco
 source: [05-VERIFICATION.md]
 started: 2026-10-03T13:38:23Z
-updated: 2026-10-03T17:45:43Z
+updated: 2026-10-03T17:47:01Z
 ---
 
 ## Current Test
 
-number: 7
-name: Discovery export on/off and homeassistant prefix
+number: 8
+name: Device delete and integration removal
 expected: |
-  enabled_by_default false, no buttons; core prefix yields only disabled duplicates; off clears topics
+  Device and entities disappear; retained document, state and discovery topics cleared per options
 awaiting: user response
 
 ## Tests
@@ -47,7 +47,8 @@ reason: user skipped; will be tested on the production instances
 
 ### 7. Discovery export on/off and homeassistant prefix
 expected: enabled_by_default false, no buttons; core prefix yields only disabled duplicates; off clears topics
-result: [pending]
+result: skipped
+reason: user skipped
 
 ### 8. Device delete and integration removal
 expected: Device and entities disappear; retained document, state and discovery topics cleared per options
@@ -62,8 +63,8 @@ result: [pending]
 total: 9
 passed: 3
 issues: 0
-pending: 3
-skipped: 3
+pending: 2
+skipped: 4
 blocked: 0
 
 ## Gaps

@@ -1122,8 +1122,10 @@ class Manager:
         """
         Replace a mirror by an owned device with the same id; the caller holds the lock and checked the preconditions.
 
-        Nothing is published to the broker and the registry of core MQTT is not touched: the discovery of the device
-        stays, and the new owner publishes it again with its own availability when the device is added.
+        Nothing is cleared on the broker and the registry of core MQTT is not touched: the discovery of the device
+        stays, and the new owner publishes it again with its own availability when the device is added. A native mirror
+        becomes a native owned device; a legacy mirror on a native instance is queued for the takeover of the next
+        setup.
         """
         device_id = mirror.device_id
         spec = mirror.spec
@@ -1140,6 +1142,13 @@ class Manager:
         self._revs[device_id] = {"rev": info.rev, "hash": ADOPTED_HASH}
         if mirror.tracker.last_acted is not None:
             self._stored_last_acted[device_id] = mirror.tracker.last_acted
+        # A native device stays native whatever this instance's flag says; a legacy device of a native instance first
+        # needs the takeover pass of the next setup, so it is pending and not native until then (T-5-12)
+        queue_takeover = not info.native and self._native.instance
+        if info.native:
+            self._native_devices.add(device_id)
+        elif queue_takeover:
+            self._native_pending.add(device_id)
         await self._async_drop_mirror(mirror)
         # The select platform forgets the mirror's mode select now; the add below gives the owned device its own
         self._notify_devices_changed()
@@ -1150,6 +1159,8 @@ class Manager:
         except Exception:
             self._transfers.pop(device_id, None)
             self._revs.pop(device_id, None)
+            self._native_devices.discard(device_id)
+            self._native_pending.discard(device_id)
             if approval is not None:
                 self._approvals[device_id] = approval
             await self.sync.async_restore_mirror(device_id, info.payload)
@@ -1157,6 +1168,9 @@ class Manager:
         LOGGER.info("Adopted device %s from an instance that is offline or was forced", shown(spec.name))
         # The update listener of the entry reconciles too, once the lock is free, and then finds nothing to do
         await self._async_reconcile_locked()
+        if queue_takeover:
+            # The next setup runs the pass for it: the migrate payload, the takeover and the retained clear
+            self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
 
     async def _async_drop_mirror(self, mirror: Device) -> None:
         """

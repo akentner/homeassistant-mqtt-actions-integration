@@ -21,7 +21,8 @@ from custom_components.mqtt_actions.const import (
     STORE_VERSION,
 )
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY, trigger_key
-from custom_components.mqtt_actions.topics import discovery_topic, state_topic
+from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
+from tests.documents import FOREIGN_OWNER, FOREIGN_OWNER_NAME, document_payload, make_spec
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -586,3 +587,75 @@ async def test_press_of_an_unknown_trigger_does_nothing(
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert (on_calls, off_calls) == ([], [])
+
+
+# --- Plan 05-04: native mirrors of a marked document ---------------------------------------------------------------
+
+
+async def _deliver(hass: HomeAssistant, device_id: str, payload: str, *, retain: bool = True) -> None:
+    async_fire_mqtt_message(hass, config_topic(BASE, device_id), payload, retain=retain)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def _presence(hass: HomeAssistant, status: str, owner: str = FOREIGN_OWNER, *, retain: bool = True) -> None:
+    async_fire_mqtt_message(hass, availability_topic(BASE, owner), status, retain=retain)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _native_platform_entries(hass: HomeAssistant, domain: str) -> list[er.RegistryEntry]:
+    return [
+        entry for entry in er.async_get(hass).entities.values() if entry.platform == DOMAIN and entry.domain == domain
+    ]
+
+
+def _companion(hass: HomeAssistant, entry: MockConfigEntry, device_id: str) -> dr.DeviceEntry | None:
+    return dr.async_get(hass).async_get_device_by_identifier((DOMAIN, device_id), entry.entry_id)
+
+
+async def test_a_marked_mirror_is_a_native_entity_directly_under_the_entry(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-07, D-09, ENT-01, STA-01: a marked foreign document is a native switch on a device of the entry itself."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _presence(hass, "online")
+
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+
+    entity_id = _entity_id(hass, "switch", spec.device_id)
+    assert entity_id is not None
+    registered = er.async_get(hass).async_get(entity_id)
+    assert registered is not None
+    assert registered.platform == DOMAIN
+    assert registered.config_subentry_id is None
+    assert registered.config_entry_id == entry.entry_id
+    companion = _companion(hass, entry, spec.device_id)
+    assert companion is not None
+    assert companion.config_subentry_id is None
+    assert companion.model == f"Switch device (mirror of {FOREIGN_OWNER_NAME})"
+    assert registered.device_id == companion.id
+    mode = er.async_get(hass).async_get(_entity_id(hass, "select", f"{spec.device_id}_mode"))
+    assert mode is not None
+    assert mode.device_id == companion.id
+
+    await _state(hass, spec.device_id, "ON", retain=True)
+    assert _switch_state(hass, spec.device_id) == "on"
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _publishes(mqtt_mock, state_topic(BASE, spec.device_id)) == [("OFF", 1, True)]
+
+
+async def test_an_unmarked_mirror_stays_on_the_legacy_path(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-09: a document without the marker creates no native entity and keeps its legacy companion device."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+
+    await _deliver(hass, spec.device_id, document_payload(spec))
+
+    assert _native_platform_entries(hass, "switch") == []
+    companion = _companion(hass, entry, spec.device_id)
+    assert companion is not None
+    assert companion.model == "Switch device (mirror)"

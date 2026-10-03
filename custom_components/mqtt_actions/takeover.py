@@ -172,6 +172,26 @@ async def async_take_over(  # noqa: PLR0913
     return TakeoverStatus.DONE
 
 
+async def async_flush_registries(hass: HomeAssistant) -> bool:
+    """
+    Write the entity and device registry to disk now and return whether both writes went through.
+
+    Home Assistant only schedules a save of a registry change, about ten seconds ahead. A takeover is recorded as done
+    in the Store of this integration, so a crash inside that window would leave the Store claiming a move the
+    registry files never saw, and the entities would start again under new ids (WR-01). Home Assistant has no public
+    flush; the registry's own store is the narrowest way to force one, and a failure only costs the early write.
+    """
+    flushed = True
+    for registry in (er.async_get(hass), dr.async_get(hass)):
+        try:
+            await registry._store.async_save(registry._data_to_save())  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            LOGGER.warning("A registry could not be written ahead of its schedule after the native takeover")
+            LOGGER.debug("The registry flush failed", exc_info=True)
+            flushed = False
+    return flushed
+
+
 def _short(target: TakeoverTarget) -> str:
     """Return the device id capped for logging; a mirror's id comes from the broker."""
     return target.device_id[:40]

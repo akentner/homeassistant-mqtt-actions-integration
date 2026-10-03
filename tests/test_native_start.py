@@ -10,6 +10,7 @@ from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.storage import Store
 from pytest_homeassistant_custom_component import plugins
 from pytest_homeassistant_custom_component.common import (
     async_capture_events,
@@ -183,6 +184,53 @@ async def test_an_upgrade_takes_over_the_legacy_entities_and_marks_the_document(
     ]
     document = json.loads(_publishes(mqtt_mock, config_topic(BASE, device_id))[-1][0])
     assert document["entities"] == "native"
+
+
+async def test_the_registries_are_written_before_the_takeover_is_recorded_as_done(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """WR-01: both registries are flushed before the pending marker is saved away, or a crash would lose the ids."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    device_id = legacy.device_id
+    assert await hass.config_entries.async_unload(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _seed_native(hass_storage, pending=[device_id])
+    _loop_back_discovery(hass, mqtt_mock)
+    order: list[str] = []
+
+    def _spy_registry(name: str, registry: Any) -> None:
+        original = registry._store.async_save
+
+        async def _save(*args: Any, **kwargs: Any) -> None:
+            order.append(name)
+            await original(*args, **kwargs)
+
+        monkeypatch.setattr(registry._store, "async_save", _save)
+
+    _spy_registry("entity registry", er.async_get(hass))
+    _spy_registry("device registry", dr.async_get(hass))
+    original_save = Store.async_save
+
+    async def _save_store(store: Store, data: Any) -> None:
+        if store.key == STORE_KEY:
+            order.append("pending cleared" if data["native"]["pending"] == [] else "pending kept")
+        await original_save(store, data)
+
+    monkeypatch.setattr(Store, "async_save", _save_store)
+
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _stored_pending(hass_storage) == []
+    assert {"entity registry", "device registry", "pending cleared"} <= set(order)
+    cleared = order.index("pending cleared")
+    assert "entity registry" in order[:cleared]
+    assert "device registry" in order[:cleared]
 
 
 async def test_a_device_without_legacy_entities_still_gets_the_migrate_and_the_clear(

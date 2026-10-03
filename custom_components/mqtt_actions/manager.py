@@ -882,6 +882,9 @@ class Manager:
             *(self._async_take_over_one(target, mqtt_entry_id, skip=set(owned) - migrated) for target in targets),
             return_exceptions=True,
         )
+        if any(status is takeover.TakeoverStatus.DONE for status in results):
+            # The registry files hold the move before any marker says it is done and before the retained clear goes out
+            await takeover.async_flush_registries(self._hass)
         for target, status in zip(targets, results, strict=True):
             deferred = status is takeover.TakeoverStatus.DEFERRED
             if isinstance(status, BaseException):

@@ -1,5 +1,6 @@
-"""Native Switch, Select and test button entities of owned devices (ENT-01, ENT-02, MIG-03, D-03, D-07, D-08)."""
+"""Native Switch, Select and test button entities of owned devices and mirrors (ENT-01, ENT-02, MIG-03, D-07)."""
 
+import json
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
@@ -8,6 +9,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions import topics
@@ -17,9 +19,13 @@ from custom_components.mqtt_actions.const import (
     CONF_OPTIONS,
     CONF_STATE_VALUE,
     DOMAIN,
+    ISSUE_OWNER_CONFLICT_PREFIX,
     STORE_KEY,
+    STORE_MIRRORS,
     STORE_VERSION,
 )
+from custom_components.mqtt_actions.discovery import build_discovery
+from custom_components.mqtt_actions.document import parse_document
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY, trigger_key
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 from tests.documents import FOREIGN_OWNER, FOREIGN_OWNER_NAME, document_payload, make_spec
@@ -689,3 +695,194 @@ async def test_a_native_mirror_has_test_buttons_that_run_locally_once_approved(
     await _press(hass, spec.device_id, SWITCH_ON_KEY)
     assert len(on_calls) == 1
     assert _all_publishes(mqtt_mock, spec.device_id) == []
+
+
+# --- Plan 05-04 task 2: availability, one-way native status, removal -----------------------------------------------
+
+
+def _mirror_state(hass: HomeAssistant, device_id: str) -> str:
+    return _switch_state(hass, device_id)
+
+
+async def test_a_native_mirror_is_unavailable_until_its_owner_is_online(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-07: availability is the owner's announced presence, like the legacy discovery availability."""
+    spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
+    await _setup(hass, make_hub_entry())
+
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    assert _mirror_state(hass, spec.device_id) == "unavailable"
+
+    await _presence(hass, "online")
+    assert _mirror_state(hass, spec.device_id) == "unknown"
+
+    await _presence(hass, "offline")
+    assert _mirror_state(hass, spec.device_id) == "unavailable"
+
+    # An owned native entity needs no announcement: it is available while the manager runs
+    _entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    assert _switch_state(hass, device_id) != "unavailable"
+
+
+async def test_an_availability_change_reaches_the_entity_without_a_heartbeat(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-05: a live message flips the entity at once, although the owner never sent a heartbeat."""
+    spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
+    await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+
+    await _presence(hass, "online", retain=False)
+    assert _mirror_state(hass, spec.device_id) == "unknown"
+
+    await _presence(hass, "offline", retain=False)
+    assert _mirror_state(hass, spec.device_id) == "unavailable"
+
+    # A cleared announcement is an unknown owner, which is not online either
+    await _presence(hass, "online", retain=False)
+    await _presence(hass, "", retain=False)
+    assert _mirror_state(hass, spec.device_id) == "unavailable"
+
+
+async def test_an_unmarked_document_never_reverts_a_native_mirror(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """T-5-11: a later document of the same owner without the marker updates the content and keeps the entity native."""
+    spec = make_spec(name="Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    changed = make_spec(device_id=spec.device_id, name="Floor lamp", on=OFF_ACTIONS, off=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _presence(hass, "online")
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True, rev=1), retain=False)
+
+    await _deliver(hass, spec.device_id, document_payload(changed, rev=2), retain=False)
+
+    manager = _manager(entry)
+    assert manager.is_native(spec.device_id)
+    assert manager.mirrors[spec.device_id].spec.name == "Floor lamp"
+    assert _switch_state(hass, spec.device_id) == "unknown"
+    assert _companion(hass, entry, spec.device_id).model == f"Switch device (mirror of {FOREIGN_OWNER_NAME})"
+    # It stays native after a restart too: what is persisted for the mirror still carries the marker
+    stored = manager._data_to_save()[STORE_MIRRORS][spec.device_id]
+    assert parse_document(spec.device_id, stored).native is True
+    assert parse_document(spec.device_id, stored).spec.name == "Floor lamp"
+
+
+async def test_a_marker_appearing_on_an_unchanged_document_makes_a_legacy_mirror_native(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-07: an owner that switches to native republishes the same content with the marker; the mirror follows."""
+    spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _presence(hass, "online")
+    await _deliver(hass, spec.device_id, document_payload(spec, rev=1), retain=False)
+    assert _entity_id(hass, "switch", spec.device_id) is None
+
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True, rev=2), retain=False)
+
+    assert _manager(entry).is_native(spec.device_id)
+    assert _entity_id(hass, "switch", spec.device_id) is not None
+    assert _companion(hass, entry, spec.device_id).model == f"Switch device (mirror of {FOREIGN_OWNER_NAME})"
+
+
+@pytest.mark.parametrize("pinned_native", [True, False])
+async def test_a_marker_of_a_competing_owner_changes_nothing(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, pinned_native: bool
+) -> None:
+    """T-5-03: native-ness follows the pinned owner; another owner's claim is the owner conflict and nothing else."""
+    spec = make_spec(name="Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    other = make_spec(device_id=spec.device_id, name="Hijacked", on=OFF_ACTIONS, off=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, native=pinned_native), retain=False)
+    mirror = _manager(entry).mirrors[spec.device_id]
+    spec_before, info_before = mirror.spec, mirror.mirror
+
+    await _deliver(
+        hass,
+        spec.device_id,
+        document_payload(other, owner="instance-other", owner_name="Other", native=not pinned_native),
+        retain=False,
+    )
+
+    assert mirror.spec is spec_before
+    assert mirror.mirror is info_before
+    assert _manager(entry).is_native(spec.device_id) is pinned_native
+    assert (_entity_id(hass, "switch", spec.device_id) is not None) is pinned_native
+    issue_id = f"{ISSUE_OWNER_CONFLICT_PREFIX}{spec.device_id}"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+
+async def test_removing_a_native_mirror_removes_its_device_and_entities(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-09, SYN-05: a tombstone removes everything native and leaves the core MQTT device and entities alone."""
+    spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS, name="Foreign lamp")
+    entry = await _setup(hass, make_hub_entry())
+    discovery = discovery_topic("homeassistant", spec.device_id)
+    payload = build_discovery(spec=spec, base_topic=BASE, instance_id=FOREIGN_OWNER, sw_version="1.2.3")
+    async_fire_mqtt_message(hass, discovery, json.dumps(payload), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _presence(hass, "online")
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True), retain=False)
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": _entity_id(hass, "select", f"{spec.device_id}_mode"), "option": "observe"},
+        blocking=True,
+    )
+    manager = _manager(entry)
+    assert manager.device_mode(spec.device_id) == "observe"
+
+    (mqtt_entry,) = hass.config_entries.async_entries("mqtt")
+    device_registry = dr.async_get(hass)
+    entity_registry = er.async_get(hass)
+    mqtt_device = device_registry.async_get_device_by_identifier(
+        ("mqtt", f"{DOMAIN}_{spec.device_id}"), mqtt_entry.entry_id
+    )
+    assert mqtt_device is not None
+    mqtt_entities = er.async_entries_for_device(entity_registry, mqtt_device.id)
+    assert mqtt_entities
+    assert _companion(hass, entry, spec.device_id) is not None
+    assert _entity_id(hass, "switch", spec.device_id) is not None
+    assert _button_id(hass, spec.device_id, SWITCH_ON_KEY) is not None
+
+    await _deliver(hass, spec.device_id, "", retain=False)
+
+    assert _companion(hass, entry, spec.device_id) is None
+    assert _entity_id(hass, "switch", spec.device_id) is None
+    assert _button_id(hass, spec.device_id, SWITCH_ON_KEY) is None
+    assert _button_id(hass, spec.device_id, SWITCH_OFF_KEY) is None
+    assert _entity_id(hass, "select", f"{spec.device_id}_mode") is None
+    assert spec.device_id not in manager.mirrors
+    assert manager.device_mode(spec.device_id) == "run"
+    assert spec.device_id not in manager._data_to_save()[STORE_MIRRORS]
+    assert device_registry.async_get(mqtt_device.id) == mqtt_device
+    for entity in mqtt_entities:
+        assert entity_registry.async_get(entity.entity_id) == entity
+        assert hass.states.get(entity.entity_id) is not None
+
+
+@pytest.mark.parametrize("user_name", [None, "My lamp"])
+async def test_a_renamed_native_mirror_renames_its_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, user_name: str | None
+) -> None:
+    """D-13: a new name of the pinned owner renames the device, unless the user gave it a name of their own."""
+    spec = make_spec(name="Lamp", on=ON_ACTIONS)
+    renamed = make_spec(device_id=spec.device_id, name="Floor lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, spec.device_id, document_payload(spec, native=True, rev=1), retain=False)
+    companion = _companion(hass, entry, spec.device_id)
+    assert companion is not None
+    if user_name is not None:
+        dr.async_get(hass).async_update_device(companion.id, name_by_user=user_name)
+
+    await _deliver(hass, spec.device_id, document_payload(renamed, native=True, rev=2), retain=False)
+
+    companion = _companion(hass, entry, spec.device_id)
+    assert companion is not None
+    assert companion.name == ("Floor lamp" if user_name is None else "Lamp")
+    assert companion.name_by_user == user_name

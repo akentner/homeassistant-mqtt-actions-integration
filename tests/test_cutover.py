@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.config_entries import ConfigSubentry
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
@@ -170,6 +171,42 @@ async def test_a_legacy_install_without_peers_cuts_over_after_the_settle_time(
         ({"migrate_discovery": True}, False),
         (CLEAR_PAYLOAD, True),
     ]
+
+
+async def test_the_cutover_reload_keeps_the_customizations_of_the_entities(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    """IN-04: through the real reload of the cutover, a renamed, re-homed entity keeps id, entity id, name and area."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    device_id = legacy.device_id
+    switch_id = entity_registry.async_get_entity_id("switch", "mqtt", device_id)
+    assert switch_id is not None
+    area = ar.async_get(hass).async_create("Living room")
+    entity_registry.async_update_entity(switch_id, name="Reading lamp", area_id=area.id, new_entity_id="switch.my_lamp")
+    before = entity_registry.async_get("switch.my_lamp")
+    assert before is not None
+    assert (before.name, before.area_id) == ("Reading lamp", area.id)
+    _loop_back_discovery(hass, mqtt_mock)
+
+    # The cutover schedules the real reload; nothing is patched, so the takeover runs in the new setup
+    await _settle(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _manager(legacy.entry).is_native(device_id)
+    after = entity_registry.async_get("switch.my_lamp")
+    assert after is not None
+    assert (after.id, after.entity_id, after.platform) == (before.id, "switch.my_lamp", DOMAIN)
+    assert (after.name, after.area_id) == ("Reading lamp", area.id)
+    assert entity_registry.async_get_entity_id("switch", DOMAIN, device_id) == "switch.my_lamp"
+    state = hass.states.get("switch.my_lamp")
+    assert state is not None
+    assert not state.attributes.get("restored")
 
 
 async def test_nothing_happens_before_the_settle_time(

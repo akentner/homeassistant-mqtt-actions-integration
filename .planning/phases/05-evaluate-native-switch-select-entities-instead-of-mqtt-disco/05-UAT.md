@@ -3,15 +3,15 @@ status: testing
 phase: 05-evaluate-native-switch-select-entities-instead-of-mqtt-disco
 source: [05-VERIFICATION.md]
 started: 2026-10-03T13:38:23Z
-updated: 2026-10-03T17:44:11Z
+updated: 2026-10-03T17:44:51Z
 ---
 
 ## Current Test
 
-number: 5
-name: Late replay race (A4)
+number: 6
+name: Commands across two real instances
 expected: |
-  Re-published legacy retained discovery plus two restarts yields no _2 duplicates (see IN-03)
+  Actions run exactly once on every approved instance; unknown payload ignored, state unchanged
 awaiting: user response
 
 ## Tests
@@ -37,7 +37,8 @@ reason: user skipped; needs a real mixed fleet (0.1.0 next to a native instance)
 
 ### 5. Late replay race (A4)
 expected: Re-published legacy retained discovery plus two restarts yields no _2 duplicates (see IN-03)
-result: [pending]
+result: skipped
+reason: user skipped; IN-03 stays open
 
 ### 6. Commands across two real instances
 expected: Actions run exactly once on every approved instance; unknown payload ignored, state unchanged
@@ -60,8 +61,8 @@ result: [pending]
 total: 9
 passed: 3
 issues: 0
-pending: 5
-skipped: 1
+pending: 4
+skipped: 2
 blocked: 0
 
 ## Gaps

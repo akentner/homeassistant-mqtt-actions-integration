@@ -21,6 +21,7 @@ from custom_components.mqtt_actions.const import (
 )
 from custom_components.mqtt_actions.model import DeviceSpec, spec_from_data, trigger_key
 from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, state_topic
+from tests.log_helpers import own_warnings
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -195,7 +196,7 @@ async def test_select_unknown_payload_keeps_state_without_core_warning(
             await _send(hass, unknown)
             assert hass.states.get("select.mode").state == "Bravo"
 
-    assert [record for record in caplog.records if record.levelno >= logging.WARNING] == []
+    assert own_warnings(caplog) == []
 
 
 async def test_select_rename_and_remove_current_option_show_unknown(hass: HomeAssistant, mqtt_mock: Any) -> None:

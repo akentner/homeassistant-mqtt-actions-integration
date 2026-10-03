@@ -3,11 +3,13 @@
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from homeassistant.core import valid_entity_id
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, DOMAIN, STORE_KEY, STORE_VERSION
+from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY, trigger_key
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -159,3 +161,116 @@ async def test_an_existing_restore_button_keeps_its_old_german_id(
     assert hass.states.get(OLD_RESTORE_ID) is not None
     bath_id = entity_id(hass, "button", f"{device_id_of(bath)}_restore_previous")
     assert bath_id == "button.kuche_modus_bad_restore"
+
+
+def registered_ids(hass: HomeAssistant, entry: MockConfigEntry) -> dict[tuple[str, str], str]:
+    """Return the entity id of every registry entry of the config entry, by (domain, unique id)."""
+    registry = er.async_get(hass)
+    return {
+        (registered.domain, registered.unique_id): registered.entity_id
+        for registered in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+@pytest.mark.parametrize("area", [False, True])
+async def test_every_new_entity_gets_its_english_id_part(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+    make_switch_subentry: Callable,
+    language: str,
+    area: bool,
+) -> None:
+    """The ids of all entities of an instance, in en and de, with and without an area part."""
+    select = make_select_subentry("Modus Küche", KITCHEN_OPTIONS)
+    switch = make_switch_subentry("Lampe", on=[{"action": "test.on"}], off=[{"action": "test.off"}])
+    entry = make_hub_entry([select, switch])
+    await prepare(hass, hass_storage, entry, language=language, area=area)
+    await setup(hass, entry)
+
+    select_prefix = "kuche_modus_kuche" if area else "modus_kuche"
+    switch_prefix = "kuche_lampe" if area else "lampe"
+    sid, wid = device_id_of(select), device_id_of(switch)
+    hub = entry.entry_id
+    assert registered_ids(hass, entry) == {
+        ("select", sid): f"select.{select_prefix}",
+        ("select", f"{sid}_mode"): f"select.{select_prefix}_mode",
+        ("button", f"{sid}_restore_previous"): f"button.{select_prefix}_restore",
+        ("button", f"{sid}_test_{trigger_key('kitchen_on')}"): f"button.{select_prefix}_test_kitchen_on",
+        ("button", f"{sid}_test_{trigger_key('off')}"): f"button.{select_prefix}_test_off",
+        ("switch", wid): f"switch.{switch_prefix}",
+        ("select", f"{wid}_mode"): f"select.{switch_prefix}_mode",
+        ("button", f"{wid}_test_{SWITCH_ON_KEY}"): f"button.{switch_prefix}_test_on",
+        ("button", f"{wid}_test_{SWITCH_OFF_KEY}"): f"button.{switch_prefix}_test_off",
+        ("button", f"{hub}_resync"): "button.test_instance_resync",
+        ("sensor", f"{hub}_roster"): "sensor.test_instance_instances",
+        ("select", f"{hub}_instance_mode"): "select.test_instance_instance_mode",
+    }
+    resync = er.async_get(hass).async_get("button.test_instance_resync")
+    assert resync is not None
+    assert resync.original_name == ("Neu synchronisieren" if language == "de" else "Resync")
+
+
+async def test_every_existing_entity_keeps_its_old_german_id(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """Entries of every kind registered before keep entity id and registry id; the unregistered test button is new."""
+    select = make_select_subentry("Modus Küche", KITCHEN_OPTIONS)
+    entry = make_hub_entry([select])
+    devices = await prepare(hass, hass_storage, entry, language="de", area=True)
+    sid, hub = device_id_of(select), entry.entry_id
+    old_ids = {
+        ("button", f"{hub}_resync", None): "button.test_instance_neu_synchronisieren",
+        ("sensor", f"{hub}_roster", None): "sensor.test_instance_verbundene_instanzen",
+        ("select", f"{hub}_instance_mode", None): "select.test_instance_instanzmodus",
+        ("select", f"{sid}_mode", sid): "select.kuche_modus_kuche_modus",
+        ("button", f"{sid}_restore_previous", sid): OLD_RESTORE_ID,
+        ("button", f"{sid}_test_{trigger_key('kitchen_on')}", sid): "button.kuche_modus_kuche_test_kuche_an",
+    }
+    before = {
+        key: pre_register(hass, entry, devices, key[0], key[1], old_id, device_id=key[2])
+        for key, old_id in old_ids.items()
+    }
+    for key, old_id in old_ids.items():
+        assert before[key].entity_id == old_id
+
+    await setup(hass, entry)
+
+    registry = er.async_get(hass)
+    for key, old_id in old_ids.items():
+        after = registry.async_get(old_id)
+        assert after is not None, old_id
+        assert (after.id, after.unique_id) == (before[key].id, key[1])
+        assert entity_id(hass, key[0], key[1]) == old_id
+    assert entity_id(hass, "button", f"{sid}_test_{trigger_key('off')}") == "button.kuche_modus_kuche_test_off"
+
+
+async def test_a_hostile_state_value_gives_a_valid_test_button_id(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """T-261003-07: a StateValue with spaces, slashes, dots, colons and an umlaut cannot produce an invalid id."""
+    value = "Ä b/c.d:e  ü/../9"
+    select = make_select_subentry("Modus", [(value, "Hostile", [{"action": "test.on"}]), ("off", "Aus", [])])
+    entry = make_hub_entry([select])
+    await prepare(hass, hass_storage, entry, language="de", area=False)
+    await setup(hass, entry)
+
+    registered_id = entity_id(hass, "button", f"{device_id_of(select)}_test_{trigger_key(value)}")
+    assert registered_id is not None
+    assert valid_entity_id(registered_id)
+    assert registered_id.startswith("button.")
+    assert len(registered_id) <= 255
+    # The part comes from the StateValue and not from the friendly name
+    assert registered_id.startswith("button.modus_test_")
+    assert "_c_d_e_" in registered_id

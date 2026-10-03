@@ -132,14 +132,17 @@ def fast_takeover(monkeypatch: pytest.MonkeyPatch) -> None:
 # --- Task 1 tracer: the owner pass ---------------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("language", ["en", "de"])
 async def test_an_upgrade_takes_over_the_legacy_entities_and_marks_the_document(
     hass: HomeAssistant,
     mqtt_mock: Any,
     hass_storage: dict[str, Any],
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
+    language: str,
 ) -> None:
     """D-05, D-09, D-12, MIG-01: migrate, move, retained clear, in that order; every identity of the device is kept."""
+    hass.config.language = language
     legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
     entity_registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
@@ -150,6 +153,7 @@ async def test_an_upgrade_takes_over_the_legacy_entities_and_marks_the_document(
     legacy_ids = legacy_entity_ids(hass, device_id)
     assert len(legacy_ids) == 3  # the switch and the two test buttons
     before = {entity_id: entity_registry.async_get(entity_id) for entity_id in legacy_ids}
+    unique_ids = {entity_id: (old.domain, old.unique_id) for entity_id, old in before.items()}
     mqtt_device = device_registry.async_get_device_by_identifier(
         ("mqtt", f"{DOMAIN}_{device_id}"), hass.config_entries.async_entries("mqtt")[0].entry_id
     )
@@ -169,6 +173,9 @@ async def test_an_upgrade_takes_over_the_legacy_entities_and_marks_the_document(
         assert moved is not None
         assert (moved.id, moved.platform, moved.device_id) == (old.id, DOMAIN, mqtt_device.id)
         assert (moved.config_entry_id, moved.config_subentry_id) == (legacy.entry.entry_id, sub_id)
+    # The legacy entities, the test buttons too, keep their entity id and unique id in every language
+    for entity_id, (domain, unique_id) in unique_ids.items():
+        assert entity_registry.async_get_entity_id(domain, DOMAIN, unique_id) == entity_id
     assert entity_registry.async_get_entity_id("switch", DOMAIN, device_id) == switch_id
     assert hass.states.get(switch_id) is not None
     device = device_registry.async_get(mqtt_device.id)

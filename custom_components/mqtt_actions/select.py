@@ -46,6 +46,7 @@ class DeviceModeSelect(_ModeSelect):
     """The mode of one device: run, observe or disabled. Local to this instance, never published (D-14)."""
 
     _attr_translation_key = "device_mode"
+    _entity_id_part = "mode"
     _signals = (SIGNAL_MODES_CHANGED, SIGNAL_DEVICES_CHANGED)
 
     def __init__(self, manager: Manager, device_id: str) -> None:
@@ -134,6 +135,7 @@ class InstanceModeSelect(_ModeSelect):
     """The mode of the whole instance on the hub device; the most restrictive of this and a device mode counts."""
 
     _attr_translation_key = "instance_mode"
+    _entity_id_part = "instance_mode"
 
     def __init__(self, manager: Manager) -> None:
         """Initialize the select; its unique id is bound to the config entry."""

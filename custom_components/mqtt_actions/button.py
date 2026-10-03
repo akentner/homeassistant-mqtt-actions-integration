@@ -28,6 +28,7 @@ class ResyncButton(MqttActionsEntity, ButtonEntity):
     """Republishes the config documents, the discovery and `online` through the order of Phase 3."""
 
     _attr_translation_key = "resync"
+    _entity_id_part = "resync"
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, manager: Manager) -> None:
@@ -78,6 +79,8 @@ class DeviceTestButton(NativeDeviceEntity, ButtonEntity):
         self._attr_entity_category = entity_category
         self._trigger_key = trigger.key
         self._attr_unique_id = _test_button_unique_id(device_id, trigger.key)
+        # The StateValue never changes, unlike the friendly name; Home Assistant slugifies it and resolves a collision
+        self._entity_id_part = f"test_{trigger.value}"
         self._attr_name = f"Test {trigger.friendly_name}"
 
     @callback

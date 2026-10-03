@@ -1,18 +1,14 @@
 ---
-status: testing
+status: partial
 phase: 05-evaluate-native-switch-select-entities-instead-of-mqtt-disco
 source: [05-VERIFICATION.md]
 started: 2026-10-03T13:38:23Z
-updated: 2026-10-03T17:48:06Z
+updated: 2026-10-03T17:48:34Z
 ---
 
 ## Current Test
 
-number: 9
-name: Owner decision on open review items WR-03 (partial), IN-02, IN-03
-expected: |
-  Accept for 0.2.0 (documented) or schedule a follow-up
-awaiting: user response
+[testing paused - 4 skipped items outstanding (tests 4, 5, 6, 7); test 3 accepted without reproduction]
 
 ## Tests
 
@@ -56,14 +52,15 @@ result: pass
 
 ### 9. Owner decision on open review items WR-03 (partial), IN-02, IN-03
 expected: Accept for 0.2.0 (documented) or schedule a follow-up
-result: [pending]
+result: pass
+note: owner accepted all three for 0.2.0; documented in README Limitations
 
 ## Summary
 
 total: 9
-passed: 4
+passed: 5
 issues: 0
-pending: 1
+pending: 0
 skipped: 4
 blocked: 0
 

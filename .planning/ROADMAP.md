@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection (completed 2026-09-30)
 - [x] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely (completed 2026-10-02)
 - [x] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation (completed 2026-10-03)
-- [ ] **Phase 5: Evaluate native switch/select entities instead of MQTT Discovery** - Native switch and select entities replace MQTT Discovery as the default (ADR, takeover migration, cutover, optional export)
+- [x] **Phase 5: Evaluate native switch/select entities instead of MQTT Discovery** - Native switch and select entities replace MQTT Discovery as the default (ADR, takeover migration, cutover, optional export) (completed 2026-10-03)
 
 ## Phase Details
 
@@ -198,7 +198,7 @@ Plans:
   5. MQTT Discovery is published only as an optional export and the documentation, ACL page and translations say so.
 
 **Depends on:** Phase 4
-**Plans:** 9/9 plans executed
+**Plans:** 9/9 plans complete
 
 Plans:
 **Wave 1**
@@ -237,7 +237,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
-| 5. Evaluate native switch/select entities instead of MQTT Discovery | 9/9 | In Progress|  |
+| 5. Evaluate native switch/select entities instead of MQTT Discovery | 9/9 | Complete    | 2026-10-03 |
 
 ## Backlog
 

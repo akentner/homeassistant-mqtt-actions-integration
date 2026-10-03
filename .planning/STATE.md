@@ -1,36 +1,35 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 5
-status: "Phase 5 merged (PR #12), v1.0.0 tagged"
+status: Awaiting next milestone
 stopped_at: Phase 5 complete — all phases complete
-last_updated: "2026-10-03T20:19:58.389Z"
+last_updated: "2026-10-03T20:24:35.838Z"
 last_activity: 2026-10-03
-state_head: b6e958997d222cc5ff6687f571522a4ed39b394b
+last_activity_desc: Milestone v1.0 completed and archived
+state_head: d0f660cb2422c7688d22a674cf54f955a8c26c7f
 progress:
   total_phases: 5
   completed_phases: 5
   total_plans: 42
   completed_plans: 42
   percent: 100
+current_phase: 5
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-28)
+See: .planning/PROJECT.md (updated 2026-10-03)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 05 — Evaluate native switch/select entities instead of MQTT Discovery
+**Current focus:** Planning next milestone (v1.0 shipped; backlog 999.1 and Phase 5 UAT debt open)
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
-Status: Phase 5 merged (PR #12), v1.0.0 tagged
-Last activity: 2026-10-03
-
-Progress: [██████████] 100% of Phase 01 plans
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-03 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
@@ -223,3 +222,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 Last session: 2026-10-03T12:53:13.727Z
 Stopped at: Phase 5 complete — all phases complete
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

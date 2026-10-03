@@ -3,12 +3,17 @@
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
+import pytest
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
+    CONF_FRIENDLY_NAME,
+    CONF_OPTIONS,
+    CONF_STATE_VALUE,
     DOMAIN,
     STORE_KEY,
     STORE_VERSION,
@@ -252,3 +257,173 @@ async def test_an_instance_without_the_native_flag_keeps_the_legacy_path(
     assert not [
         entry for entry in er.async_get(hass).entities.values() if entry.platform == DOMAIN and entry.domain == "switch"
     ]
+
+
+# --- Task 2: the native Select ---------------------------------------------------------------------------------------
+
+SELECT_OPTIONS = [
+    ("a", "Alpha", [{"action": "test.a"}]),
+    ("Mixed Case", "Bravo", [{"action": "test.b"}]),
+    ("c", "Charlie", [{"action": "test.c"}]),
+]
+
+
+async def _native_select(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> tuple[MockConfigEntry, str]:
+    """Set up a native instance with one Select device."""
+    _seed_native(hass_storage)
+    subentry = make_select_subentry("Mode", SELECT_OPTIONS)
+    entry = await _setup(hass, make_hub_entry([subentry]))
+    return entry, _device_id(subentry)
+
+
+def _select_entity_id(hass: HomeAssistant, device_id: str) -> str:
+    entity_id = _entity_id(hass, "select", device_id)
+    assert entity_id is not None
+    return entity_id
+
+
+def _select_state(hass: HomeAssistant, device_id: str) -> str:
+    state = hass.states.get(_select_entity_id(hass, device_id))
+    assert state is not None
+    return state.state
+
+
+async def test_native_select_offers_the_friendly_names_and_shows_the_current_one(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """ENT-01: the options are the friendly names in stored order; any spelling of a StateValue maps to its option."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    entity_id = _select_entity_id(hass, device_id)
+    registered = er.async_get(hass).async_get(entity_id)
+    assert registered is not None
+    assert registered.platform == DOMAIN
+    assert registered.unique_id == device_id
+    (subentry_id,) = entry.subentries
+    assert registered.config_subentry_id == subentry_id
+    assert hass.states.get(entity_id).attributes["options"] == ["Alpha", "Bravo", "Charlie"]
+    assert _select_state(hass, device_id) == "unknown"
+
+    await _state(hass, device_id, "a", retain=True)
+    assert _select_state(hass, device_id) == "Alpha"
+
+    await _state(hass, device_id, "  MIXED case\n")
+    assert _select_state(hass, device_id) == "Bravo"
+
+
+async def test_an_unknown_select_payload_keeps_the_state(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """STA-07: a payload that is no StateValue and the empty retained clear leave the current option alone."""
+    _entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    await _state(hass, device_id, "c", retain=True)
+
+    await _state(hass, device_id, "nonsense")
+    assert _select_state(hass, device_id) == "Charlie"
+    await _state(hass, device_id, "", retain=True)
+    assert _select_state(hass, device_id) == "Charlie"
+
+
+async def test_choosing_an_option_publishes_the_state_value_not_the_friendly_name(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """D-07, ENT-02: the broker gets the exact StateValue, retained at QoS 1, and a foreign option is refused."""
+    _entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    entity_id = _select_entity_id(hass, device_id)
+
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": entity_id, "option": "Bravo"}, blocking=True
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == [("Mixed Case", 1, True)]
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            "select", "select_option", {"entity_id": entity_id, "option": "Delta"}, blocking=True
+        )
+    assert len(_publishes(mqtt_mock, state_topic(BASE, device_id))) == 1
+
+
+async def test_renaming_an_option_is_followed_live(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """The entity shows the new friendly name of the same StateValue after a reconfigure."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    await _state(hass, device_id, "a", retain=True)
+    assert _select_state(hass, device_id) == "Alpha"
+
+    subentry = next(iter(entry.subentries.values()))
+    renamed = [
+        {**option, CONF_FRIENDLY_NAME: "Omega"} if option[CONF_STATE_VALUE] == "a" else option
+        for option in subentry.data[CONF_OPTIONS]
+    ]
+    hass.config_entries.async_update_subentry(entry, subentry, data={**subentry.data, CONF_OPTIONS: renamed})
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert hass.states.get(_select_entity_id(hass, device_id)).attributes["options"] == ["Omega", "Bravo", "Charlie"]
+    assert _select_state(hass, device_id) == "Omega"
+
+
+async def test_removing_the_selected_option_leaves_the_state_unknown(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """A removed option is no stale name: the state becomes unknown."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    await _state(hass, device_id, "c", retain=True)
+    assert _select_state(hass, device_id) == "Charlie"
+
+    subentry = next(iter(entry.subentries.values()))
+    kept = [option for option in subentry.data[CONF_OPTIONS] if option[CONF_STATE_VALUE] != "c"]
+    hass.config_entries.async_update_subentry(entry, subentry, data={**subentry.data, CONF_OPTIONS: kept})
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert hass.states.get(_select_entity_id(hass, device_id)).attributes["options"] == ["Alpha", "Bravo"]
+    assert _select_state(hass, device_id) == "unknown"
+
+
+async def test_the_mode_select_shares_the_device_of_the_native_entities(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """D-08: one device per concept; the mode select and the native select report the same device."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    registry = er.async_get(hass)
+    native = registry.async_get(_select_entity_id(hass, device_id))
+    mode_id = _entity_id(hass, "select", f"{device_id}_mode")
+    assert mode_id is not None
+    mode = registry.async_get(mode_id)
+    assert native is not None
+    assert mode is not None
+    assert native.device_id == mode.device_id
+    device = dr.async_get(hass).async_get(native.device_id)
+    assert device is not None
+    assert (DOMAIN, device_id) in device.identifiers
+    assert device.model == "Select device"
+    assert _manager(entry).device_mode(device_id) == "run"

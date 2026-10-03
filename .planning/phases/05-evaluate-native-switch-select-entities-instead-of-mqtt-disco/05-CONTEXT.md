@@ -29,7 +29,14 @@ Decide whether switch and select entities owned by the MQTT Actions config entry
 - **D-07:** Owned devices sit under their subentry. Mirror devices (owner = another instance) are devices directly under the config entry, marked with the owner and not editable. Everything shows on our integration page.
 - **D-08:** The Phase 4 companion devices and mode selects merge into the native device: one device carries switch/select plus the mode select; the companion concept ends (its reason was D-13).
 
+### Cutover refinements (from plan-phase research, 2026-10-03)
+- **D-09:** D-06 is realized without a schema bump: `schema_version` stays 1; an additive, unhashed marker in the document plus an additive heartbeat capability key signal native mode. v0.1.0 instances get no Repairs hint; their actions keep running, only their UI entities are lost.
+- **D-10:** The owner only switches to native mode once all online peers are capable; an online legacy peer blocks the switch (offline peers do not block).
+- **D-11:** The optional Discovery export drops DSC-03 healing: best-effort, `enabled_by_default: false`, configurable prefix, no test buttons or test topic.
+- **D-12:** Live cutover on running followers reloads the config entry automatically; takeover runs before the platform forward (entities first, then device, then retained clear).
+
 ### Claude's Discretion
+- Behaviour when a new and an old instance adopt the same device.
 - Technical form of the spike, how exactly the same entity_id/unique_id is taken over, and where the schema version lives in the central config.
 
 </decisions>

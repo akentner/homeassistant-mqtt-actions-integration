@@ -46,7 +46,7 @@ entry in the integration page.
 
 ## Upgrading from 0.1.x
 
-Version 0.2.0 is the first release in which the entities are native entities of the integration. The upgrade is
+Version 1.0.0 is the first release in which the entities are native entities of the integration. The upgrade is
 automatic and one-way: there is no setting and no step to take.
 
 - **What is kept.** The entity ids, registry ids, device ids, areas, names and history are kept, so dashboards,
@@ -65,7 +65,7 @@ automatic and one-way: there is no setting and no step to take.
   [docs/troubleshooting.md](docs/troubleshooting.md).
 - **Test buttons.** A test button that exists already, including the ones moved from core MQTT, keeps its category and
   enabled state. Only new test buttons are diagnostic and disabled by default; nothing is migrated.
-- **Entity ids.** Ids of entities that exist are never renamed. Entities created from 0.2.0 on get a short English id
+- **Entity ids.** Ids of entities that exist are never renamed. Entities created from 1.0.0 on get a short English id
   part whatever the language of Home Assistant: `_mode`, `_restore`, `_resync`, `_instances`, `_instance_mode` and
   `_test_<StateValue>` (for example `_test_on`), after the area and device parts that Home Assistant adds according to
   its own entity ID setting. The displayed names stay translated. To get the short ids for old entities, rename them by
@@ -147,7 +147,7 @@ Diagnostic category and disabled by default, so enable it on its entity page whe
 devices and for mirrors. A test button that already exists, including the ones migrated from 0.1.x, keeps its category
 and its enabled state: nothing is migrated.
 
-- **Native devices (the default since 0.2.0):** a press runs the actions only on this instance and publishes nothing.
+- **Native devices (the default since 1.0.0):** a press runs the actions only on this instance and publishes nothing.
   Pressed on a mirror, it runs the mirrored actions only if this instance approved the device (see
   [Trust model and approval](#trust-model-and-approval)).
 - **Devices on the legacy path (an instance on an older version is online):** a press also publishes the trigger's
@@ -401,7 +401,7 @@ A release is made by pushing a tag of the form `vX.Y.Z`; the release workflow ru
 the `version` in `custom_components/mqtt_actions/manifest.json`, and the workflow fails first when it does not. It then
 runs the same checks as every push (Ruff lint and format, the unit tests, the tests against a real Mosquitto broker and
 the multi-instance tests) and the validation (hassfest and the HACS validation). Only when all of them passed does it
-create the GitHub release with generated notes. A version with a hyphen suffix, for example `v0.2.0-rc1`, becomes a
+create the GitHub release with generated notes. A version with a hyphen suffix, for example `v1.0.0-rc1`, becomes a
 prerelease. No zip is built, because the repository has the standard layout `custom_components/mqtt_actions/` and HACS
 offers the releases as the installable versions.
 

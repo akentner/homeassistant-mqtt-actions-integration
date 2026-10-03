@@ -83,7 +83,7 @@ characters.
 
 ### A device exists twice on the integration page
 
-Since 0.2.0 a native device is one device of MQTT Actions with all of its entities, so it appears once. Two devices of
+Since 1.0.0 a native device is one device of MQTT Actions with all of its entities, so it appears once. Two devices of
 the same name are expected only for a device that is still on the legacy path: the **core MQTT device** that holds its
 entities and the **companion device** that holds the **Mode** select. It becomes one device when the instance
 switches to native entities (see `native_cutover_waiting`). Do not delete either to tidy up: deleting an owned device
@@ -95,7 +95,7 @@ the next two sections.
 This happens after you went back to 0.1.x, which is not supported. The upgrade moved the entities from core MQTT to
 MQTT Actions. A 0.1.x instance publishes the discovery again, and core MQTT creates new entities that cannot take the
 old entity ids, so they get a `_2` suffix, while the migrated entities are left behind as orphans. **What to do:**
-update to 0.2.0 or newer again. The instance takes the discovery entities over once more; remove the leftover
+update to 1.0.0 or newer again. The instance takes the discovery entities over once more; remove the leftover
 unavailable entities in the entity registry by hand if they stay. There is no automatic rollback, and an automation or
 dashboard that you changed to the `_2` ids has to be changed back.
 

@@ -406,7 +406,7 @@ def test_readme_documents_native_entities_and_the_upgrade() -> None:
         "entity ids, registry ids, device ids, areas, names and history are kept",
         "removing the integration removes the entities",
         "should not run concurrently",
-        "0.2.0",
+        "1.0.0",
     ):
         assert phrase in upgrade, f"the upgrade section never says: {phrase}"
     assert "native entities" in _normalize(text)

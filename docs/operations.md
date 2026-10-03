@@ -354,14 +354,14 @@ Fixed in the code, not configurable. The page and the test suite use the constan
   reported visibly. Add the lines of the tested example in [docs/broker-acl.md](broker-acl.md).
 - **New entities.** The hub device, the roster sensor, the resync button, the mode selects and the companion devices
   (which end for a device when it switches to the native path) appear after the upgrade. The mode of everything starts as `run`.
-- **Native entities.** Since 0.2.0 the Switch, Select and test buttons of a device are native entities of this
+- **Native entities.** Since 1.0.0 the Switch, Select and test buttons of a device are native entities of this
   integration, on the same device as the **Mode** select. The upgrade from 0.1.x is automatic and one-way: an instance
   switches when no online instance runs an older version, and Repairs shows `native_cutover_waiting` while it waits.
   There is no rollback, and an older instance that comes online later loses the entities of migrated devices without a
   hint. See the [README](../README.md#upgrading-from-01x).
 - **Test buttons.** New native test buttons are diagnostic and disabled by default. An existing entry, including one
   moved from core MQTT, keeps its category and enabled state: nothing is migrated.
-- **Entity ids.** Ids of entities that exist are never renamed. Entities created from 0.2.0 on get a short English id
+- **Entity ids.** Ids of entities that exist are never renamed. Entities created from 1.0.0 on get a short English id
   part whatever the language of Home Assistant: `_mode`, `_restore`, `_resync`, `_instances`, `_instance_mode` and
   `_test_<StateValue>` (for example `_test_on`), after the area and device parts that Home Assistant adds according to
   its own entity ID setting. The displayed names stay translated. To get the short ids for old entities, rename them by

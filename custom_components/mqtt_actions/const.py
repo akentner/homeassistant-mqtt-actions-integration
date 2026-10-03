@@ -13,6 +13,11 @@ CONF_INSTANCE_ID: Final = "instance_id"
 DEFAULT_BASE_TOPIC: Final = "mqtt_actions"
 # Hub config entry option (D-11): delete every owned device from the broker when the hub is removed; default keep
 CONF_DELETE_DEVICES_ON_REMOVE: Final = "delete_devices_on_remove"
+# Hub config entry options (D-03, D-11): the optional MQTT Discovery export of native devices for external consumers.
+# Off by default; the prefix defaults to one that Home Assistant itself does not listen to
+CONF_DISCOVERY_EXPORT: Final = "discovery_export"
+CONF_EXPORT_PREFIX: Final = "export_prefix"
+DEFAULT_EXPORT_PREFIX: Final = "mqtt_actions_export"
 
 # Protocol path segment of every topic (D-01); bumping it is a breaking protocol change
 TOPIC_VERSION: Final = "v1"

@@ -39,10 +39,13 @@ from .const import (
     BLOCKED_SERVICES_MAX_SHOWN,
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
+    CONF_DISCOVERY_EXPORT,
+    CONF_EXPORT_PREFIX,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
     CUTOVER_HINT_MAX_NAMES,
     CUTOVER_SETTLE_SECONDS,
+    DEFAULT_EXPORT_PREFIX,
     DOMAIN,
     ISSUE_APPROVAL_PREFIX,
     ISSUE_BLOCKED_PREFIX,
@@ -1952,11 +1955,32 @@ class Manager:
             f"publish the config document of device {device.name}",
         )
 
+    def _export_signature(self) -> tuple[bool, str]:
+        """Return whether the discovery export is on and its prefix, read from the hub options (D-03, D-11)."""
+        options = self._entry.options
+        return (
+            bool(options.get(CONF_DISCOVERY_EXPORT, False)),
+            str(options.get(CONF_EXPORT_PREFIX, DEFAULT_EXPORT_PREFIX)),
+        )
+
     async def async_publish_discovery(self, device: Device) -> None:
         """Publish the retained discovery of a device; an unavailable MQTT client is logged, the next start retries."""
         assert self._publisher is not None  # noqa: S101
-        # A native device has entities of its own and needs no discovery (D-03)
-        if device.device_id in self.sync.transferred_away or self.is_native(device.device_id):
+        if device.device_id in self.sync.transferred_away:
+            return
+        if self.is_native(device.device_id):
+            # A native device has entities of its own; discovery survives only as the optional export (D-03, D-11)
+            export_enabled, prefix = self._export_signature()
+            if export_enabled:
+                await _async_attempt(
+                    partial(
+                        self._publisher.async_publish_export,
+                        spec=device.spec,
+                        instance_id=self._instance_id,
+                        prefix=prefix,
+                    ),
+                    f"publish the discovery export of device {device.name}",
+                )
             return
         await _async_attempt(
             partial(

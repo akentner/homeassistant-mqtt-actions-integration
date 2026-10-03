@@ -196,12 +196,13 @@ Plans:
   3. An installation upgraded from 0.1.0 keeps entity ids, registry ids, device ids, areas, names and history without a manual step.
   4. The owner switches to native entities only when no online peer is a legacy instance, and a mixed fleet keeps working throughout.
   5. MQTT Discovery is published only as an optional export and the documentation, ACL page and translations say so.
+
 **Depends on:** Phase 4
-**Plans:** 9 plans
+**Plans:** 1/9 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md — ADR with the four D-02 criteria, spike scenarios pinned as regression tests, requirement registration and the blocking-human Go gate (wave 1)
+- [x] 05-01-PLAN.md — ADR with the four D-02 criteria, spike scenarios pinned as regression tests, requirement registration and the blocking-human Go gate (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 05-02-PLAN.md — Registry takeover module: fixed order, identity check, bounded unload wait, duplicate guard (wave 2)
@@ -236,7 +237,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
-| 5. Evaluate native switch/select entities instead of MQTT Discovery | 0/9 | Not started | - |
+| 5. Evaluate native switch/select entities instead of MQTT Discovery | 1/9 | In Progress|  |
 
 ## Backlog
 

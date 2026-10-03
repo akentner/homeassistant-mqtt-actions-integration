@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 05
-current_phase_name: evaluate-native-switch-select-entities-instead-of-mqtt-disco
-status: completed
-stopped_at: Phase 5 context gathered
-last_updated: "2026-10-03T09:59:40.290Z"
+current_phase_name: Evaluate native switch/select entities instead of MQTT Discovery
+status: executing
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-10-03T10:44:16.849Z"
 last_activity: 2026-10-03
-last_activity_desc: Phase 04 complete
-state_head: 85a059a4bc1bf0066cc138bceffd20922da4f4c2
+last_activity_desc: Phase 05 execution started
+state_head: 402f624ae20ec8b2a3bd5fefcf4019c0223f8ab7
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 42
-  completed_plans: 33
-  percent: 79
+  completed_plans: 34
+  percent: 80
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-28)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 04 — Operations, Recovery and Release
+**Current focus:** Phase 05 — Evaluate native switch/select entities instead of MQTT Discovery
 
 ## Current Position
 
-Phase: 05 (evaluate-native-switch-select-entities-instead-of-mqtt-disco) — READY TO EXECUTE
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-10-03 — Phase 04 complete
+Phase: 05 (Evaluate native switch/select entities instead of MQTT Discovery) — EXECUTING
+Plan: 2 of 9
+Status: Ready to execute
+Last activity: 2026-10-03 — Phase 05 execution started
 
-Progress: [████████░░] 79% of Phase 01 plans
+Progress: [████████░░] 80% of Phase 01 plans
 
 ## Performance Metrics
 
@@ -87,6 +87,7 @@ Progress: [████████░░] 79% of Phase 01 plans
 | Phase 04 P12 | 21 min | 3 tasks | 11 files |
 | Phase 04 P13 | 11 min | 3 tasks | 6 files |
 | Phase 04 P14 | 15 min | 2 tasks | 3 files |
+| Phase 05 P01 | 24min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -169,6 +170,7 @@ Recent decisions affecting current work:
 - [Phase 04]: The pages state the known limits as they are: imports and adoption are owned content without approval, returning-owner recognition is in memory only, the new instance id is not in a per-instance ACL
 - [Phase 04]: 04-14: issue-level description removed from the three fixable Repairs issues; explanation lives in the confirm step (hassfest exclusion group fixable)
 - [Phase 04]: 04-14: ISSUES in tests/test_translations.py is read from en.json so every new issue is guarded against description plus fix_flow
+- [Phase 05]: Go: replace MQTT-Discovery entities with native switch/select platforms (ADR 0001 Accepted)
 
 ### Pending Todos
 
@@ -192,6 +194,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T08:58:56.147Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-evaluate-native-switch-select-entities-instead-of-mqtt-disco/05-CONTEXT.md
+Last session: 2026-10-03T10:44:16.728Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None

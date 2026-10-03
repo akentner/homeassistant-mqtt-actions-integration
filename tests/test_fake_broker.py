@@ -4,9 +4,11 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
-from custom_components.mqtt_actions.const import STORE_KEY
+from custom_components.mqtt_actions.const import DOMAIN, STORE_KEY
 from custom_components.mqtt_actions.manager import Manager
 from custom_components.mqtt_actions.mqtt_gateway import IncomingMessage, MqttGateway
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
@@ -241,3 +243,36 @@ async def test_two_instances_share_one_broker(
 
     assert len(first_calls) == 1
     assert len(second_calls) == 0
+
+
+# --- real setup: the whole integration, platforms and reloads included ---------------------------------------------
+
+
+async def test_a_real_setup_instance_is_loaded_with_its_platforms(
+    hass: HomeAssistant, make_instance: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-12: a real-setup instance has its entry loaded and its hub entities; a reload keeps the gateway."""
+    sub = make_switch_subentry("Lamp")
+    device_id = sub["data"]["device_id"]
+    first = await make_instance("first", hass=hass, subentries=[sub], real_setup=True)
+    second = await make_instance("second", real_setup=True)
+
+    for instance in (first, second):
+        assert instance.entry.state is ConfigEntryState.LOADED
+        assert instance.manager is instance.entry.runtime_data
+        assert instance.manager.running
+        assert instance.manager.gateway is instance.gateway
+        assert er.async_entries_for_config_entry(er.async_get(instance.hass), instance.entry.entry_id)
+    assert er.async_get(hass).async_get_entity_id("select", DOMAIN, f"{device_id}_mode") is not None
+    assert device_id in second.manager.mirrors
+
+    gateway, old_manager = first.gateway, first.manager
+    assert await hass.config_entries.async_reload(first.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert first.gateway is gateway
+    assert first.manager is not old_manager
+    assert first.manager is first.entry.runtime_data
+    assert first.manager.running
+    assert not old_manager.running
+    assert first.manager.gateway is gateway

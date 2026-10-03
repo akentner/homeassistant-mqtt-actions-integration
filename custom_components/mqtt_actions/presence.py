@@ -37,6 +37,7 @@ from .const import (
     MAX_TRACKED_INSTANCES,
     SIGNAL_ROSTER_UPDATED,
 )
+from .document import NATIVE_KEY, NATIVE_VALUE
 from .model import invalid_name
 from .sync import PRESENCE_OFFLINE, PRESENCE_ONLINE
 from .topics import heartbeat_topic, heartbeat_wildcard, is_valid_device_id, parse_heartbeat_topic
@@ -53,6 +54,8 @@ if TYPE_CHECKING:
 HEARTBEAT_QOS = 0
 # The expiry is strict (a peer is online up to and including the timeout), so its timer fires this much later
 EXPIRY_MARGIN_SECONDS = 1.0
+# Shown in the cutover hint while the roster had no room for a peer, in place of a name (WR-03)
+UNTRACKED_PEERS_LABEL = "more instances than can be tracked"
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +67,8 @@ class Heartbeat:
     version: str
     devices: int
     session: str
+    # True when the sender announced that its build can run native entities; a v0.1.0 heartbeat has no such key (D-10)
+    native: bool = False
 
 
 def valid_text(value: object) -> bool:
@@ -123,7 +128,14 @@ def parse_heartbeat(base_topic: str, topic: str, payload: str) -> Heartbeat | No
     topic_id, data = parsed
     name, version, devices, session = (data.get(key) for key in ("name", "version", "devices", "session"))
     if valid_text(name) and valid_text(version) and _valid_devices(devices) and valid_uuid(session):
-        return Heartbeat(instance_id=topic_id, name=name, version=version, devices=devices, session=session)
+        return Heartbeat(
+            instance_id=topic_id,
+            name=name,
+            version=version,
+            devices=devices,
+            session=session,
+            native=data.get(NATIVE_KEY) == NATIVE_VALUE,
+        )
     return None
 
 
@@ -150,6 +162,12 @@ class Roster:
         self._instance_status = instance_status
         self._peers: dict[str, _Peer] = {}
         self._listening_since = clock()
+        # When a new peer was last dropped because every row was fresh; None until it happened (WR-03)
+        self._dropped_at: float | None = None
+
+    def listening_seconds(self) -> float:
+        """Return how long this instance has listened for heartbeats, on the roster clock."""
+        return self._clock() - self._listening_since
 
     def restart_listening(self) -> None:
         """Start counting the time this instance has listened for heartbeats again, for a start or a reconnect."""
@@ -161,17 +179,33 @@ class Roster:
     def _online(self, peer: _Peer) -> bool:
         return self._fresh(peer) and self._instance_status(peer.heartbeat.instance_id) != PRESENCE_OFFLINE
 
+    def saturated(self) -> bool:
+        """
+        Return whether a new peer was dropped within the offline timeout because every row was fresh (WR-03).
+
+        The dropped peer may be a legacy instance, so a gate that depends on the roster must not trust it while this
+        holds.
+        """
+        return self._dropped_at is not None and self._clock() - self._dropped_at <= HEARTBEAT_OFFLINE_SECONDS
+
     def observe(self, heartbeat: Heartbeat) -> bool:
         """
         Record a heartbeat of a peer as heard now; False when the peer is new and the roster is full.
 
         At the cap a new peer replaces the stalest row that is already past the timeout, so random ids cannot block a
-        real instance for good; when every row is fresh the new peer is not tracked (T-04-12).
+        real instance for good; when every row is fresh the new peer is not tracked (T-04-12) and the roster is
+        saturated for a while (WR-03). A capability claim never replaces the row of a legacy peer that still blocks: a
+        heartbeat is not authenticated, so anyone on the broker could claim it for a peer it wants out of the gate. The
+        claim counts once that row stopped blocking, which is when a peer that was upgraded and restarted is accepted.
         """
         instance_id = heartbeat.instance_id
-        if instance_id not in self._peers and len(self._peers) >= MAX_TRACKED_INSTANCES:
+        existing = self._peers.get(instance_id)
+        if existing is not None and heartbeat.native and self._online(existing) and not existing.heartbeat.native:
+            return True
+        if existing is None and len(self._peers) >= MAX_TRACKED_INSTANCES:
             expired = [key for key, peer in self._peers.items() if not self._fresh(peer)]
             if not expired:
+                self._dropped_at = self._clock()
                 return False
             del self._peers[min(expired, key=lambda key: self._peers[key].seen)]
         self._peers[instance_id] = _Peer(heartbeat, self._clock(), dt_util.utcnow())
@@ -186,6 +220,12 @@ class Roster:
     def online_ids(self) -> list[str]:
         """Return the ids of the peers that are online."""
         return [instance_id for instance_id, peer in self._peers.items() if self._online(peer)]
+
+    def legacy_online_names(self) -> list[str]:
+        """Return the names of the online peers whose heartbeat does not announce the native capability (D-10)."""
+        return [
+            peer.heartbeat.name for peer in self._peers.values() if self._online(peer) and not peer.heartbeat.native
+        ]
 
     def rows(self) -> list[dict[str, Any]]:
         """Return every peer row, online or not, in the order the peers were first heard."""
@@ -289,9 +329,13 @@ class PresenceManager:
         self._refresh()
 
     @callback
-    def on_availability_changed(self) -> None:
-        """Re-evaluate the roster after the announced presence of an instance changed, for example a clean shutdown."""
-        self._refresh()
+    def on_availability_changed(self) -> bool:
+        """
+        Re-evaluate the roster after the announced presence of an instance changed, for example a clean shutdown.
+
+        Returns True when the set of online instances changed and the entities were told about it.
+        """
+        return self._refresh()
 
     async def async_publish_heartbeat(self) -> None:
         """Publish one heartbeat, not retained; an unavailable MQTT client is logged, never raised."""
@@ -303,6 +347,8 @@ class PresenceManager:
                 "version": manager.version,
                 "devices": len(manager.devices),
                 "session": self.session,
+                # What this build can do, whether or not this instance already switched; legacy builds lack the key
+                NATIVE_KEY: NATIVE_VALUE,
             }
         )
         try:
@@ -354,6 +400,7 @@ class PresenceManager:
         self._announced = frozenset(self._roster.online_ids())
         self._arm_expiry()
         self._send_signal()
+        manager.on_roster_changed()
 
     @callback
     def _observe_duplicate(self) -> None:
@@ -393,8 +440,12 @@ class PresenceManager:
         return max(remaining, 0.0) + EXPIRY_MARGIN_SECONDS
 
     @callback
-    def _refresh(self) -> None:
-        """Re-evaluate who is online; tell the entities when the set changed and arm the timer of the next expiry."""
+    def _refresh(self) -> bool:
+        """
+        Re-evaluate who is online; tell the entities when the set changed and arm the timer of the next expiry.
+
+        Returns whether the set changed, which is whether the entities were told.
+        """
         online = frozenset(self._roster.online_ids())
         changed = online != self._announced
         self._announced = online
@@ -402,6 +453,9 @@ class PresenceManager:
         self._arm_expiry()
         if changed:
             self._send_signal()
+        # The gate of the native cutover depends on more than the online set: an announced presence and the time too
+        self._manager.on_roster_changed()
+        return changed
 
     @callback
     def _arm_expiry(self) -> None:
@@ -447,6 +501,27 @@ class PresenceManager:
     def online_peers(self) -> list[dict[str, Any]]:
         """Return the rows of the peers that are online now, this instance excluded."""
         return [row for row in self._roster.rows() if row["online"]]
+
+    def blocking_peers(self) -> list[str]:
+        """
+        Return the display names of the online peers that keep this instance from switching to native entities (D-10).
+
+        A peer blocks when its heartbeat is fresh, it is not announced offline and its heartbeat lacks the capability
+        key. An instance that is announced online but never sent a heartbeat blocks too, by its shortened id, until
+        this instance listened for the offline timeout. Offline peers, stale heartbeats and long-silent instances never
+        block. A roster that is saturated blocks as well: a peer it had no room for cannot be told from a legacy one
+        (WR-03).
+        """
+        names = self._roster.legacy_online_names()
+        silent = [
+            instance_id[:8]
+            for instance_id in self._manager.sync.online_instance_ids()
+            if self._roster.status(instance_id) is None
+        ]
+        if self._roster.listening_seconds() >= HEARTBEAT_OFFLINE_SECONDS:
+            silent = []
+        untracked = [UNTRACKED_PEERS_LABEL] if self._roster.saturated() else []
+        return [*names, *silent, *untracked]
 
     def peer_status(self, instance_id: str) -> str | None:
         """Return `online` or `offline` for a peer that sent a heartbeat, None for any other instance."""

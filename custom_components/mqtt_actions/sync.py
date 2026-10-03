@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.core import callback
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
 
 from .actions import ActionsInvalid, validate_spec_structure
@@ -51,6 +52,7 @@ from .const import (
     PUBLISHED_HASH_HISTORY,
     REPUBLISH_THROTTLE_SECONDS,
     SCHEMA_VERSION,
+    SIGNAL_ROSTER_UPDATED,
 )
 from .document import (
     DocumentRejectedError,
@@ -219,7 +221,9 @@ class SyncManager:
         unknown owner and never like an online one (D-10). The owner republishes documents before it announces online.
         """
         self._seen.clear()
-        self._instances.clear()
+        if self._instances:
+            self._instances.clear()
+            self._announce_presence_change()
         self.arm_prune()
 
     @callback
@@ -279,6 +283,15 @@ class SyncManager:
             1 for instance_id, status in self._instances.items() if instance_id != own and status == PRESENCE_ONLINE
         )
 
+    def online_instance_ids(self) -> list[str]:
+        """Return the ids of the instances other than this one that are currently announced as online."""
+        own = self._manager.instance_id
+        return [
+            instance_id
+            for instance_id, status in self._instances.items()
+            if instance_id != own and status == PRESENCE_ONLINE
+        ]
+
     def instance_status(self, instance_id: str) -> str | None:
         """Return the last announced presence of an instance (`online` or `offline`), None when it is not known."""
         return self._instances.get(instance_id)
@@ -295,6 +308,7 @@ class SyncManager:
         if instance_id is None:
             return
         status = msg.payload.strip().lower()
+        stored_before = self._instances.get(instance_id)
         if not msg.payload:
             self._instances.pop(instance_id, None)
         elif status in {PRESENCE_ONLINE, PRESENCE_OFFLINE}:
@@ -312,7 +326,28 @@ class SyncManager:
                 # An owner that was offline or unknown when this instance started may have deleted devices meanwhile
                 self.arm_prune()
         # A clean shutdown shows in the roster at once, without waiting for the heartbeat timeout (D-05)
-        self._manager.presence.on_availability_changed()
+        roster_signalled = self._manager.presence.on_availability_changed()
+        if self._instances.get(instance_id) != stored_before and not roster_signalled:
+            # A native mirror re-reads its availability although the roster set is unchanged, for example when an
+            # owner without a heartbeat announces itself (D-07); a roster signal already makes every entity re-read
+            self._announce_presence_change(instance_id)
+
+    @callback
+    def _announce_presence_change(self, instance_id: str | None = None) -> None:
+        """
+        Tell the entities that an announced presence changed, when a native mirror follows it (D-07).
+
+        A native mirror is available while its owner is online, so only the owner of a native mirror matters; without
+        one (`instance_id` None means any owner) nothing is signalled and the roster signals stay exactly as they were.
+        """
+        manager = self._manager
+        if any(
+            device.mirror is not None
+            and device.mirror.native
+            and (instance_id is None or device.mirror.owner == instance_id)
+            for device in manager.mirrors.values()
+        ):
+            async_dispatcher_send(manager.hass, SIGNAL_ROSTER_UPDATED.format(manager.entry.entry_id))
 
     @callback
     def note_published(self, device_id: str, digest: str) -> None:
@@ -446,8 +481,9 @@ class SyncManager:
             # The pinned owner was adopted away: the document names it and the roster says it is gone (D-09)
             LOGGER.info("The mirrored device %s follows a new owner, because its previous owner was adopted", shown)
             await manager.async_apply_mirror(parsed)
-        elif info is None or parsed.content_hash != info.content_hash:
-            # The hash decides, never the rev: an owner that lost its Store restarts at rev 1 (D-15)
+        elif info is None or parsed.content_hash != info.content_hash or (parsed.native and not info.native):
+            # The hash decides, never the rev: an owner that lost its Store restarts at rev 1 (D-15); a marker that
+            # appears on unchanged content is the owner switching to native entities, which the mirror follows (D-07)
             await manager.async_apply_mirror(parsed)
         self._resolve(device_id)
 
@@ -674,14 +710,17 @@ class SyncManager:
 
         Only an empty payload counts: the owner's own publishes and the discovery of other instances are not empty.
         Core publishes it when any instance deletes one entity of the device, and then drops every entity of it.
-        Only ids in `devices` are healed, and a device being deleted has already left `devices`, so the owner's own
-        delete is never mistaken for a removal elsewhere.
+        Only legacy ids in `devices` are healed, and a device being deleted has already left `devices`, so the owner's
+        own delete is never mistaken for a removal elsewhere.
         """
         if msg.payload:
             return
         manager = self._manager
         device_id = parse_discovery_topic(self._discovery_prefix, msg.topic)
         if device_id is None or (device := manager.devices.get(device_id)) is None:
+            return
+        # A native device has no discovery to heal, and the owner's own clear during the takeover is no removal
+        if not manager.heals_discovery(device_id):
             return
         self._note_removal(device)
         self._discovery_heal.request(device_id)
@@ -714,7 +753,9 @@ class SyncManager:
 
     @callback
     def _start_discovery_heal(self, device_id: str) -> None:
-        """Start the republish of the discovery of one device."""
+        """Start the republish of the discovery of one device, unless it is no longer on the legacy path."""
+        if not self._manager.heals_discovery(device_id):
+            return
         self._start_heal(device_id, self._manager.async_publish_discovery, "discovery")
 
     def _start_heal(self, device_id: str, publish: Callable[[Device], Awaitable[None]], what: str) -> None:

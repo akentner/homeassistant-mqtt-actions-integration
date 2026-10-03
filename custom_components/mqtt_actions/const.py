@@ -13,6 +13,11 @@ CONF_INSTANCE_ID: Final = "instance_id"
 DEFAULT_BASE_TOPIC: Final = "mqtt_actions"
 # Hub config entry option (D-11): delete every owned device from the broker when the hub is removed; default keep
 CONF_DELETE_DEVICES_ON_REMOVE: Final = "delete_devices_on_remove"
+# Hub config entry options (D-03, D-11): the optional MQTT Discovery export of native devices for external consumers.
+# Off by default; the prefix defaults to one that Home Assistant itself does not listen to
+CONF_DISCOVERY_EXPORT: Final = "discovery_export"
+CONF_EXPORT_PREFIX: Final = "export_prefix"
+DEFAULT_EXPORT_PREFIX: Final = "mqtt_actions_export"
 
 # Protocol path segment of every topic (D-01); bumping it is a breaking protocol change
 TOPIC_VERSION: Final = "v1"
@@ -129,6 +134,13 @@ STORE_DEVICE_MODES: Final = "device_modes"
 # device id -> the instance ids that owned an adopted device before, newest last; published as `transferred_from` with
 # every document of the device so a follower that missed the adoption learns it (D-09)
 STORE_TRANSFERS: Final = "transfers"
+# The native entity switch of Phase 5 (D-03): a dict with `instance` (bool, the owned devices of this instance are
+# native), `pending` (owned device ids whose takeover is still to run) and `devices` (owned device ids that are native
+# although the instance flag is not set); local to this instance, never part of a document
+STORE_NATIVE: Final = "native"
+# device id -> the last shown and the previous StateValue of a native Select (`last`, `previous`); local to this
+# instance, written only while a device has a history, never part of a document or a hash
+STORE_PREVIOUS_STATES: Final = "previous_states"
 STORE_SAVE_DELAY: Final = 5.0
 
 # Owner-side defense of the published truth (D-15, D-17, D-18): how many published content hashes per device count as
@@ -160,6 +172,14 @@ MAX_HEARTBEAT_DEVICES: Final = 10000
 # Dispatcher signal sent when the roster changed; formatted with the config entry id (D-05, D-06)
 SIGNAL_ROSTER_UPDATED: Final = f"{DOMAIN}_roster_updated_{{}}"
 
+# Native cutover (D-09, D-10, MIG-02): this long after the start, and again whenever the roster changes, an instance
+# that still uses MQTT Discovery checks whether any online peer is a legacy instance. The time only has to cover the
+# replay of the retained availability messages at subscribe; the capability itself is read from the heartbeats
+CUTOVER_SETTLE_SECONDS: Final = 5.0
+# One warning issue on the waiting instance names the peers that keep it from switching; at most this many are named
+ISSUE_NATIVE_CUTOVER_WAITING: Final = "native_cutover_waiting"
+CUTOVER_HINT_MAX_NAMES: Final = 5
+
 # Per-device and per-instance mode (D-14): run is normal, observe tracks the baseline and logs what would have run, and
 # disabled ignores the state topic completely. The effective mode is the most restrictive of the two. The existing
 # run_mode (serial or restart) is a different thing and is untouched.
@@ -171,6 +191,9 @@ MODES: Final = (MODE_RUN, MODE_OBSERVE, MODE_DISABLED)
 # device appeared or disappeared (the select platform adds or forgets its entity) (D-14, D-15)
 SIGNAL_MODES_CHANGED: Final = f"{DOMAIN}_modes_changed_{{}}"
 SIGNAL_DEVICES_CHANGED: Final = f"{DOMAIN}_devices_changed_{{}}"
+# The accepted state of one device changed (native entities write their state); formatted with the entry id and the
+# device id
+SIGNAL_DEVICE_STATE: Final = f"{DOMAIN}_device_state_{{}}_{{}}"
 
 # Names of the services of the integration, registered once at the integration setup (D-12)
 SERVICE_RESYNC: Final = "resync"

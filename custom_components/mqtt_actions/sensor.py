@@ -20,6 +20,7 @@ class RosterSensor(MqttActionsEntity, SensorEntity):
     """The number of online instances including this one; follows the roster."""
 
     _attr_translation_key = "instances_online"
+    _entity_id_part = "instances"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _signals = (SIGNAL_ROSTER_UPDATED,)
     # The list can be long and changes with every heartbeat; it is never written to the recorder (T-04-16)

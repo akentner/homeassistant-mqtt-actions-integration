@@ -1,17 +1,16 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 04
-status: completed
-stopped_at: Phase 04 complete — all phases complete
-last_updated: "2026-10-03T08:24:32.137Z"
+current_phase: 5
+status: "Phase 5 shipped — PR #12"
+stopped_at: Phase 5 complete — all phases complete
+last_updated: "2026-10-03T20:07:05.814Z"
 last_activity: 2026-10-03
-last_activity_desc: Phase 04 complete
-state_head: 0816e05d8556008c786b6922932593d7207d39d3
+state_head: 5effddbadceef704c2b2c5b93a729021b16e1615
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 33
-  completed_plans: 33
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 42
+  completed_plans: 42
   percent: 100
 ---
 
@@ -22,21 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-28)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 04 — Operations, Recovery and Release
+**Current focus:** Phase 05 — Evaluate native switch/select entities instead of MQTT Discovery
 
 ## Current Position
 
-Phase: 04
+Phase: 5
 Plan: Not started
-Status: All phases complete
-Last activity: 2026-10-03 — Phase 04 complete
+Status: Phase 5 shipped — PR #12
+Last activity: 2026-10-03
 
 Progress: [██████████] 100% of Phase 01 plans
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 33
+- Total plans completed: 42
 - Average duration: - min
 - Total execution time: 0.0 hours
 
@@ -48,6 +47,7 @@ Progress: [██████████] 100% of Phase 01 plans
 | 02 | 5 | - | - |
 | 03 | 8 | - | - |
 | 04 | 14 | - | - |
+| 5 | 9 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -86,6 +86,15 @@ Progress: [██████████] 100% of Phase 01 plans
 | Phase 04 P12 | 21 min | 3 tasks | 11 files |
 | Phase 04 P13 | 11 min | 3 tasks | 6 files |
 | Phase 04 P14 | 15 min | 2 tasks | 3 files |
+| Phase 05 P01 | 24min | 3 tasks | 4 files |
+| Phase 05 P02 | 30min | 2 tasks | 2 files |
+| Phase 05 P03 | 40min | 3 tasks | 9 files |
+| Phase 05 P04 | 45min | 2 tasks | 9 files |
+| Phase 05 P05 | 75min | 3 tasks | 4 files |
+| Phase 5 P06 | 60min | 2 tasks | 11 files |
+| Phase 05 P07 | 45min | 2 tasks | 6 files |
+| Phase 05 P08 | 60min | 3 tasks | 10 files |
+| Phase 5 P09 | 35min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -168,6 +177,19 @@ Recent decisions affecting current work:
 - [Phase 04]: The pages state the known limits as they are: imports and adoption are owned content without approval, returning-owner recognition is in memory only, the new instance id is not in a per-instance ACL
 - [Phase 04]: 04-14: issue-level description removed from the three fixable Repairs issues; explanation lives in the confirm step (hassfest exclusion group fixable)
 - [Phase 04]: 04-14: ISSUES in tests/test_translations.py is read from en.json so every new issue is guarded against description plus fix_flow
+- [Phase 05]: Go: replace MQTT-Discovery entities with native switch/select platforms (ADR 0001 Accepted)
+- [Phase 05]: Takeover removes the emptied legacy device only when nothing moved and the native device exists; otherwise the device is moved and the companion merged
+- [Phase 05]: Native Store key written only when non-default, so legacy instances keep their persisted data unchanged
+- [Phase 05]: device_info_for replaces companion_device_info as the single device info builder shared by mode select and native entities
+- [Phase 05]: 05-04: Native marker is the top-level key entities=native, never hashed, read strictly; mirror native-ness is one-way and the stored payload carries the marker
+- [Phase 05]: 05-04: Presence signal is sent only for owners of native mirrors and only when the roster did not already signal, keeping Phase 4 roster signal counts
+- [Phase 05]: 05-05: a pending owned device always gets the migrate payload before the retained clear, even without a legacy device of its own
+- [Phase 05]: 05-05: adoption keeps a native mirror native via the persisted devices set; a legacy mirror on a native instance is queued as pending and reloads the entry
+- [Phase 5]: 05-06: hint rebuilt only when the set of blocking peers changes; a silent announced-online peer is released by the heartbeat tick; natively listed devices are not made pending at the flip
+- [Phase 05]: A running legacy mirror that flips to native is parked in _legacy_this_run and the entry reloads once, so the takeover keeps every entity identity (05-07)
+- [Phase 05]: 05-08: heals_discovery gates healing to owned legacy devices; a deferred device is legacy again (in _legacy_this_run), only the pass window is excluded
+- [Phase 05]: 05-08: the discovery export is a best-effort second publish path (disabled by default, own prefix, no subscription, no healing); option changes apply from async_reconcile without reload
+- [Phase 5]: 05-09: ACL block unchanged; the export prefix has its own row and the discovery prefix is a legacy-path and export concern
 
 ### Pending Todos
 
@@ -181,6 +203,13 @@ None yet.
 - [Phase 3]: Needs deeper research before planning (`/gsd-plan-phase --research-phase 3`): prune strategy (grace window vs owner manifest), `FakeBroker` design, Repairs approval flow, discovered-entity registry cleanup, subentry deletion hooks, subentries as device store fit
 - [Phase 3]: Open decision: owner availability (heartbeat + graceful-shutdown publish vs. no tie to owner liveness); AVL-01 is deferred to v2
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261003-rmy | Native Select restore-previous-state button and previous_state attribute; new native test buttons diagnostic and disabled by default | 2026-10-03 | c7a537c | [261003-rmy-native-entities-test-buttons-disabled-by](./quick/261003-rmy-native-entities-test-buttons-disabled-by/) |
+| 261003-sfb | New native entities get short English entity id parts (_restore, _test_<StateValue>, _mode, _resync, _instances, _instance_mode) in every UI language; existing ids never renamed | 2026-10-03 | 89019df | [261003-sfb-native-entity-ids-shorter-and-english](./quick/261003-sfb-native-entity-ids-shorter-and-english/) |
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:
@@ -191,6 +220,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T19:32:34.423Z
-Stopped at: Phase 04 complete — all phases complete
+Last session: 2026-10-03T12:53:13.727Z
+Stopped at: Phase 5 complete — all phases complete
 Resume file: None

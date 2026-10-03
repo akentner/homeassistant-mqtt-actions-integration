@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 FOREIGN_OWNER = "instance-foreign"
 FOREIGN_OWNER_NAME = "Foreign instance"
+PEER_SESSION = "6f1c0f0e-3a52-4f43-8d0c-5a0b7f3c9d21"
 
 
 def make_spec(
@@ -70,16 +71,18 @@ def document_payload(
     rev: int = 1,
     schema_version: int | None = None,
     transferred_from: Sequence[str] | None = None,
+    native: bool = False,
     tamper: Callable[[dict[str, Any]], None] | None = None,
 ) -> str:
     """
     Return the wire text of the document an owner would publish for a spec.
 
     `schema_version` overrides the version, `transferred_from` writes the transfer marker of an adopted device as a
-    top-level list, `tamper` may change, add or delete any key of the document before it is serialized. The hash field
-    is not recomputed after tampering, exactly like a hostile writer's document.
+    top-level list, `native` writes the marker of an owner whose entities are native, `tamper` may change, add or
+    delete any key of the document before it is serialized. The hash field is not recomputed after tampering, exactly
+    like a hostile writer's document.
     """
-    document = build_document(spec, owner=owner, owner_name=owner_name, rev=rev)
+    document = build_document(spec, owner=owner, owner_name=owner_name, rev=rev, native=native)
     if transferred_from is not None:
         document["transferred_from"] = list(transferred_from)
     if schema_version is not None:
@@ -92,3 +95,28 @@ def document_payload(
 def raw_payload(document: dict[str, Any]) -> str:
     """Return the wire text of an arbitrary document, for payloads no owner would build."""
     return json.dumps(document)
+
+
+def heartbeat_payload(
+    instance_id: str,
+    *,
+    name: str = "Peer",
+    version: str = "0.1.0",
+    native: bool = False,
+    session: str = PEER_SESSION,
+) -> str:
+    """
+    Return the wire text of the heartbeat of a peer of either generation.
+
+    A v0.1.0 peer has no `entities` key; one that can run native entities announces `entities: native` (D-10).
+    """
+    data: dict[str, Any] = {
+        "instance_id": instance_id,
+        "name": name,
+        "version": version,
+        "devices": 1,
+        "session": session,
+    }
+    if native:
+        data["entities"] = "native"
+    return json.dumps(data)

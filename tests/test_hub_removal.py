@@ -17,6 +17,8 @@ from custom_components.mqtt_actions.config_flow import MqttActionsConfigFlow
 from custom_components.mqtt_actions.const import (
     CONF_DELETE_DEVICES_ON_REMOVE,
     CONF_DEVICE_ID,
+    CONF_DISCOVERY_EXPORT,
+    CONF_EXPORT_PREFIX,
     CONF_INSTANCE_ID,
     DOMAIN,
     ISSUE_DEVICE_PREFIXES,
@@ -104,9 +106,11 @@ async def test_hub_has_options_flow_with_delete_choice(
         field["name"]: field
         for field in probatio.to_field_list(result["data_schema"], custom_serializer=cv.custom_serializer)
     }
-    assert set(fields) == {CONF_DELETE_DEVICES_ON_REMOVE}
+    # The export switch and its prefix share the form since Phase 5 (D-03); the export has its own tests
+    assert set(fields) == {CONF_DELETE_DEVICES_ON_REMOVE, CONF_DISCOVERY_EXPORT, CONF_EXPORT_PREFIX}
     assert fields[CONF_DELETE_DEVICES_ON_REMOVE]["selector"] == {"boolean": {}}
-    assert not any(key.description and key.description.get("suggested_value") for key in result["data_schema"].schema)
+    suggested = {key.schema: key.description.get("suggested_value") for key in result["data_schema"].schema}
+    assert suggested[CONF_DELETE_DEVICES_ON_REMOVE] is False
 
     result = await hass.config_entries.options.async_configure(result["flow_id"], {CONF_DELETE_DEVICES_ON_REMOVE: True})
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -114,7 +118,7 @@ async def test_hub_has_options_flow_with_delete_choice(
 
     # The stored choice is what the form shows the next time
     again = await hass.config_entries.options.async_init(entry.entry_id)
-    (key,) = again["data_schema"].schema
+    (key,) = (key for key in again["data_schema"].schema if key.schema == CONF_DELETE_DEVICES_ON_REMOVE)
     assert key.description["suggested_value"] is True
     # A hub still has no reconfigure step (D-01)
     assert not hasattr(MqttActionsConfigFlow, "async_step_reconfigure")

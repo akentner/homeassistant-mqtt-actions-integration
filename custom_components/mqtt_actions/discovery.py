@@ -137,6 +137,28 @@ def build_discovery(
     }
 
 
+def build_export(*, spec: DeviceSpec, base_topic: str, instance_id: str, sw_version: str) -> dict[str, Any]:
+    """
+    Build the optional discovery export of a native device for external consumers (D-03, D-11).
+
+    The same device block, origin and availability as the legacy payload, but one component only: no test buttons, no
+    test topic and no tombstones. The component is disabled by default, so a Home Assistant that happens to listen to
+    the export prefix creates a disabled duplicate instead of a second working entity.
+    """
+    topic = state_topic(base_topic, spec.device_id)
+    if spec.kind == SUBENTRY_SELECT:
+        key, component = "select", _select_component(topic, spec)
+    else:
+        key, component = "switch", _switch_component(topic, spec.device_id)
+    component["enabled_by_default"] = False
+    return {
+        "device": {"identifiers": [f"{DOMAIN}_{spec.device_id}"], "name": spec.name},
+        "origin": {"name": "MQTT Actions", "sw_version": sw_version},
+        "components": {key: component},
+        "availability": [{"topic": availability_topic(base_topic, instance_id)}],
+    }
+
+
 class DiscoveryPublisher:
     """Publishes discovery and availability messages through the gateway."""
 
@@ -159,6 +181,35 @@ class DiscoveryPublisher:
             discovery_topic(self._gateway.discovery_prefix(), spec.device_id),
             json_dumps(payload),
             retain=True,
+        )
+
+    @property
+    def discovery_prefix(self) -> str:
+        """Return the discovery prefix core MQTT listens to."""
+        return self._gateway.discovery_prefix()
+
+    async def async_publish_export(self, *, spec: DeviceSpec, instance_id: str, prefix: str) -> None:
+        """Publish the retained export of a native device on the export prefix; nothing ever heals it (D-11)."""
+        payload = build_export(
+            spec=spec, base_topic=self._base_topic, instance_id=instance_id, sw_version=self._sw_version
+        )
+        await self._gateway.async_publish(discovery_topic(prefix, spec.device_id), json_dumps(payload), retain=True)
+
+    async def async_clear_export(self, device_id: str, prefix: str) -> None:
+        """Clear the retained export of a device with the empty retained payload; a topic without one is a no-op."""
+        await self._gateway.async_publish(discovery_topic(prefix, device_id), "", retain=True)
+
+    async def async_publish_migrate(self, device_id: str) -> None:
+        """
+        Publish the live migrate payload that makes every core MQTT instance unload the entities of a device (D-12).
+
+        Not retained, so a later subscriber never replays it. It goes out before the registry takeover; the empty
+        retained clear follows only after, because on a loaded entity the clear alone deletes its registry entry.
+        """
+        await self._gateway.async_publish(
+            discovery_topic(self._gateway.discovery_prefix(), device_id),
+            json_dumps({"migrate_discovery": True}),
+            retain=False,
         )
 
     async def async_clear_device(self, device_id: str) -> None:

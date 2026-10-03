@@ -24,9 +24,11 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
 
+from . import takeover
 from .actions import ActionsInvalid, async_validate_actions, validate_spec_structure
 from .breaker import CircuitBreaker
 from .const import (
@@ -37,8 +39,13 @@ from .const import (
     BLOCKED_SERVICES_MAX_SHOWN,
     CONF_BASE_TOPIC,
     CONF_DEVICE_ID,
+    CONF_DISCOVERY_EXPORT,
+    CONF_EXPORT_PREFIX,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
+    CUTOVER_HINT_MAX_NAMES,
+    CUTOVER_SETTLE_SECONDS,
+    DEFAULT_EXPORT_PREFIX,
     DOMAIN,
     ISSUE_APPROVAL_PREFIX,
     ISSUE_BLOCKED_PREFIX,
@@ -47,6 +54,7 @@ from .const import (
     ISSUE_DEVICE_PREFIXES,
     ISSUE_DISCOVERY_DISABLED,
     ISSUE_DUPLICATE_INSTANCE_ID,
+    ISSUE_NATIVE_CUTOVER_WAITING,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
@@ -55,6 +63,7 @@ from .const import (
     MODE_OBSERVE,
     MODE_RUN,
     RESYNC_MIN_INTERVAL_SECONDS,
+    SIGNAL_DEVICE_STATE,
     SIGNAL_DEVICES_CHANGED,
     SIGNAL_MODES_CHANGED,
     STORE_APPROVALS,
@@ -63,6 +72,8 @@ from .const import (
     STORE_KEY,
     STORE_LAST_ACTED,
     STORE_MIRRORS,
+    STORE_NATIVE,
+    STORE_PREVIOUS_STATES,
     STORE_PUBLISHED,
     STORE_REVS,
     STORE_SAVE_DELAY,
@@ -84,8 +95,10 @@ from .document import (
     parse_document,
     serialize_document,
     spec_has_actions,
+    with_native_marker,
 )
-from .model import DeviceSpec, shown, spec_from_subentry, trigger_key
+from .entities import device_info_for
+from .model import DeviceSpec, TriggerSpec, shown, spec_from_subentry, trigger_key
 from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .portability import subentry_payload
@@ -128,6 +141,8 @@ class MirrorInfo:
     residual: tuple[str, ...] = ()
     # The previous owners the document names when the device was adopted, newest last (D-09)
     transferred_from: tuple[str, ...] = ()
+    # True when the pinned owner marked its document as one of native entities; the mirror is then a native entity here
+    native: bool = False
 
 
 class AdoptionError(Exception):
@@ -165,6 +180,8 @@ class Device:
     retired_components: set[str] = field(default_factory=set)
     # Set for a mirror of a foreign device, None for an owned device
     mirror: MirrorInfo | None = None
+    # The last accepted canonical StateValue of the state topic, None until one arrived; what a native entity shows
+    value: str | None = None
 
     @property
     def name(self) -> str:
@@ -290,6 +307,58 @@ def _parse_mirrors(stored: dict[str, Any]) -> dict[str, ParsedDocument]:
     return mirrors
 
 
+@dataclass(slots=True)
+class NativeState:
+    """The persisted native switch of this instance (D-03): the instance flag and two sets of owned device ids."""
+
+    instance: bool = False
+    pending: set[str] = field(default_factory=set)
+    devices: set[str] = field(default_factory=set)
+
+
+@dataclass(frozen=True, slots=True)
+class SelectHistory:
+    """The last shown StateValue of a native Select and the different one that was shown before it."""
+
+    last: str
+    previous: str
+
+
+def _parse_native(stored: dict[str, Any]) -> NativeState:
+    """Return the native state from a loaded Store payload; anything malformed means the defaults (D-03)."""
+    native = stored.get(STORE_NATIVE)
+    if not isinstance(native, dict):
+        return NativeState()
+    instance = native.get("instance")
+    pending = native.get("pending")
+    devices = native.get("devices")
+    return NativeState(
+        instance=instance if isinstance(instance, bool) else False,
+        pending={item for item in pending if isinstance(item, str) and is_valid_device_id(item)}
+        if isinstance(pending, list)
+        else set(),
+        devices={item for item in devices if isinstance(item, str) and is_valid_device_id(item)}
+        if isinstance(devices, list)
+        else set(),
+    )
+
+
+def _parse_previous_states(stored: dict[str, Any]) -> dict[str, SelectHistory]:
+    """Return the select histories from a loaded Store payload; every malformed item is dropped (T-261003-02)."""
+    raw = stored.get(STORE_PREVIOUS_STATES)
+    if not isinstance(raw, dict):
+        return {}
+    histories: dict[str, SelectHistory] = {}
+    for device_id, item in raw.items():
+        if not isinstance(device_id, str) or not is_valid_device_id(device_id) or not isinstance(item, dict):
+            continue
+        last = item.get("last")
+        previous = item.get("previous")
+        if isinstance(last, str) and isinstance(previous, str) and last and previous and last != previous:
+            histories[device_id] = SelectHistory(last=last, previous=previous)
+    return histories
+
+
 async def _async_attempt(action: Callable[[], Awaitable[None]], description: str) -> bool:
     """Run one MQTT cleanup step; an unavailable MQTT client is logged and never raised (T-01-14)."""
     try:
@@ -300,15 +369,17 @@ async def _async_attempt(action: Callable[[], Awaitable[None]], description: str
     return True
 
 
-async def _async_clear_topics(publisher: DiscoveryPublisher, device_id: str) -> bool:
+async def _async_clear_topics(
+    publisher: DiscoveryPublisher, device_id: str, *, export_prefix: str | None = None
+) -> bool:
     """
     Clear the retained discovery, config and state topics of a device in that order; True when all were cleared.
 
-    The empty config payload is the tombstone that tells followers the device is gone (D-16).
+    The empty config payload is the tombstone that tells followers the device is gone (D-16). With an `export_prefix`
+    the optional export topic is cleared right after the legacy discovery topic, unless it is the same topic. An empty
+    payload on a topic that holds nothing is a no-op, so no question is asked which of them the device used (D-11).
     """
-    discovery_cleared = await _async_attempt(
-        partial(publisher.async_clear_device, device_id), f"clear the discovery of device {device_id}"
-    )
+    discovery_cleared = await _async_clear_discovery_topics(publisher, device_id, export_prefix, device_id)
     config_cleared = await _async_attempt(
         partial(publisher.async_clear_config, device_id), f"clear the config document of device {device_id}"
     )
@@ -316,6 +387,21 @@ async def _async_clear_topics(publisher: DiscoveryPublisher, device_id: str) -> 
         partial(publisher.async_clear_state, device_id), f"clear the retained state of device {device_id}"
     )
     return discovery_cleared and config_cleared and state_cleared
+
+
+async def _async_clear_discovery_topics(
+    publisher: DiscoveryPublisher, device_id: str, export_prefix: str | None, name: str
+) -> bool:
+    """Clear the legacy discovery topic of a device and, when an export prefix is given, its export topic."""
+    cleared = await _async_attempt(
+        partial(publisher.async_clear_device, device_id), f"clear the discovery of device {name}"
+    )
+    if export_prefix is None or export_prefix == publisher.discovery_prefix:
+        return cleared
+    exported = await _async_attempt(
+        partial(publisher.async_clear_export, device_id, export_prefix), f"clear the discovery export of device {name}"
+    )
+    return cleared and exported
 
 
 async def async_remove_local_state(hass: HomeAssistant, entry: ConfigEntry, *, store_key: str = STORE_KEY) -> None:  # noqa: ARG001
@@ -330,7 +416,7 @@ async def async_remove_local_state(hass: HomeAssistant, entry: ConfigEntry, *, s
     for domain, issue_id in list(registry.issues):
         if domain == DOMAIN and (
             issue_id.startswith(ISSUE_DEVICE_PREFIXES)
-            or issue_id in {ISSUE_DISCOVERY_DISABLED, ISSUE_DUPLICATE_INSTANCE_ID}
+            or issue_id in {ISSUE_DISCOVERY_DISABLED, ISSUE_DUPLICATE_INSTANCE_ID, ISSUE_NATIVE_CUTOVER_WAITING}
         ):
             ir.async_delete_issue(hass, domain, issue_id)
 
@@ -357,8 +443,10 @@ async def async_remove_all_devices(
     publisher = DiscoveryPublisher(
         gateway if gateway is not None else MqttGateway(hass), entry.data[CONF_BASE_TOPIC], str(integration.version)
     )
+    export_enabled = bool(entry.options.get(CONF_DISCOVERY_EXPORT, False))
+    export_prefix = str(entry.options.get(CONF_EXPORT_PREFIX, DEFAULT_EXPORT_PREFIX)) if export_enabled else None
     for device_id in sorted(device_ids):
-        await _async_clear_topics(publisher, device_id)
+        await _async_clear_topics(publisher, device_id, export_prefix=export_prefix)
     await _async_attempt(
         partial(publisher.async_publish_availability, entry.data[CONF_INSTANCE_ID], AvailabilityState.CLEARED),
         "clear the instance availability",
@@ -430,6 +518,37 @@ class Manager:
         # instance, kept in the Store and never part of a document or a hash (D-14)
         self._instance_mode = MODE_RUN
         self._device_modes: dict[str, str] = {}
+        # Which owned devices are native entities instead of MQTT discovery entities; local, kept in the Store (D-03)
+        self._native = NativeState()
+        # Native Select device id -> the shown StateValue and the one before it; in memory here, local to this instance
+        self._previous: dict[str, SelectHistory] = {}
+        # Owned or mirrored devices whose takeover could not run yet; they use the legacy path for this run only and
+        # their id stays pending in the Store, so the next setup retries (T-5-08)
+        self._legacy_this_run: set[str] = set()
+        # Owned devices whose entities were moved to this integration but whose retained discovery could not be cleared
+        # yet: native for this run, pending in the Store, and the clear is retried on the next republish (WR-02)
+        self._clear_unconfirmed: set[str] = set()
+        # The wait before the first cutover check, read once so a test can turn the timer off; None means none (D-09)
+        self.cutover_settle_seconds: float | None = CUTOVER_SETTLE_SECONDS
+        self._cancel_cutover: CALLBACK_TYPE | None = None
+        # Set once the settle time has passed; only then does a roster change start a cutover check
+        self._cutover_ready = False
+        # The blocking peers the hint issue shows now, so an unchanged set does not rebuild the issue on every heartbeat
+        self._cutover_hint: tuple[str, ...] | None = None
+        # Set once this manager asked for the reload that follows an owner into native entities; one reload is enough
+        self._reload_scheduled = False
+        # The export option and prefix the topics on the broker reflect now; a change is applied by the reconcile (D-03)
+        self._export_applied = self._export_signature()
+
+    @property
+    def _native_pending(self) -> set[str]:
+        """Return the owned device ids that still wait for the takeover pass; the persisted set itself, not a copy."""
+        return self._native.pending
+
+    @property
+    def _native_devices(self) -> set[str]:
+        """Return the owned device ids that are native although the instance flag is not set; the persisted set."""
+        return self._native.devices
 
     @property
     def hass(self) -> HomeAssistant:
@@ -499,6 +618,40 @@ class Manager:
             if subentry.data[CONF_DEVICE_ID] == device_id:
                 return subentry.subentry_id
         return None
+
+    def is_native(self, device_id: str) -> bool:
+        """
+        Return whether a device is a native entity of this integration instead of an MQTT discovery entity (D-03).
+
+        True for an owned device that is listed as native or while the instance flag is set, and for a mirror whose
+        pinned owner marked its document as native (D-07, D-09); False for an unknown id. A device that still waits for
+        the takeover pass, or whose takeover was deferred for this run, is not native: its legacy entities exist, so a
+        native one next to them would be a duplicate (T-5-08). A device whose entities moved but whose retained clear
+        is still outstanding is native, as the registry says (WR-02).
+        """
+        if device_id in self._legacy_this_run:
+            return False
+        if (mirror := self.mirrors.get(device_id)) is not None:
+            return mirror.mirror is not None and mirror.mirror.native
+        return device_id in self.devices and (
+            device_id in self._clear_unconfirmed
+            or (device_id not in self._native_pending and (self._native.instance or device_id in self._native_devices))
+        )
+
+    def heals_discovery(self, device_id: str) -> bool:
+        """
+        Return whether the owner heals the MQTT discovery of a device that core MQTT cleared (DSC-03, D-11, MIG-03).
+
+        True only for an owned device that is still on the legacy path. A native device has no discovery to heal, and a
+        device that waits for the takeover pass is not healed either: the empty retained payload the owner publishes
+        itself during the pass is no foreign removal. A device whose takeover was deferred is legacy for this run and
+        heals like before.
+        """
+        return (
+            device_id in self.devices
+            and not self.is_native(device_id)
+            and (device_id not in self._native_pending or device_id in self._legacy_this_run)
+        )
 
     def has_device(self, device_id: str) -> bool:
         """Return whether the id belongs to an owned device or a mirror."""
@@ -619,6 +772,7 @@ class Manager:
         self._revs = {device_id: value for device_id, value in self._revs.items() if device_id in current}
         self._transfers = {device_id: value for device_id, value in self._transfers.items() if device_id in current}
         self._device_modes = {device_id: value for device_id, value in self._device_modes.items() if device_id in kept}
+        self._previous = {device_id: value for device_id, value in self._previous.items() if device_id in kept}
         # The lock is held from the first subscribe until the owned devices are registered and published: a retained
         # document replayed while the subscribes are awaited queues its ingest on this lock, and by the time it runs
         # the owned ids are in `devices`, so a foreign claim for an owned id can never become a mirror (CR-02)
@@ -629,9 +783,209 @@ class Manager:
             await self.retrigger.async_start()
             await self._async_orphan_cleanup()
             await self._async_reconcile_locked(startup=True)
+            # Before the platform forward and before any document: the entities move first, then the retained clear
+            await self._async_native_takeover()
             await self._async_publish_owned()
+            # The pass decided which devices are native, so only now is it known whether discovery is still needed
+            self._check_discovery_enabled()
         await self._async_publish_availability(AvailabilityState.ONLINE)
         await self.presence.async_publish_heartbeat()
+        self._arm_cutover()
+
+    @callback
+    def _arm_cutover(self) -> None:
+        """Wait the settle time before the first cutover check; a native instance never waits or checks (D-09)."""
+        if self._native.instance or self.cutover_settle_seconds is None:
+            return
+        self._cancel_cutover = async_call_later(self._hass, self.cutover_settle_seconds, self._on_cutover_due)
+
+    @callback
+    def _on_cutover_due(self, _now: object) -> None:
+        """Start trusting the roster once the settle time passed, and check at once (D-09)."""
+        self._cancel_cutover = None
+        self._cutover_ready = True
+        self._start_cutover_check()
+
+    @callback
+    def on_roster_changed(self) -> None:
+        """Re-run the cutover check after the roster, an announced presence or the time changed (D-10)."""
+        if self._cutover_ready:
+            self._start_cutover_check()
+
+    @callback
+    def _start_cutover_check(self) -> None:
+        """Start the check in a background task of the entry; it takes the lock, which a callback cannot await."""
+        if not self._running or self._native.instance:
+            return
+        self._entry.async_create_background_task(self._hass, self._async_cutover_check(), name=f"{DOMAIN} cutover")
+
+    async def _async_cutover_check(self) -> None:
+        """
+        Switch this instance to native entities once no online peer is a legacy instance (D-09, D-10, D-12, MIG-02).
+
+        The flag is persisted before the reload and checked first, so the switch happens exactly once (T-5-13). Every
+        owned device that is not native yet becomes pending and the reload runs the takeover pass before the platform
+        forward; nothing is moved or published here. Without such a device the flag alone is enough.
+        """
+        async with self._lock:
+            if not self._running or self._native.instance:
+                return
+            if blocking := self.presence.blocking_peers():
+                self._show_cutover_hint(tuple(blocking))
+                return
+            self._clear_cutover_hint()
+            self._native.instance = True
+            self._native_pending.update(self.devices.keys() - self._native_devices)
+            await self._store.async_save(self._data_to_save())
+            if self._native_pending:
+                self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
+
+    @callback
+    def _show_cutover_hint(self, blocking: tuple[str, ...]) -> None:
+        """
+        Explain in Repairs why this instance still uses MQTT Discovery; only the first names are shown (D-10, T-5-14).
+
+        The names come from the broker, so they are escaped and capped, and they are never logged. The issue is deleted
+        first so that a changed set of peers refreshes the text.
+        """
+        if blocking == self._cutover_hint:
+            return
+        self._cutover_hint = blocking
+        shown = ", ".join(escape_markdown(name) for name in blocking[:CUTOVER_HINT_MAX_NAMES])
+        instances = f"{shown} \u2026" if len(blocking) > CUTOVER_HINT_MAX_NAMES else shown
+        ir.async_delete_issue(self._hass, DOMAIN, ISSUE_NATIVE_CUTOVER_WAITING)
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            ISSUE_NATIVE_CUTOVER_WAITING,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_NATIVE_CUTOVER_WAITING,
+            translation_placeholders={"instances": instances},
+        )
+
+    @callback
+    def _clear_cutover_hint(self) -> None:
+        """Delete the hint; the cutover proceeds, so there is nothing left to wait for."""
+        self._cutover_hint = None
+        ir.async_delete_issue(self._hass, DOMAIN, ISSUE_NATIVE_CUTOVER_WAITING)
+
+    async def _async_native_takeover(self) -> None:
+        """
+        Move the legacy MQTT entities of pending owned devices and native mirrors here (D-05, D-09, D-12, MIG-01).
+
+        The order for an owned device is fixed: the live migrate payload, then the registry takeover, then the
+        retained clear. A device whose legacy entities stay loaded is deferred: nothing moves, nothing is cleared, it
+        stays pending and runs on the legacy path for this run (T-5-08). Only ids that are owned devices are ever
+        published for (T-5-02). A follower publishes nothing. The caller holds the lock; the platforms are not
+        forwarded yet.
+        """
+        assert self._publisher is not None  # noqa: S101
+        owned = sorted(self._native_pending & self.devices.keys())
+        stale = self._native_pending - set(owned)
+        self._native_pending.difference_update(stale)
+        mqtt_entry_id = self.gateway.mqtt_entry_id()
+        mirrors = sorted(
+            device_id
+            for device_id, mirror in self.mirrors.items()
+            if mirror.mirror is not None
+            and mirror.mirror.native
+            and mqtt_entry_id is not None
+            and takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is not None
+        )
+        if not owned and not mirrors:
+            if stale:
+                await self._store.async_save(self._data_to_save())
+            return
+        # Published for every pending device, even without a legacy device of our own: another instance's core MQTT
+        # may have its entities loaded, and the clear alone would delete their registry entries
+        migrated = {
+            device_id
+            for device_id in owned
+            if await _async_attempt(
+                partial(self._publisher.async_publish_migrate, device_id),
+                f"publish the migrate payload of device {device_id}",
+            )
+        }
+        targets = [takeover.TakeoverTarget(device_id, self.subentry_id_of(device_id)) for device_id in owned]
+        targets += [takeover.TakeoverTarget(device_id, None) for device_id in mirrors]
+        results = await asyncio.gather(
+            *(self._async_take_over_one(target, mqtt_entry_id, skip=set(owned) - migrated) for target in targets),
+            return_exceptions=True,
+        )
+        if any(status is takeover.TakeoverStatus.DONE or isinstance(status, BaseException) for status in results):
+            # The registry files hold the move before any marker says it is done and before the retained clear goes out
+            await takeover.async_flush_registries(self._hass)
+        for target, status in zip(targets, results, strict=True):
+            deferred = status is takeover.TakeoverStatus.DEFERRED
+            if isinstance(status, BaseException):
+                # No registry or broker content in the log: a registry surprise must never keep the start from finishing
+                LOGGER.warning("The native takeover of a device raised an unexpected error")
+                LOGGER.debug("The native takeover failed with %s", type(status).__name__)
+                # The registry decides, not the return path: entries that moved cannot go back to core MQTT
+                deferred = not takeover.has_moved_entities(self._hass, self._entry, target.device_id)
+            if deferred:
+                await self._async_defer_takeover(target.device_id)
+            elif not await self._async_finish_takeover(target.device_id, set(owned)):
+                # Moved, but the retained clear is still to do: native for this run, and the id stays pending in the
+                # Store so the next start and the next republish retry the clear (WR-02)
+                self._clear_unconfirmed.add(target.device_id)
+        await self._store.async_save(self._data_to_save())
+
+    async def _async_take_over_one(
+        self, target: takeover.TakeoverTarget, mqtt_entry_id: str | None, *, skip: set[str]
+    ) -> takeover.TakeoverStatus:
+        """Take one device over; a device in `skip`, whose migrate payload did not go out, is deferred untouched."""
+        if target.device_id in skip:
+            return takeover.TakeoverStatus.DEFERRED
+        if mqtt_entry_id is None:
+            return takeover.TakeoverStatus.NOTHING
+        return await takeover.async_take_over(
+            self._hass,
+            self._entry,
+            target,
+            mqtt_entry_id=mqtt_entry_id,
+            unload_timeout=takeover.TAKEOVER_UNLOAD_TIMEOUT,
+            retry_interval=takeover.TAKEOVER_RETRY_INTERVAL,
+        )
+
+    async def _async_finish_takeover(self, device_id: str, owned: set[str]) -> bool:
+        """
+        Finish a taken-over device; False when the retained clear of an owned device could not be published.
+
+        The owner clears the retained discovery last and ends the stale test-topic subscription of the legacy path. A
+        follower has nothing to clear.
+        """
+        if device_id not in owned:
+            return True
+        assert self._publisher is not None  # noqa: S101
+        if not await _async_attempt(
+            partial(self._publisher.async_clear_device, device_id), f"clear the discovery of device {device_id}"
+        ):
+            return False
+        self._native_pending.discard(device_id)
+        if (device := self.devices.get(device_id)) is not None and device.unsubscribe_test is not None:
+            device.unsubscribe_test()
+            device.unsubscribe_test = None
+        return True
+
+    async def _async_defer_takeover(self, device_id: str) -> None:
+        """
+        Keep a device that could not be taken over on the legacy path for this run, with everything as in 0.1.0.
+
+        A native mirror was built without the test-topic subscription of the legacy path, so it gets it now: its legacy
+        test buttons are still the entities of the device.
+        """
+        LOGGER.info("The native takeover of a device is postponed to the next start; it stays as it is until then")
+        self._legacy_this_run.add(device_id)
+        if (mirror := self.mirrors.get(device_id)) is None or mirror.unsubscribe_test is not None:
+            return
+        try:
+            mirror.unsubscribe_test = await self.gateway.async_subscribe(
+                test_topic(self._base_topic, device_id), partial(self._on_test_message, device_id)
+            )
+        except HomeAssistantError as err:
+            LOGGER.warning("MQTT could not subscribe to the test topic of device %s: %s", mirror.name, err)
 
     async def async_reconcile(self, *, startup: bool = False) -> None:
         """
@@ -642,6 +996,37 @@ class Manager:
         """
         async with self._lock:
             await self._async_reconcile_locked(startup=startup)
+            await self._async_apply_export_options()
+
+    async def _async_apply_export_options(self) -> None:
+        """
+        Follow a change of the export option or its prefix: clear the old export topics, publish the new ones (D-03).
+
+        The entry update listener reaches this through the reconcile, so no reload is needed. Only owned native devices
+        have an export; a legacy device and a device another instance adopted are skipped. The caller holds the lock.
+        """
+        if not self._running:
+            return
+        current = self._export_signature()
+        (was_enabled, old_prefix), self._export_applied = self._export_applied, current
+        if current == (was_enabled, old_prefix):
+            return
+        assert self._publisher is not None  # noqa: S101
+        exported = [
+            device
+            for device in self.devices.values()
+            if self.is_native(device.device_id) and device.device_id not in self.sync.transferred_away
+        ]
+        if was_enabled:
+            for device in exported:
+                await _async_attempt(
+                    partial(self._publisher.async_clear_export, device.device_id, old_prefix),
+                    f"clear the discovery export of device {device.name}",
+                )
+        if current[0]:
+            for device in exported:
+                await self.async_publish_discovery(device)
+        self._check_discovery_enabled()
 
     async def _async_reconcile_locked(self, *, startup: bool = False) -> None:
         """Reconcile the running devices with the subentries; the caller holds the lock."""
@@ -672,6 +1057,10 @@ class Manager:
         """
         async with self._lock:
             self._running = False
+            self._cutover_ready = False
+            if self._cancel_cutover is not None:
+                self._cancel_cutover()
+                self._cancel_cutover = None
             self.sync.async_stop()
             self.presence.async_stop()
             self.retrigger.async_stop()
@@ -738,9 +1127,27 @@ class Manager:
         async with self._lock:
             if not self._running:
                 return
+            await self._async_retry_unconfirmed_clears()
             await self._async_publish_owned()
             await self._async_publish_availability(AvailabilityState.ONLINE)
             await self.presence.async_publish_heartbeat()
+
+    async def _async_retry_unconfirmed_clears(self) -> None:
+        """
+        Publish the retained discovery clear again for devices whose entities moved but whose clear failed (WR-02).
+
+        The caller holds the lock. A cleared device is no longer pending, so the Store forgets the marker.
+        """
+        if not self._clear_unconfirmed:
+            return
+        assert self._publisher is not None  # noqa: S101
+        for device_id in sorted(self._clear_unconfirmed):
+            if device_id not in self.devices:
+                self._clear_unconfirmed.discard(device_id)
+                continue
+            if await self._async_finish_takeover(device_id, {device_id}):
+                self._clear_unconfirmed.discard(device_id)
+                self._schedule_save()
 
     async def _async_publish_owned(self) -> None:
         """Publish every config document, then every discovery; the caller holds the lock and publishes availability."""
@@ -749,9 +1156,23 @@ class Manager:
         for device in self.devices.values():
             await self.async_publish_discovery(device)
 
+    def _discovery_needed(self) -> bool:
+        """
+        Return whether any entity of this instance depends on core MQTT discovery (D-03, MIG-03).
+
+        Yes for an instance that is not native, for any owned device or mirror that is still on the legacy path, and for
+        an export on the very prefix core MQTT listens to. Not for a fully native instance: its entities are its own.
+        """
+        if not self._native.instance:
+            return True
+        if any(not self.is_native(device_id) for device_id in (*self.devices, *self.mirrors)):
+            return True
+        enabled, prefix = self._export_signature()
+        return enabled and prefix == self.gateway.discovery_prefix()
+
     def _check_discovery_enabled(self) -> None:
-        """Warn and raise a Repairs issue when MQTT discovery is disabled, because then no entity ever appears."""
-        if self.gateway.discovery_enabled():
+        """Warn and raise a Repairs issue while MQTT discovery is disabled and still needed, otherwise delete it."""
+        if self.gateway.discovery_enabled() or not self._discovery_needed():
             ir.async_delete_issue(self._hass, DOMAIN, ISSUE_DISCOVERY_DISABLED)
             return
         LOGGER.warning("MQTT discovery is disabled, so the entities of MQTT Actions cannot appear")
@@ -790,10 +1211,30 @@ class Manager:
         self._approvals = _parse_approvals(stored)
         self._instance_mode = _parse_instance_mode(stored)
         self._device_modes = _parse_device_modes(stored)
+        self._native = _parse_native(stored)
+        self._previous = _parse_previous_states(stored)
 
     @callback
     def _data_to_save(self) -> dict[str, Any]:
         """Return the persisted state; devices without a baseline are omitted (D-07)."""
+        data = self._base_data_to_save()
+        # The native key is only written once it carries something, so an instance that never used it keeps its Store
+        if self._native != NativeState():
+            data[STORE_NATIVE] = {
+                "instance": self._native.instance,
+                "pending": sorted(self._native.pending),
+                "devices": sorted(self._native.devices),
+            }
+        # Same pattern: a Store without any history keeps its exact key set
+        if self._previous:
+            data[STORE_PREVIOUS_STATES] = {
+                device_id: {"last": history.last, "previous": history.previous}
+                for device_id, history in sorted(self._previous.items())
+            }
+        return data
+
+    def _base_data_to_save(self) -> dict[str, Any]:
+        """Return the persisted state of every key that is always written."""
         live = {**self.devices, **self.mirrors}
         return {
             STORE_LAST_ACTED: {
@@ -845,12 +1286,16 @@ class Manager:
             if existing.mirror is not None and existing.mirror.content_hash == parsed.content_hash:
                 # The same content under a new owner is a re-pin after an adoption (D-09). Only the bookkeeping moves:
                 # a fresh breaker would release a tripped device and a rebuilt Script would drop its running queue.
-                existing.mirror = self._mirror_info(parsed)
+                was_native = existing.mirror.native
+                existing.mirror = self._mirror_info(parsed, keep_native=was_native)
+                self._follow_native_status(existing, was_native=was_native)
                 self._sync_approval_issues(existing)
                 self._schedule_save()
                 return
+            was_native = existing.mirror is not None and existing.mirror.native
             self._update_mirror(existing, parsed)
             self._rename_companion(device_id, parsed.spec.name)
+            self._follow_native_status(existing, was_native=was_native)
             # A changed document starts clean: a stale setup or denied-call issue belongs to the old actions
             self.runner.clear_issue(device_id)
             ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_DENIED_CALL_PREFIX}{device_id}")
@@ -923,8 +1368,10 @@ class Manager:
         """
         Replace a mirror by an owned device with the same id; the caller holds the lock and checked the preconditions.
 
-        Nothing is published to the broker and the registry of core MQTT is not touched: the discovery of the device
-        stays, and the new owner publishes it again with its own availability when the device is added.
+        Nothing is cleared on the broker and the registry of core MQTT is not touched: the discovery of the device
+        stays, and the new owner publishes it again with its own availability when the device is added. A native mirror
+        becomes a native owned device; a legacy mirror on a native instance is queued for the takeover of the next
+        setup.
         """
         device_id = mirror.device_id
         spec = mirror.spec
@@ -941,9 +1388,20 @@ class Manager:
         self._revs[device_id] = {"rev": info.rev, "hash": ADOPTED_HASH}
         if mirror.tracker.last_acted is not None:
             self._stored_last_acted[device_id] = mirror.tracker.last_acted
-        await self._async_drop_mirror(mirror)
-        # The select platform forgets the mirror's mode select now; the add below gives the owned device its own
-        self._notify_devices_changed()
+        # A native device stays native whatever this instance's flag says; a legacy device of a native instance first
+        # needs the takeover pass of the next setup, so it is pending and not native until then (T-5-12)
+        queue_takeover = not info.native and self._native.instance
+        if info.native:
+            self._native_devices.add(device_id)
+        elif queue_takeover:
+            self._native_pending.add(device_id)
+        # A native mirror keeps its device: the native entities, the test buttons and the mode select live on it, and
+        # removing it would delete their registry entries with the entity ids, areas and names (CR-01)
+        await self._async_drop_mirror(mirror, keep_companion=info.native)
+        if not info.native:
+            # The select platform forgets the mirror's mode select now; the add below gives the owned device its own.
+            # A native device is never announced as absent: the platforms would drop its entities in that gap
+            self._notify_devices_changed()
         # Saved before the subentry exists: a crash in between loses the adoption, not the device (T-04-53)
         await self._store.async_save(self._data_to_save())
         try:
@@ -951,6 +1409,8 @@ class Manager:
         except Exception:
             self._transfers.pop(device_id, None)
             self._revs.pop(device_id, None)
+            self._native_devices.discard(device_id)
+            self._native_pending.discard(device_id)
             if approval is not None:
                 self._approvals[device_id] = approval
             await self.sync.async_restore_mirror(device_id, info.payload)
@@ -958,13 +1418,20 @@ class Manager:
         LOGGER.info("Adopted device %s from an instance that is offline or was forced", shown(spec.name))
         # The update listener of the entry reconciles too, once the lock is free, and then finds nothing to do
         await self._async_reconcile_locked()
+        if info.native:
+            self._rebind_native_registry(device_id)
+        if queue_takeover:
+            # The next setup runs the pass for it: the migrate payload, the takeover and the retained clear
+            self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
 
-    async def _async_drop_mirror(self, mirror: Device) -> None:
+    async def _async_drop_mirror(self, mirror: Device, *, keep_companion: bool = False) -> None:
         """
         Release a mirror without clearing anything: no broker message and no registry cleanup of core MQTT.
 
         Both subscriptions end, the Script is unloaded, the per-device issues, the approval and the companion device go
         and the sync side forgets the mirror. The stored mode and the baseline stay for the owned device that follows.
+        With `keep_companion` the companion device stays: the owned device that replaces a native mirror uses the same
+        identifier, so its entities keep their registry entries.
         """
         device_id = mirror.device_id
         self.mirrors.pop(device_id, None)
@@ -976,7 +1443,8 @@ class Manager:
         self._delete_device_issues(device_id)
         self._approvals.pop(device_id, None)
         self._tripped.pop(device_id, None)
-        self._remove_companion(device_id)
+        if not keep_companion:
+            self._remove_companion(device_id)
         self.sync.forget_mirror(device_id)
 
     @callback
@@ -1059,12 +1527,22 @@ class Manager:
         self.sync.forget(device_id)
         if device.tracker.last_acted is not None:
             self._stored_last_acted[device_id] = device.tracker.last_acted
+        self._previous.pop(device_id, None)
         self._released.add(device_id)
         self._published.discard(device_id)
         self._revs.pop(device_id, None)
         self._tripped.pop(device_id, None)
         self._transfers.pop(device_id, None)
         self._unpublishable.discard(device_id)
+        self._forget_native(device_id)
+
+    @callback
+    def _forget_native(self, device_id: str) -> None:
+        """Forget the native bookkeeping of an owned device that is deleted or released here."""
+        self._native_pending.discard(device_id)
+        self._native_devices.discard(device_id)
+        self._legacy_this_run.discard(device_id)
+        self._clear_unconfirmed.discard(device_id)
 
     async def async_release_device_locally(self, device_id: str) -> bool:
         """
@@ -1233,6 +1711,7 @@ class Manager:
         self._approvals.pop(device_id, None)
         # Neither a mode nor a companion device outlives its mirror (T-04-26)
         self._device_modes.pop(device_id, None)
+        self._previous.pop(device_id, None)
         self._remove_companion(device_id)
         self._clean_registry(device_id)
         self._schedule_save()
@@ -1251,6 +1730,28 @@ class Manager:
         companion = device_registry.async_get_device_by_identifier((DOMAIN, device_id), self._entry.entry_id)
         if companion is not None:
             device_registry.async_remove_device(companion.id)
+
+    @callback
+    def _rebind_native_registry(self, device_id: str) -> None:
+        """
+        Attach the device and the entities of an adopted native mirror to the subentry of the owned device.
+
+        A mirror has no subentry, so its registry entries carry none; the owned device does. The entities move first,
+        because the entity registry removes every entity of the old subentry when the device itself changes its
+        subentry. Nothing is removed or created: the registry ids, entity ids, areas and names stay.
+        """
+        subentry_id = self.subentry_id_of(device_id)
+        device_registry = dr.async_get(self._hass)
+        companion = device_registry.async_get_device_by_identifier((DOMAIN, device_id), self._entry.entry_id)
+        if subentry_id is None or companion is None or self._device(device_id) is None:
+            return
+        entity_registry = er.async_get(self._hass)
+        for entity in er.async_entries_for_device(entity_registry, companion.id, include_disabled_entities=True):
+            if entity.config_entry_id == self._entry.entry_id and entity.config_subentry_id is None:
+                entity_registry.async_update_entity(entity.entity_id, config_subentry_id=subentry_id)
+        # The model no longer names an owner
+        info = device_info_for(self, device_id)
+        device_registry.async_update_device(companion.id, new_config_subentry_id=subentry_id, model=info.get("model"))
 
     @callback
     def _clean_registry(self, device_id: str) -> None:
@@ -1293,20 +1794,27 @@ class Manager:
             self._sync_approval_issues(device)
 
     @staticmethod
-    def _mirror_info(parsed: ParsedDocument) -> MirrorInfo:
-        """Return what a follower records of a document: its owner, both hashes, the payload and the static analysis."""
+    def _mirror_info(parsed: ParsedDocument, *, keep_native: bool = False) -> MirrorInfo:
+        """
+        Return what a follower records of a document: its owner, both hashes, the payload and the static analysis.
+
+        `keep_native` is set when the mirror this replaces was native: a document without the marker never reverts it
+        (T-5-11), and the stored payload then carries the marker so the status also survives a restart.
+        """
         analysis: ActionAnalysis = analyze_spec(parsed.spec)
+        carried = keep_native and not parsed.native
         return MirrorInfo(
             owner=parsed.owner,
             owner_name=parsed.owner_name,
             rev=parsed.rev,
             content_hash=parsed.content_hash,
             actions_hash=parsed.actions_hash,
-            payload=parsed.payload,
+            payload=with_native_marker(parsed.payload) if carried else parsed.payload,
             denied=analysis.denied,
             templated=analysis.templated,
             residual=analysis.residual,
             transferred_from=parsed.transferred_from,
+            native=parsed.native or keep_native,
         )
 
     def _build_mirror(self, parsed: ParsedDocument, *, startup: bool) -> Device:
@@ -1338,7 +1846,8 @@ class Manager:
         StateValue of the new spec becomes unknown (D-15 of Phase 2, A11).
         """
         spec = parsed.spec
-        mirror = self._mirror_info(parsed)
+        # A mirror that was native stays native, whatever the new document says (T-5-11)
+        mirror = self._mirror_info(parsed, keep_native=device.mirror is not None and device.mirror.native)
         device.spec = spec
         device.mirror = mirror
         device.signature = canonical_json(parsed.content)
@@ -1351,6 +1860,43 @@ class Manager:
         self._tripped.pop(device.device_id, None)
         self._schedule_save()
 
+    @callback
+    def _follow_native_status(self, device: Device, *, was_native: bool) -> None:
+        """
+        Bring the companion of a mirror in line after its record was replaced and the mirror is native.
+
+        A mirror that was native already keeps its companion device in line: the device model names the owner. A running
+        legacy mirror that just became native stays legacy for this run and reloads the entry instead (D-07, D-12).
+        """
+        if device.mirror is None or not device.mirror.native:
+            return
+        if not was_native:
+            # A running legacy mirror whose owner just switched: its legacy entities are still the entities of the
+            # device, so it stays on the legacy path until the reload, whose start runs the takeover before the
+            # platform forward. A native entity created now would sit next to them in the registry and make the
+            # takeover drop the legacy entries, and with them the entity ids, instead of moving them (D-12, T-5-09).
+            self._legacy_this_run.add(device.device_id)
+            self._schedule_native_reload()
+            return
+        device_registry = dr.async_get(self._hass)
+        companion = device_registry.async_get_device_by_identifier((DOMAIN, device.device_id), self._entry.entry_id)
+        model = device_info_for(self, device.device_id).get("model")
+        if companion is not None and model is not None and companion.model != model:
+            device_registry.async_update_device(companion.id, model=model)
+
+    @callback
+    def _schedule_native_reload(self) -> None:
+        """
+        Reload the entry once, so the takeover pass of the next setup moves the entities of a mirror that turned native.
+
+        Several flips before the stop ask once (T-5-15); the flag belongs to this manager, so the new one starts clean.
+        The final save of the stop persists the mirror records, marker included.
+        """
+        if self._reload_scheduled:
+            return
+        self._reload_scheduled = True
+        self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
+
     async def _async_subscribe_mirror(self, device: Device) -> None:
         """Register a mirror and subscribe to its state and test topics; a failed subscribe leaves nothing behind."""
         device_id = device.device_id
@@ -1360,9 +1906,11 @@ class Manager:
             device.unsubscribe = await self.gateway.async_subscribe(
                 state_topic(self._base_topic, device_id), partial(self._on_message, device_id)
             )
-            device.unsubscribe_test = await self.gateway.async_subscribe(
-                test_topic(self._base_topic, device_id), partial(self._on_test_message, device_id)
-            )
+            # A native mirror has test buttons that run the trigger here, so it needs no test topic (MIG-03)
+            if not self.is_native(device_id):
+                device.unsubscribe_test = await self.gateway.async_subscribe(
+                    test_topic(self._base_topic, device_id), partial(self._on_test_message, device_id)
+                )
         except BaseException:
             self.mirrors.pop(device_id, None)
             if device.unsubscribe is not None:
@@ -1406,10 +1954,12 @@ class Manager:
             state_topic(self._base_topic, device_id),
             partial(self._on_message, device_id),
         )
-        device.unsubscribe_test = await self.gateway.async_subscribe(
-            test_topic(self._base_topic, device_id),
-            partial(self._on_test_message, device_id),
-        )
+        # A native device has a test button that runs the trigger directly, so no test topic round trip exists (MIG-03)
+        if not self.is_native(device_id):
+            device.unsubscribe_test = await self.gateway.async_subscribe(
+                test_topic(self._base_topic, device_id),
+                partial(self._on_test_message, device_id),
+            )
         # The start publishes all documents first, then all discovery (D-15); only a later add publishes per device
         if not startup:
             await self.async_publish_config(device)
@@ -1449,6 +1999,8 @@ class Manager:
         self._rename_companion(device.device_id, spec.name)
         await self.async_publish_config(device, changed_only=True)
         await self.async_publish_discovery(device)
+        # A native select re-reads its options and its current option; a legacy device ignores the signal
+        self._notify_devices_changed()
 
     @callback
     def _rename_companion(self, device_id: str, name: str) -> None:
@@ -1478,8 +2030,8 @@ class Manager:
         device = self.devices.pop(device_id)
         # Another instance adopted the device: its topics are the adopter's now and this delete must not clear them
         adopted_away = self.sync.transfer_info(device_id) is not None
-        discovery_cleared = adopted_away or await _async_attempt(
-            partial(self._publisher.async_clear_device, device_id), f"clear the discovery of device {device.name}"
+        discovery_cleared = adopted_away or await _async_clear_discovery_topics(
+            self._publisher, device_id, self._export_clear_prefix(), device.name
         )
         if device.unsubscribe is not None:
             device.unsubscribe()
@@ -1499,6 +2051,8 @@ class Manager:
         self._revs.pop(device_id, None)
         self._transfers.pop(device_id, None)
         self._device_modes.pop(device_id, None)
+        self._previous.pop(device_id, None)
+        self._forget_native(device_id)
         if discovery_cleared and config_cleared and state_cleared:
             self._published.discard(device_id)
         self._schedule_save()
@@ -1513,7 +2067,7 @@ class Manager:
         assert self._publisher is not None  # noqa: S101
         current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
         for device_id in sorted(self._published - current):
-            if await _async_clear_topics(self._publisher, device_id):
+            if await _async_clear_topics(self._publisher, device_id, export_prefix=self._export_clear_prefix()):
                 self._published.discard(device_id)
                 self._stored_last_acted.pop(device_id, None)
                 self._schedule_save()
@@ -1541,6 +2095,8 @@ class Manager:
                 rev=1,
                 # An adopted device carries its previous owners in every document, so a late follower learns it (D-09)
                 transferred_from=tuple(self._transfers.get(device_id, ())),
+                # The marker only while the device is native, so a deferred or legacy device publishes none
+                native=self.is_native(device_id),
             )
             digest: str = document["hash"]
             changed = known is None or known["hash"] != digest
@@ -1575,10 +2131,37 @@ class Manager:
             f"publish the config document of device {device.name}",
         )
 
+    def _export_signature(self) -> tuple[bool, str]:
+        """Return whether the discovery export is on and its prefix, read from the hub options (D-03, D-11)."""
+        options = self._entry.options
+        return (
+            bool(options.get(CONF_DISCOVERY_EXPORT, False)),
+            str(options.get(CONF_EXPORT_PREFIX, DEFAULT_EXPORT_PREFIX)),
+        )
+
+    def _export_clear_prefix(self) -> str | None:
+        """Return the export prefix to clear along with the legacy discovery topic, None while the export is off."""
+        enabled, prefix = self._export_signature()
+        return prefix if enabled else None
+
     async def async_publish_discovery(self, device: Device) -> None:
         """Publish the retained discovery of a device; an unavailable MQTT client is logged, the next start retries."""
         assert self._publisher is not None  # noqa: S101
         if device.device_id in self.sync.transferred_away:
+            return
+        if self.is_native(device.device_id):
+            # A native device has entities of its own; discovery survives only as the optional export (D-03, D-11)
+            export_enabled, prefix = self._export_signature()
+            if export_enabled:
+                await _async_attempt(
+                    partial(
+                        self._publisher.async_publish_export,
+                        spec=device.spec,
+                        instance_id=self._instance_id,
+                        prefix=prefix,
+                    ),
+                    f"publish the discovery export of device {device.name}",
+                )
             return
         await _async_attempt(
             partial(
@@ -1592,9 +2175,13 @@ class Manager:
 
     @callback
     def _on_message(self, device_id: str, msg: IncomingMessage) -> None:
-        """Handle a state message: separate baseline from edge and enqueue the matching script."""
+        """Handle a state message: record the value, separate baseline from edge and enqueue the matching script."""
+        if (device := self._device(device_id)) is None:
+            return
+        # The shown state is recorded before the mode gate: a disabled device still shows what the broker says (STA-07)
+        self._record_value(device, msg.payload)
         # Disabled processes nothing: the baseline stays where it was and no payload is looked at (D-14)
-        if (device := self._device(device_id)) is None or self.effective_mode(device_id) == MODE_DISABLED:
+        if self.effective_mode(device_id) == MODE_DISABLED:
             return
         previous = device.tracker.last_acted
         decision = device.tracker.handle(msg.retain, msg.payload)
@@ -1607,6 +2194,62 @@ class Manager:
             return
         assert decision.value is not None  # noqa: S101
         self._run_trigger(device, decision.value)
+
+    @callback
+    def _record_value(self, device: Device, payload: str) -> None:
+        """Remember the StateValue of an accepted payload and tell the native entity; other payloads change nothing."""
+        value = device.spec.accepted.get(payload.strip().lower())
+        if value is None or value == device.value:
+            return
+        old = device.value
+        device.value = value
+        self._track_previous(device, old, value)
+        async_dispatcher_send(self._hass, SIGNAL_DEVICE_STATE.format(self._entry.entry_id, device.device_id))
+
+    @callback
+    def _track_previous(self, device: Device, old: str | None, value: str) -> None:
+        """Remember the value that was shown before `value` for a native Select; other devices have no history."""
+        if device.spec.kind != SUBENTRY_SELECT or not self.is_native(device.device_id):
+            return
+        before = old
+        if before is None and (existing := self._previous.get(device.device_id)) is not None:
+            before = existing.last
+        if before is not None and before != value:
+            self._previous[device.device_id] = SelectHistory(last=value, previous=before)
+            self._schedule_save()
+
+    def previous_value(self, device_id: str) -> str | None:
+        """Return the StateValue shown before the current one, None when unknown or no option any more."""
+        device = self._device(device_id)
+        if device is None or device.spec.kind != SUBENTRY_SELECT:
+            return None
+        if (history := self._previous.get(device_id)) is None:
+            return None
+        return history.previous if history.previous in device.spec.accepted.values() else None
+
+    async def async_restore_previous(self, device_id: str) -> bool:
+        """
+        Publish the previous StateValue like a select choice; False when there is none.
+
+        Nothing is changed locally: the echo of the broker moves the shown value and the history.
+        """
+        if (previous := self.previous_value(device_id)) is None:
+            return False
+        await self.async_send_state(device_id, previous)
+        return True
+
+    async def async_send_state(self, device_id: str, value: str) -> None:
+        """
+        Publish a StateValue to the shared state topic of a device, retained at QoS 1 (D-07, T-5-10).
+
+        Nothing is changed locally: the echo of the broker is the single state source. Raises ValueError for an unknown
+        device and for a value that is not exactly one of its StateValues; the HomeAssistantError of an unavailable
+        MQTT client propagates.
+        """
+        if (device := self._device(device_id)) is None or value not in device.spec.accepted.values():
+            msg = "Unknown device or state value"
+            raise ValueError(msg)
+        await self.gateway.async_publish(state_topic(self._base_topic, device_id), value, retain=True, qos=1)
 
     @callback
     def _run_trigger(self, device: Device, value: str) -> None:
@@ -1729,25 +2372,46 @@ class Manager:
         message is a replay, never a press, so it must not run actions (T-02-09). Only a payload that equals a
         StateValue of the device runs anything (T-02-08). A device that is observed or disabled runs nothing.
         """
-        if msg.retain or (device := self._device(device_id)) is None:
-            return
-        # The test buttons follow the same mode as the state topic, so they cannot bypass it (D-14, T-04-19)
-        if (mode := self.effective_mode(device_id)) != MODE_RUN:
-            LOGGER.debug("The test press of device %s runs no actions in %s mode", shown(device.name), mode)
+        if msg.retain or (device := self._device(device_id)) is None or self._test_blocked(device):
             return
         value = device.spec.accepted.get(msg.payload.strip().lower())
         if value is None:
             self._log_ignored(device, msg.payload)
             return
-        trigger = device.spec.triggers.get(trigger_key(value))
-        if trigger is None or not self.runner.can_run(device_id, trigger.key):
+        if (trigger := device.spec.triggers.get(trigger_key(value))) is not None:
+            self._enqueue_test(device, trigger)
+
+    async def async_press_test(self, device_id: str, key: str) -> None:
+        """
+        Run the actions of one trigger of a device as a test, the way a native test button does (MIG-03).
+
+        The press never touches the tracker, the baseline or the state topic, and nothing is published. It passes the
+        same mode gate as the test topic; an unknown device id or trigger key does nothing.
+        """
+        if (device := self._device(device_id)) is None or (trigger := device.spec.triggers.get(key)) is None:
+            return
+        if not self._test_blocked(device):
+            self._enqueue_test(device, trigger)
+
+    def _test_blocked(self, device: Device) -> bool:
+        """Return whether the mode stops a test run; the test buttons follow the mode of the state topic (D-14)."""
+        if (mode := self.effective_mode(device.device_id)) == MODE_RUN:
+            return False
+        LOGGER.debug("The test press of device %s runs no actions in %s mode", shown(device.name), mode)
+        return True
+
+    @callback
+    def _enqueue_test(self, device: Device, trigger: TriggerSpec) -> None:
+        """Enqueue the actions of a trigger as a test run, unless the runner has no Script for it (T-04-19)."""
+        device_id = device.device_id
+        if not self.runner.can_run(device_id, trigger.key):
             return
         self.runner.enqueue(
             device_id,
             device.name,
             trigger.label,
             trigger.key,
-            {"device_id": device_id, "state": value},
+            {"device_id": device_id, "state": trigger.value},
             test=True,
         )
 

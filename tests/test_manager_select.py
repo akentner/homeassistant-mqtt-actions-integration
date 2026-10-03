@@ -19,6 +19,7 @@ from custom_components.mqtt_actions.const import (
     STORE_VERSION,
 )
 from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, state_topic
+from tests.log_helpers import own_warnings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -206,13 +207,13 @@ async def test_select_unknown_payload_is_ignored_and_logged(
     with caplog.at_level(logging.DEBUG, logger="custom_components.mqtt_actions"):
         caplog.clear()
         await _fire(hass, entry, device_id, "nope", retain=False)
-        (warning,) = [r for r in caplog.records if r.levelno == logging.WARNING]
+        (warning,) = own_warnings(caplog, exact=True)
         assert "Mode" in warning.getMessage()
         assert "'nope'" in warning.getMessage()
 
         caplog.clear()
         await _fire(hass, entry, device_id, "x\nforged log line " + "y" * 500, retain=False)
-        (long_warning,) = [r for r in caplog.records if r.levelno == logging.WARNING]
+        (long_warning,) = own_warnings(caplog, exact=True)
         message = long_warning.getMessage()
         assert "\n" not in message
         assert "Mode" in message
@@ -223,7 +224,7 @@ async def test_select_unknown_payload_is_ignored_and_logged(
 
         caplog.clear()
         await _fire(hass, entry, device_id, "", retain=False)
-        assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+        assert own_warnings(caplog) == []
 
     assert (len(calls["a"]), len(calls["b"]), len(calls["c"])) == (1, 0, 0)
     assert entry.runtime_data.devices[device_id].tracker.last_acted == "a"
@@ -305,7 +306,7 @@ async def test_select_removed_state_value_becomes_unknown(
     with caplog.at_level(logging.WARNING, logger="custom_components.mqtt_actions"):
         caplog.clear()
         await _fire(hass, entry, device_id, "b", retain=False)
-        (warning,) = [r for r in caplog.records if r.levelno == logging.WARNING]
+        (warning,) = own_warnings(caplog, exact=True)
     assert "Mode" in warning.getMessage()
     assert len(calls["b"]) == 1
     assert entry.runtime_data.devices[device_id].tracker.last_acted is None

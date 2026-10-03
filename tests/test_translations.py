@@ -51,6 +51,7 @@ NEW_ISSUES = {
     "schema_too_new": {"device", "version", "supported"},
     "mirror_blocked": {"device", "owner", "services"},
     "denied_service_call": {"device", "trigger", "service"},
+    "native_cutover_waiting": {"instances"},
 }
 
 # Fixable issues show their text in the confirm step of the fix flow (hassfest rejects an issue-level description next
@@ -205,6 +206,7 @@ REQUIRED_KEYS = (
     "config_subentries.switch.error.breaker_window_range",
     "entity.sensor.instances_online.name",
     "entity.button.resync.name",
+    "entity.button.restore_previous.name",
     "services.resync.name",
     "services.resync.description",
     "services.export_devices.name",

@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection (completed 2026-09-30)
 - [x] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely (completed 2026-10-02)
 - [x] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation (completed 2026-10-03)
+- [x] **Phase 5: Evaluate native switch/select entities instead of MQTT Discovery** - Native switch and select entities replace MQTT Discovery as the default (ADR, takeover migration, cutover, optional export) (completed 2026-10-03)
 
 ## Phase Details
 
@@ -185,10 +186,50 @@ Plans:
 **Wave 12** *(gap closure, blocked on Wave 11 completion)*
 - [x] 04-14-PLAN.md — Gap closure: fixable Repairs issues keep their text in the fix flow step so hassfest passes and the release gate can go green (wave 12)
 
+### Phase 5: Evaluate native switch/select entities instead of MQTT Discovery
+
+**Goal:** Switch and select entities owned by the MQTT Actions config entry replace MQTT Discovery as the default way device entities are created, so every device and entity of every instance, mirrors included, shows on the integration page; existing installations migrate automatically with entity ids, history and registry customizations intact; MQTT Discovery stays only as an optional export. Origin: backlog item 999.2 and Phase 4 D-13 (a device belongs to exactly one config entry; Phase 4 uses companion devices meanwhile).
+**Requirements**: ENT-01, ENT-02, ENT-03, MIG-01, MIG-02, MIG-03, DEC-01
+**Success Criteria** (what must be TRUE):
+  1. Every owned device and every mirror shows its switch or select, its test buttons and its mode select as entities of this integration, on the integration page of each instance.
+  2. Toggling a native entity on any instance publishes to the shared retained state topic and the actions run locally on every participating instance exactly as before.
+  3. An installation upgraded from 0.1.0 keeps entity ids, registry ids, device ids, areas, names and history without a manual step.
+  4. The owner switches to native entities only when no online peer is a legacy instance, and a mixed fleet keeps working throughout.
+  5. MQTT Discovery is published only as an optional export and the documentation, ACL page and translations say so.
+
+**Depends on:** Phase 4
+**Plans:** 9/9 plans complete
+
+Plans:
+**Wave 1**
+- [x] 05-01-PLAN.md — ADR with the four D-02 criteria, spike scenarios pinned as regression tests, requirement registration and the blocking-human Go gate (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 05-02-PLAN.md — Registry takeover module: fixed order, identity check, bounded unload wait, duplicate guard (wave 2)
+- [x] 05-03-PLAN.md — Native Switch, Select and test-button entities of owned devices, state from the echo, retained QoS 1 commands (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 05-04-PLAN.md — Additive document marker, native mirrors directly under the entry, availability parity, one-way native status (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 05-05-PLAN.md — Takeover pass at start before the platform forward, deferral fallback, adoption between native and legacy devices (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 05-06-PLAN.md — Cutover decision: heartbeat capability, roster gate, settle timer, Repairs hint for blocking peers (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 05-07-PLAN.md — Live follower flip with automatic reload, real-setup multi-instance harness and cutover acceptance scenarios (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 05-08-PLAN.md — Optional Discovery export with hub options, legacy-only healing, issues and test topic, native delete lifecycle (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [x] 05-09-PLAN.md — README, docs and ACL page, project record amendments, release 0.2.0 preparation and the real-instance UAT (wave 8)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -196,21 +237,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
+| 5. Evaluate native switch/select entities instead of MQTT Discovery | 9/9 | Complete    | 2026-10-03 |
 
 ## Backlog
 
 ### Phase 999.1: Per-instance local actions on mirrored devices (followers add own actions, relates to MAP-01) (BACKLOG)
 
 **Goal:** [Captured for future planning] A follower instance can add its own local actions to a mirrored device, on top of the owner's document (for example different entities per instance). Found during Phase 3 UAT: mirrors are read-only today.
-**Requirements:** TBD
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (promote with /gsd-review-backlog when ready)
-
-### Phase 999.2: Evaluate native switch/select entities instead of MQTT Discovery (BACKLOG)
-
-**Goal:** [Captured for future planning] Entities owned by the MQTT Actions config entry would show the full device and entity count on our integration page (incl. mirrored devices on other instances), remove discovery healing/ghost-entity handling and DSC-04. Costs: breaks the PROJECT.md Discovery constraint, rewrite of phase 1-3 publishing, loses non-HA consumers. Origin: Phase 4 research on D-13 (a device belongs to exactly one config entry); Phase 4 uses companion devices meanwhile.
 **Requirements:** TBD
 **Plans:** 0 plans
 

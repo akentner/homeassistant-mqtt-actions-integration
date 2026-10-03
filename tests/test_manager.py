@@ -34,6 +34,7 @@ from custom_components.mqtt_actions.const import (
 )
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
+from tests.log_helpers import own_warnings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -287,20 +288,20 @@ async def test_unknown_payload_is_ignored_and_logged(
     with caplog.at_level(logging.DEBUG, logger="custom_components.mqtt_actions"):
         caplog.clear()
         await _fire(hass, entry, _device_id(sub), "toggle", retain=False)
-        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        warnings = own_warnings(caplog, exact=True)
         assert len(warnings) == 1
         assert "Lamp" in warnings[0].getMessage()
         assert "'toggle'" in warnings[0].getMessage()
 
         caplog.clear()
         await _fire(hass, entry, _device_id(sub), "x\nforged log line " + "y" * 500, retain=False)
-        (long_warning,) = [r for r in caplog.records if r.levelno == logging.WARNING]
+        (long_warning,) = own_warnings(caplog, exact=True)
         assert "\n" not in long_warning.getMessage()
         assert len(long_warning.getMessage()) < 250
 
         caplog.clear()
         await _fire(hass, entry, _device_id(sub), "", retain=False)
-        assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+        assert own_warnings(caplog) == []
 
     assert len(on_calls) == 1
     assert len(off_calls) == 0
@@ -947,7 +948,7 @@ async def test_delete_device_own_subscription_never_sees_state_clear(
         await hass.async_block_till_done(wait_background_tasks=True)
 
     assert (len(on_calls), len(off_calls)) == (0, 0)
-    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+    assert own_warnings(caplog) == []
     assert "Ignoring empty payload" not in caplog.text
 
 

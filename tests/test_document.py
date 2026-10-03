@@ -31,6 +31,8 @@ from custom_components.mqtt_actions.const import (
     SUBENTRY_SWITCH,
 )
 from custom_components.mqtt_actions.document import (
+    NATIVE_KEY,
+    NATIVE_VALUE,
     DocumentRejectedError,
     ParsedDocument,
     SchemaTooNewError,
@@ -733,3 +735,53 @@ def test_transferred_from_accepts_the_maximum_length() -> None:
     marker = [f"inst-{number}" for number in range(8)]
     document = _document(_switch(), transferred_from=marker)
     assert parse_document("dev-1", serialize_document(document)).transferred_from == tuple(marker)
+
+
+# --- native marker of an owner with native entities (D-09, T-5-03) -------------------------------------------------
+
+
+def test_the_marker_is_never_hashed() -> None:
+    """D-09: the marker changes neither hash nor the content, and a document without it is the one built before."""
+    spec = _switch(on=LIGHT_ON, off=LIGHT_OFF)
+    plain = _document(spec)
+    marked = _document(spec, native=True)
+    assert marked[NATIVE_KEY] == NATIVE_VALUE
+    assert marked["hash"] == plain["hash"]
+    assert marked["schema_version"] == plain["schema_version"] == SCHEMA_VERSION == 1
+    plain_parsed = parse_document("dev-1", serialize_document(plain))
+    marked_parsed = parse_document("dev-1", serialize_document(marked))
+    assert marked_parsed.content_hash == plain_parsed.content_hash
+    assert marked_parsed.actions_hash == plain_parsed.actions_hash
+    assert marked_parsed.content == plain_parsed.content
+    # No marker, no key: the text is the one an owner of the previous release publishes
+    assert NATIVE_KEY not in plain
+    assert serialize_document(_document(spec, native=False)) == serialize_document(plain)
+    assert set(plain) == {"schema_version", CONF_DEVICE_ID, "owner", "owner_name", "rev", "hash", *build_content(spec)}
+    assert plain_parsed.native is False
+    assert marked_parsed.native is True
+
+
+@pytest.mark.parametrize("value", ["other", "NATIVE", 1, True, None, ["native"], {"native": 1}])
+def test_the_marker_is_read_strictly(value: Any) -> None:
+    """T-5-03: only the exact string reads as native; any other value is not native and never rejects the document."""
+    document = _document(_switch())
+    document[NATIVE_KEY] = value
+    assert parse_document("dev-1", serialize_document(document)).native is False
+
+
+def test_an_absent_marker_reads_as_not_native() -> None:
+    """A document of an owner of the previous release has no marker and parses as before."""
+    assert parse_document("dev-1", serialize_document(_document(_switch()))).native is False
+
+
+def test_a_marker_next_to_unknown_extra_keys_parses_unchanged() -> None:
+    """The property that makes a reader of the previous release ignore the marker: unknown keys never matter."""
+    spec = _switch()
+    plain = parse_document("dev-1", _wire(spec))
+    document = _document(spec, native=True)
+    document["future_field"] = {"anything": [1, 2, 3]}
+    parsed = parse_document("dev-1", serialize_document(document))
+    assert parsed.content_hash == plain.content_hash
+    assert parsed.actions_hash == plain.actions_hash
+    assert parsed.spec == plain.spec
+    assert parsed.native is True

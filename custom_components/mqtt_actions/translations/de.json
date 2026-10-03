@@ -241,14 +241,21 @@
     "step": {
       "init": {
         "title": "MQTT-Actions-Optionen",
-        "description": "Lege fest, was mit deinen Geräten passiert, wenn du diese Integration entfernst. Die Auswahl wird beim Entfernen gelesen, stelle sie also vor dem Entfernen der Integration ein.",
+        "description": "Lege fest, was mit deinen Geräten passiert, wenn du diese Integration entfernst. Die Auswahl wird beim Entfernen gelesen, stelle sie also vor dem Entfernen der Integration ein. Außerdem kannst du einen optionalen MQTT-Discovery-Export deiner Geräte für externe Verbraucher einschalten, die nicht Home Assistant sind.",
         "data": {
-          "delete_devices_on_remove": "Alle Geräte löschen, wenn diese Integration entfernt wird"
+          "delete_devices_on_remove": "Alle Geräte löschen, wenn diese Integration entfernt wird",
+          "discovery_export": "MQTT-Discovery-Export veröffentlichen",
+          "export_prefix": "Präfix des Discovery-Exports"
         },
         "data_description": {
-          "delete_devices_on_remove": "Standardmäßig aus: Beim Entfernen dieser Integration bleiben alle ihre Geräte und deren retained Nachrichten auf dem Broker, und andere Instanzen behalten sie als verwaiste Geräte, die als nicht verfügbar angezeigt werden. An: Beim Entfernen dieser Integration werden alle auf dieser Instanz erstellten Geräte vom Broker und von jeder verbundenen Instanz gelöscht."
+          "delete_devices_on_remove": "Standardmäßig aus: Beim Entfernen dieser Integration bleiben alle ihre Geräte und deren retained Nachrichten auf dem Broker, und andere Instanzen behalten sie als verwaiste Geräte, die als nicht verfügbar angezeigt werden. An: Beim Entfernen dieser Integration werden alle auf dieser Instanz erstellten Geräte vom Broker und von jeder verbundenen Instanz gelöscht.",
+          "discovery_export": "Standardmäßig aus. Home Assistant braucht für die Geräte dieser Integration keine Discovery, der Export ist also nur für andere Verbraucher des Brokers. Er führt jedes Gerät mit einer einzigen, standardmäßig deaktivierten Entität auf, ohne Test-Buttons. Er wird nur nach bestem Bemühen veröffentlicht: Wird er auf dem Broker gelöscht, stellt ihn nichts wieder her.",
+          "export_prefix": "Das Topic-Präfix des Exports. Das Standardpräfix wird von Home Assistant nicht beobachtet. Gibst du das Discovery-Präfix ein, auf das Home Assistant selbst lauscht, legt es von jedem Gerät ein deaktiviertes Duplikat an. Keine Wildcards, keine leeren Ebenen, kein führendes $."
         }
       }
+    },
+    "error": {
+      "invalid_export_prefix": "Das Export-Präfix darf nicht leer sein, kein # oder + enthalten, nicht mit einem Schrägstrich beginnen oder enden, keine leeren Ebenen enthalten und nicht mit $ beginnen."
     }
   },
   "entity": {
@@ -260,6 +267,9 @@
     "button": {
       "resync": {
         "name": "Neu synchronisieren"
+      },
+      "restore_previous": {
+        "name": "Vorherigen Zustand wiederherstellen"
       }
     },
     "select": {
@@ -289,6 +299,10 @@
     "mqtt_discovery_disabled": {
       "title": "MQTT Discovery ist deaktiviert",
       "description": "MQTT Actions erstellt seine Entitäten über MQTT Discovery, aber Discovery ist in der MQTT-Integration deaktiviert. Es erscheint keine Entität von MQTT Actions, bis Discovery in den Optionen der MQTT-Integration wieder aktiviert wird."
+    },
+    "native_cutover_waiting": {
+      "title": "Diese Instanz nutzt noch MQTT Discovery",
+      "description": "Diese Instanzen verwenden eine ältere Version von MQTT Actions, die noch keine nativen Entitäten nutzen kann: {instances}. Diese Instanz nutzt für ihre Entitäten weiterhin MQTT Discovery, bis jene aktualisiert wurden oder offline gehen, und wechselt dann selbstständig zu nativen Entitäten. Solange sie wartet, geht nichts verloren: Geräte, Namen und Bereiche bleiben unverändert."
     },
     "circuit_breaker_tripped": {
       "title": "Ein Gerät wurde vom Schutzschalter pausiert",

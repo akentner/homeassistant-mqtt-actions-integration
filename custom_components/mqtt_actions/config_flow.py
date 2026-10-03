@@ -28,6 +28,8 @@ from .const import (
     CONF_BREAKER_WINDOW,
     CONF_DELETE_DEVICES_ON_REMOVE,
     CONF_DEVICE_ID,
+    CONF_DISCOVERY_EXPORT,
+    CONF_EXPORT_PREFIX,
     CONF_FRIENDLY_NAME,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
@@ -40,6 +42,7 @@ from .const import (
     DEFAULT_BASE_TOPIC,
     DEFAULT_BREAKER_MAX_RUNS,
     DEFAULT_BREAKER_WINDOW,
+    DEFAULT_EXPORT_PREFIX,
     DOMAIN,
     MAX_OPTIONS,
     MIN_OPTIONS,
@@ -125,7 +128,7 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> HubOptionsFlow:  # noqa: ARG004
-        """Return the options flow of the hub: the keep-or-delete choice for its removal (D-11)."""
+        """Return the options flow of the hub: the keep-or-delete choice (D-11) and the discovery export (D-03)."""
         return HubOptionsFlow()
 
     @classmethod
@@ -137,25 +140,51 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class HubOptionsFlow(OptionsFlow):
     """
-    Choose what removing the hub does to the devices on the broker (D-11).
+    Hub options: what removing the hub does to the devices (D-11) and the optional MQTT Discovery export (D-03).
 
-    A plain options flow, not a reload-on-change one: saving the option triggers the update listener, whose reconcile
-    finds nothing to do. Nothing is published here; the choice is only read when the entry is removed.
+    A plain options flow, not a reload-on-change one. The delete choice is only read when the entry is removed. The
+    export options are applied by the manager from the entry update, which publishes or clears the export topics.
+    Only submitted keys are stored, so an omitted export key means the default: off, and the default prefix.
     """
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Show the delete choice, off by default, and store it."""
+        """Show the delete choice, the export switch and the export prefix, and store what is submitted."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(
-                data={CONF_DELETE_DEVICES_ON_REMOVE: bool(user_input.get(CONF_DELETE_DEVICES_ON_REMOVE, False))}
-            )
+            options: dict[str, Any] = {
+                CONF_DELETE_DEVICES_ON_REMOVE: bool(user_input.get(CONF_DELETE_DEVICES_ON_REMOVE, False))
+            }
+            if CONF_DISCOVERY_EXPORT in user_input:
+                options[CONF_DISCOVERY_EXPORT] = bool(user_input[CONF_DISCOVERY_EXPORT])
+            if CONF_EXPORT_PREFIX in user_input:
+                prefix = str(user_input[CONF_EXPORT_PREFIX]).strip()
+                try:
+                    validate_base_topic(prefix)
+                except InvalidBaseTopic:
+                    errors[CONF_EXPORT_PREFIX] = "invalid_export_prefix"
+                options[CONF_EXPORT_PREFIX] = prefix
+            if not errors:
+                return self.async_create_entry(data=options)
         schema = probatio.Schema(
-            {probatio.Optional(CONF_DELETE_DEVICES_ON_REMOVE, default=False): selector.BooleanSelector()}
+            {
+                probatio.Optional(CONF_DELETE_DEVICES_ON_REMOVE, default=False): selector.BooleanSelector(),
+                probatio.Optional(CONF_DISCOVERY_EXPORT): selector.BooleanSelector(),
+                probatio.Optional(CONF_EXPORT_PREFIX): selector.TextSelector(),
+            }
         )
-        stored = bool(self.config_entry.options.get(CONF_DELETE_DEVICES_ON_REMOVE, False))
+        stored = self.config_entry.options
+        suggested = {
+            CONF_DELETE_DEVICES_ON_REMOVE: bool(stored.get(CONF_DELETE_DEVICES_ON_REMOVE, False)),
+            CONF_DISCOVERY_EXPORT: bool(stored.get(CONF_DISCOVERY_EXPORT, False)),
+            CONF_EXPORT_PREFIX: str(stored.get(CONF_EXPORT_PREFIX, DEFAULT_EXPORT_PREFIX)),
+        }
+        if user_input is not None:
+            # A refused submit shows what the user typed, not the stored values
+            suggested.update(user_input)
         return self.async_show_form(
             step_id="init",
-            data_schema=self.add_suggested_values_to_schema(schema, {CONF_DELETE_DEVICES_ON_REMOVE: stored}),
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            errors=errors,
         )
 
 

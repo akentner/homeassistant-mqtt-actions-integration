@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Evaluate native switch/select entities instead of MQTT Discovery
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-10-03T11:29:11.089Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-10-03T11:44:03.750Z"
 last_activity: 2026-10-03
 last_activity_desc: Phase 05 execution started
-state_head: 8ce4d2a3faa561ab1129212fed87dd7712ee7f7e
+state_head: "0b464cc6951cab7b0ad447dca1f503c9373464ad"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 42
-  completed_plans: 37
+  completed_plans: 38
   percent: 80
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 05 (Evaluate native switch/select entities instead of MQTT Discovery) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-10-03 — Phase 05 execution started
 
@@ -91,6 +91,7 @@ Progress: [████████░░] 80% of Phase 01 plans
 | Phase 05 P02 | 30min | 2 tasks | 2 files |
 | Phase 05 P03 | 40min | 3 tasks | 9 files |
 | Phase 05 P04 | 45min | 2 tasks | 9 files |
+| Phase 05 P05 | 75min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -179,6 +180,8 @@ Recent decisions affecting current work:
 - [Phase 05]: device_info_for replaces companion_device_info as the single device info builder shared by mode select and native entities
 - [Phase 05]: 05-04: Native marker is the top-level key entities=native, never hashed, read strictly; mirror native-ness is one-way and the stored payload carries the marker
 - [Phase 05]: 05-04: Presence signal is sent only for owners of native mirrors and only when the roster did not already signal, keeping Phase 4 roster signal counts
+- [Phase 05]: 05-05: a pending owned device always gets the migrate payload before the retained clear, even without a legacy device of its own
+- [Phase 05]: 05-05: adoption keeps a native mirror native via the persisted devices set; a legacy mirror on a native instance is queued as pending and reloads the entry
 
 ### Pending Todos
 
@@ -202,6 +205,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T11:29:10.984Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-10-03T11:44:03.639Z
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None

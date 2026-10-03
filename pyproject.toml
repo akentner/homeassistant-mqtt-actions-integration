@@ -18,6 +18,6 @@ markers = [
 
 [dependency-groups]
 dev = [
-    "pytest-homeassistant-custom-component==0.13.368",
+    "pytest-homeassistant-custom-component==0.13.367",
     "ruff==0.16.10",
 ]

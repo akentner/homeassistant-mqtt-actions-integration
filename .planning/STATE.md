@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Evaluate native switch/select entities instead of MQTT Discovery
-status: executing
-stopped_at: Completed 05-08-PLAN.md
-last_updated: "2026-10-03T12:23:59.042Z"
+status: verifying
+stopped_at: Completed 05-09-PLAN.md (real-instance UAT pending)
+last_updated: "2026-10-03T12:53:13.839Z"
 last_activity: 2026-10-03
 last_activity_desc: Phase 05 execution started
-state_head: 764bc4b44d50e6db29735701fb3ff6fa38654cf9
+state_head: 3cc244db54da5e33437e05fd4250b8680d5fc00a
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 42
-  completed_plans: 41
+  completed_plans: 42
   percent: 80
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 
 Phase: 05 (Evaluate native switch/select entities instead of MQTT Discovery) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-03 — Phase 05 execution started
 
 Progress: [████████░░] 80% of Phase 01 plans
@@ -95,6 +95,7 @@ Progress: [████████░░] 80% of Phase 01 plans
 | Phase 5 P06 | 60min | 2 tasks | 11 files |
 | Phase 05 P07 | 45min | 2 tasks | 6 files |
 | Phase 05 P08 | 60min | 3 tasks | 10 files |
+| Phase 5 P09 | 35min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -189,6 +190,7 @@ Recent decisions affecting current work:
 - [Phase 05]: A running legacy mirror that flips to native is parked in _legacy_this_run and the entry reloads once, so the takeover keeps every entity identity (05-07)
 - [Phase 05]: 05-08: heals_discovery gates healing to owned legacy devices; a deferred device is legacy again (in _legacy_this_run), only the pass window is excluded
 - [Phase 05]: 05-08: the discovery export is a best-effort second publish path (disabled by default, own prefix, no subscription, no healing); option changes apply from async_reconcile without reload
+- [Phase 5]: 05-09: ACL block unchanged; the export prefix has its own row and the discovery prefix is a legacy-path and export concern
 
 ### Pending Todos
 
@@ -212,6 +214,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T12:23:58.941Z
-Stopped at: Completed 05-08-PLAN.md
+Last session: 2026-10-03T12:53:13.727Z
+Stopped at: Completed 05-09-PLAN.md (real-instance UAT pending)
 Resume file: None

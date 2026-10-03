@@ -198,7 +198,7 @@ Plans:
   5. MQTT Discovery is published only as an optional export and the documentation, ACL page and translations say so.
 
 **Depends on:** Phase 4
-**Plans:** 8/9 plans executed
+**Plans:** 9/9 plans executed
 
 Plans:
 **Wave 1**
@@ -224,7 +224,7 @@ Plans:
 - [x] 05-08-PLAN.md — Optional Discovery export with hub options, legacy-only healing, issues and test topic, native delete lifecycle (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 05-09-PLAN.md — README, docs and ACL page, project record amendments, release 0.2.0 preparation and the real-instance UAT (wave 8)
+- [x] 05-09-PLAN.md — README, docs and ACL page, project record amendments, release 0.2.0 preparation and the real-instance UAT (wave 8)
 
 ## Progress
 
@@ -237,7 +237,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
-| 5. Evaluate native switch/select entities instead of MQTT Discovery | 8/9 | In Progress|  |
+| 5. Evaluate native switch/select entities instead of MQTT Discovery | 9/9 | In Progress|  |
 
 ## Backlog
 

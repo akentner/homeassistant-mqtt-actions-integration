@@ -710,14 +710,17 @@ class SyncManager:
 
         Only an empty payload counts: the owner's own publishes and the discovery of other instances are not empty.
         Core publishes it when any instance deletes one entity of the device, and then drops every entity of it.
-        Only ids in `devices` are healed, and a device being deleted has already left `devices`, so the owner's own
-        delete is never mistaken for a removal elsewhere.
+        Only legacy ids in `devices` are healed, and a device being deleted has already left `devices`, so the owner's
+        own delete is never mistaken for a removal elsewhere.
         """
         if msg.payload:
             return
         manager = self._manager
         device_id = parse_discovery_topic(self._discovery_prefix, msg.topic)
         if device_id is None or (device := manager.devices.get(device_id)) is None:
+            return
+        # A native device has no discovery to heal, and the owner's own clear during the takeover is no removal
+        if not manager.heals_discovery(device_id):
             return
         self._note_removal(device)
         self._discovery_heal.request(device_id)
@@ -750,7 +753,9 @@ class SyncManager:
 
     @callback
     def _start_discovery_heal(self, device_id: str) -> None:
-        """Start the republish of the discovery of one device."""
+        """Start the republish of the discovery of one device, unless it is no longer on the legacy path."""
+        if not self._manager.heals_discovery(device_id):
+            return
         self._start_heal(device_id, self._manager.async_publish_discovery, "discovery")
 
     def _start_heal(self, device_id: str, publish: Callable[[Device], Awaitable[None]], what: str) -> None:

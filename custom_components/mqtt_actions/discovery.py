@@ -183,6 +183,11 @@ class DiscoveryPublisher:
             retain=True,
         )
 
+    @property
+    def discovery_prefix(self) -> str:
+        """Return the discovery prefix core MQTT listens to."""
+        return self._gateway.discovery_prefix()
+
     async def async_publish_export(self, *, spec: DeviceSpec, instance_id: str, prefix: str) -> None:
         """Publish the retained export of a native device on the export prefix; nothing ever heals it (D-11)."""
         payload = build_export(

@@ -344,15 +344,17 @@ async def _async_attempt(action: Callable[[], Awaitable[None]], description: str
     return True
 
 
-async def _async_clear_topics(publisher: DiscoveryPublisher, device_id: str) -> bool:
+async def _async_clear_topics(
+    publisher: DiscoveryPublisher, device_id: str, *, export_prefix: str | None = None
+) -> bool:
     """
     Clear the retained discovery, config and state topics of a device in that order; True when all were cleared.
 
-    The empty config payload is the tombstone that tells followers the device is gone (D-16).
+    The empty config payload is the tombstone that tells followers the device is gone (D-16). With an `export_prefix`
+    the optional export topic is cleared right after the legacy discovery topic, unless it is the same topic. An empty
+    payload on a topic that holds nothing is a no-op, so no question is asked which of them the device used (D-11).
     """
-    discovery_cleared = await _async_attempt(
-        partial(publisher.async_clear_device, device_id), f"clear the discovery of device {device_id}"
-    )
+    discovery_cleared = await _async_clear_discovery_topics(publisher, device_id, export_prefix, device_id)
     config_cleared = await _async_attempt(
         partial(publisher.async_clear_config, device_id), f"clear the config document of device {device_id}"
     )
@@ -360,6 +362,21 @@ async def _async_clear_topics(publisher: DiscoveryPublisher, device_id: str) -> 
         partial(publisher.async_clear_state, device_id), f"clear the retained state of device {device_id}"
     )
     return discovery_cleared and config_cleared and state_cleared
+
+
+async def _async_clear_discovery_topics(
+    publisher: DiscoveryPublisher, device_id: str, export_prefix: str | None, name: str
+) -> bool:
+    """Clear the legacy discovery topic of a device and, when an export prefix is given, its export topic."""
+    cleared = await _async_attempt(
+        partial(publisher.async_clear_device, device_id), f"clear the discovery of device {name}"
+    )
+    if export_prefix is None or export_prefix == publisher.discovery_prefix:
+        return cleared
+    exported = await _async_attempt(
+        partial(publisher.async_clear_export, device_id, export_prefix), f"clear the discovery export of device {name}"
+    )
+    return cleared and exported
 
 
 async def async_remove_local_state(hass: HomeAssistant, entry: ConfigEntry, *, store_key: str = STORE_KEY) -> None:  # noqa: ARG001
@@ -401,8 +418,10 @@ async def async_remove_all_devices(
     publisher = DiscoveryPublisher(
         gateway if gateway is not None else MqttGateway(hass), entry.data[CONF_BASE_TOPIC], str(integration.version)
     )
+    export_enabled = bool(entry.options.get(CONF_DISCOVERY_EXPORT, False))
+    export_prefix = str(entry.options.get(CONF_EXPORT_PREFIX, DEFAULT_EXPORT_PREFIX)) if export_enabled else None
     for device_id in sorted(device_ids):
-        await _async_clear_topics(publisher, device_id)
+        await _async_clear_topics(publisher, device_id, export_prefix=export_prefix)
     await _async_attempt(
         partial(publisher.async_publish_availability, entry.data[CONF_INSTANCE_ID], AvailabilityState.CLEARED),
         "clear the instance availability",
@@ -589,6 +608,21 @@ class Manager:
             and (self._native.instance or device_id in self._native_devices)
         )
 
+    def heals_discovery(self, device_id: str) -> bool:
+        """
+        Return whether the owner heals the MQTT discovery of a device that core MQTT cleared (DSC-03, D-11, MIG-03).
+
+        True only for an owned device that is still on the legacy path. A native device has no discovery to heal, and a
+        device that waits for the takeover pass is not healed either: the empty retained payload the owner publishes
+        itself during the pass is no foreign removal. A device whose takeover was deferred is legacy for this run and
+        heals like before.
+        """
+        return (
+            device_id in self.devices
+            and not self.is_native(device_id)
+            and (device_id not in self._native_pending or device_id in self._legacy_this_run)
+        )
+
     def has_device(self, device_id: str) -> bool:
         """Return whether the id belongs to an owned device or a mirror."""
         return self._device(device_id) is not None
@@ -721,6 +755,8 @@ class Manager:
             # Before the platform forward and before any document: the entities move first, then the retained clear
             await self._async_native_takeover()
             await self._async_publish_owned()
+            # The pass decided which devices are native, so only now is it known whether discovery is still needed
+            self._check_discovery_enabled()
         await self._async_publish_availability(AvailabilityState.ONLINE)
         await self.presence.async_publish_heartbeat()
         self._arm_cutover()
@@ -951,6 +987,7 @@ class Manager:
         if current[0]:
             for device in exported:
                 await self.async_publish_discovery(device)
+        self._check_discovery_enabled()
 
     async def _async_reconcile_locked(self, *, startup: bool = False) -> None:
         """Reconcile the running devices with the subentries; the caller holds the lock."""
@@ -1062,9 +1099,23 @@ class Manager:
         for device in self.devices.values():
             await self.async_publish_discovery(device)
 
+    def _discovery_needed(self) -> bool:
+        """
+        Return whether any entity of this instance depends on core MQTT discovery (D-03, MIG-03).
+
+        Yes for an instance that is not native, for any owned device or mirror that is still on the legacy path, and for
+        an export on the very prefix core MQTT listens to. Not for a fully native instance: its entities are its own.
+        """
+        if not self._native.instance:
+            return True
+        if any(not self.is_native(device_id) for device_id in (*self.devices, *self.mirrors)):
+            return True
+        enabled, prefix = self._export_signature()
+        return enabled and prefix == self.gateway.discovery_prefix()
+
     def _check_discovery_enabled(self) -> None:
-        """Warn and raise a Repairs issue when MQTT discovery is disabled, because then no entity ever appears."""
-        if self.gateway.discovery_enabled():
+        """Warn and raise a Repairs issue while MQTT discovery is disabled and still needed, otherwise delete it."""
+        if self.gateway.discovery_enabled() or not self._discovery_needed():
             ir.async_delete_issue(self._hass, DOMAIN, ISSUE_DISCOVERY_DISABLED)
             return
         LOGGER.warning("MQTT discovery is disabled, so the entities of MQTT Actions cannot appear")
@@ -1887,8 +1938,8 @@ class Manager:
         device = self.devices.pop(device_id)
         # Another instance adopted the device: its topics are the adopter's now and this delete must not clear them
         adopted_away = self.sync.transfer_info(device_id) is not None
-        discovery_cleared = adopted_away or await _async_attempt(
-            partial(self._publisher.async_clear_device, device_id), f"clear the discovery of device {device.name}"
+        discovery_cleared = adopted_away or await _async_clear_discovery_topics(
+            self._publisher, device_id, self._export_clear_prefix(), device.name
         )
         if device.unsubscribe is not None:
             device.unsubscribe()
@@ -1923,7 +1974,7 @@ class Manager:
         assert self._publisher is not None  # noqa: S101
         current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
         for device_id in sorted(self._published - current):
-            if await _async_clear_topics(self._publisher, device_id):
+            if await _async_clear_topics(self._publisher, device_id, export_prefix=self._export_clear_prefix()):
                 self._published.discard(device_id)
                 self._stored_last_acted.pop(device_id, None)
                 self._schedule_save()
@@ -1994,6 +2045,11 @@ class Manager:
             bool(options.get(CONF_DISCOVERY_EXPORT, False)),
             str(options.get(CONF_EXPORT_PREFIX, DEFAULT_EXPORT_PREFIX)),
         )
+
+    def _export_clear_prefix(self) -> str | None:
+        """Return the export prefix to clear along with the legacy discovery topic, None while the export is off."""
+        enabled, prefix = self._export_signature()
+        return prefix if enabled else None
 
     async def async_publish_discovery(self, device: Device) -> None:
         """Publish the retained discovery of a device; an unavailable MQTT client is logged, the next start retries."""

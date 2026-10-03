@@ -8,6 +8,9 @@ from typing import Any
 import yaml
 
 from custom_components.mqtt_actions import const
+from custom_components.mqtt_actions.button import RestorePreviousButton, ResyncButton
+from custom_components.mqtt_actions.select import DeviceModeSelect, InstanceModeSelect
+from custom_components.mqtt_actions.sensor import RosterSensor
 from tests.test_diagnostics import DEVICE_KEYS, HUB_KEYS, ROSTER_KEYS, TOP_KEYS
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -496,3 +499,23 @@ def test_docs_describe_the_restore_button_and_the_diagnostic_test_buttons() -> N
     assert "disabled by default" in test_buttons
     assert "nothing is migrated" in test_buttons
     assert "nothing is migrated" in _normalize(_section(operations, "upgrade notes"))
+
+
+def test_docs_describe_the_english_entity_id_suffixes() -> None:
+    """The upgrade notes list the suffixes of the code, say that old ids stay, and the README gives the test example."""
+    suffixes = [
+        f"_{cls._entity_id_part}"
+        for cls in (ResyncButton, RestorePreviousButton, DeviceModeSelect, InstanceModeSelect, RosterSensor)
+    ]
+    assert all(len(suffix) > 1 for suffix in suffixes)
+    readme = _page(README)
+    operations = _page(OPERATIONS)
+    for text in (_normalize(_section(readme, "upgrading from 0.1")), _normalize(_section(operations, "upgrade notes"))):
+        for suffix in suffixes:
+            assert f"`{suffix}`" in text, f"the upgrade notes never name {suffix}"
+        assert "_test_<statevalue>" in text
+        assert "english" in text
+        assert "never renamed" in text
+    test_buttons = _normalize(_section(readme, "run mode, test buttons"))
+    assert "_test_<statevalue>" in test_buttons
+    assert "_test_on" in test_buttons

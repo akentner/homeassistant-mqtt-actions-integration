@@ -126,11 +126,16 @@ Every device, Switch and Select, has these settings in its dialog:
 
 Test buttons: every trigger of a device gets a button entity, `Test ON` and `Test OFF` for a Switch and one
 `Test <friendly name>` per option for a Select (listed under Configuration). Pressing a test button runs that trigger's
-actions locally, publishes the press on `<base topic>/v1/devices/<device uuid>/test` (not retained), and never changes
-the state, the baseline or the state topic. Existing Switch devices get their two test buttons after the upgrade;
-there is no opt-out. A retained message on the test topic is ignored. Every instance that follows the device sees the
-press: a test button press runs the actions on every instance that approved the device, and never on an instance that
-did not (see [Trust model and approval](#trust-model-and-approval)).
+actions, and never changes the state, the baseline or the state topic. It follows the run mode of the device and
+passes through the queue and the circuit breaker like any other run. Existing Switch devices get their two test
+buttons after the upgrade; there is no opt-out.
+
+- **Native devices (the default since 0.2.0):** a press runs the actions only on this instance and publishes nothing.
+  Pressed on a mirror, it runs the mirrored actions only if this instance approved the device (see
+  [Trust model and approval](#trust-model-and-approval)).
+- **Devices on the legacy path (an instance on an older version is online):** a press also publishes the trigger's
+  state value, not retained, on `<base topic>/v1/devices/<device uuid>/test`, so every instance that approved the
+  device runs the actions, and never an instance that did not. A retained message on the test topic is ignored.
 
 Circuit breaker: an action that changes the state of its own device can trigger itself forever. When a device would
 exceed its limit, for example the sixth run within 10 seconds, the breaker pauses the device:
@@ -280,7 +285,8 @@ Every device gets a random UUID. Its state topic, which is also its command topi
   values of its options, exactly as created.
 - Inbound values are trimmed and read case-insensitively, so `on`, `On` and `ON` are equal. Any other payload is
   ignored and logged. For a Select, the accepted values are the state values of its options.
-- Test buttons publish the state value of their trigger, not retained, to a second topic per device:
+- On the legacy path, test buttons publish the state value of their trigger, not retained, to a second topic per
+  device; native devices have no test topic, because their test buttons run locally:
 
   ```
   <base topic>/v1/devices/<device uuid>/test
@@ -338,7 +344,8 @@ Every device gets a random UUID. Its state topic, which is also its command topi
 - A forged tombstone removes the mirrors of a device until the owner publishes it again, and forces a new approval.
 - A follower mirrors at most 100 devices of other instances, and a config document may be at most 256 KiB.
 - Actions are readable by every client that can read the config topic. Do not put secrets into actions.
-- A test button press runs the actions on every instance that approved the device.
+- A test button press of a native device runs the actions only on the instance where it is pressed. On the legacy
+  path, it runs them on every instance that approved the device.
 - Only Switch and Select devices exist in this release.
 - Actions that target a `device_id` work only on the instance where they were created, because device IDs differ
   between instances. Prefer entity, area or label targets.

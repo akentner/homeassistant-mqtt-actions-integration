@@ -1,14 +1,14 @@
 ---
-status: partial
+status: complete
 phase: 04-operations-recovery-and-release
 source: [04-VERIFICATION.md]
 started: 2026-10-02T19:38:46Z
-updated: 2026-10-03T01:20:00Z
+updated: 2026-10-03T08:30:00Z
 ---
 
 ## Current Test
 
-[testing paused — 1 item outstanding: test 2 (release v0.1.0), blocked until the phase is merged]
+[testing complete]
 
 ## Tests
 
@@ -19,9 +19,8 @@ note: Validate run on c52a548 (pushed phase branch) concluded success; job-level
 
 ### 2. First release v0.1.0 (plan 04-01, D4)
 expected: After the phase is merged and Validate is green, push tag v0.1.0 (equal to manifest version 0.1.0); Release runs check-version, ci and validate, then creates the GitHub release with generated notes
-result: blocked
-blocked_by: release-build
-reason: Needs the merged phase and a pushed tag v0.1.0 on GitHub; cannot be done before the merge.
+result: pass
+note: Phase merged (PR #9, fix PR #10). The first tag v0.1.0 on 0816e05 ran Release: Tag matches manifest version, hassfest, HACS, Ruff, Unit tests, Multi-instance tests, Broker tests and Create GitHub release all succeeded; the release v0.1.0 is published. An earlier tag on 9757e23 failed because a Renovate bump pulled Home Assistant 2026.10.0b0; it was reverted in PR #10 and the tag was moved.
 
 ### 3. D5/D8 diagnostics download in a real Home Assistant (plan 04-07)
 expected: Settings > Devices & services > MQTT Actions > Download diagnostics yields a JSON with hub, roster and device rows; no action YAML, entity ids, service data, broker host or credentials; instance ids shortened to 8 characters
@@ -71,11 +70,11 @@ note: German and English approval dialog read through by the user; reads natural
 ## Summary
 
 total: 11
-passed: 10
+passed: 11
 issues: 0
 pending: 0
 skipped: 0
-blocked: 1
+blocked: 0
 
 ## Gaps
 

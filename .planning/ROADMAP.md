@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Walking Skeleton - Installable Switch** - HACS-installable integration where a Switch created in the UI runs its actions on MQTT state changes, safely across restarts (completed 2026-09-29)
 - [x] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection (completed 2026-09-30)
 - [x] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely (completed 2026-10-02)
-- [ ] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation
+- [x] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation (completed 2026-10-03)
 
 ## Phase Details
 
@@ -144,7 +144,7 @@ Plans:
   4. User can set per instance and device whether actions run, are only observed, or are disabled, and can download diagnostics with sensitive data redacted.
   5. README and docs cover setup, trust model and limitations; a tagged release is built automatically with the manifest version matching the tag; CI runs the unit, real-Mosquitto and multi-instance fake-broker test tiers.
 
-**Plans:** 14/14 plans executed
+**Plans:** 14/14 plans complete
 
 Plans:
 **Wave 1**
@@ -195,7 +195,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
-| 4. Operations, Recovery and Release | 14/14 | In Progress|  |
+| 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
 
 ## Backlog
 

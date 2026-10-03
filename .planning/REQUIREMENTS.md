@@ -39,7 +39,7 @@
 - [x] **DSC-01**: The owner publishes MQTT Discovery for every entity (UUID `unique_id`, availability, device info)
 - [x] **DSC-02**: Discovery is removed only on explicit user deletion, never on unload or shutdown
 - [x] **DSC-03**: The owner republishes discovery if it was removed by a follower deleting the entity
-- [ ] **DSC-04**: User can trigger a manual resync that republishes config and discovery of all owned devices
+- [x] **DSC-04**: User can trigger a manual resync that republishes config and discovery of all owned devices
 
 ### Central Config & Ownership
 
@@ -49,10 +49,10 @@
 - [x] **SYN-04**: The owner reconciles and republishes its config on every MQTT reconnect
 - [x] **SYN-05**: Followers never delete devices because a message is absent; removal is driven by tombstone or grace window
 - [x] **SYN-06**: Deleting a device requires an explicit confirmation stating it is removed on all connected instances, then unpublishes central config and discovery
-- [ ] **SYN-07**: User can transfer ownership of a device or adopt an orphaned device
-- [ ] **SYN-08**: User can export devices to JSON and import them
-- [ ] **SYN-09**: User can set per instance and device whether actions run, are only observed, or are disabled
-- [ ] **SYN-10**: A duplicate instance ID (cloned or restored instance) is detected and reported
+- [x] **SYN-07**: User can transfer ownership of a device or adopt an orphaned device
+- [x] **SYN-08**: User can export devices to JSON and import them
+- [x] **SYN-09**: User can set per instance and device whether actions run, are only observed, or are disabled
+- [x] **SYN-10**: A duplicate instance ID (cloned or restored instance) is detected and reported
 
 ### Trust & Security
 
@@ -63,12 +63,12 @@
 
 ### Operations
 
-- [ ] **OPS-01**: A service re-triggers the actions on all approved instances (non-retained, `request_id` dedupe, rate-limited)
-- [ ] **OPS-02**: Instances acknowledge a re-trigger, and the caller can see which instances executed it
-- [ ] **OPS-03**: User can see the connected instances (roster with presence heartbeat)
-- [ ] **OPS-04**: Diagnostics export with sensitive data redacted
+- [x] **OPS-01**: A service re-triggers the actions on all approved instances (non-retained, `request_id` dedupe, rate-limited)
+- [x] **OPS-02**: Instances acknowledge a re-trigger, and the caller can see which instances executed it
+- [x] **OPS-03**: User can see the connected instances (roster with presence heartbeat)
+- [x] **OPS-04**: Diagnostics export with sensitive data redacted
 - [x] **OPS-05**: README and docs cover setup, trust model, limitations; releases are automated with manifest version in step with the tag
-- [ ] **OPS-06**: Test suite covers unit level, a real-Mosquitto tier, and multi-instance scenarios via an in-memory fake broker
+- [x] **OPS-06**: Test suite covers unit level, a real-Mosquitto tier, and multi-instance scenarios via an in-memory fake broker
 
 ## v2 Requirements
 
@@ -133,27 +133,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DSC-01 | Phase 1 | Complete |
 | DSC-02 | Phase 1 | Complete |
 | DSC-03 | Phase 3 | Complete |
-| DSC-04 | Phase 4 | Gaps Found |
+| DSC-04 | Phase 4 | Complete |
 | SYN-01 | Phase 3 | Complete |
 | SYN-02 | Phase 3 | Complete |
 | SYN-03 | Phase 3 | Complete |
 | SYN-04 | Phase 3 | Complete |
 | SYN-05 | Phase 3 | Complete |
 | SYN-06 | Phase 3 | Complete |
-| SYN-07 | Phase 4 | Gaps Found |
-| SYN-08 | Phase 4 | Gaps Found |
-| SYN-09 | Phase 4 | Gaps Found |
-| SYN-10 | Phase 4 | Gaps Found |
+| SYN-07 | Phase 4 | Complete |
+| SYN-08 | Phase 4 | Complete |
+| SYN-09 | Phase 4 | Complete |
+| SYN-10 | Phase 4 | Complete |
 | TRU-01 | Phase 3 | Complete |
 | TRU-02 | Phase 3 | Complete |
 | TRU-03 | Phase 3 | Complete |
 | TRU-04 | Phase 3 | Complete |
-| OPS-01 | Phase 4 | Gaps Found |
-| OPS-02 | Phase 4 | Gaps Found |
-| OPS-03 | Phase 4 | Gaps Found |
-| OPS-04 | Phase 4 | Gaps Found |
+| OPS-01 | Phase 4 | Complete |
+| OPS-02 | Phase 4 | Complete |
+| OPS-03 | Phase 4 | Complete |
+| OPS-04 | Phase 4 | Complete |
 | OPS-05 | Phase 4 | Complete |
-| OPS-06 | Phase 4 | Gaps Found |
+| OPS-06 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 44 total

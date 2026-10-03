@@ -1,4 +1,8 @@
-"""The buttons: resync, the native test buttons and the restore button of native Select devices."""
+"""
+The buttons: resync, the native test buttons and the restore button of native Select devices.
+
+New test buttons are diagnostic and disabled by default; an existing registry entry keeps its category and its state.
+"""
 
 from typing import TYPE_CHECKING
 
@@ -42,19 +46,36 @@ def _test_button_unique_id(device_id: str, key: str) -> str:
     return f"{device_id}_test_{key}"
 
 
+def _test_button_category(registry: er.EntityRegistry, device_id: str, key: str) -> EntityCategory | None:
+    """
+    Return the category a test button is added with: its own for an existing registry entry, else diagnostic.
+
+    Home Assistant writes the category of an entity to an existing registry entry at every add, but applies the
+    enabled default only when the entry is created. An existing entry therefore has to hand its own category back to
+    stay untouched; only a new entry gets the diagnostic category (P-05).
+    """
+    entity_id = registry.async_get_entity_id("button", DOMAIN, _test_button_unique_id(device_id, key))
+    if entity_id is not None and (existing := registry.async_get(entity_id)) is not None:
+        return existing.entity_category
+    return EntityCategory.DIAGNOSTIC
+
+
 class DeviceTestButton(NativeDeviceEntity, ButtonEntity):
     """
     Runs the actions of one trigger locally, through the same mode gate as the test topic (MIG-03).
 
     A press publishes nothing and never touches the state or the baseline: no test topic round trip exists for a native
-    device.
+    device. A new button is diagnostic and disabled by default; an existing registry entry keeps both (Q-01).
     """
 
-    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
 
-    def __init__(self, manager: Manager, device_id: str, trigger: TriggerSpec) -> None:
+    def __init__(
+        self, manager: Manager, device_id: str, trigger: TriggerSpec, entity_category: EntityCategory | None
+    ) -> None:
         """Initialize the button of one trigger; its unique id derives from the immutable StateValue."""
         super().__init__(manager, device_id)
+        self._attr_entity_category = entity_category
         self._trigger_key = trigger.key
         self._attr_unique_id = _test_button_unique_id(device_id, trigger.key)
         self._attr_name = f"Test {trigger.friendly_name}"
@@ -122,7 +143,10 @@ async def async_setup_entry(
             new = [(pair, trigger) for pair, trigger in expected.items() if pair[0] == device_id and pair not in added]
             added.update(pair for pair, _trigger in new)
             async_add_entities(
-                [DeviceTestButton(manager, device_id, trigger) for _pair, trigger in new],
+                [
+                    DeviceTestButton(manager, device_id, trigger, _test_button_category(registry, device_id, key))
+                    for (_device_id, key), trigger in new
+                ],
                 config_subentry_id=manager.subentry_id_of(device_id),
             )
 

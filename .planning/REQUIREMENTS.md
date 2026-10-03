@@ -70,6 +70,16 @@
 - [x] **OPS-05**: README and docs cover setup, trust model, limitations; releases are automated with manifest version in step with the tag
 - [x] **OPS-06**: Test suite covers unit level, a real-Mosquitto tier, and multi-instance scenarios via an in-memory fake broker
 
+### Native entities (Phase 5)
+
+- [ ] **ENT-01**: Switch, Select and test-button entities are native entities of the hub entry: owned devices sit under their subentry, mirrors directly under the entry, unique ids unchanged
+- [ ] **ENT-02**: Native entity state comes from the shared state topic, commands publish retained at QoS 1 to it, availability follows the owner
+- [ ] **ENT-03**: MQTT Discovery is an optional export for external consumers: off by default, `enabled_by_default` false, configurable prefix, documented duplicate warning
+- [ ] **MIG-01**: Existing entities are taken over with entity id, registry id, device id, area, name and history intact, with no manual step
+- [ ] **MIG-02**: Mixed versions: the owner keeps the legacy path while an online peer is not native-capable; documents and heartbeats carry additive unhashed markers
+- [ ] **MIG-03**: Healing, ghost cleanup, the discovery-disabled and discovery-removed issues and the test topic apply only to devices still on the legacy path
+- [ ] **DEC-01**: An ADR records the Go/No-Go evaluation against the four criteria
+
 ## v2 Requirements
 
 Deferred to a future release. Tracked but not in the current roadmap.
@@ -154,10 +164,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPS-04 | Phase 4 | Complete |
 | OPS-05 | Phase 4 | Complete |
 | OPS-06 | Phase 4 | Complete |
+| ENT-01 | Phase 5 | Pending |
+| ENT-02 | Phase 5 | Pending |
+| ENT-03 | Phase 5 | Pending |
+| MIG-01 | Phase 5 | Pending |
+| MIG-02 | Phase 5 | Pending |
+| MIG-03 | Phase 5 | Pending |
+| DEC-01 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 44 total
-- Mapped to phases: 44
+- v1 requirements: 51 total
+- Mapped to phases: 51
 - Unmapped: 0 ✓
 
 ---

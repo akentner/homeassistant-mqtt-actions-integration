@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Select Devices and Reliable Execution** - Select devices with per-option actions, plus run modes, test button and loop protection (completed 2026-09-30)
 - [x] **Phase 3: Trust, Central Config and Ownership** - Retained central config, owner/follower mirrors and the approval gate so every instance runs actions locally and safely (completed 2026-10-02)
 - [x] **Phase 4: Operations, Recovery and Release** - Re-trigger service, roster, resync/import/export/transfer, diagnostics, docs, test tiers and release automation (completed 2026-10-03)
-- [ ] **Phase 5: Evaluate native switch/select entities instead of MQTT Discovery** - Decide whether entities owned by the config entry replace MQTT Discovery; scope to be rediscussed
+- [ ] **Phase 5: Evaluate native switch/select entities instead of MQTT Discovery** - Native switch and select entities replace MQTT Discovery as the default (ADR, takeover migration, cutover, optional export)
 
 ## Phase Details
 
@@ -188,8 +188,14 @@ Plans:
 
 ### Phase 5: Evaluate native switch/select entities instead of MQTT Discovery
 
-**Goal:** [To be redefined in discuss-phase] Decide whether switch and select entities owned by the MQTT Actions config entry should replace MQTT Discovery. Context carried over from backlog item 999.2: native entities would show the full device and entity count on our integration page (including mirrored devices on other instances) and remove discovery healing, ghost-entity handling and DSC-04. Costs: it breaks the PROJECT.md Discovery constraint, needs a rewrite of the publishing from phases 1-3, and loses non-HA consumers. Origin: Phase 4 research on D-13 (a device belongs to exactly one config entry); Phase 4 uses companion devices meanwhile.
-**Requirements**: TBD
+**Goal:** Switch and select entities owned by the MQTT Actions config entry replace MQTT Discovery as the default way device entities are created, so every device and entity of every instance, mirrors included, shows on the integration page; existing installations migrate automatically with entity ids, history and registry customizations intact; MQTT Discovery stays only as an optional export. Origin: backlog item 999.2 and Phase 4 D-13 (a device belongs to exactly one config entry; Phase 4 uses companion devices meanwhile).
+**Requirements**: ENT-01, ENT-02, ENT-03, MIG-01, MIG-02, MIG-03, DEC-01
+**Success Criteria** (what must be TRUE):
+  1. Every owned device and every mirror shows its switch or select, its test buttons and its mode select as entities of this integration, on the integration page of each instance.
+  2. Toggling a native entity on any instance publishes to the shared retained state topic and the actions run locally on every participating instance exactly as before.
+  3. An installation upgraded from 0.1.0 keeps entity ids, registry ids, device ids, areas, names and history without a manual step.
+  4. The owner switches to native entities only when no online peer is a legacy instance, and a mixed fleet keeps working throughout.
+  5. MQTT Discovery is published only as an optional export and the documentation, ACL page and translations say so.
 **Depends on:** Phase 4
 **Plans:** 9 plans
 

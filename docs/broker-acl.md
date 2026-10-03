@@ -12,16 +12,18 @@ denied ones reach nobody. The text you copy is the text that was tested.
 
 - Anyone who can publish to a device's **state topic** can trigger the actions of that device on every Home Assistant
   instance that approved the device.
-- The **test topic** (`<base topic>/v1/devices/<device uuid>/test`) is a second way to trigger them: a message there
-  runs the actions of a trigger without changing the state. Every instance that approved the device runs them.
+- The **test topic** (`<base topic>/v1/devices/<device uuid>/test`) is a second way to trigger them for a device on the
+  legacy path: a message there runs the actions of a trigger without changing the state. Every instance that approved
+  the device runs them. Native devices have no test topic.
 - The **re-trigger topic** (`<base topic>/v1/devices/<device uuid>/retrigger`) is a third way: a message there runs the
   actions of a device again on every instance that approved it, like the test topic, and every instance answers on the
   acknowledgement topic of the requester. It carries a state of the device, never actions.
 - Anyone who can write a **config topic** can make a device appear on the other instances. A foreign device is only a
   read-only mirror that runs nothing until a user approved its exact actions on that instance, but the user still
   gets an approval request they never expected.
-- Anyone who can write the **discovery prefix** can create, change or remove entities of every instance that listens
-  to MQTT Discovery.
+- Anyone who can write the **discovery prefix** can create, change or remove the entities of a device on the legacy
+  path on every instance that listens to MQTT Discovery. Native entities do not depend on it. If you switch on the
+  export, the same holds for its prefix toward every consumer that listens to it.
 - Anyone who can **read** a config topic can read the actions of every device (see the limits below).
 
 ## Topics
@@ -30,15 +32,20 @@ denied ones reach nobody. The text you copy is the text that was tested.
 |-------|------------|----------|---------|
 | `<base topic>/v1/devices/<device uuid>/config` | the owner instance only (a tombstone is an empty retained message) | yes | every instance |
 | `<base topic>/v1/devices/<device uuid>/state` | any instance, and external publishers you trust | yes | every instance |
-| `<base topic>/v1/devices/<device uuid>/test` | any instance (test buttons) | no | every instance |
+| `<base topic>/v1/devices/<device uuid>/test` | any instance (test buttons), only for devices on the legacy path | no | every instance |
 | `<base topic>/v1/devices/<device uuid>/retrigger` | any instance (the re-trigger service) | no | every instance |
 | `<base topic>/v1/instances/<instance id>/availability` | that instance only | yes | every instance |
 | `<base topic>/v1/instances/<instance id>/heartbeat` | that instance only (every 30 seconds) | no | every instance |
 | `<base topic>/v1/instances/<requester id>/acks` | any instance (its answer to a re-trigger of that requester) | no | the requester only |
-| `<discovery prefix>/device/<device uuid>/config` | the owner instance, and core MQTT of any instance that deletes the entity | yes | every instance |
+| `<discovery prefix>/device/<device uuid>/config` | the owner instance for a device on the legacy path, and core MQTT of any instance that deletes such an entity | yes | every instance |
+| `<export prefix>/device/<device uuid>/config` | the owner instance, only when the export is on | yes | external consumers |
 
-The base topic is `mqtt_actions` by default, the discovery prefix is `homeassistant` by default. Adjust both lines if you
-changed them. The instance id of an instance is the segment of its retained availability topic
+The base topic is `mqtt_actions` by default, the discovery prefix is `homeassistant` by default and the export prefix is
+`mqtt_actions_export` by default. Adjust the lines if you changed them. The legacy path is the path of 0.1.x: a device
+is on it while an instance on an older version is online. A fully upgraded fleet uses neither the test topic nor the
+discovery prefix, and publishes the export prefix only when the export is on. The owner needs write access to the export
+prefix then; the documented block already covers the default discovery prefix, and a separate prefix needs a line of
+its own. The instance id of an instance is the segment of its retained availability topic
 (`mosquitto_sub -v -t 'mqtt_actions/v1/instances/+/availability'` lists them) and the `instance_id` value in the data
 of its hub entry. The example uses one MQTT user per instance.
 
@@ -113,15 +120,18 @@ The ACL cannot do everything, and the example does not pretend to:
 - **The approval gate is the real control.** A document from another instance never runs on an instance before the user
   approved its exact actions there. A forged document can make approval requests appear or make mirrors disappear and
   reappear, which forces a new approval, but it cannot run an action.
-- **Home Assistant instances need write access to the discovery prefix.** Core MQTT clears the retained discovery topic
-  when a user deletes an entity, and the owner republishes it. With a read-only prefix that clearing is denied and
-  the entity stays gone for everyone. Core MQTT also publishes its birth and will messages below `homeassistant/`.
+- **The discovery prefix is a concern of the legacy path and of the export only.** While a device is on the legacy
+  path, core MQTT clears the retained discovery topic when a user deletes an entity, and the owner republishes it. With
+  a read-only prefix that clearing is denied and the entity stays gone for everyone. Native devices need none of this.
+  Core MQTT also publishes its birth and will messages below `homeassistant/`.
+- **The export prefix needs write access for the owner when the export is on.** The export has no healing: if somebody
+  deletes it on the broker, it stays gone until a resync. It is for external consumers; do not grant them write access.
 - **The heartbeat shows who is there.** It carries the instance name, the integration version and the number of owned
   devices, and every Home Assistant user of the group can read it, like the availability topic. It is not retained, so
   a late subscriber receives none and a crashed instance cannot look current: a peer counts as offline after 90 seconds
   without a heartbeat. Do not grant the heartbeat topics to external publishers.
-- **The test topic is a trigger source** next to the state topic. Do not grant it to external publishers unless you
-  want them to run actions.
+- **The test topic is a trigger source** next to the state topic, for devices on the legacy path. Do not grant it to
+  external publishers unless you want them to run actions.
 - **The re-trigger topic is a trigger source** too. It is not retained, so a late subscriber receives nothing and a
   stale request cannot run later; a receiver also drops requests older than 60 seconds, repeated request ids and more
   than one request per device every 5 seconds, and it runs only what its own approval, mode and circuit breaker allow.
@@ -133,7 +143,7 @@ The ACL cannot do everything, and the example does not pretend to:
   Home Assistant shows nothing in its log. When you verify your ACL, read the retained state back with a second client
   instead of waiting for an error.
 - **Changing the MQTT discovery prefix at runtime needs a reload** of the integration, and an ACL change for the new
-  prefix.
+  prefix. It matters only on the legacy path and for an export on that prefix.
 - The ACL covers the topics of this integration only. Core MQTT and your other integrations need their own entries.
 
 ## Transport and secrets

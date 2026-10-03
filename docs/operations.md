@@ -33,10 +33,11 @@ no loaded MQTT Actions entry a call fails with a translated error.
 | `retrigger` | `device_id` (required), `state` (optional) | `request_id`, `uuid`, `state` and `instances`, one entry per instance |
 | `adopt_device` | `device_id` (required), `force` (optional, default false) | `uuid`, `adopted` and `previous_owner` |
 
-The field `device_id` of a service is the **Home Assistant registry id of the companion device** of a device (see
-[Modes and companion devices](#modes-and-companion-devices)); the device selector of the action editor produces it. The
-responses name a device by its `uuid`, the random id that the device has on the broker. Only the companion device of a
-device of this integration is accepted: the hub device and devices of other integrations are refused.
+The field `device_id` of a service is the **Home Assistant registry id of the device of MQTT Actions** (since 0.2 the
+same device that carries the entities; a device on the legacy path uses its companion device, see
+[Modes and devices](#modes-and-devices)); the device selector of the action editor produces it. The responses name a
+device by its `uuid`, the random id that the device has on the broker. Only the device of a device of this integration
+is accepted: the hub device and devices of other integrations are refused.
 
 The value of `device_id` is the Home Assistant registry id of the device on this instance, so it differs between
 instances and must not be used in shared actions. It is only a field of a service call that you start on this instance:
@@ -148,17 +149,19 @@ The `session` lets an instance tell its own restart from a clone: see [Duplicate
 
 ## Resync
 
-Resync publishes everything this instance owns again: the config documents, then the discovery, then the retained
-`online` availability, then one heartbeat. This is the order of a start, so a follower never mistakes a document that is
-about to arrive for a deleted one. It heals a broker that lost its retained messages and restores entities that were
-removed. It **never deletes** anything.
+Resync publishes everything this instance owns again: the config documents, then the discovery (for a device on the
+legacy path, and the export of a native device while the export is on), then the retained `online` availability, then
+one heartbeat. This is the order of a start, so a follower never mistakes a document that is
+about to arrive for a deleted one. It heals a broker that lost its retained messages and, for a device on the legacy path, restores entities that were
+removed. The entities of a native device belong to the integration and need no restore. It **never deletes**
+anything.
 
 Use the **Resync** button of the hub device (a configuration entity) or the service `resync`. A second resync inside
 `RESYNC_MIN_INTERVAL_SECONDS` is refused with an error, so a held button or a looping automation cannot queue
-republishes. It republishes what this instance owns, so it restores the entities of its own devices. The
-mirrors of other instances come from their owners; their Resync button restores those.
+republishes. It republishes what this instance owns. The documents of the mirrors of other instances come from their
+owners; their Resync button republishes those.
 
-## Modes and companion devices
+## Modes and devices
 
 Every device, owned or mirrored, and the instance as a whole has a **mode**. The mode is local to the instance: it is
 never part of a config document, never part of a hash and never shared, and it survives a restart.
@@ -174,13 +177,17 @@ beats run. The test topic and the re-trigger obey it as well (a re-trigger of a 
 `observing`). Leaving `disabled` takes the retained state at that moment as the new baseline, so a stale retained value
 never runs. The run mode of a device (serial or restart) is a different setting and untouched.
 
-The mode is chosen with a select entity: **Instance mode** on the hub device and **Mode** on the companion device of
-each device. A **companion device** is a device of this integration that exists for every owned device (under its
-subentry) and for every mirror (a plain device, without a subentry and without an edit dialog). The integration page
-therefore shows the hub device with the roster, the resync button and the instance mode, and one companion device for
-each device. The entities of the device itself (the Switch or Select and the test buttons) belong to the core MQTT
-integration and its own device, which has the same name, so the same device name can appear twice: once for the
-core MQTT device and once for the companion device. A companion device is renamed with the device and removed with it.
+The mode is chosen with a select entity: **Instance mode** on the hub device and **Mode** on the device of each
+device. Since 0.2 the companion concept has ended for native devices: the device of MQTT Actions carries the Switch or
+Select, the test buttons and the **Mode** select together, under its subentry for an owned device and directly under
+the config entry for a mirror (a device without an edit dialog, marked with its owner). The integration page shows the
+hub device with the roster, the resync button and the instance mode, and one device for each device, with all of its
+entities. The `device_id` field of the services is the registry id of this device.
+
+A device that is still on the legacy path (see [Upgrade notes](#upgrade-notes)) keeps a **companion device**: the
+entities of the device itself sit on a device of the core MQTT integration with the same name, and the companion
+device carries only the **Mode** select. When the device switches to the native path, both devices become
+one and the entities keep their ids. A device is renamed and removed together with the device it belongs to.
 
 ## Adoption
 
@@ -338,6 +345,14 @@ Fixed in the code, not configurable. The page and the test suite use the constan
   before them has no lines for them: the roster stays empty, a re-trigger reaches nobody and a denied publish is not
   reported visibly. Add the lines of the tested example in [docs/broker-acl.md](broker-acl.md).
 - **New entities.** The hub device, the roster sensor, the resync button, the mode selects and the companion devices
-  appear after the upgrade. The mode of everything starts as `run`.
+  (which end for a device when it switches to the native path) appear after the upgrade. The mode of everything starts as `run`.
+- **Native entities.** Since 0.2.0 the Switch, Select and test buttons of a device are native entities of this
+  integration, on the same device as the **Mode** select. The upgrade from 0.1.x is automatic and one-way: an instance
+  switches when no online instance runs an older version, and Repairs shows `native_cutover_waiting` while it waits.
+  There is no rollback, and an older instance that comes online later loses the entities of migrated devices without a
+  hint. See the [README](../README.md#upgrading-from-01x).
+- **Discovery is optional.** MQTT Discovery stays only for a device on the legacy path and as an optional export for
+  other consumers (see the [README](../README.md#mqtt-discovery-export)); the export has no healing and no test
+  buttons.
 - **Mixed versions.** An instance on an older version sends no heartbeat, so it is not in the roster and not listed in a
   re-trigger, and it ignores the transfer marker.

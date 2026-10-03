@@ -450,7 +450,8 @@ def test_old_discovery_claims_are_gone() -> None:
         )
         assert "every instance needs write access to the discovery prefix" not in normalized
     operations = _normalize(_page(OPERATIONS))
-    assert "belong to the core mqtt integration and its own device" not in operations
+    assert "stay on the core mqtt device" not in operations
+    assert "legacy path" in operations
 
 
 def test_acl_page_has_an_export_row_and_keeps_the_block() -> None:

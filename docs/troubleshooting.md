@@ -16,7 +16,7 @@ cooperative:** the broker cannot bind a device to its owner, so the approval on 
 ### Entities are unavailable
 
 The entities of a mirror use the availability of the owner instance, so a mirror is `unavailable` while its owner is
-offline. Check these in order:
+offline. Native entities show the state that comes back from the broker; they never guess it. Check these in order:
 
 1. **The owner is offline.** Open the sensor **Instances online** of the hub device, whose attribute `instances` shows
    every instance with `online` and `last_seen`. An instance that shut down cleanly turns offline at once. An instance
@@ -25,8 +25,11 @@ offline. Check these in order:
    entities can look available although the owner is gone. If the owner is gone for good, you can
    [adopt](operations.md#adoption) its devices.
 2. **MQTT is not connected** in this instance, or the broker is down. Fix the MQTT integration first.
-3. **MQTT discovery is disabled** in the MQTT integration, which raises the issue `mqtt_discovery_disabled`.
-4. **The ACL denies the discovery prefix** to this instance (see A denied publish is not reported below).
+3. **MQTT discovery is disabled** in the MQTT integration, which raises the issue `mqtt_discovery_disabled`. That
+   matters only for a device that is still on the legacy path (an instance on an older version is online, see
+   `native_cutover_waiting`) or for an export on the core prefix.
+4. **The ACL denies the state or config topic** to this instance, or, on the legacy path, the discovery prefix (see A
+   denied publish is not reported below).
 
 ### Approvals lapsed after an upgrade
 
@@ -80,22 +83,44 @@ characters.
 
 ### A device exists twice on the integration page
 
-This is not a duplicate. Every device has two devices of the same name on purpose: the **core MQTT device** that holds
-its entities (the Switch or Select and the test buttons), and the **companion device** of MQTT Actions, which holds the
-**Mode** select and sits under the subentry of an owned device or alone for a mirror. Do not delete either to tidy up:
-deleting an owned device deletes it on every instance, and deleting an entity of a mirror makes the owner publish it
-again (see `discovery_removed` below).
+Since 0.2.0 a native device is one device of MQTT Actions with all of its entities, so it appears once. Two devices of
+the same name are expected only for a device that is still on the legacy path: the **core MQTT device** that holds its
+entities and the **companion device** that holds the **Mode** select. It becomes one device when the instance
+switches to native entities (see `native_cutover_waiting`). Do not delete either to tidy up: deleting an owned device
+deletes it on every instance. If the two stay after the switch, reload the integration once; if that does not help, see
+the next two sections.
+
+### Duplicate _2 entities after a downgrade
+
+This happens after you went back to 0.1.x, which is not supported. The upgrade moved the entities from core MQTT to
+MQTT Actions. A 0.1.x instance publishes the discovery again, and core MQTT creates new entities that cannot take the
+old entity ids, so they get a `_2` suffix, while the migrated entities are left behind as orphans. **What to do:**
+update to 0.2.0 or newer again. The instance takes the discovery entities over once more; remove the leftover
+unavailable entities in the entity registry by hand if they stay. There is no automatic rollback, and an automation or
+dashboard that you changed to the `_2` ids has to be changed back.
+
+### Entities are missing on an older instance
+
+An instance on 0.1.x that comes online after the others switched keeps running its actions, but it shows no entities
+for the devices that were migrated, and Home Assistant does not say why: the integration cannot tell an older version.
+The roster lists it with its older `version`. **What to do:** update MQTT Actions on that instance. Entities of devices
+it created itself stay as they are until the others cannot be reached any more; they are no problem to keep, but the
+mix of versions should not last.
 
 ### Resync did not restore the entities
 
 Resync republishes what this instance **owns**: the config documents, the discovery and the online availability. It never
 deletes anything. So:
 
-- The entities of a **mirror** come from its owner; press **Resync** on the owner's instance.
+- The documents of a **mirror** come from its owner; press **Resync** on the owner's instance.
+- Native entities need no restore: they belong to the integration. Resync matters for the documents, for a device on
+  the legacy path and for an enabled export.
 - A second resync inside 5 seconds is refused with an error; wait and try again.
 - If the publish is denied by the ACL, nothing is reported (see A denied publish is not reported above).
-- If MQTT discovery is disabled in the MQTT integration, no entity appears until it is enabled again.
-- Entities that were recreated start without the customizations (names, icons, areas) of the old ones.
+- If MQTT discovery is disabled in the MQTT integration, no entity of a legacy device appears until it is enabled
+  again.
+- Entities of a legacy device that were recreated start without the customizations (names, icons, areas) of the old
+  ones.
 
 ## Repairs issues
 
@@ -111,8 +136,10 @@ successful run. The log has more detail.
 
 ### `mqtt_discovery_disabled`
 
-**Meaning:** MQTT Actions creates its entities through MQTT discovery, but discovery is disabled in the MQTT integration.
-**What to do:** enable discovery again in the options of the MQTT integration. No entity appears before that.
+**Meaning:** this instance still needs MQTT discovery, but discovery is disabled in the MQTT integration. That is the
+case only while a device is on the legacy path (an instance on an older version is online) or when the export uses the
+prefix of core MQTT. **What to do:** enable discovery again in the options of the MQTT integration, or update the older
+instances so that this instance switches to native entities. No entity of a legacy device appears before that.
 
 ### `native_cutover_waiting`
 
@@ -147,8 +174,9 @@ it is usually a restored backup or a clone (see `duplicate_instance_id`), or an 
 
 ### `discovery_removed`
 
-**Meaning:** the entities of a device were removed three times within ten minutes, for example by deleting an entity on
-another Home Assistant instance. Each time, this instance published the discovery again. **Why:** deleting an entity of
+**Meaning:** a device on the legacy path (never a native one) lost its entities three times within ten minutes, for
+example by deleting an entity on another Home Assistant instance. Each time, this instance published the discovery
+again. **Why:** deleting an entity of
 a mirror makes core MQTT clear the discovery of the whole device on the broker. **What to do:** delete the device
 itself on its owner if you no longer want it. Deleting a single entity does not stay deleted.
 

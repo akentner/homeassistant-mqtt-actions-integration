@@ -12,6 +12,7 @@ takeover module tests of the later plans.
 
 import asyncio
 import json
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pytest
@@ -28,7 +29,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN
 from custom_components.mqtt_actions.discovery import build_discovery
-from custom_components.mqtt_actions.takeover import TakeoverStatus, TakeoverTarget, async_take_over
+from custom_components.mqtt_actions.takeover import TakeoverStatus, TakeoverTarget, async_take_over, is_legacy_entity
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
 
@@ -774,3 +775,30 @@ async def test_the_device_stays_when_an_unrecognized_entry_remains_on_it(
     device = dr.async_get(hass).async_get(mqtt_device.id)
     assert device is not None
     assert device.config_entry_id == _mqtt_entry_id(hass)
+
+
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        ({}, True),
+        ({"unique_id": "dev_test_on", "domain": "button"}, True),
+        ({"unique_id": "dev-other"}, False),
+        ({"unique_id": "devx_test_on"}, False),
+        ({"platform": DOMAIN}, False),
+        ({"config_entry_id": "other-entry"}, False),
+        ({"device_id": "other-device"}, False),
+        ({"domain": "sensor"}, False),
+    ],
+)
+def test_is_legacy_entity_needs_every_part_of_the_identity(changes: dict[str, str], expected: bool) -> None:
+    """T-5-01: the unique id alone never decides, platform, entry, device, domain and shape must all match."""
+    fields = {
+        "platform": "mqtt",
+        "config_entry_id": "mqtt-entry",
+        "device_id": "mqtt-device",
+        "domain": "switch",
+        "unique_id": "dev",
+    }
+    entity = SimpleNamespace(**{**fields, **changes})
+
+    assert is_legacy_entity(entity, "dev", "mqtt-entry", "mqtt-device") is expected  # type: ignore[arg-type]

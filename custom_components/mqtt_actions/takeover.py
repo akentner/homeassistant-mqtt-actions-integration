@@ -128,24 +128,53 @@ async def async_take_over(  # noqa: PLR0913
         retry_interval=retry_interval,
     )
     if entries is None:
-        LOGGER.warning("Takeover of device %r postponed: its legacy entities are still loaded", target.device_id[:40])
+        LOGGER.warning("Takeover of device %r postponed: its legacy entities are still loaded", _short(target))
         return TakeoverStatus.DEFERRED
 
     entity_registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
+    moved = 0
     # Entities first: moving the device first would remove the entities that still belong to the old entry
     for legacy in entries:
+        if entity_registry.async_get_entity_id(legacy.domain, DOMAIN, legacy.unique_id) is not None:
+            # Core does not guard a duplicate key: a platform move would leave two entries (T-5-09). The legacy entry
+            # is not loaded, so deleting it publishes nothing.
+            entity_registry.async_remove(legacy.entity_id)
+            continue
         entity_registry.async_update_entity_platform(
             legacy.entity_id,
             DOMAIN,
             new_config_entry_id=entry.entry_id,
             new_config_subentry_id=UNDEFINED if target.subentry_id is None else target.subentry_id,
         )
+        moved += 1
+
+    leftovers = [
+        remaining
+        for remaining in er.async_entries_for_device(entity_registry, device.id, include_disabled_entities=True)
+        if remaining.config_entry_id == mqtt_entry_id
+    ]
+    if leftovers:
+        # Moving the device would remove these entries, so it stays where it is
+        LOGGER.warning(
+            "Device %r keeps its MQTT device: it has entries this integration did not create", _short(target)
+        )
+        return TakeoverStatus.DONE
+    native = device_registry.async_get_device_by_identifier((DOMAIN, target.device_id), entry.entry_id)
+    if moved == 0 and native is not None and native.id != device.id:
+        # The native device exists already and every legacy entry was a duplicate: the legacy device is empty
+        device_registry.async_remove_device(device.id)
+        return TakeoverStatus.DONE
     device_registry.async_update_device(
         device.id, new_config_entry_id=entry.entry_id, new_config_subentry_id=target.subentry_id
     )
     _merge_companion(hass, entry, target, device)
     return TakeoverStatus.DONE
+
+
+def _short(target: TakeoverTarget) -> str:
+    """Return the device id capped for logging; a mirror's id comes from the broker."""
+    return target.device_id[:40]
 
 
 def _merge_companion(hass: HomeAssistant, entry: ConfigEntry, target: TakeoverTarget, device: dr.DeviceEntry) -> None:

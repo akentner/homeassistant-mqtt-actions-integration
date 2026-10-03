@@ -27,8 +27,10 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN
+from custom_components.mqtt_actions.discovery import build_discovery
 from custom_components.mqtt_actions.takeover import TakeoverStatus, TakeoverTarget, async_take_over
-from custom_components.mqtt_actions.topics import availability_topic, discovery_topic
+from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic
+from tests.documents import FOREIGN_OWNER, document_payload, make_spec
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -375,6 +377,17 @@ async def test_user_disabled_entity_survives_the_migrate(
 # --- the takeover module: tracer (D-05, D-07, D-12) --------------------------------------------------------------
 
 
+def _moved_entity_ids(hass: HomeAssistant, device_id: str) -> list[str]:
+    """Return the entity ids of the entries of this integration that carry the shape of a legacy entry."""
+    return [
+        entry.entity_id
+        for entry in er.async_get(hass).entities.values()
+        if entry.platform == DOMAIN
+        and entry.domain in {"switch", "select", "button"}
+        and (entry.unique_id == device_id or entry.unique_id.startswith(f"{device_id}_test_"))
+    ]
+
+
 def _target(legacy: LegacyDevice) -> TakeoverTarget:
     return TakeoverTarget(device_id=legacy.device_id, subentry_id=_subentry(legacy.entry).subentry_id)
 
@@ -501,3 +514,263 @@ async def test_take_over_defers_and_moves_nothing_while_an_entity_stays_loaded(
         assert (entry.platform, entry.config_entry_id) == ("mqtt", _mqtt_entry_id(hass))
     assert _mqtt_device(hass, legacy.device_id).config_entry_id == _mqtt_entry_id(hass)
     assert _mqtt_entry_state(hass) == snapshot
+
+
+# --- the takeover module: hardening (D-05, D-07) -----------------------------------------------------------------
+
+BASE = "mqtt_actions"
+
+
+def _take_over_now(hass: HomeAssistant, legacy: LegacyDevice) -> Any:
+    """Return the awaitable of a takeover that must not need to wait: a short timeout turns a wait into DEFERRED."""
+    return async_take_over(
+        hass,
+        legacy.entry,
+        _target(legacy),
+        mqtt_entry_id=_mqtt_entry_id(hass),
+        unload_timeout=0.1,
+        retry_interval=0.02,
+    )
+
+
+async def test_a_foreign_mqtt_entity_with_the_same_unique_id_is_left_alone(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-5-01: an unrelated MQTT entity that carries this device's id as unique id is not this device's entity."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    foreign_payload = {
+        "device": {"identifiers": ["somebody_else"], "name": "Somebody else"},
+        "origin": {"name": "Somebody else"},
+        "components": {
+            "other": {
+                "platform": "button",
+                "unique_id": legacy.device_id,
+                "name": "Foreign button",
+                "command_topic": "somebody/else/set",
+            }
+        },
+    }
+    async_fire_mqtt_message(hass, discovery_topic(PREFIX, "somebody_else"), json.dumps(foreign_payload), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    foreign_id = entity_registry.async_get_entity_id("button", "mqtt", legacy.device_id)
+    assert foreign_id is not None
+    foreign_before = entity_registry.async_get(foreign_id)
+    assert foreign_before is not None
+    assert foreign_before.device_id != _mqtt_device(hass, legacy.device_id).id
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+
+    foreign_after = entity_registry.async_get(foreign_id)
+    assert foreign_after is not None
+    assert foreign_after.platform == "mqtt"
+    assert foreign_after.device_id == foreign_before.device_id
+    assert foreign_after.entity_id == foreign_id
+    assert foreign_after.config_entry_id == _mqtt_entry_id(hass)
+    assert entity_registry.async_get_entity_id("switch", DOMAIN, legacy.device_id) is not None
+
+
+async def test_a_ghost_is_taken_over_without_any_broadcast(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A legacy device that is unloaded already needs no wait: the call returns DONE at once."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+    await _deliver(hass, legacy.topic, CLEAR_PAYLOAD)
+
+    assert await asyncio.wait_for(_take_over_now(hass, legacy), timeout=1) is TakeoverStatus.DONE
+    assert er.async_get(hass).async_get_entity_id("switch", DOMAIN, legacy.device_id) is not None
+
+
+async def test_a_user_disabled_legacy_entry_is_moved_and_stays_disabled(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A disabled entry is not loaded and still part of the device: it moves and keeps the user's choice."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    switch_id = entity_registry.async_get_entity_id("switch", "mqtt", legacy.device_id)
+    assert switch_id is not None
+    entity_registry.async_update_entity(switch_id, disabled_by=er.RegistryEntryDisabler.USER)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+
+    moved = entity_registry.async_get(switch_id)
+    assert moved is not None
+    assert moved.platform == DOMAIN
+    assert moved.disabled_by is er.RegistryEntryDisabler.USER
+
+
+async def test_an_existing_native_entry_is_never_duplicated(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-5-09: with native twins present the legacy duplicates are deleted and the emptied legacy device goes."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    device_id = legacy.device_id
+    mqtt_device = _mqtt_device(hass, device_id)
+    native_device = device_registry.async_get_device_by_identifier((DOMAIN, device_id), legacy.entry.entry_id)
+    assert native_device is not None
+    legacy_ids = legacy_entity_ids(hass, device_id)
+    keys = [(entry.domain, entry.unique_id) for entry in map(entity_registry.async_get, legacy_ids) if entry]
+    assert len(keys) == 3
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+    natives = {
+        (domain, unique_id): entity_registry.async_get_or_create(
+            domain,
+            DOMAIN,
+            unique_id,
+            config_entry=legacy.entry,
+            config_subentry_id=_subentry(legacy.entry).subentry_id,
+            device_id=native_device.id,
+            suggested_object_id=f"native_{unique_id[-8:]}",
+        )
+        for domain, unique_id in keys
+    }
+
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+
+    for (domain, unique_id), native in natives.items():
+        same_key = [
+            entry
+            for entry in entity_registry.entities.values()
+            if (entry.domain, entry.platform, entry.unique_id) == (domain, DOMAIN, unique_id)
+        ]
+        assert [(entry.id, entry.entity_id, entry.device_id) for entry in same_key] == [
+            (native.id, native.entity_id, native_device.id)
+        ]
+    assert legacy_entity_ids(hass, device_id) == []
+    assert device_registry.async_get(mqtt_device.id) is None
+    assert device_registry.async_get(native_device.id) is not None
+
+
+async def test_a_select_device_moves_its_select_and_option_buttons(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_select_subentry: Callable
+) -> None:
+    """The identity filter covers the select and the option buttons of a Select device the same way."""
+
+    def _select_subentry(name: str) -> Any:
+        return make_select_subentry(name, [("low", "Low", []), ("high", "High", [])])
+
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, _select_subentry, name="Fan")
+    entity_registry = er.async_get(hass)
+    device_id = legacy.device_id
+    legacy_ids = legacy_entity_ids(hass, device_id)
+    assert len(legacy_ids) == 3  # the select and one test button per option
+    assert entity_registry.async_get_entity_id("select", "mqtt", device_id) is not None
+    before = {entity_id: entity_registry.async_get(entity_id) for entity_id in legacy_ids}
+    mqtt_device = _mqtt_device(hass, device_id)
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+
+    sub_id = _subentry(legacy.entry).subentry_id
+    for entity_id, old in before.items():
+        moved = entity_registry.async_get(entity_id)
+        assert moved is not None
+        assert (moved.id, moved.platform, moved.device_id) == (old.id, DOMAIN, mqtt_device.id)
+        assert (moved.config_entry_id, moved.config_subentry_id) == (legacy.entry.entry_id, sub_id)
+    assert entity_registry.async_get_entity_id("select", DOMAIN, device_id) is not None
+
+
+async def test_a_mirror_moves_directly_under_the_entry(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """Assumption A3: a mirror has no subentry, its legacy entities and device end up directly under the entry."""
+    spec = make_spec(name="Foreign lamp")
+    entry = make_hub_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    topic = discovery_topic(PREFIX, spec.device_id)
+    discovery = build_discovery(spec=spec, base_topic=BASE, instance_id=FOREIGN_OWNER, sw_version="1.2.3")
+    async_fire_mqtt_message(hass, topic, json.dumps(discovery), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    async_fire_mqtt_message(hass, config_topic(BASE, spec.device_id), document_payload(spec), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    entity_registry = er.async_get(hass)
+    legacy_ids = legacy_entity_ids(hass, spec.device_id)
+    assert len(legacy_ids) == 3
+    mqtt_device = _mqtt_device(hass, spec.device_id)
+    await _deliver(hass, topic, MIGRATE_PAYLOAD)
+
+    status = await async_take_over(
+        hass,
+        entry,
+        TakeoverTarget(device_id=spec.device_id, subentry_id=None),
+        mqtt_entry_id=_mqtt_entry_id(hass),
+        unload_timeout=0.1,
+        retry_interval=0.02,
+    )
+
+    assert status is TakeoverStatus.DONE
+    for entity_id in legacy_ids:
+        moved = entity_registry.async_get(entity_id)
+        assert moved is not None
+        assert (moved.platform, moved.config_entry_id, moved.config_subentry_id) == (DOMAIN, entry.entry_id, None)
+    device = dr.async_get(hass).async_get(mqtt_device.id)
+    assert device is not None
+    assert (device.config_entry_id, device.config_subentry_id) == (entry.entry_id, None)
+    assert device.identifiers == {(DOMAIN, spec.device_id)}
+
+
+async def test_a_late_replay_duplicate_is_cleaned_at_the_next_call(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Pitfall 5: a discovery replay after the takeover recreates a legacy twin; the next call removes only that."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    device_id = legacy.device_id
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+    await _deliver(hass, legacy.topic, CLEAR_PAYLOAD)
+    taken = {entity_id: entity_registry.async_get(entity_id) for entity_id in _moved_entity_ids(hass, device_id)}
+    assert len(taken) == 3
+    taken_device = device_registry.async_get_device_by_identifier((DOMAIN, device_id), legacy.entry.entry_id)
+    assert taken_device is not None
+
+    await _deliver(hass, legacy.topic, legacy.payload)  # the late replay: live discovery creates new legacy twins
+    replayed = legacy_entity_ids(hass, device_id)
+    assert len(replayed) == 3
+    assert not set(replayed) & set(taken)
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+
+    assert legacy_entity_ids(hass, device_id) == []
+    for entity_id in replayed:
+        assert entity_registry.async_get(entity_id) is None
+    for entity_id, old in taken.items():
+        assert entity_registry.async_get(entity_id) == old
+    assert device_registry.async_get(taken_device.id) is not None
+    assert (
+        device_registry.async_get_device_by_identifier(("mqtt", f"{DOMAIN}_{device_id}"), _mqtt_entry_id(hass)) is None
+    )
+
+
+async def test_the_device_stays_when_an_unrecognized_entry_remains_on_it(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Moving the device would remove an MQTT entry the module did not move, so the device is left in place."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    mqtt_device = _mqtt_device(hass, legacy.device_id)
+    mqtt_entry = hass.config_entries.async_get_entry(_mqtt_entry_id(hass))
+    odd = entity_registry.async_get_or_create(
+        "sensor", "mqtt", "an-odd-sensor", config_entry=mqtt_entry, device_id=mqtt_device.id
+    )
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+
+    assert legacy_entity_ids(hass, legacy.device_id) == []
+    switch = entity_registry.async_get_entity_id("switch", DOMAIN, legacy.device_id)
+    assert switch is not None
+    assert entity_registry.async_get(odd.entity_id) is not None
+    device = dr.async_get(hass).async_get(mqtt_device.id)
+    assert device is not None
+    assert device.config_entry_id == _mqtt_entry_id(hass)

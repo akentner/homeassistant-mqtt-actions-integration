@@ -26,14 +26,17 @@ from custom_components.mqtt_actions.const import (
     HEARTBEAT_OFFLINE_SECONDS,
     ISSUE_NATIVE_CUTOVER_WAITING,
     STORE_KEY,
+    STORE_MIRRORS,
     SUBENTRY_SWITCH,
 )
 from custom_components.mqtt_actions.manager import async_remove_local_state
 from custom_components.mqtt_actions.presence import parse_heartbeat
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, heartbeat_topic
-from tests.test_native_start import _loop_back_discovery
+from tests.documents import document_payload, make_spec
+from tests.test_native_start import _legacy_mirror, _loop_back_discovery, _mqtt_device_of
 from tests.test_takeover import (
     CLEAR_PAYLOAD,
+    MIGRATE_PAYLOAD,
     PREFIX,
     customize_mqtt_device,
     legacy_entity_ids,
@@ -568,3 +571,111 @@ async def test_a_device_created_after_the_cutover_is_native_at_once(
     assert er.async_get(hass).async_get_entity_id("switch", DOMAIN, device_id) is not None
     assert _config_payloads(mqtt_mock, device_id)[-1]["entities"] == "native"
     assert _stored_native(hass_storage) == {"instance": True, "pending": [], "devices": []}
+
+
+# --- Plan 05-07 task 1 tracer: a running legacy mirror follows the owner's marker ------------------------------------
+
+NEW_ACTIONS = [{"action": "test.on"}]
+
+
+@pytest.mark.parametrize("changed", [False, True], ids=["same_content", "changed_content"])
+async def test_a_marker_for_a_running_legacy_mirror_flips_it_after_a_reload(
+    changed: bool, hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-09, D-12, MIG-02: the marker, with the content unchanged or changed, flips the mirror and reloads once."""
+    spec = make_spec(name="Foreign lamp")
+    entry, topic = await _legacy_mirror(hass, make_hub_entry, spec)
+    entity_registry = er.async_get(hass)
+    customize_mqtt_device(hass, spec.device_id, area_id="kitchen", name_by_user="Stehlampe")
+    legacy_ids = legacy_entity_ids(hass, spec.device_id)
+    before = {entity_id: entity_registry.async_get(entity_id) for entity_id in legacy_ids}
+    switch_id = entity_registry.async_get_entity_id("switch", "mqtt", spec.device_id)
+    mqtt_device = _mqtt_device_of(hass, spec.device_id)
+    assert switch_id is not None
+    assert mqtt_device is not None
+    async_fire_mqtt_message(hass, topic, MIGRATE_PAYLOAD, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    marked = make_spec(device_id=spec.device_id, name="Foreign lamp", on=NEW_ACTIONS) if changed else spec
+    original = hass.config_entries.async_schedule_reload
+    mqtt_mock.async_publish.reset_mock()
+
+    with patch.object(hass.config_entries, "async_schedule_reload", wraps=original) as schedule_reload:
+        async_fire_mqtt_message(
+            hass, config_topic(BASE, spec.device_id), document_payload(marked, rev=2, native=True), retain=False
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    schedule_reload.assert_called_once_with(entry.entry_id)
+    manager = _manager(entry)
+    info = manager.mirrors[spec.device_id].mirror
+    assert info is not None
+    assert info.native is True
+    assert manager.is_native(spec.device_id)
+    for entity_id, old in before.items():
+        moved = entity_registry.async_get(entity_id)
+        assert moved is not None
+        assert (moved.id, moved.platform, moved.device_id) == (old.id, DOMAIN, mqtt_device.id)
+    assert entity_registry.async_get_entity_id("switch", DOMAIN, spec.device_id) == switch_id
+    assert hass.states.get(switch_id) is not None
+    device = dr.async_get(hass).async_get(mqtt_device.id)
+    assert device is not None
+    assert (device.area_id, device.name_by_user) == ("kitchen", "Stehlampe")
+    assert device.identifiers == {(DOMAIN, spec.device_id)}
+    stored = json.loads(hass_storage[STORE_KEY]["data"][STORE_MIRRORS][spec.device_id])
+    assert stored["entities"] == "native"
+    assert [topic for topic in (c.args[0] for c in mqtt_mock.async_publish.call_args_list) if PREFIX in topic] == []
+
+
+async def test_a_burst_of_marked_documents_schedules_one_reload(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """T-5-15: three mirrors flipped by three documents in a row, and a later marked change, reload once."""
+    entry = await _setup(hass, make_hub_entry())
+    specs = [make_spec(name=f"Foreign {index}") for index in range(3)]
+    for spec in specs:
+        async_fire_mqtt_message(hass, config_topic(BASE, spec.device_id), document_payload(spec), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert all(spec.device_id in _manager(entry).mirrors for spec in specs)
+
+    with patch.object(hass.config_entries, "async_schedule_reload") as schedule_reload:
+        for spec in specs:
+            async_fire_mqtt_message(
+                hass, config_topic(BASE, spec.device_id), document_payload(spec, rev=2, native=True), retain=False
+            )
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert schedule_reload.call_count == 1
+        schedule_reload.assert_called_once_with(entry.entry_id)
+
+        changed = make_spec(device_id=specs[0].device_id, name="Foreign 0", on=NEW_ACTIONS)
+        async_fire_mqtt_message(
+            hass, config_topic(BASE, changed.device_id), document_payload(changed, rev=3, native=True), retain=False
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert schedule_reload.call_count == 1
+    assert all(_manager(entry).mirrors[spec.device_id].mirror.native for spec in specs)
+
+
+async def test_a_document_without_the_marker_or_from_a_competing_owner_schedules_no_reload(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """T-5-15, T-5-03: an unmarked change and a marked claim of another owner leave the mirror legacy and quiet."""
+    spec = make_spec(name="Foreign lamp")
+    entry = await _setup(hass, make_hub_entry())
+    async_fire_mqtt_message(hass, config_topic(BASE, spec.device_id), document_payload(spec), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    with patch.object(hass.config_entries, "async_schedule_reload") as schedule_reload:
+        changed = make_spec(device_id=spec.device_id, name="Foreign lamp", on=NEW_ACTIONS)
+        async_fire_mqtt_message(
+            hass, config_topic(BASE, spec.device_id), document_payload(changed, rev=2), retain=False
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+        competing = document_payload(spec, owner="instance-other", owner_name="Other", rev=3, native=True)
+        async_fire_mqtt_message(hass, config_topic(BASE, spec.device_id), competing, retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    schedule_reload.assert_not_called()
+    info = _manager(entry).mirrors[spec.device_id].mirror
+    assert info is not None
+    assert (info.native, info.owner) == (False, "instance-foreign")

@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Evaluate native switch/select entities instead of MQTT Discovery
 status: executing
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-10-03T11:44:03.750Z"
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-10-03T11:57:33.761Z"
 last_activity: 2026-10-03
 last_activity_desc: Phase 05 execution started
-state_head: "0b464cc6951cab7b0ad447dca1f503c9373464ad"
+state_head: f0527e03c50e50d15767b0ae1401541fba4a9a5d
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 42
-  completed_plans: 38
+  completed_plans: 39
   percent: 80
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 05 (Evaluate native switch/select entities instead of MQTT Discovery) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
 Status: Ready to execute
 Last activity: 2026-10-03 — Phase 05 execution started
 
@@ -92,6 +92,7 @@ Progress: [████████░░] 80% of Phase 01 plans
 | Phase 05 P03 | 40min | 3 tasks | 9 files |
 | Phase 05 P04 | 45min | 2 tasks | 9 files |
 | Phase 05 P05 | 75min | 3 tasks | 4 files |
+| Phase 5 P06 | 60min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -182,6 +183,7 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-04: Presence signal is sent only for owners of native mirrors and only when the roster did not already signal, keeping Phase 4 roster signal counts
 - [Phase 05]: 05-05: a pending owned device always gets the migrate payload before the retained clear, even without a legacy device of its own
 - [Phase 05]: 05-05: adoption keeps a native mirror native via the persisted devices set; a legacy mirror on a native instance is queued as pending and reloads the entry
+- [Phase 5]: 05-06: hint rebuilt only when the set of blocking peers changes; a silent announced-online peer is released by the heartbeat tick; natively listed devices are not made pending at the flip
 
 ### Pending Todos
 
@@ -205,6 +207,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T11:44:03.639Z
-Stopped at: Completed 05-05-PLAN.md
+Last session: 2026-10-03T11:57:33.655Z
+Stopped at: Completed 05-06-PLAN.md
 Resume file: None

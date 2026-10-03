@@ -198,7 +198,7 @@ Plans:
   5. MQTT Discovery is published only as an optional export and the documentation, ACL page and translations say so.
 
 **Depends on:** Phase 4
-**Plans:** 5/9 plans executed
+**Plans:** 6/9 plans executed
 
 Plans:
 **Wave 1**
@@ -215,7 +215,7 @@ Plans:
 - [x] 05-05-PLAN.md — Takeover pass at start before the platform forward, deferral fallback, adoption between native and legacy devices (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 05-06-PLAN.md — Cutover decision: heartbeat capability, roster gate, settle timer, Repairs hint for blocking peers (wave 5)
+- [x] 05-06-PLAN.md — Cutover decision: heartbeat capability, roster gate, settle timer, Repairs hint for blocking peers (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 05-07-PLAN.md — Live follower flip with automatic reload, real-setup multi-instance harness and cutover acceptance scenarios (wave 6)
@@ -237,7 +237,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
-| 5. Evaluate native switch/select entities instead of MQTT Discovery | 5/9 | In Progress|  |
+| 5. Evaluate native switch/select entities instead of MQTT Discovery | 6/9 | In Progress|  |
 
 ## Backlog
 

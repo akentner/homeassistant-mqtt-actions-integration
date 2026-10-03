@@ -2,14 +2,14 @@
 
 import json
 from typing import TYPE_CHECKING, Any
-from unittest.mock import DEFAULT, AsyncMock
+from unittest.mock import DEFAULT, AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component import plugins
-from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
+from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import (
@@ -432,3 +432,98 @@ async def test_an_unexpected_error_in_the_takeover_defers_the_device_and_the_int
     published = _publishes(mqtt_mock, discovery_topic(PREFIX, device_id))
     assert (CLEAR_PAYLOAD, True) not in published
     assert [json.loads(payload) for payload, retain in published if not retain] == [{"migrate_discovery": True}]
+
+
+# --- Task 3: adoption between native and legacy devices ------------------------------------------------------------
+
+ON_ACTIONS = [{"action": "test.on"}]
+OFF_ACTIONS = [{"action": "test.off"}]
+
+
+async def _approved_mirror(hass: HomeAssistant, entry: MockConfigEntry, spec: Any, *, native: bool) -> None:
+    """Deliver the document of a foreign owner, marked or not, and approve exactly the actions the mirror has."""
+    async_mock_service(hass, "test", "on")
+    async_mock_service(hass, "test", "off")
+    async_fire_mqtt_message(
+        hass, config_topic(BASE, spec.device_id), document_payload(spec, native=native), retain=True
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    info = _manager(entry).mirrors[spec.device_id].mirror
+    assert info is not None
+    assert await _manager(entry).async_approve(spec.device_id, info.actions_hash)
+
+
+def _switch_entry(hass: HomeAssistant, device_id: str) -> er.RegistryEntry | None:
+    entity_registry = er.async_get(hass)
+    entity_id = entity_registry.async_get_entity_id("switch", DOMAIN, device_id)
+    return None if entity_id is None else entity_registry.async_get(entity_id)
+
+
+async def test_adopting_a_native_mirror_keeps_the_device_native_on_a_legacy_instance(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-5-12: the adopted device stays native although this instance's own flag is not set, and it is marked."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _approved_mirror(hass, entry, spec, native=True)
+    assert _switch_entry(hass, spec.device_id) is not None
+    mqtt_mock.async_publish.reset_mock()
+
+    await _manager(entry).async_adopt(spec.device_id, force=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    manager = _manager(entry)
+    assert spec.device_id in manager.devices
+    assert manager.is_native(spec.device_id) is True
+    assert hass_storage[STORE_KEY]["data"]["native"]["devices"] == [spec.device_id]
+    native_switch = _switch_entry(hass, spec.device_id)
+    assert native_switch is not None
+    assert native_switch.config_subentry_id == manager.subentry_id_of(spec.device_id)
+    assert _publishes(mqtt_mock, discovery_topic(PREFIX, spec.device_id)) == []
+    document = json.loads(_publishes(mqtt_mock, config_topic(BASE, spec.device_id))[-1][0])
+    assert document["entities"] == "native"
+
+
+async def test_adopting_a_legacy_mirror_on_a_native_instance_queues_the_takeover(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-5-12: the legacy device is pending and reloads the entry; until then no native entity doubles the legacy."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    _seed_native(hass_storage, pending=[])
+    entry = await _setup(hass, make_hub_entry())
+    await _approved_mirror(hass, entry, spec, native=False)
+
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        await _manager(entry).async_adopt(spec.device_id, force=True)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    manager = _manager(entry)
+    assert spec.device_id in manager.devices
+    assert hass_storage[STORE_KEY]["data"]["native"]["pending"] == [spec.device_id]
+    reload.assert_called_once_with(entry.entry_id)
+    assert manager.is_native(spec.device_id) is False
+    assert _switch_entry(hass, spec.device_id) is None
+
+
+async def test_adoption_on_a_legacy_instance_of_a_legacy_mirror_is_unchanged(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """The Phase 4 behavior holds when neither side is native: legacy discovery, no marker, no pass, no reload."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _approved_mirror(hass, entry, spec, native=False)
+    mqtt_mock.async_publish.reset_mock()
+
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        await _manager(entry).async_adopt(spec.device_id, force=True)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    manager = _manager(entry)
+    assert spec.device_id in manager.devices
+    assert manager.is_native(spec.device_id) is False
+    assert "native" not in hass_storage[STORE_KEY]["data"]
+    reload.assert_not_called()
+    published = _publishes(mqtt_mock, discovery_topic(PREFIX, spec.device_id))
+    assert [json.loads(payload)["components"] and retain for payload, retain in published] == [True]
+    document = json.loads(_publishes(mqtt_mock, config_topic(BASE, spec.device_id))[-1][0])
+    assert "entities" not in document

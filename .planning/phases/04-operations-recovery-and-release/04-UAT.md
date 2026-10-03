@@ -1,18 +1,14 @@
 ---
-status: testing
+status: partial
 phase: 04-operations-recovery-and-release
 source: [04-VERIFICATION.md]
 started: 2026-10-02T19:38:46Z
-updated: 2026-10-03T01:10:00Z
+updated: 2026-10-03T01:20:00Z
 ---
 
 ## Current Test
 
-number: 10
-name: README and docs read-through (plan 04-13, D5)
-expected: |
-  A new user can go from README to installation, the first operations and the troubleshooting entry of a Repairs issue by following links
-awaiting: user response
+[testing paused — 1 item outstanding: test 2 (release v0.1.0), blocked until the phase is merged]
 
 ## Tests
 
@@ -64,8 +60,8 @@ note: ha-one stopped, adopt_device on ha-two without force succeeded after the 9
 
 ### 10. README and docs read-through (plan 04-13, D5)
 expected: A new user can go from README to installation, the first operations and the troubleshooting entry of a Repairs issue by following links
-result: [pending]
-note: judgment by the user.
+result: pass
+note: README and docs read through by the user.
 
 ### 11. Wording of the approval dialog paragraph in German and English (plan 04-02, D5)
 expected: The paragraph naming run mode and breaker limits reads naturally
@@ -75,9 +71,9 @@ note: German and English approval dialog read through by the user; reads natural
 ## Summary
 
 total: 11
-passed: 9
+passed: 10
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 1
 

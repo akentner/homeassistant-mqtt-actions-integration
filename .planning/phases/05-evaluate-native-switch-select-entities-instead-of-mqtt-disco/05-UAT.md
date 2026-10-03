@@ -3,15 +3,15 @@ status: testing
 phase: 05-evaluate-native-switch-select-entities-instead-of-mqtt-disco
 source: [05-VERIFICATION.md]
 started: 2026-10-03T13:38:23Z
-updated: 2026-10-03T17:41:44Z
+updated: 2026-10-03T17:43:48Z
 ---
 
 ## Current Test
 
-number: 3
-name: Mixed fleet and live follower cutover (A5)
+number: 4
+name: Straggler v0.1.0 instance after cutover
 expected: |
-  native_cutover_waiting names the v0.1.0 instance; after its update both switch, follower reloads on its own
+  Keeps running actions, shows no entities for migrated devices, raises no error
 awaiting: user response
 
 ## Tests
@@ -27,7 +27,8 @@ result: pass
 
 ### 3. Mixed fleet and live follower cutover (A5)
 expected: native_cutover_waiting names the v0.1.0 instance; after its update both switch, follower reloads on its own
-result: [pending]
+result: pass
+note: accepted by the user without a reproduction on ha-a/ha-b (mixed fleet not rebuilt); covered by automated tests with a fake broker (test_cutover_instances.py), not observed on real instances
 
 ### 4. Straggler v0.1.0 instance after cutover
 expected: Keeps running actions, shows no entities for migrated devices, raises no error
@@ -56,9 +57,9 @@ result: [pending]
 ## Summary
 
 total: 9
-passed: 2
+passed: 3
 issues: 0
-pending: 7
+pending: 6
 skipped: 0
 blocked: 0
 

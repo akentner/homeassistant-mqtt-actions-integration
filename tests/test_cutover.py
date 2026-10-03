@@ -2,25 +2,35 @@
 
 import json
 from datetime import timedelta
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
+from homeassistant.config_entries import ConfigSubentry
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
 from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
+    CONF_ON_CHANGE_TO_OFF,
+    CONF_ON_CHANGE_TO_ON,
+    CONF_RUN_ON_STARTUP,
+    CUTOVER_HINT_MAX_NAMES,
     DOMAIN,
     HEARTBEAT_INTERVAL_SECONDS,
     HEARTBEAT_OFFLINE_SECONDS,
+    ISSUE_NATIVE_CUTOVER_WAITING,
     STORE_KEY,
+    SUBENTRY_SWITCH,
 )
+from custom_components.mqtt_actions.manager import async_remove_local_state
 from custom_components.mqtt_actions.presence import parse_heartbeat
-from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, heartbeat_topic
+from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, heartbeat_topic
 from tests.test_native_start import _loop_back_discovery
 from tests.test_takeover import (
     CLEAR_PAYLOAD,
@@ -358,3 +368,203 @@ async def test_the_heartbeat_announces_the_capability(
     parsed = parse_heartbeat(BASE, topic, legacy)
     assert parsed is not None
     assert parsed.native is False
+
+
+# --- Task 2: the hint and the devices created while waiting ---------------------------------------------------------
+
+
+def _hint(hass: HomeAssistant) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_NATIVE_CUTOVER_WAITING)
+
+
+def _new_switch(device_id: str) -> ConfigSubentry:
+    return ConfigSubentry(
+        data=MappingProxyType(
+            {
+                CONF_DEVICE_ID: device_id,
+                CONF_ON_CHANGE_TO_ON: [],
+                CONF_ON_CHANGE_TO_OFF: [],
+                CONF_RUN_ON_STARTUP: False,
+            }
+        ),
+        subentry_type=SUBENTRY_SWITCH,
+        title="Fresh",
+        unique_id=device_id,
+    )
+
+
+def _config_payloads(mqtt_mock: Any, device_id: str) -> list[dict[str, Any]]:
+    topic = config_topic(BASE, device_id)
+    return [json.loads(call.args[1]) for call in mqtt_mock.async_publish.call_args_list if call.args[0] == topic]
+
+
+async def test_the_hint_names_the_blocking_peers(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    """D-10, T-5-14: a waiting cutover raises a plain warning that lists the peer, markdown escaped."""
+    await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    _peer(hass, "legacy-peer", native=False, name="Old *Lamp* [x]")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _hint(hass) is None  # nothing is decided before the settle time
+
+    await _settle(hass)
+
+    issue = _hint(hass)
+    assert issue is not None
+    assert issue.translation_key == ISSUE_NATIVE_CUTOVER_WAITING
+    assert issue.severity is ir.IssueSeverity.WARNING
+    assert issue.is_fixable is False
+    assert issue.translation_placeholders == {"instances": r"Old \*Lamp\* \[x\]"}
+
+
+async def test_the_hint_is_capped(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    """T-5-14: more blocking peers than the cap are listed up to the cap and an ellipsis."""
+    await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    for index in range(CUTOVER_HINT_MAX_NAMES + 2):
+        _peer(hass, f"legacy-peer-{index}", native=False, name=f"Peer {index}")
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    await _settle(hass)
+
+    issue = _hint(hass)
+    assert issue is not None
+    text = issue.translation_placeholders["instances"]
+    assert text.count("Peer ") == CUTOVER_HINT_MAX_NAMES
+    assert text.endswith("\u2026")
+
+
+async def test_the_hint_goes_when_the_cutover_proceeds(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    """D-10: the issue is deleted once the blocker went offline and the flip happened; nothing blocking, no issue."""
+    await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    _peer(hass, "legacy-peer", native=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _settle(hass)
+    assert _hint(hass) is not None
+
+    async_fire_mqtt_message(hass, availability_topic(BASE, "legacy-peer"), "offline", retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _stored_native(hass_storage) is not None
+    assert _hint(hass) is None
+
+
+async def test_the_hint_is_never_created_when_nothing_blocks(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    await _settle(hass)
+    assert _hint(hass) is None
+
+
+async def test_the_hint_is_not_rebuilt_while_the_blockers_stay_the_same(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    """Every heartbeat re-runs the check; an unchanged set of blockers must not churn the issue registry."""
+    await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    _peer(hass, "legacy-peer", native=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _settle(hass)
+    with patch.object(ir, "async_create_issue") as create_issue, patch.object(ir, "async_delete_issue") as delete_issue:
+        _peer(hass, "legacy-peer", native=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        await _settle(hass, HEARTBEAT_INTERVAL_SECONDS + 1)
+    create_issue.assert_not_called()
+    delete_issue.assert_not_called()
+
+
+async def test_hub_removal_deletes_the_hint(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    _peer(hass, "legacy-peer", native=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _settle(hass)
+    assert _hint(hass) is not None
+
+    await async_remove_local_state(hass, entry)
+
+    assert _hint(hass) is None
+
+
+async def test_a_device_created_while_waiting_stays_legacy(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    """D-10: a device created under a blocking peer is legacy and part of the pending set at the later cutover."""
+    entry = await _setup(hass, make_hub_entry())
+    _peer(hass, "legacy-peer", native=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _settle(hass)
+    device_id = "0b1f6a0e-6a52-4f5b-9b0e-3a4c1c2d9e11"
+
+    hass.config_entries.async_add_subentry(entry, _new_switch(device_id))
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert not _manager(entry).is_native(device_id)
+    published = _discovery_publishes(mqtt_mock, device_id)
+    assert published
+    assert all(payload and "migrate_discovery" not in payload for payload, _retain in published)
+    assert "entities" not in _config_payloads(mqtt_mock, device_id)[-1]
+
+    with patch.object(hass.config_entries, "async_schedule_reload") as schedule_reload:
+        async_fire_mqtt_message(hass, availability_topic(BASE, "legacy-peer"), "offline", retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    schedule_reload.assert_called_once_with(entry.entry_id)
+    native = _stored_native(hass_storage)
+    assert native == {"instance": True, "pending": [device_id], "devices": []}
+
+
+async def test_a_device_created_after_the_cutover_is_native_at_once(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    enable_native_cutover: None,
+) -> None:
+    """D-12: with the instance flag set a new device is native, publishes no discovery and is not pending."""
+    entry = await _setup(hass, make_hub_entry())
+    await _settle(hass)
+    assert _stored_native(hass_storage) == {"instance": True, "pending": [], "devices": []}
+    device_id = "0b1f6a0e-6a52-4f5b-9b0e-3a4c1c2d9e11"
+
+    hass.config_entries.async_add_subentry(entry, _new_switch(device_id))
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _manager(entry).is_native(device_id)
+    assert not _discovery_publishes(mqtt_mock, device_id)
+    assert er.async_get(hass).async_get_entity_id("switch", DOMAIN, device_id) is not None
+    assert _config_payloads(mqtt_mock, device_id)[-1]["entities"] == "native"
+    assert _stored_native(hass_storage) == {"instance": True, "pending": [], "devices": []}

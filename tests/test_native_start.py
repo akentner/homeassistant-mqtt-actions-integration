@@ -6,10 +6,16 @@ from unittest.mock import DEFAULT, AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component import plugins
-from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
+from pytest_homeassistant_custom_component.common import (
+    async_capture_events,
+    async_fire_mqtt_message,
+    async_mock_service,
+)
 
 from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import (
@@ -459,6 +465,22 @@ def _switch_entry(hass: HomeAssistant, device_id: str) -> er.RegistryEntry | Non
     return None if entity_id is None else entity_registry.async_get(entity_id)
 
 
+def _assert_nothing_removed(entity_events: list[Any], device_events: list[Any], state_events: list[Any]) -> None:
+    """Assert that no registry entry, device or state was removed in the captured events."""
+    assert [event.data["entity_id"] for event in entity_events if event.data["action"] == "remove"] == []
+    assert [event.data["device_id"] for event in device_events if event.data["action"] == "remove"] == []
+    assert [event.data["entity_id"] for event in state_events if event.data["new_state"] is None] == []
+
+
+def _test_button_entries(hass: HomeAssistant, spec: Any) -> dict[str, er.RegistryEntry]:
+    """Return the registry entries of the native test buttons of a device, by entity id."""
+    entity_registry = er.async_get(hass)
+    entity_ids = (
+        entity_registry.async_get_entity_id("button", DOMAIN, f"{spec.device_id}_test_{key}") for key in spec.triggers
+    )
+    return {entity_id: entity_registry.async_get(entity_id) for entity_id in entity_ids if entity_id is not None}
+
+
 async def test_adopting_a_native_mirror_keeps_the_device_native_on_a_legacy_instance(
     hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
 ) -> None:
@@ -466,11 +488,29 @@ async def test_adopting_a_native_mirror_keeps_the_device_native_on_a_legacy_inst
     spec = make_spec(name="Foreign lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
     entry = await _setup(hass, make_hub_entry())
     await _approved_mirror(hass, entry, spec, native=True)
-    assert _switch_entry(hass, spec.device_id) is not None
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    old_switch = _switch_entry(hass, spec.device_id)
+    assert old_switch is not None
+    # The user customized the mirror's native switch: an area and a name (CR-01, IN-04)
+    area = ar.async_get(hass).async_create("Living room")
+    entity_registry.async_update_entity(old_switch.entity_id, area_id=area.id, name="My lamp")
+    old_switch = _switch_entry(hass, spec.device_id)
+    assert old_switch is not None
+    old_buttons = _test_button_entries(hass, spec)
+    assert len(old_buttons) == len(spec.triggers) > 0
+    old_device = device_registry.async_get_device_by_identifier((DOMAIN, spec.device_id), entry.entry_id)
+    assert old_device is not None
     mqtt_mock.async_publish.reset_mock()
 
+    # Home Assistant restores a deleted registry entry on re-creation, so the final state alone cannot show the loss:
+    # nothing of the device may be removed on the way, or exposure settings and the live state would be dropped
+    entity_events = async_capture_events(hass, er.EVENT_ENTITY_REGISTRY_UPDATED)
+    device_events = async_capture_events(hass, dr.EVENT_DEVICE_REGISTRY_UPDATED)
+    state_events = async_capture_events(hass, EVENT_STATE_CHANGED)
     await _manager(entry).async_adopt(spec.device_id, force=True)
     await hass.async_block_till_done(wait_background_tasks=True)
+    _assert_nothing_removed(entity_events, device_events, state_events)
 
     manager = _manager(entry)
     assert spec.device_id in manager.devices
@@ -479,6 +519,25 @@ async def test_adopting_a_native_mirror_keeps_the_device_native_on_a_legacy_inst
     native_switch = _switch_entry(hass, spec.device_id)
     assert native_switch is not None
     assert native_switch.config_subentry_id == manager.subentry_id_of(spec.device_id)
+    # The same registry entry survives with its id, entity id, area and name (CR-01)
+    assert native_switch.id == old_switch.id
+    assert native_switch.entity_id == old_switch.entity_id
+    assert native_switch.area_id == area.id
+    assert native_switch.name == "My lamp"
+    for entity_id, old_button in old_buttons.items():
+        button = entity_registry.async_get(entity_id)
+        assert button is not None
+        assert button.id == old_button.id
+        assert button.config_subentry_id == manager.subentry_id_of(spec.device_id)
+    # ... and so does the device that carries them
+    new_device = device_registry.async_get_device_by_identifier((DOMAIN, spec.device_id), entry.entry_id)
+    assert new_device is not None
+    assert new_device.id == old_device.id
+    assert new_device.config_subentry_id == manager.subentry_id_of(spec.device_id)
+    assert new_device.model == "Switch device"
+    state = hass.states.get(old_switch.entity_id)
+    assert state is not None
+    assert not state.attributes.get("restored")
     assert _publishes(mqtt_mock, discovery_topic(PREFIX, spec.device_id)) == []
     document = json.loads(_publishes(mqtt_mock, config_topic(BASE, spec.device_id))[-1][0])
     assert document["entities"] == "native"

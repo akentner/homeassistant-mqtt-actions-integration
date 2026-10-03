@@ -1331,9 +1331,13 @@ class Manager:
             self._native_devices.add(device_id)
         elif queue_takeover:
             self._native_pending.add(device_id)
-        await self._async_drop_mirror(mirror)
-        # The select platform forgets the mirror's mode select now; the add below gives the owned device its own
-        self._notify_devices_changed()
+        # A native mirror keeps its device: the native entities, the test buttons and the mode select live on it, and
+        # removing it would delete their registry entries with the entity ids, areas and names (CR-01)
+        await self._async_drop_mirror(mirror, keep_companion=info.native)
+        if not info.native:
+            # The select platform forgets the mirror's mode select now; the add below gives the owned device its own.
+            # A native device is never announced as absent: the platforms would drop its entities in that gap
+            self._notify_devices_changed()
         # Saved before the subentry exists: a crash in between loses the adoption, not the device (T-04-53)
         await self._store.async_save(self._data_to_save())
         try:
@@ -1350,16 +1354,20 @@ class Manager:
         LOGGER.info("Adopted device %s from an instance that is offline or was forced", shown(spec.name))
         # The update listener of the entry reconciles too, once the lock is free, and then finds nothing to do
         await self._async_reconcile_locked()
+        if info.native:
+            self._rebind_native_registry(device_id)
         if queue_takeover:
             # The next setup runs the pass for it: the migrate payload, the takeover and the retained clear
             self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
 
-    async def _async_drop_mirror(self, mirror: Device) -> None:
+    async def _async_drop_mirror(self, mirror: Device, *, keep_companion: bool = False) -> None:
         """
         Release a mirror without clearing anything: no broker message and no registry cleanup of core MQTT.
 
         Both subscriptions end, the Script is unloaded, the per-device issues, the approval and the companion device go
         and the sync side forgets the mirror. The stored mode and the baseline stay for the owned device that follows.
+        With `keep_companion` the companion device stays: the owned device that replaces a native mirror uses the same
+        identifier, so its entities keep their registry entries.
         """
         device_id = mirror.device_id
         self.mirrors.pop(device_id, None)
@@ -1371,7 +1379,8 @@ class Manager:
         self._delete_device_issues(device_id)
         self._approvals.pop(device_id, None)
         self._tripped.pop(device_id, None)
-        self._remove_companion(device_id)
+        if not keep_companion:
+            self._remove_companion(device_id)
         self.sync.forget_mirror(device_id)
 
     @callback
@@ -1654,6 +1663,28 @@ class Manager:
         companion = device_registry.async_get_device_by_identifier((DOMAIN, device_id), self._entry.entry_id)
         if companion is not None:
             device_registry.async_remove_device(companion.id)
+
+    @callback
+    def _rebind_native_registry(self, device_id: str) -> None:
+        """
+        Attach the device and the entities of an adopted native mirror to the subentry of the owned device.
+
+        A mirror has no subentry, so its registry entries carry none; the owned device does. The entities move first,
+        because the entity registry removes every entity of the old subentry when the device itself changes its
+        subentry. Nothing is removed or created: the registry ids, entity ids, areas and names stay.
+        """
+        subentry_id = self.subentry_id_of(device_id)
+        device_registry = dr.async_get(self._hass)
+        companion = device_registry.async_get_device_by_identifier((DOMAIN, device_id), self._entry.entry_id)
+        if subentry_id is None or companion is None or self._device(device_id) is None:
+            return
+        entity_registry = er.async_get(self._hass)
+        for entity in er.async_entries_for_device(entity_registry, companion.id, include_disabled_entities=True):
+            if entity.config_entry_id == self._entry.entry_id and entity.config_subentry_id is None:
+                entity_registry.async_update_entity(entity.entity_id, config_subentry_id=subentry_id)
+        # The model no longer names an owner
+        info = device_info_for(self, device_id)
+        device_registry.async_update_device(companion.id, new_config_subentry_id=subentry_id, model=info.get("model"))
 
     @callback
     def _clean_registry(self, device_id: str) -> None:

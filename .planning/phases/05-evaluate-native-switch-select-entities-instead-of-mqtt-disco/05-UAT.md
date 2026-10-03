@@ -3,15 +3,15 @@ status: testing
 phase: 05-evaluate-native-switch-select-entities-instead-of-mqtt-disco
 source: [05-VERIFICATION.md]
 started: 2026-10-03T13:38:23Z
-updated: 2026-10-03T17:47:01Z
+updated: 2026-10-03T17:48:06Z
 ---
 
 ## Current Test
 
-number: 8
-name: Device delete and integration removal
+number: 9
+name: Owner decision on open review items WR-03 (partial), IN-02, IN-03
 expected: |
-  Device and entities disappear; retained document, state and discovery topics cleared per options
+  Accept for 0.2.0 (documented) or schedule a follow-up
 awaiting: user response
 
 ## Tests
@@ -52,7 +52,7 @@ reason: user skipped
 
 ### 8. Device delete and integration removal
 expected: Device and entities disappear; retained document, state and discovery topics cleared per options
-result: [pending]
+result: pass
 
 ### 9. Owner decision on open review items WR-03 (partial), IN-02, IN-03
 expected: Accept for 0.2.0 (documented) or schedule a follow-up
@@ -61,9 +61,9 @@ result: [pending]
 ## Summary
 
 total: 9
-passed: 3
+passed: 4
 issues: 0
-pending: 2
+pending: 1
 skipped: 4
 blocked: 0
 

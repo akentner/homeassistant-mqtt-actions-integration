@@ -906,3 +906,121 @@ async def test_a_cached_native_mirror_is_native_again_after_a_restart(
     assert _manager(entry).is_native(spec.device_id)
     assert _entity_id(hass, "switch", spec.device_id) is not None
     assert _manager(entry).mirrors[spec.device_id].unsubscribe_test is None
+
+
+# --- Quick 261003-rmy: restore previous state ------------------------------------------------------------------------
+
+
+def _restore_id(hass: HomeAssistant, device_id: str) -> str | None:
+    return _entity_id(hass, "button", f"{device_id}_restore_previous")
+
+
+async def _press_restore(hass: HomeAssistant, device_id: str) -> None:
+    entity_id = _restore_id(hass, device_id)
+    assert entity_id is not None
+    await hass.services.async_call("button", "press", {"entity_id": entity_id}, blocking=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_a_native_select_has_a_visible_restore_button_on_its_device(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """Q-04, P-02: the button is a normal enabled entity of the subentry and of the device of the select."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+
+    entity_id = _restore_id(hass, device_id)
+    assert entity_id is not None
+    registered = er.async_get(hass).async_get(entity_id)
+    assert registered is not None
+    assert registered.platform == DOMAIN
+    assert registered.entity_category is None
+    assert registered.disabled_by is None
+    (subentry_id,) = entry.subentries
+    assert registered.config_subentry_id == subentry_id
+    select = er.async_get(hass).async_get(_select_entity_id(hass, device_id))
+    assert select is not None
+    assert registered.device_id == select.device_id
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state != "unavailable"
+
+
+async def test_a_native_switch_has_no_restore_button(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """Q-04: native Select devices only."""
+    _entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
+
+    assert _restore_id(hass, device_id) is None
+
+
+async def test_the_restore_button_publishes_the_previous_state_value(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """Q-03: the previous StateValue goes out retained at QoS 1; the shown value changes with the echo."""
+    _entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    await _state(hass, device_id, "a", retain=True)
+    await _state(hass, device_id, "Mixed Case")
+    assert _select_state(hass, device_id) == "Bravo"
+
+    await _press_restore(hass, device_id)
+
+    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == [("a", 1, True)]
+    await _state(hass, device_id, "a")
+    assert _select_state(hass, device_id) == "Alpha"
+
+
+async def test_the_restore_button_does_nothing_without_a_previous_state(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """Q-03: no value at all and one single value both leave the broker alone."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+
+    await _press_restore(hass, device_id)
+    assert _manager(entry).previous_value(device_id) is None
+    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == []
+
+    await _state(hass, device_id, "a", retain=True)
+    await _press_restore(hass, device_id)
+    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == []
+
+
+async def test_the_history_tracks_changes_only(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """Q-02: a repeated value and an unknown or empty payload leave the history alone."""
+    entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
+    manager = _manager(entry)
+
+    await _state(hass, device_id, "a", retain=True)
+    assert manager.previous_value(device_id) is None
+    await _state(hass, device_id, "Mixed Case")
+    assert manager.previous_value(device_id) == "a"
+    await _state(hass, device_id, "Mixed Case")
+    await _state(hass, device_id, "nonsense")
+    await _state(hass, device_id, "")
+    assert manager.previous_value(device_id) == "a"
+
+    await _state(hass, device_id, "c")
+    assert manager.previous_value(device_id) == "Mixed Case"
+    assert manager.previous_value("unknown-device") is None

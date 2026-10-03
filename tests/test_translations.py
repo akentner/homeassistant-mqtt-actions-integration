@@ -206,6 +206,7 @@ REQUIRED_KEYS = (
     "config_subentries.switch.error.breaker_window_range",
     "entity.sensor.instances_online.name",
     "entity.button.resync.name",
+    "entity.button.restore_previous.name",
     "services.resync.name",
     "services.resync.description",
     "services.export_devices.name",

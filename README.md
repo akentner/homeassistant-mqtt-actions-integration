@@ -8,7 +8,9 @@ matching actions locally, without any YAML automation.
 
 Several Home Assistant instances on the same broker share their devices: a device you create on one instance appears
 on all the others as a read-only mirror, and every instance runs the actions locally once its user approved them. See
-[Multiple instances](#multiple-instances) and [Trust model and approval](#trust-model-and-approval).
+[Multiple instances](#multiple-instances) and [Trust model and approval](#trust-model-and-approval). What you can do
+once it runs, such as re-triggering actions, seeing who is connected and recovering devices, is described under
+[Operations](#operations).
 
 ## Requirements
 
@@ -109,7 +111,8 @@ created on it and a **follower** of the devices created on the others.
   Its entities come from the owner's MQTT Discovery, so they appear on the follower like the owner's own.
 - A follower pins the first owner it saw for a device. A document of another owner for the same device is ignored and
   Home Assistant Repairs shows an issue naming both claims. An owner that finds its own device claimed by another
-  instance publishes its document again and raises an issue as well. There is no takeover.
+  instance publishes its document again and raises an issue as well. There is no takeover, with one exception: a device
+  whose owner is gone can be adopted by another instance (see [Operations](#operations)).
 - The owner publishes its documents again on every start and on every MQTT reconnect, in this order: config documents,
   discovery, then `online`. A broker that lost its retained messages is healed this way. If something other than the
   owner changes or clears a document, the owner publishes it again (at most once per 60 seconds per device, plus one
@@ -123,6 +126,10 @@ created on it and a **follower** of the devices created on the others.
 - If you delete a mirrored entity on a follower, core MQTT clears the retained discovery of the whole device. The
   owner publishes it again (at most once per 60 seconds per device, plus one trailing publish) and repeated removals
   raise a Repairs hint. The recreated entities start without the customizations you gave the old ones.
+- Every instance publishes a heartbeat, and the sensor **Instances online** of the hub device is the roster: how many
+  instances are online and, in its attributes, which. The integration page also shows one **companion device** for every
+  device you own and every mirror, with a **Mode** select; the entities of the device itself stay on the core MQTT
+  device of the same name. See [docs/operations.md](docs/operations.md).
 
 Actions you want to share between instances should use targets that exist on every instance:
 
@@ -139,8 +146,11 @@ Actions from another instance run with the full access of your Home Assistant, s
 - A mirror tracks the state of the device, but it runs nothing until you **approve** its actions on this instance. The
   approval request appears in Home Assistant Repairs and shows the device, the owner, the full YAML of the actions and
   a hash. Approving does not run anything retroactively; only a later change of the state runs the actions.
-- The approval is bound to the hash of the actions. If the owner changes them, the approval lapses, the mirror stops
-  running, and Repairs asks again with the new YAML. A tombstone or a pruned mirror also drops the approval. A forged tombstone from anyone with write access to the config topic therefore forces a new approval
+- The approval is bound to the hash of the actions, the startup flag, the run mode and the circuit breaker limits (the
+  maximum number of runs and the window); the dialog shows all of them. If the owner changes any of them, the approval
+  lapses, the mirror stops running, and Repairs asks again with the new YAML. A rename does not change the hash.
+  Approvals made before the run mode and the breaker limits were bound lapse once after the upgrade: every approved
+  mirror stops running and Repairs asks again, with no migration. A tombstone or a pruned mirror also drops the approval. A forged tombstone from anyone with write access to the config topic therefore forces a new approval
   and cannot run an action.
 - There is no hub-wide switch: no ask or auto mode and no extra opt-in setting. The per-device, per-instance approval
   is the opt-in (the "local opt-in flag" of the project notes). Devices you own never need an approval.
@@ -162,6 +172,32 @@ Actions from another instance run with the full access of your Home Assistant, s
   approval view flags these calls, and calls into the `script` domain and `automation.trigger`, as residual. The
   denylist cannot see inside them. That is why the approval shows the full YAML: approve only what you read and trust.
   Your own devices are not restricted at all.
+
+## Operations
+
+These tools are for running several instances with confidence. Every service is admin only and can return a response.
+[docs/operations.md](docs/operations.md) describes each of them, their fields, results and limits.
+
+- **Resync:** the **Resync** button of the hub device and the service `mqtt_actions.resync` publish everything this
+  instance owns again (documents, discovery, online). It never deletes anything.
+- **Roster:** the sensor **Instances online** counts the instances that are online by their heartbeat, which is sent
+  every 30 seconds; an instance is offline after 90 seconds without one.
+- **Modes:** every device and the whole instance can be in `run`, `observe` (track the state, run nothing, log what
+  would have run) or `disabled`, chosen with a select on the companion device or the hub device. A mode is local and
+  never shared.
+- **Re-trigger:** `mqtt_actions.retrigger` runs the actions of one device again on every instance that approved it, and
+  returns who executed them. It never changes the state. Acknowledgements are advisory.
+- **Export and import:** `mqtt_actions.export_devices` returns your devices as JSON, or writes a private file;
+  `mqtt_actions.import_devices` creates new devices from it, all or nothing.
+- **Adoption:** `mqtt_actions.adopt_device` takes over a device whose owner is offline (or with `force`), if you
+  approved its actions on this instance first.
+- **Duplicate instance id:** a clone or a restored backup that shares an instance id is reported in Repairs, with a fix
+  that gives the copy a new id.
+- **Diagnostics:** **Download diagnostics** on the integration entry gives a file with the structure of your setup and
+  no action content. See [docs/diagnostics.md](docs/diagnostics.md).
+
+When something looks wrong, start with Repairs and then
+[docs/troubleshooting.md](docs/troubleshooting.md), which has an entry for every issue.
 
 ## Deleting devices and removing the integration
 
@@ -221,9 +257,18 @@ Every device gets a random UUID. Its state topic, which is also its command topi
 ## Limitations
 
 - A crash of Home Assistant leaves a retained `online` availability on the broker, so the entity can appear available
-  until this instance connects again. Availability is set to `offline` only on a clean unload.
-- There is no Last Will: an owner that crashed leaves `online` on the broker, so its mirrors look available and are not
-  pruned until it connects again.
+  until this instance connects again. Availability is set to `offline` only on a clean unload. There is no Last Will,
+  because Home Assistant owns the MQTT connection, and the mirrors of a crashed owner are not pruned until it connects
+  again.
+- Presence comes from the heartbeat: a crashed owner turns offline in the roster after 90 seconds while its retained
+  availability can stay online. The heartbeat does not change the availability of the mirrored entities.
+- Adoption needs an approved mirror and an owner that is offline, or `force`. Older versions ignore the transfer marker
+  of an adopted device and keep following the old owner. An old owner that returns keeps running its own actions for
+  the device until you release it in Repairs.
+- A re-trigger reaches only instances that are connected and approved. Acknowledgements are advisory and can be forged,
+  and `executed` means started. Requests are delivered at least once; a repeated request id runs nothing.
+- Adoption and import put content under the administrator's responsibility: the devices are owned, so they run without
+  an approval. Read what you adopt or import.
 - A foreign write to a config topic that was made before the owner started is caught on a best-effort basis. A write
   made while the owner runs is always caught and healed.
 - Changing the discovery prefix of the MQTT integration needs a reload of this integration.
@@ -256,6 +301,16 @@ approval is the real control, and the ACL keeps everyone else out. [docs/broker-
 Mosquitto ACL example that the test suite enforces on a real broker, the topic table, the limits and the advice on TLS
 and on keeping secrets out of actions.
 
+## Releases
+
+A release is made by pushing a tag of the form `vX.Y.Z`; the release workflow runs for `v*.*.*`. The tag has to equal
+the `version` in `custom_components/mqtt_actions/manifest.json`, and the workflow fails first when it does not. It then
+runs the same checks as every push (Ruff lint and format, the unit tests, the tests against a real Mosquitto broker and
+the multi-instance tests) and the validation (hassfest and the HACS validation). Only when all of them passed does it
+create the GitHub release with generated notes. A version with a hyphen suffix, for example `v0.2.0-rc1`, becomes a
+prerelease. No zip is built, because the repository has the standard layout `custom_components/mqtt_actions/` and HACS
+offers the releases as the installable versions.
+
 ## Development
 
 ```bash
@@ -265,9 +320,18 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-The broker tests, including the ACL tests, start a throwaway `mosquitto` (and `mosquitto_passwd`) and are skipped when
-it is not installed. Every push runs hassfest,
-HACS validation, Ruff and pytest in GitHub Actions; all third-party actions are pinned by commit SHA.
+The test suite has three tiers, selected by pytest markers, and CI runs one job for each:
+
+| Tier | Command | CI job |
+|------|---------|--------|
+| Unit tests, no broker | `uv run pytest -q -m "not broker and not multi_instance"` | Unit tests |
+| Real Mosquitto broker, including the ACL tests | `uv run pytest -q -m broker` | Broker tests (Mosquitto) |
+| Several Home Assistant instances on an in-memory broker | `uv run pytest -q -m multi_instance` | Multi-instance tests |
+
+The broker tests start a throwaway `mosquitto` (and `mosquitto_passwd`) and are skipped when it is not installed. Set
+`MQTT_ACTIONS_REQUIRE_BROKER=1` to turn that skip into a failure; the CI broker job sets it so that it cannot pass
+without a broker. A fourth job runs Ruff. Every push also runs hassfest and the HACS validation, and all third-party
+actions are pinned by commit SHA.
 
 ## License
 

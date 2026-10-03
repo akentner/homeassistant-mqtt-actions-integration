@@ -23,6 +23,7 @@ about presence, keep every mirror.
 """
 
 from collections import deque
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -40,6 +41,7 @@ from .const import (
     ISSUE_OWNER_CONFLICT_PREFIX,
     ISSUE_OWNERSHIP_CLAIM_PREFIX,
     ISSUE_SCHEMA_TOO_NEW_PREFIX,
+    ISSUE_TRANSFERRED_PREFIX,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
@@ -82,6 +84,7 @@ TRANSLATION_OWNERSHIP_CLAIM = "ownership_claim"
 TRANSLATION_DISCOVERY_REMOVED = "discovery_removed"
 TRANSLATION_OWNER_CONFLICT = "owner_conflict"
 TRANSLATION_SCHEMA_TOO_NEW = "schema_too_new"
+TRANSLATION_TRANSFERRED = "transferred"
 
 # Stored presence values; only these two payloads of the availability topic mean anything
 PRESENCE_ONLINE = "online"
@@ -91,6 +94,16 @@ PRESENCE_OFFLINE = "offline"
 def _shown(device_id: str) -> str:
     """Return a device id fit for a log line: length-capped and quoted, so a broker-chosen id cannot forge a line."""
     return repr(device_id[:MAX_LOGGED_PAYLOAD_LENGTH]) + ("..." if len(device_id) > MAX_LOGGED_PAYLOAD_LENGTH else "")
+
+
+@dataclass(frozen=True, slots=True)
+class TransferInfo:
+    """What an old owner recognized of the adopter of one of its devices: who, under which name, and its document."""
+
+    claimant: str
+    claimant_name: str
+    # The document text that passed the parser; the release flow creates the mirror from it (T-04-59)
+    payload: str
 
 
 class _TrailingThrottle:
@@ -161,6 +174,9 @@ class SyncManager:
         # mirror ids plus the ids of mirrors created since, so it is bounded by MAX_MIRRORS
         self._seen: set[str] = set()
         self._prune_timer: CALLBACK_TYPE | None = None
+        # Owned device ids that another instance adopted, with the adopter's valid document; in memory only, so it is
+        # bounded by the owned devices and empty again after a restart (assumption A15)
+        self._transferred: dict[str, TransferInfo] = {}
 
     async def async_start(self) -> None:
         """Subscribe to the config wildcard; the caller does this before anything is published (SYN-04)."""
@@ -295,6 +311,8 @@ class SyncManager:
             if status == PRESENCE_ONLINE and previous != PRESENCE_ONLINE:
                 # An owner that was offline or unknown when this instance started may have deleted devices meanwhile
                 self.arm_prune()
+        # A clean shutdown shows in the roster at once, without waiting for the heartbeat timeout (D-05)
+        self._manager.presence.on_availability_changed()
 
     @callback
     def note_published(self, device_id: str, digest: str) -> None:
@@ -305,9 +323,34 @@ class SyncManager:
 
     @callback
     def forget(self, device_id: str) -> None:
-        """Forget everything about a deleted device."""
+        """Forget everything about a deleted or released device."""
         self._published.pop(device_id, None)
         self._removals.pop(device_id, None)
+        self.clear_transferred(device_id)
+
+    @property
+    def transferred_away(self) -> frozenset[str]:
+        """Return the owned device ids that another instance adopted; this instance neither heals nor publishes them."""
+        return frozenset(self._transferred)
+
+    def transfer_info(self, device_id: str) -> TransferInfo | None:
+        """Return what was recognized of the adopter of a device, None for a device that was not transferred away."""
+        return self._transferred.get(device_id)
+
+    @callback
+    def clear_transferred(self, device_id: str) -> str | None:
+        """Forget that a device was transferred away and return the saved document of the adopter, if any."""
+        info = self._transferred.pop(device_id, None)
+        return None if info is None else info.payload
+
+    async def async_follow(self, device_id: str, payload: str) -> None:
+        """
+        Create the mirror of the adopter from its saved document; the caller holds the manager lock.
+
+        The document goes through the same gates as any received one, so nothing saved here is trusted more than a
+        message from the broker.
+        """
+        await self._async_ingest_locked(device_id, payload)
 
     @callback
     def _on_config_message(self, msg: IncomingMessage) -> None:
@@ -396,13 +439,37 @@ class SyncManager:
             await manager.async_apply_mirror(parsed)
             self._seen.add(device_id)
         elif (info := mirror.mirror) is not None and info.owner != parsed.owner:
-            # The first owner wins; nothing another owner sends changes the mirror (D-17)
-            self._conflict(mirror, info, parsed.owner_name)
-            return
+            if not self._may_repin(info, parsed):
+                # The first owner wins; nothing another owner sends changes the mirror (D-17)
+                self._conflict(mirror, info, parsed.owner_name)
+                return
+            # The pinned owner was adopted away: the document names it and the roster says it is gone (D-09)
+            LOGGER.info("The mirrored device %s follows a new owner, because its previous owner was adopted", shown)
+            await manager.async_apply_mirror(parsed)
         elif info is None or parsed.content_hash != info.content_hash:
             # The hash decides, never the rev: an owner that lost its Store restarts at rev 1 (D-15)
             await manager.async_apply_mirror(parsed)
         self._resolve(device_id)
+
+    def _may_repin(self, info: MirrorInfo, parsed: ParsedDocument) -> bool:
+        """
+        Return whether a document of another owner moves the pin: the single exception to first owner wins (D-09).
+
+        Both must hold: the transfer marker of the document names the owner this mirror is pinned to, and the roster
+        says that owner is offline. A marker that names someone else, or a pinned owner that is online or unknown, is a
+        conflict like any other claim (T-04-49). The approval stays bound to the actions hash, so new actions of the new
+        owner still need an approval here.
+        """
+        return info.owner in parsed.transferred_from and self._manager.presence.owner_offline(info.owner)
+
+    @callback
+    def forget_mirror(self, device_id: str) -> None:
+        """Forget that a document of a device was seen; the device left the mirrors, for example by adoption."""
+        self._seen.discard(device_id)
+
+    async def async_restore_mirror(self, device_id: str, payload: str) -> None:
+        """Feed a saved document through the normal ingest path again; the caller holds the manager lock (T-04-53)."""
+        await self._async_ingest_locked(device_id, payload)
 
     def _resolve(self, device_id: str) -> None:
         """Delete the conflict and schema issues of a device: its pinned owner has a current, readable document."""
@@ -462,8 +529,22 @@ class SyncManager:
         """Classify a message on the config topic of an owned device and heal it when it is not this instance's."""
         manager = self._manager
         parsed = self._parse(device, payload)
+        names_this_instance = (
+            parsed is not None
+            and parsed.owner != manager.instance_id
+            and manager.instance_id in parsed.transferred_from
+        )
+        if device.device_id in self._transferred:
+            # Recognized already: nothing is healed any more (T-04-60); only a newer valid document is kept for the flow
+            if names_this_instance:
+                assert parsed is not None  # noqa: S101
+                self._transferred_to(device, parsed, payload)
+            return
         if parsed is None:
             self._overwritten(device)
+        elif names_this_instance:
+            # A valid document of another owner that lists this instance as a previous owner: the device was adopted
+            self._transferred_to(device, parsed, payload)
         elif parsed.owner != manager.instance_id:
             self._claimed(device, parsed.owner_name)
         elif self._differs(device, parsed):
@@ -524,15 +605,49 @@ class SyncManager:
             )
         self._heal(device.device_id)
 
-    def _raise_once(
+    def _transferred_to(self, device: Device, parsed: ParsedDocument, payload: str) -> None:
+        """
+        React to the valid document of an adopter that lists this instance as a previous owner (D-09, T-04-59).
+
+        This instance stops healing and publishing the device and raises one fixable issue; it never steps down by
+        itself, the release flow does that after a confirmation. The saved document is the newest one of the adopter.
+        A different adopter replaces the issue, so the flow binds the claimant that is current.
+        """
+        device_id = device.device_id
+        known = self._transferred.get(device_id)
+        self._transferred[device_id] = TransferInfo(parsed.owner, parsed.owner_name, payload)
+        if known is not None and known.claimant == parsed.owner:
+            return
+        if known is not None:
+            ir.async_delete_issue(self._manager.hass, DOMAIN, f"{ISSUE_TRANSFERRED_PREFIX}{device_id}")
+        if self._raise_once(
+            ISSUE_TRANSFERRED_PREFIX,
+            TRANSLATION_TRANSFERRED,
+            device_id,
+            {"device": escape_markdown(device.name), "claimant": escape_markdown(parsed.owner_name)},
+            ir.IssueSeverity.WARNING,
+            data={"device_id": device_id, "claimant": parsed.owner},
+        ):
+            LOGGER.warning(
+                "Another instance adopted device %s, so this instance stops publishing it until it is released",
+                device.name,
+            )
+
+    def _raise_once(  # noqa: PLR0913
         self,
         prefix: str,
         translation_key: str,
         device_id: str,
         placeholders: dict[str, str],
         severity: ir.IssueSeverity = ir.IssueSeverity.ERROR,
+        *,
+        data: dict[str, str] | None = None,
     ) -> bool:
-        """Create a non-fixable issue unless it exists, so a repeating writer cannot reset a dismissal; True if new."""
+        """
+        Create an issue unless it exists, so a repeating writer cannot reset a dismissal; True if new.
+
+        With `data` the issue is fixable and carries that data to its fix flow; otherwise it is informational.
+        """
         hass = self._manager.hass
         issue_id = f"{prefix}{device_id}"
         if ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None:
@@ -541,7 +656,8 @@ class SyncManager:
             hass,
             DOMAIN,
             issue_id,
-            is_fixable=False,
+            data=data,
+            is_fixable=data is not None,
             severity=severity,
             translation_key=translation_key,
             translation_placeholders=placeholders,
@@ -613,5 +729,8 @@ class SyncManager:
         manager = self._manager
         async with manager.lock:
             if not manager.running or (device := manager.devices.get(device_id)) is None:
+                return
+            if device_id in self._transferred:
+                # Another instance adopted it: publishing would only start the fight again (T-04-60)
                 return
             await publish(device)

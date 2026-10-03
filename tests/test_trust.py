@@ -1,6 +1,7 @@
 """Trust gate: a mirror runs only with an approval bound to its actions hash, through guarded service names (TRU-01)."""
 
 import asyncio
+import hashlib
 import logging
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
@@ -32,7 +33,7 @@ from custom_components.mqtt_actions.const import (
     TRIGGER_ON,
     TRIGGER_SETUP,
 )
-from custom_components.mqtt_actions.document import escape_markdown, parse_document
+from custom_components.mqtt_actions.document import canonical_json, escape_markdown, parse_document
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY
 from custom_components.mqtt_actions.runner import ActionRunner
 from custom_components.mqtt_actions.topics import config_topic, state_topic
@@ -405,15 +406,11 @@ async def test_changed_actions_lapse_the_approval(
     assert order == ["hold:start", "hold:start"]
 
 
-async def test_rename_and_settings_change_keep_the_approval(
-    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
-) -> None:
-    """A new name, run mode or breaker limits keep the approval; the rebuilt Script uses the new run mode (A5)."""
+async def test_rename_keeps_the_approval(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:
+    """A new name with identical actions and settings keeps the approval and the Script in place (A5)."""
     async_mock_service(hass, "test", "on")
     v1 = make_spec(on=ON_ACTIONS, name="Lamp")
-    v2 = make_spec(
-        device_id=v1.device_id, on=ON_ACTIONS, name="Renamed", run_mode="restart", breaker_max_runs=3, breaker_window=7
-    )
+    v2 = make_spec(device_id=v1.device_id, on=ON_ACTIONS, name="Renamed")
     entry = await _setup(hass, make_hub_entry())
     await _deliver(hass, v1.device_id, document_payload(v1))
     assert await _approve(entry, v1.device_id) is True
@@ -421,15 +418,93 @@ async def test_rename_and_settings_change_keep_the_approval(
     approved = dict(manager._approvals)
     script = manager.runner.script_for(v1.device_id, SWITCH_ON_KEY)
     assert script is not None
-    assert script.script_mode == "queued"
 
     await _deliver(hass, v1.device_id, document_payload(v2, rev=2), retain=False)
 
     assert manager._approvals == approved
-    rebuilt = manager.runner.script_for(v1.device_id, SWITCH_ON_KEY)
-    assert rebuilt is not None
-    assert rebuilt.script_mode == "restart"
+    assert manager.runner.script_count(v1.device_id) == 1
+    assert manager.runner.script_for(v1.device_id, SWITCH_ON_KEY) is not None
     assert manager.mirrors[v1.device_id].name == "Renamed"
+    assert _issue(hass, "approval_", v1.device_id) is None
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [{"run_mode": "restart"}, {"breaker_max_runs": 3}, {"breaker_window": 7}],
+    ids=["run_mode", "breaker_max_runs", "breaker_window"],
+)
+async def test_run_mode_or_breaker_change_lapses_the_approval(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, changed: dict[str, Any]
+) -> None:
+    """A changed run mode or breaker limit stops an approved mirror and asks again, actions being equal (D-16)."""
+    on_calls = async_mock_service(hass, "test", "on")
+    v1 = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
+    v2 = make_spec(device_id=v1.device_id, on=ON_ACTIONS, off=OFF_ACTIONS, **changed)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver(hass, v1.device_id, document_payload(v1))
+    await _state(hass, v1.device_id, "OFF", retain=True)
+    assert await _approve(entry, v1.device_id) is True
+    manager = _manager(entry)
+    approved_hash = manager._approvals[v1.device_id]
+    assert manager.runner.script_count(v1.device_id) == 1
+    assert _issue(hass, "approval_", v1.device_id) is None
+
+    await _deliver(hass, v1.device_id, document_payload(v2, rev=2), retain=False)
+
+    new_hash = parse_document(v1.device_id, document_payload(v2, rev=2)).actions_hash
+    assert new_hash != approved_hash
+    assert manager.runner.script_count(v1.device_id) == 0
+    await _state(hass, v1.device_id, "OFF")
+    await _state(hass, v1.device_id, "ON")
+    assert on_calls == []
+    issue = _issue(hass, "approval_", v1.device_id)
+    assert issue is not None
+    assert issue.data is not None
+    assert issue.data["actions_hash"] == new_hash
+
+
+def _old_format_hash(spec: DeviceSpec) -> str:
+    """Return the approval hash the way it was computed before D-16: kind, startup flag and sorted pairs only."""
+    pairs = sorted(
+        ([trigger.value.lower(), trigger.actions] for trigger in spec.triggers.values()),
+        key=lambda pair: pair[0],
+    )
+    text = canonical_json({"kind": spec.kind, "run_on_startup": spec.run_on_startup, "triggers": pairs})
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+async def test_approval_of_the_old_hash_format_lapses_once(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, hass_storage: dict[str, Any]
+) -> None:
+    """An approval of the old hash runs nothing after the upgrade; approving the new hash runs again (D-16)."""
+    on_calls = async_mock_service(hass, "test", "on")
+    spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
+    payload = document_payload(spec)
+    old_hash = _old_format_hash(spec)
+    assert old_hash != parse_document(spec.device_id, payload).actions_hash
+    _seed_store(
+        hass_storage,
+        {STORE_MIRRORS: {spec.device_id: payload}, STORE_APPROVALS: {spec.device_id: old_hash}},
+    )
+
+    entry = await _setup(hass, make_hub_entry())
+    manager = _manager(entry)
+
+    assert spec.device_id in manager.mirrors
+    assert manager.runner.script_count(spec.device_id) == 0
+    await _state(hass, spec.device_id, "OFF", retain=True)
+    await _state(hass, spec.device_id, "ON")
+    assert on_calls == []
+    issue = _issue(hass, "approval_", spec.device_id)
+    assert issue is not None
+    assert issue.data is not None
+    assert issue.data["actions_hash"] == parse_document(spec.device_id, payload).actions_hash
+
+    assert await _approve(entry, spec.device_id) is True
+    assert manager.runner.script_count(spec.device_id) == 1
+    await _state(hass, spec.device_id, "OFF")
+    await _state(hass, spec.device_id, "ON")
+    assert len(on_calls) == 1
 
 
 async def test_approval_persists_across_restart(
@@ -654,6 +729,17 @@ def test_view_carries_the_startup_flag() -> None:
     assert _view(make_spec(on=ON_ACTIONS)).run_on_startup is False
 
 
+def test_view_shows_run_mode_and_breaker_limits() -> None:
+    """The view carries the three settings the approval hash binds, so the user approves what is bound (D-16)."""
+    spec = make_spec(on=ON_ACTIONS, run_mode="restart", breaker_max_runs=3, breaker_window=7)
+
+    view = _view(spec)
+
+    assert view.run_mode == "restart"
+    assert view.breaker_max_runs == 3
+    assert view.breaker_window == 7
+
+
 def test_view_shows_every_action_list_when_select_labels_collide() -> None:
     """Two options whose labels are equal ("a (b (c)") both appear in the review; none is dropped (CR-01)."""
     spec = make_spec(
@@ -703,3 +789,31 @@ def test_view_removes_control_characters_and_fence_runs() -> None:
     assert chr(7) not in view.actions_yaml
     assert chr(0x202E) not in view.actions_yaml
     assert "abc" in view.actions_yaml
+
+
+# --- the approval words (D-17, OPS-04) ----------------------------------------------------------------------------
+
+
+async def test_approval_state_words(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """Every device has one public answer: owned, approved, pending, blocked, no_actions or unknown."""
+    sub = make_switch_subentry("Own lamp", on=ON_ACTIONS)
+    owned_id = sub["data"]["device_id"]
+    pending = make_spec(on=ON_ACTIONS, name="Pending")
+    blocked = make_spec(on=DENIED_ACTIONS, name="Blocked")
+    plain = make_spec(name="Plain")
+    entry = await _setup(hass, make_hub_entry([sub]))
+    for spec in (pending, blocked, plain):
+        await _deliver(hass, spec.device_id, document_payload(spec))
+    manager = _manager(entry)
+
+    assert manager.approval_state(owned_id) == "owned"
+    assert manager.approval_state(pending.device_id) == "pending"
+    assert manager.approval_state(blocked.device_id) == "blocked"
+    assert manager.approval_state(plain.device_id) == "no_actions"
+    assert manager.approval_state("not-a-device") == "unknown"
+
+    assert await _approve(entry, pending.device_id)
+
+    assert manager.approval_state(pending.device_id) == "approved"

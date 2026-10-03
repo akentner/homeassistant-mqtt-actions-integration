@@ -10,7 +10,11 @@ package = false
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = ["broker: needs a real mosquitto broker on PATH (skipped when it is not installed)"]
+addopts = "--strict-markers"
+markers = [
+    "broker: needs a real mosquitto broker on PATH (skipped when it is not installed)",
+    "multi_instance: two or more real Home Assistant instances on the in-memory fake broker",
+]
 
 [dependency-groups]
 dev = [

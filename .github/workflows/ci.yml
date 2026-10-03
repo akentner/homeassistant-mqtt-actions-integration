@@ -2,17 +2,56 @@ name: CI
 
 on:
   push:
+    # A version tag runs these checks once, through release.yml
+    tags-ignore:
+      - "v*.*.*"
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions: {}
 
 jobs:
-  test:
-    name: Ruff and pytest
+  lint:
+    name: Ruff
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pytest -q -m "not broker and not multi_instance"
+
+  broker:
+    name: Broker tests (Mosquitto)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MQTT_ACTIONS_REQUIRE_BROKER: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -27,6 +66,20 @@ jobs:
           sudo apt-get install -y mosquitto
           command -v mosquitto
       - run: uv sync --locked
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      - run: uv run pytest -q
+      - run: uv run pytest -q -m broker
+
+  multi-instance:
+    name: Multi-instance tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pytest -q -m multi_instance

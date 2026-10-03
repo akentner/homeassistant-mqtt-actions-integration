@@ -67,7 +67,7 @@
 - [ ] **OPS-02**: Instances acknowledge a re-trigger, and the caller can see which instances executed it
 - [ ] **OPS-03**: User can see the connected instances (roster with presence heartbeat)
 - [ ] **OPS-04**: Diagnostics export with sensitive data redacted
-- [ ] **OPS-05**: README and docs cover setup, trust model, limitations; releases are automated with manifest version in step with the tag
+- [x] **OPS-05**: README and docs cover setup, trust model, limitations; releases are automated with manifest version in step with the tag
 - [ ] **OPS-06**: Test suite covers unit level, a real-Mosquitto tier, and multi-instance scenarios via an in-memory fake broker
 
 ## v2 Requirements
@@ -133,27 +133,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DSC-01 | Phase 1 | Complete |
 | DSC-02 | Phase 1 | Complete |
 | DSC-03 | Phase 3 | Complete |
-| DSC-04 | Phase 4 | Pending |
+| DSC-04 | Phase 4 | Gaps Found |
 | SYN-01 | Phase 3 | Complete |
 | SYN-02 | Phase 3 | Complete |
 | SYN-03 | Phase 3 | Complete |
 | SYN-04 | Phase 3 | Complete |
 | SYN-05 | Phase 3 | Complete |
 | SYN-06 | Phase 3 | Complete |
-| SYN-07 | Phase 4 | Pending |
-| SYN-08 | Phase 4 | Pending |
-| SYN-09 | Phase 4 | Pending |
-| SYN-10 | Phase 4 | Pending |
+| SYN-07 | Phase 4 | Gaps Found |
+| SYN-08 | Phase 4 | Gaps Found |
+| SYN-09 | Phase 4 | Gaps Found |
+| SYN-10 | Phase 4 | Gaps Found |
 | TRU-01 | Phase 3 | Complete |
 | TRU-02 | Phase 3 | Complete |
 | TRU-03 | Phase 3 | Complete |
 | TRU-04 | Phase 3 | Complete |
-| OPS-01 | Phase 4 | Pending |
-| OPS-02 | Phase 4 | Pending |
-| OPS-03 | Phase 4 | Pending |
-| OPS-04 | Phase 4 | Pending |
-| OPS-05 | Phase 4 | Pending |
-| OPS-06 | Phase 4 | Pending |
+| OPS-01 | Phase 4 | Gaps Found |
+| OPS-02 | Phase 4 | Gaps Found |
+| OPS-03 | Phase 4 | Gaps Found |
+| OPS-04 | Phase 4 | Gaps Found |
+| OPS-05 | Phase 4 | Complete |
+| OPS-06 | Phase 4 | Gaps Found |
 
 **Coverage:**
 - v1 requirements: 44 total

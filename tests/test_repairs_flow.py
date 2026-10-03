@@ -1,26 +1,35 @@
 """Approval through Repairs: the issue lifecycle, the fix flow, hash binding, the race abort and a safe view (D-02)."""
 
+import json
+import uuid
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_mqtt_message,
+    async_fire_time_changed,
     async_mock_service,
 )
 
+from custom_components.mqtt_actions import const, repairs
 from custom_components.mqtt_actions.const import (
     APPROVAL_HASH_PREFIX_LENGTH,
+    CONF_INSTANCE_ID,
     DOMAIN,
+    HEARTBEAT_OFFLINE_SECONDS,
     ISSUE_APPROVAL_PREFIX,
     ISSUE_BLOCKED_PREFIX,
     ISSUE_DENIED_CALL_PREFIX,
 )
 from custom_components.mqtt_actions.document import escape_markdown
-from custom_components.mqtt_actions.topics import config_topic, state_topic
+from custom_components.mqtt_actions.manager import async_remove_local_state
+from custom_components.mqtt_actions.topics import availability_topic, config_topic, heartbeat_topic, state_topic
 from tests.documents import FOREIGN_OWNER_NAME, document_payload, make_spec
 
 if TYPE_CHECKING:
@@ -272,6 +281,9 @@ async def test_flow_shows_device_owner_yaml_hash_and_templates(
         "hash",
         "actions",
         "startup",
+        "run_mode",
+        "breaker_max_runs",
+        "breaker_window",
         "templated",
         "residual",
         "invalid",
@@ -297,6 +309,22 @@ async def test_flow_states_the_startup_flag_the_hash_binds(
     result = await _start_flow(hass, device_id)
 
     assert result["description_placeholders"]["startup"] == "true"
+
+
+async def test_confirm_form_placeholders_include_settings(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """The confirm form also supplies the run mode and both breaker limits the approval hash binds (D-16)."""
+    _entry, device_id, _spec = await _pending(
+        hass, make_hub_entry, run_mode="restart", breaker_max_runs=3, breaker_window=7
+    )
+
+    result = await _start_flow(hass, device_id)
+
+    placeholders = result["description_placeholders"]
+    assert placeholders["run_mode"] == "restart"
+    assert placeholders["breaker_max_runs"] == "3"
+    assert placeholders["breaker_window"] == "7"
 
 
 async def test_residual_and_invalid_actions_are_listed(
@@ -452,3 +480,275 @@ async def test_submit_after_the_entry_unloaded_aborts(
     assert done["type"] is FlowResultType.ABORT
     assert done["reason"] == "not_loaded"
     assert manager._approvals == {}
+
+
+# --- the duplicate instance id issue and its fix flow (D-07, D-08) ----------------------------------------------------
+
+FOREIGN_SESSION = "6f1c0f0e-3a52-4f43-8d0c-5a0b7f3c9d21"
+
+
+def _use_clock(manager: Manager) -> list[float]:
+    now = [1000.0]
+    manager.clock = lambda: now[0]
+    return now
+
+
+async def _own_id_heartbeat(hass: HomeAssistant, entry: MockConfigEntry, session: str = FOREIGN_SESSION) -> None:
+    """Deliver a live heartbeat with this instance's own id and another session."""
+    instance_id = entry.data[CONF_INSTANCE_ID]
+    payload = json.dumps(
+        {"instance_id": instance_id, "name": "Clone", "version": "0.1.0", "devices": 1, "session": session}
+    )
+    async_fire_mqtt_message(hass, heartbeat_topic(BASE, instance_id), payload)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def _duplicate_setup(
+    hass: HomeAssistant, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> tuple[MockConfigEntry, list[float]]:
+    """Set up a hub with one device and let it confirm a duplicate instance id."""
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+    now = _use_clock(_manager(entry))
+    await _own_id_heartbeat(hass, entry)
+    await _own_id_heartbeat(hass, entry)
+    return entry, now
+
+
+def _duplicate_issue(hass: HomeAssistant) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, const.ISSUE_DUPLICATE_INSTANCE_ID)
+
+
+async def _start_duplicate_flow(hass: HomeAssistant) -> dict[str, Any]:
+    return await hass.data["repairs"]["flow_manager"].async_init(
+        DOMAIN, data={"issue_id": const.ISSUE_DUPLICATE_INSTANCE_ID}
+    )
+
+
+async def test_duplicate_issue_is_created_once_and_cleared(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-07: one fixable error issue after two foreign sessions, a dismissal stays, 90 seconds of silence deletes it."""
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)]))
+    manager = _manager(entry)
+    now = _use_clock(manager)
+    await _own_id_heartbeat(hass, entry)
+    assert _duplicate_issue(hass) is None
+
+    await _own_id_heartbeat(hass, entry)
+
+    issue = _duplicate_issue(hass)
+    assert issue is not None
+    assert issue.is_fixable is True
+    assert issue.severity is ir.IssueSeverity.ERROR
+    assert issue.translation_key == "duplicate_instance_id"
+    assert issue.translation_placeholders == {"instance": escape_markdown(manager.instance_name)}
+    assert issue.data == {"instance_id": manager.instance_id}
+
+    ir.async_ignore_issue(hass, DOMAIN, const.ISSUE_DUPLICATE_INSTANCE_ID, True)
+    await _own_id_heartbeat(hass, entry)
+    dismissed = _duplicate_issue(hass)
+    assert dismissed is not None
+    assert dismissed.dismissed_version is not None
+
+    now[0] += HEARTBEAT_OFFLINE_SECONDS + 2
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=HEARTBEAT_OFFLINE_SECONDS + 5))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _duplicate_issue(hass) is None
+
+
+async def test_duplicate_issue_is_removed_with_the_hub(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    entry, _now = await _duplicate_setup(hass, make_hub_entry, make_switch_subentry)
+    assert _duplicate_issue(hass) is not None
+
+    await async_remove_local_state(hass, entry)
+
+    assert _duplicate_issue(hass) is None
+
+
+async def test_dispatcher_returns_the_right_flow(hass: HomeAssistant) -> None:
+    """The issue id decides: the duplicate id flow for its issue, the approval flow for everything else."""
+    duplicate = await repairs.async_create_fix_flow(hass, const.ISSUE_DUPLICATE_INSTANCE_ID, {"instance_id": "x"})
+    approval = await repairs.async_create_fix_flow(hass, f"{ISSUE_APPROVAL_PREFIX}abc", {"device_id": "abc"})
+    other = await repairs.async_create_fix_flow(hass, "something_else", None)
+    transferred = await repairs.async_create_fix_flow(
+        hass, f"{const.ISSUE_TRANSFERRED_PREFIX}abc", {"device_id": "abc"}
+    )
+
+    assert isinstance(transferred, repairs.TransferredRepairFlow)
+    assert isinstance(duplicate, repairs.DuplicateIdRepairFlow)
+    assert isinstance(approval, repairs.ApprovalRepairFlow)
+    assert isinstance(other, repairs.ApprovalRepairFlow)
+
+
+async def test_duplicate_flow_form_and_confirmation(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-08: the form names the instance and the device count; a submit releases locally and publishes no clear."""
+    entry, _now = await _duplicate_setup(hass, make_hub_entry, make_switch_subentry)
+    manager = _manager(entry)
+    old_id = manager.instance_id
+    mark = len(mqtt_mock.async_publish.call_args_list)
+
+    result = await _start_duplicate_flow(hass)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "confirm"
+    assert result["description_placeholders"] == {"instance": escape_markdown(manager.instance_name), "devices": "1"}
+    with patch.object(hass.config_entries, "async_schedule_reload") as schedule:
+        done = await _submit(hass, result["flow_id"])
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert done["type"] is FlowResultType.CREATE_ENTRY
+    schedule.assert_called_once_with(entry.entry_id)
+    assert entry.data[CONF_INSTANCE_ID] != old_id
+    assert str(uuid.UUID(entry.data[CONF_INSTANCE_ID])) == entry.data[CONF_INSTANCE_ID]
+    assert manager.devices == {}
+    assert len(entry.subentries) == 0
+    assert _duplicate_issue(hass) is None
+    await manager.async_stop()
+    sent = mqtt_mock.async_publish.call_args_list[mark:]
+    assert [call for call in sent if call.args[1] == ""] == []
+    assert [call for call in sent if call.args[0] == availability_topic(BASE, old_id)] == []
+
+
+async def test_duplicate_flow_aborts(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """The flow does nothing when the entry is not loaded or when the instance id is not the current one."""
+    entry, _now = await _duplicate_setup(hass, make_hub_entry, make_switch_subentry)
+    manager = _manager(entry)
+    old_id = manager.instance_id
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        const.ISSUE_DUPLICATE_INSTANCE_ID,
+        data={"instance_id": "an-earlier-id"},
+        is_fixable=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="duplicate_instance_id",
+        translation_placeholders={"instance": "x"},
+    )
+
+    stale = await _start_duplicate_flow(hass)
+    assert stale["type"] is FlowResultType.ABORT
+    assert stale["reason"] == "changed"
+    assert entry.data[CONF_INSTANCE_ID] == old_id
+    assert len(manager.devices) == 1
+
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        const.ISSUE_DUPLICATE_INSTANCE_ID,
+        data={"instance_id": old_id},
+        is_fixable=True,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key="duplicate_instance_id",
+        translation_placeholders={"instance": "x"},
+    )
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    unloaded = await _start_duplicate_flow(hass)
+    assert unloaded["type"] is FlowResultType.ABORT
+    assert unloaded["reason"] == "not_loaded"
+    assert entry.data[CONF_INSTANCE_ID] == old_id
+
+
+# --- the returning old owner: the transferred issue and its release flow (D-09 refined) -------------------------------
+
+
+def _transferred_issue(hass: HomeAssistant, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{const.ISSUE_TRANSFERRED_PREFIX}{device_id}")
+
+
+async def _start_transferred_flow(hass: HomeAssistant, device_id: str) -> dict[str, Any]:
+    return await hass.data["repairs"]["flow_manager"].async_init(
+        DOMAIN, data={"issue_id": f"{const.ISSUE_TRANSFERRED_PREFIX}{device_id}"}
+    )
+
+
+async def _owned_and_transferred(
+    hass: HomeAssistant, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> tuple[MockConfigEntry, str]:
+    """Set up a hub that owns a lamp with a baseline, then deliver the adopter's valid document that names this hub."""
+    sub = make_switch_subentry("Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    device_id = sub["data"]["device_id"]
+    entry = await _setup(hass, make_hub_entry([sub]))
+    await _state(hass, device_id, "ON", retain=True)
+    adopter = make_spec(device_id=device_id, name="Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    payload = document_payload(adopter, rev=2, transferred_from=[entry.data[CONF_INSTANCE_ID]])
+    await _deliver(hass, device_id, payload, retain=False)
+    return entry, device_id
+
+
+async def test_release_flow_follows_the_adopter(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-09: the form names device and claimant; a submit releases locally and follows the adopter as a mirror."""
+    entry, device_id = await _owned_and_transferred(hass, make_hub_entry, make_switch_subentry)
+    manager = _manager(entry)
+    issue = _transferred_issue(hass, device_id)
+    assert issue is not None
+    assert issue.is_fixable is True
+    assert issue.data == {"device_id": device_id, "claimant": "instance-foreign"}
+    assert device_id in manager.devices
+    mark = len(mqtt_mock.async_publish.call_args_list)
+
+    result = await _start_transferred_flow(hass, device_id)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "confirm"
+    assert result["description_placeholders"] == {
+        "device": escape_markdown("Lamp"),
+        "claimant": escape_markdown(FOREIGN_OWNER_NAME),
+    }
+    done = await _submit(hass, result["flow_id"])
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert done["type"] is FlowResultType.CREATE_ENTRY
+    assert device_id not in manager.devices
+    assert len(entry.subentries) == 0
+    mirror = manager.mirrors[device_id]
+    assert mirror.mirror is not None
+    assert mirror.mirror.owner == "instance-foreign"
+    assert mirror.tracker.last_acted == "ON"
+    assert _transferred_issue(hass, device_id) is None
+    sent = mqtt_mock.async_publish.call_args_list[mark:]
+    assert [call for call in sent if call.args[1] == ""] == []
+    assert [call for call in sent if call.args[0] == config_topic(BASE, device_id)] == []
+
+
+async def test_transferred_flow_aborts(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """The flow changes nothing when the entry is not loaded, the claimant differs or the device is not owned."""
+    entry, device_id = await _owned_and_transferred(hass, make_hub_entry, make_switch_subentry)
+    manager = _manager(entry)
+
+    for data, reason in (
+        ({"device_id": device_id, "claimant": "someone-else"}, "changed"),
+        ({"device_id": "unknown-device", "claimant": "instance-foreign"}, "changed"),
+    ):
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            f"{const.ISSUE_TRANSFERRED_PREFIX}probe",
+            data=data,
+            is_fixable=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="transferred",
+            translation_placeholders={"device": "x", "claimant": "y"},
+        )
+        probe = await hass.data["repairs"]["flow_manager"].async_init(
+            DOMAIN, data={"issue_id": f"{const.ISSUE_TRANSFERRED_PREFIX}probe"}
+        )
+        assert probe["type"] is FlowResultType.ABORT
+        assert probe["reason"] == reason
+        ir.async_delete_issue(hass, DOMAIN, f"{const.ISSUE_TRANSFERRED_PREFIX}probe")
+    assert device_id in manager.devices
+    assert len(entry.subentries) == 1
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    unloaded = await _start_transferred_flow(hass, device_id)
+    assert unloaded["type"] is FlowResultType.ABORT
+    assert unloaded["reason"] == "not_loaded"

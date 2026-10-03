@@ -15,6 +15,7 @@ fails loudly; the documented fallback is to reject templated service names in mi
 import re
 import unicodedata
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import callback
@@ -38,6 +39,23 @@ _ITEM_MAX_CHARS = 200
 # paragraph separators; newline and tab survive only inside the YAML
 _DROPPED_CATEGORIES = frozenset({"Cc", "Cf", "Cs", "Zl", "Zp"})
 _FENCE_RUN = re.compile(r"`{3,}")
+
+
+class ApprovalState(StrEnum):
+    """
+    The public answer of the manager to "may this device run its actions here?", in words (D-17).
+
+    Diagnostics and the later re-trigger acknowledgements use the same words. `BLOCKED` is a statically denied mirror,
+    `NO_ACTIONS` a device with nothing to approve and `UNKNOWN` an id that is neither owned nor mirrored.
+    """
+
+    OWNED = "owned"
+    APPROVED = "approved"
+    PENDING = "pending"
+    BLOCKED = "blocked"
+    NO_ACTIONS = "no_actions"
+    UNKNOWN = "unknown"
+
 
 # Keys whose Template value is a service name; `service` is the legacy spelling that validation renames to `action`
 GUARDED_KEYS = ("action", "service", "service_template")
@@ -104,7 +122,9 @@ class ApprovalView:
 
     Names are markdown-escaped, `actions_yaml` has no control character and no run of three backticks, and `truncated`
     says the YAML was cut at the cap, which the flow answers with a refusal instead of showing a partial review.
-    `run_on_startup` is part of what the approval hash binds, so the dialog states it next to the actions.
+    `run_on_startup`, `run_mode`, `breaker_max_runs` and `breaker_window` are part of what the approval hash binds, so
+    the dialog states them next to the actions (D-16). The run mode is one of two validated words and the limits are
+    validated integers, so none of them needs escaping.
     """
 
     device_id: str
@@ -114,6 +134,9 @@ class ApprovalView:
     short_hash: str
     actions_yaml: str
     run_on_startup: bool
+    run_mode: str
+    breaker_max_runs: int
+    breaker_window: int
     truncated: bool
     templated: str
     residual: str
@@ -178,6 +201,9 @@ def build_approval_view(spec: DeviceSpec, info: MirrorInfo, deep_invalid_labels:
         short_hash=info.actions_hash[:APPROVAL_HASH_PREFIX_LENGTH],
         actions_yaml=actions,
         run_on_startup=spec.run_on_startup,
+        run_mode=spec.run_mode,
+        breaker_max_runs=spec.breaker_max_runs,
+        breaker_window=spec.breaker_window,
         truncated=truncated,
         templated=_bullets(info.templated, APPROVAL_TEMPLATED_MAX_LINES),
         residual=_bullets(info.residual, APPROVAL_TEMPLATED_MAX_LINES),

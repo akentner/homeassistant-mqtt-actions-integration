@@ -69,15 +69,19 @@ def document_payload(
     owner_name: str = FOREIGN_OWNER_NAME,
     rev: int = 1,
     schema_version: int | None = None,
+    transferred_from: Sequence[str] | None = None,
     tamper: Callable[[dict[str, Any]], None] | None = None,
 ) -> str:
     """
     Return the wire text of the document an owner would publish for a spec.
 
-    `schema_version` overrides the version, `tamper` may change, add or delete any key of the document before it is
-    serialized. The hash field is not recomputed after tampering, exactly like a hostile writer's document.
+    `schema_version` overrides the version, `transferred_from` writes the transfer marker of an adopted device as a
+    top-level list, `tamper` may change, add or delete any key of the document before it is serialized. The hash field
+    is not recomputed after tampering, exactly like a hostile writer's document.
     """
     document = build_document(spec, owner=owner, owner_name=owner_name, rev=rev)
+    if transferred_from is not None:
+        document["transferred_from"] = list(transferred_from)
     if schema_version is not None:
         document["schema_version"] = schema_version
     if tamper is not None:

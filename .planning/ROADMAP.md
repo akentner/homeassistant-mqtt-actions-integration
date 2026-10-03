@@ -144,7 +144,46 @@ Plans:
   4. User can set per instance and device whether actions run, are only observed, or are disabled, and can download diagnostics with sensitive data redacted.
   5. README and docs cover setup, trust model and limitations; a tagged release is built automatically with the manifest version matching the tag; CI runs the unit, real-Mosquitto and multi-instance fake-broker test tiers.
 
-**Plans**: TBD
+**Plans:** 14/14 plans executed
+
+Plans:
+**Wave 1**
+- [x] 04-01-PLAN.md — Test tiers by marker, CI job per tier, reusable CI and the tag-triggered release workflow (wave 1)
+- [x] 04-02-PLAN.md — Approval hash binds run mode and breaker limits (WR-04), dialog and README (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 04-03-PLAN.md — Tracer: heartbeat, roster, owner-offline answer and the tested ACL lines (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 04-04-PLAN.md — Hub device with the roster sensor and the resync button, platform plumbing (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 04-05-PLAN.md — Run, observe and disabled modes for owned devices and the instance, companion devices with select entities (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 04-06-PLAN.md — Companion devices and mode selects for mirrored devices, safe life cycle (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 04-07-PLAN.md — Redacted diagnostics from an allow-list (wave 6)
+- [x] 04-08-PLAN.md — Admin service layer with resync and export, private export files (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 04-09-PLAN.md — Import service: strict, all-or-nothing, bounded (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [x] 04-10-PLAN.md — Re-trigger protocol, acknowledgements, service response and ACL lines (wave 8)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [x] 04-11-PLAN.md — Adoption of orphaned devices with the transfer marker and the narrow pin rule (wave 9)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [x] 04-12-PLAN.md — Duplicate instance id: detection, local release and fix flow; returning old owner flow (wave 10)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [x] 04-13-PLAN.md — README, operations, diagnostics and troubleshooting pages tied to the code by tests (wave 11)
+
+**Wave 12** *(gap closure, blocked on Wave 11 completion)*
+- [x] 04-14-PLAN.md — Gap closure: fixable Repairs issues keep their text in the fix flow step so hassfest passes and the release gate can go green (wave 12)
 
 ## Progress
 
@@ -156,13 +195,22 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Walking Skeleton - Installable Switch | 6/6 | Complete    | 2026-09-29 |
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
-| 4. Operations, Recovery and Release | 0/0 | Not started | - |
+| 4. Operations, Recovery and Release | 14/14 | In Progress|  |
 
 ## Backlog
 
 ### Phase 999.1: Per-instance local actions on mirrored devices (followers add own actions, relates to MAP-01) (BACKLOG)
 
 **Goal:** [Captured for future planning] A follower instance can add its own local actions to a mirrored device, on top of the owner's document (for example different entities per instance). Found during Phase 3 UAT: mirrors are read-only today.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.2: Evaluate native switch/select entities instead of MQTT Discovery (BACKLOG)
+
+**Goal:** [Captured for future planning] Entities owned by the MQTT Actions config entry would show the full device and entity count on our integration page (incl. mirrored devices on other instances), remove discovery healing/ghost-entity handling and DSC-04. Costs: breaks the PROJECT.md Discovery constraint, rewrite of phase 1-3 publishing, loses non-HA consumers. Origin: Phase 4 research on D-13 (a device belongs to exactly one config entry); Phase 4 uses companion devices meanwhile.
 **Requirements:** TBD
 **Plans:** 0 plans
 

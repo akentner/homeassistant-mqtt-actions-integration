@@ -1,5 +1,6 @@
 """Fixtures for tests against a real Mosquitto broker (no Home Assistant involved)."""
 
+import os
 import shutil
 import socket
 import subprocess
@@ -14,6 +15,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 STARTUP_TIMEOUT = 5.0
+REQUIRE_BROKER_ENV = "MQTT_ACTIONS_REQUIRE_BROKER"
+
+
+def _broker_unavailable(reason: str) -> None:
+    """Skip, or fail when MQTT_ACTIONS_REQUIRE_BROKER is 1 (read at call time) so CI cannot pass vacuously."""
+    if os.environ.get(REQUIRE_BROKER_ENV) == "1":
+        pytest.fail(reason)
+    pytest.skip(reason)
 
 
 def _free_port() -> int:
@@ -42,7 +51,7 @@ def _run_broker(config: Path, port: int) -> Iterator[None]:
     """Run a Mosquitto with the given config file until the block ends."""
     executable = shutil.which("mosquitto")
     if executable is None:
-        pytest.skip("mosquitto is not installed")
+        _broker_unavailable("mosquitto is not installed")
     process = subprocess.Popen(  # noqa: S603
         [executable, "-c", str(config)],
         stdout=subprocess.DEVNULL,
@@ -83,7 +92,7 @@ def start_acl_broker(socket_enabled: None, tmp_path: Path) -> Iterator[Callable[
     is stopped at teardown. Anonymous access is off, so the ACL is the only thing that decides what a user may do.
     """
     if shutil.which("mosquitto") is None or shutil.which("mosquitto_passwd") is None:
-        pytest.skip("mosquitto or mosquitto_passwd is not installed")
+        _broker_unavailable("mosquitto or mosquitto_passwd is not installed")
     stack = ExitStack()
 
     def _start(acl_text: str, users: Mapping[str, str]) -> int:

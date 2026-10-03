@@ -3,6 +3,7 @@
 import json
 from typing import TYPE_CHECKING, Any
 
+import pytest
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions.const import STORE_KEY
@@ -15,6 +16,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from homeassistant.core import HomeAssistant
+
+pytestmark = pytest.mark.multi_instance
 
 BASE = "mqtt_actions"
 

@@ -101,6 +101,16 @@ async def _deliver_discovery(hass: HomeAssistant, mqtt_mock: Any, entry: MockCon
     await hass.async_block_till_done(wait_background_tasks=True)
 
 
+def _trigger_buttons(hass: HomeAssistant) -> list[str]:
+    """Return the entity ids of the discovered test buttons; the resync button of the hub device is not one."""
+    registry = er.async_get(hass)
+    return [
+        entity_id
+        for entity_id in hass.states.async_entity_ids("button")
+        if (entry := registry.async_get(entity_id)) is not None and entry.platform == "mqtt"
+    ]
+
+
 def _button_entity_id(hass: HomeAssistant, device_id: str, key: str) -> str | None:
     """Find a button in the entity registry by its unique id, never by entity id."""
     return er.async_get(hass).async_get_entity_id("button", "mqtt", f"{device_id}_test_{key}")
@@ -373,7 +383,7 @@ async def test_removed_option_removes_its_button_entity(
     assert hass.states.get(b_button) is None
     assert _button_entity_id(hass, device_id, trigger_key("a")) is not None
     assert _button_entity_id(hass, device_id, trigger_key("c")) is not None
-    assert len(hass.states.async_entity_ids("button")) == 2
+    assert len(_trigger_buttons(hass)) == 2
 
 
 async def test_tombstone_is_kept_for_every_republish_while_running(
@@ -441,7 +451,7 @@ async def test_new_option_adds_a_button(
 ) -> None:
     """Adding an option adds one button component and one button entity."""
     entry, device_id = await _select_entry(hass, mqtt_mock, make_hub_entry, make_select_subentry)
-    assert len(hass.states.async_entity_ids("button")) == 3
+    assert len(_trigger_buttons(hass)) == 3
 
     new_option = {CONF_STATE_VALUE: "d", CONF_FRIENDLY_NAME: "Delta", "actions": []}
     _update_options(hass, entry, [*_options(entry), new_option])
@@ -451,7 +461,7 @@ async def test_new_option_adds_a_button(
     components = _last_discovery(mqtt_mock, device_id)["components"]
     assert sum(1 for component in components.values() if component["platform"] == "button") == 4
     assert _button_entity_id(hass, device_id, trigger_key("d")) is not None
-    assert len(hass.states.async_entity_ids("button")) == 4
+    assert len(_trigger_buttons(hass)) == 4
 
 
 async def test_delete_device_clears_buttons_with_the_discovery_clear(
@@ -461,7 +471,7 @@ async def test_delete_device_clears_buttons_with_the_discovery_clear(
     entry, device_id = await _select_entry(hass, mqtt_mock, make_hub_entry, make_select_subentry)
     topic = discovery_topic("homeassistant", device_id)
     assert hass.states.get("select.mode") is not None
-    assert len(hass.states.async_entity_ids("button")) == 3
+    assert len(_trigger_buttons(hass)) == 3
 
     hass.config_entries.async_remove_subentry(entry, next(iter(entry.subentries.values())).subentry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -471,7 +481,7 @@ async def test_delete_device_clears_buttons_with_the_discovery_clear(
     async_fire_mqtt_message(hass, topic, "", retain=False)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert hass.states.get("select.mode") is None
-    assert hass.states.async_entity_ids("button") == []
+    assert _trigger_buttons(hass) == []
 
 
 def _watch_test_unsubscribe(entry: MockConfigEntry, device_id: str) -> list[str]:

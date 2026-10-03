@@ -4,7 +4,11 @@ The central config document: the wire contract between the owner of a device and
 Pure module: no Home Assistant import at runtime except the JSON parser of core. One retained (QoS 1) JSON document
 per device is published at `<base>/<TOPIC_VERSION>/devices/<device_id>/config` by its owner. It carries:
 
-- identity and bookkeeping: `schema_version`, `device_id`, `owner` (instance id), `owner_name`, `rev` and `hash`
+- identity and bookkeeping: `schema_version`, `device_id`, `owner` (instance id), `owner_name`, `rev` and `hash`, and
+  for an adopted device the optional `transferred_from`, the ids of its previous owners (newest last, at most
+  MAX_TRANSFER_HISTORY). The marker is bookkeeping like `owner` and `rev`: it is never hashed, an absent marker leaves
+  the document byte-identical to one published before adoption existed, and SCHEMA_VERSION stays 1, so a reader that
+  does not know the key ignores it (D-09)
 - the shared content (D-13): `kind`, `name`, `run_on_startup`, `run_mode`, `breaker_max_runs`, `breaker_window` and the
   actions, as `on_change_to_on` and `on_change_to_off` for a Switch or as `options` for a Select
 
@@ -15,9 +19,11 @@ The canonical-JSON and sha256 algorithm is part of the wire contract and changin
 - `canonical_json` is `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)`
 - `content_hash` is the sha256 hex digest of the UTF-8 canonical JSON of the content; owner, owner name, rev, hash,
   device id and schema version are not content, so moving or renaming an instance never changes what a device means
-- `actions_hash` binds an approval (D-02). It is the sha256 of the canonical JSON of the kind, `run_on_startup` and the
-  list of [lower-cased StateValue, actions] pairs sorted by the lower-cased StateValue. It changes when the
-  state-to-actions mapping or the startup flag changes, never on a rename, a run mode change or a breaker change (A5).
+- `actions_hash` binds an approval (D-02, D-16). It is the sha256 of the canonical JSON of the kind, `run_on_startup`,
+  `run_mode`, both breaker limits and the list of [lower-cased StateValue, actions] pairs sorted by the lower-cased
+  StateValue. It changes when the state-to-actions mapping, the startup flag, the run mode or a breaker limit changes,
+  never on a rename. It is computed locally from received content and never read from the wire, so binding more
+  settings changes no wire field and needs no SCHEMA_VERSION bump.
 
 Documents are built from the DeviceSpec, where defaults are applied, and never from raw subentry data: a device stored
 before Phase 2 publishes the same defaults as an explicit one, so a hash always means "behaves the same".
@@ -53,6 +59,7 @@ from .const import (
     MAX_ACTION_DEPTH,
     MAX_DOCUMENT_BYTES,
     MAX_OPTIONS,
+    MAX_TRANSFER_HISTORY,
     MIN_OPTIONS,
     RESIDUAL_SERVICES,
     RUN_MODE_RESTART,
@@ -62,11 +69,16 @@ from .const import (
     SUBENTRY_SWITCH,
 )
 from .model import SWITCH_OFF_KEY, SWITCH_ON_KEY, _encodable, _invalid_text, spec_from_data, validate_breaker
+from .topics import is_valid_device_id
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Sequence
 
     from .model import DeviceSpec
+
+
+# Top-level key of the transfer marker of an adopted device
+TRANSFER_KEY = "transferred_from"
 
 
 def canonical_json(value: Any) -> str:
@@ -109,18 +121,46 @@ def content_hash(content: dict[str, Any]) -> str:
 
 
 def actions_hash(spec: DeviceSpec) -> str:
-    """Return the hash an approval is bound to: the StateValue-to-actions mapping plus the startup flag (A5)."""
+    """
+    Return the hash an approval is bound to: the mapping, the startup flag, the run mode and the breaker limits.
+
+    What a user approves is what can run, including how often and in which mode (A5 revised by D-16, WR-04); only the
+    name is left out, so a rename keeps the approval.
+    """
     pairs = sorted(
         ([trigger.value.lower(), trigger.actions] for trigger in spec.triggers.values()),
         key=lambda pair: pair[0],
     )
-    return _sha256(canonical_json({"kind": spec.kind, CONF_RUN_ON_STARTUP: spec.run_on_startup, "triggers": pairs}))
+    return _sha256(
+        canonical_json(
+            {
+                "kind": spec.kind,
+                CONF_RUN_ON_STARTUP: spec.run_on_startup,
+                CONF_RUN_MODE: spec.run_mode,
+                CONF_BREAKER_MAX_RUNS: spec.breaker_max_runs,
+                CONF_BREAKER_WINDOW: spec.breaker_window,
+                "triggers": pairs,
+            }
+        )
+    )
 
 
-def build_document(spec: DeviceSpec, *, owner: str, owner_name: str, rev: int) -> dict[str, Any]:
-    """Return the document of a device: identity and bookkeeping, the content hash and the shared content."""
+def build_document(
+    spec: DeviceSpec,
+    *,
+    owner: str,
+    owner_name: str,
+    rev: int,
+    transferred_from: Sequence[str] = (),
+) -> dict[str, Any]:
+    """
+    Return the document of a device: identity and bookkeeping, the content hash and the shared content.
+
+    `transferred_from` is the transfer marker of an adopted device (D-09). It is written only when it is not empty and
+    is not part of the content, so it never changes a hash.
+    """
     content = build_content(spec)
-    return {
+    document: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         CONF_DEVICE_ID: spec.device_id,
         "owner": owner,
@@ -129,6 +169,9 @@ def build_document(spec: DeviceSpec, *, owner: str, owner_name: str, rev: int) -
         "hash": content_hash(content),
         **content,
     }
+    if transferred_from:
+        document[TRANSFER_KEY] = list(transferred_from)
+    return document
 
 
 def serialize_document(document: dict[str, Any]) -> str:
@@ -152,6 +195,7 @@ class RejectReason(StrEnum):
     BAD_RUN_MODE = "bad_run_mode"
     BAD_RUN_ON_STARTUP = "bad_run_on_startup"
     BAD_SCHEMA_VERSION = "bad_schema_version"
+    BAD_TRANSFER = "bad_transfer"
     DEVICE_ID_MISMATCH = "device_id_mismatch"
     DUPLICATE_STATE_VALUE = "duplicate_state_value"
     NOT_JSON = "not_json"
@@ -198,6 +242,8 @@ class ParsedDocument:
     content_hash: str
     actions_hash: str
     payload: str
+    # The ids of the previous owners of an adopted device, newest last; empty when the device was never adopted (D-09)
+    transferred_from: tuple[str, ...] = ()
 
 
 def migrate(document: dict[str, Any]) -> dict[str, Any]:
@@ -279,6 +325,25 @@ def _check_options(document: Mapping[str, Any]) -> list[list[dict[str, Any]]]:
     return action_lists
 
 
+def _transfer_marker(document: Mapping[str, Any]) -> tuple[str, ...]:
+    """
+    Return the transfer marker of a document, or raise `bad_transfer`.
+
+    Absent or null means the device was never adopted. Otherwise the marker must be a list of at most
+    MAX_TRANSFER_HISTORY ids, each of the shape of any instance or device id (T-04-52).
+    """
+    marker = document.get(TRANSFER_KEY)
+    if marker is None:
+        return ()
+    if (
+        not isinstance(marker, list)
+        or len(marker) > MAX_TRANSFER_HISTORY
+        or not all(isinstance(item, str) and is_valid_device_id(item) for item in marker)
+    ):
+        raise _reject(RejectReason.BAD_TRANSFER)
+    return tuple(marker)
+
+
 def _validated(document: dict[str, Any], topic_device_id: str) -> list[list[dict[str, Any]]]:
     """Check every field of a document in the current schema and return its action lists; raise on the first flaw."""
     if document.get(CONF_DEVICE_ID) != topic_device_id:
@@ -337,6 +402,7 @@ def parse_document(topic_device_id: str, payload: str) -> ParsedDocument:
         raise SchemaTooNewError(version)
     document = migrate(value)
     action_lists = _validated(document, topic_device_id)
+    transferred_from = _transfer_marker(document)
     if any(actions_depth(actions) > MAX_ACTION_DEPTH for actions in action_lists):
         raise _reject(RejectReason.TOO_DEEP)
     spec = spec_from_data(document["kind"], document["name"], document)
@@ -357,6 +423,7 @@ def parse_document(topic_device_id: str, payload: str) -> ParsedDocument:
         content_hash=digest,
         actions_hash=approval,
         payload=payload,
+        transferred_from=transferred_from,
     )
 
 

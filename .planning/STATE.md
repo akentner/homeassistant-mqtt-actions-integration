@@ -1,17 +1,18 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 4
-current_phase_name: Operations, Recovery and Release
-status: "Phase 3 shipped — PR #8"
-stopped_at: Phase 03 complete, ready to plan Phase 4
-last_updated: "2026-10-02T00:01:40.786Z"
+current_phase: 04
+current_phase_name: operations-recovery-and-release
+status: verifying
+stopped_at: Completed 04-14-PLAN.md
+last_updated: "2026-10-02T19:32:34.509Z"
 last_activity: 2026-10-02
-state_head: e6cc2e37a16f857f373a160023704c430f43c44f
+last_activity_desc: Phase 04 execution started
+state_head: e6d69cdd90bf607350fa3322ae220e0cdaa52319
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 19
-  completed_plans: 19
+  total_plans: 33
+  completed_plans: 33
   percent: 75
 ---
 
@@ -22,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-28)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 03 — trust-central-config-and-ownership
+**Current focus:** Phase 04 — Operations, Recovery and Release
 
 ## Current Position
 
-Phase: 4 — Operations, Recovery and Release
-Plan: Not started
-Status: Phase 3 shipped — PR #8
-Last activity: 2026-10-02
+Phase: 04 (operations-recovery-and-release) — READY TO EXECUTE
+Plan: 13 of 13
+Status: Phase complete — ready for verification
+Last activity: 2026-10-02 — Phase 04 execution started
 
 Progress: [████████░░] 75% of Phase 01 plans
 
@@ -71,6 +72,20 @@ Progress: [████████░░] 75% of Phase 01 plans
 | Phase 03 P06 | 55 min | 3 tasks | 13 files |
 | Phase 03 P07 | 10 min | 3 tasks | 6 files |
 | Phase 03 P08 | 20min | 2 tasks | 3 files |
+| Phase 04 P01 | 7 min | 3 tasks | 8 files |
+| Phase 04 P02 | 5 min | 2 tasks | 11 files |
+| Phase 04 P03 | 12min | 3 tasks | 11 files |
+| Phase 04 P04 | 10 min | 3 tasks | 11 files |
+| Phase 04 P05 | 15 min | 3 tasks | 14 files |
+| Phase 04 P06 | 7 min | 2 tasks | 3 files |
+| Phase 04 P07 | 5 min | 2 tasks | 5 files |
+| Phase 04 P08 | 7 min | 2 tasks | 10 files |
+| Phase 04 P09 | 8 min | 2 tasks | 9 files |
+| Phase 04 P10 | 30 min | 3 tasks | 15 files |
+| Phase 04 P11 | 17 min | 3 tasks | 14 files |
+| Phase 04 P12 | 21 min | 3 tasks | 11 files |
+| Phase 04 P13 | 11 min | 3 tasks | 6 files |
+| Phase 04 P14 | 15 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -119,6 +134,40 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-07: The documented acl block is the block the broker test enforces (the test reads docs/broker-acl.md); the external publisher gets state-topic access only
 - [Phase 03]: 03-07: owner_conflict issue is transient with an online owner (cleared when the owner's healing republish is re-seen); flagged for user review
 - [Phase 03]: 03-08: escape_markdown only on Markdown-rendered flow description placeholders; chooser labels and suggested values stay raw
+- [Phase 04]: 04-01: --strict-markers in pytest addopts; release requires hassfest/HACS validation via reusable validate.yml; ci and validate jobs in release.yml need check-version so a mismatching tag stops early; hyphenated tags are prereleases
+- [Phase 04]: 04-02: run_mode, breaker_max_runs and breaker_window are bound into actions_hash (D-16); a rename is still not; no migration code, old approvals lapse once
+- [Phase 04]: 04-03: peer online while heartbeat age <= 90 s and availability not offline; expiry timer fires 1 s after the deadline — Strict comparison gives 89 s online and 91 s offline without a busy re-arm loop
+- [Phase 04]: 04-03: owner_offline treats an owner that announced online without any heartbeat as not offline; unknown owner is offline only after 90 s of listening — Unknown must never count as offline right after a start; adoption then needs force (D-09, A10)
+- [Phase 04]: 04-03: at the peer cap a new peer evicts the stalest expired row, else is not tracked — Random heartbeat ids must not block real instances permanently (T-04-12)
+- [Phase 04]: Plan 04-04: hub device identifier is (mqtt_actions, config entry id), so it survives an instance id change
+- [Phase 04]: Plan 04-04: roster sensor counts this instance, lists it first, and caps the unrecorded instances attribute at MAX_TRACKED_INSTANCES + 1
+- [Phase 04]: Plan 04-04: Manager.async_resync returns False when throttled (5 s on Manager.clock) or stopped; the time is remembered before the republish is awaited
+- [Phase 04]: 04-05: mode gate sits between can_run and the circuit breaker; observe is logged through model.shown and never counted, disabled returns before the tracker
+- [Phase 04]: 04-05: leaving disabled re-baselines (baseline and startup window cleared, state topic resubscribed); the test topic obeys the effective mode
+- [Phase 04]: 04-05: companion devices are looked up with async_get_device_by_identifier (async_get_device is deprecated and raises in tests); mode keys are additive Store keys without a version bump
+- [Phase 04]: 04-06: mirrors share the owned devices' select add loop (config_subentry_id None for a mirror); _remove_companion removes only the (mqtt_actions, id) device and never the core MQTT device
+- [Phase 04]: 04-07: diagnostics are an allow-list (hub, roster, device rows with 8-char instance ids); async_redact_data only as a safety net — Naming what is included is safer than removing what is not; sentinel tests prove no action content, device name or full id leaves
+- [Phase 04]: 04-07: ApprovalState words (owned, approved, pending, blocked, no_actions, unknown) are the single public answer via Manager.approval_state — Diagnostics and later re-trigger acknowledgements use the same words
+- [Phase 04]: 04-08: Services are registered once in async_setup (admin only, optional response); a service field naming a device is device_id (device selector) resolved to the uuid via the (mqtt_actions, uuid) identifier — Hassfest rule; hub, foreign and unknown devices refused; mirrors refused for export
+- [Phase 04]: 04-08: Export files live only in <config>/mqtt_actions/ (0700 dir, 0600 file, bare name pattern, symlink refused); other write failures raise export_write_failed — Never www; user input never forms a path; log carries only a reason code
+- [Phase 04]: Import items run through parse_document, the structure check, the static denylist and deep validation; a forged owner, id, rev or hash of an item is overwritten by this instance's values
+- [Phase 04]: Import is all or nothing: every item is validated before the first subentry is created; rejections carry only a reason code and a 1-based position
+- [Phase 04]: Import files are read by bare name from a real private directory with a no-follow open, a regular-file check and the size checked on the descriptor; every unreadable case is file_unreadable
+- [Phase 04]: Deep validation does not check that a service exists (core resolves device actions, conditions and triggers only); an unknown service name is accepted by import, as in the UI flows
+- [Phase 04]: 04-10: re-trigger runs through the test-press path (enqueue test=True after mode and breaker checks, never breaker.record), so no state, baseline, revision or breaker count moves — A second remote execution path must reuse the existing gates; D-01, D-02, T-04-42
+- [Phase 04]: 04-10: receiver gate order retained, size and strict parse, freshness 60 s, duplicate id (128), per-device rate limit 5 s (foreign only), device, state, mode, breaker, runnability; not_approved is decided before no_actions — Replay, flood and stale requests must run nothing; every accepted request gets one answer; D-03, D-04, T-04-43 to T-04-46
+- [Phase 04]: 04-10: caller claims its per-device send slot before publishing and releases it only when the publish failed; response keys the device as uuid; no_answer and offline are synthesized by the caller and never on the wire — Concurrent calls must not both pass; documentation examples never need the registry field name; D-03
+- [Phase 04]: 04-10: tests/test_retrigger.py is a multi_instance module (receiver tests use the fake broker; a retained request is simulated by a reconnect replay) — test_tiers_partition_the_suite requires the marker for every module that uses make_instance
+- [Phase 04]: 04-11: adoption runs entirely under the manager lock (drop the mirror, save, add the subentry, reconcile); force overrides only the owner-online check, never the approval; a mirror with an owner id that cannot be named in a marker is not adoptable — A late document of the old owner must not re-create a mirror for an id about to be owned; unreviewed remote actions must never become owned ones (TRU-01, T-04-50); D-09, D-10
+- [Phase 04]: 04-11: the transferred_from marker is bookkeeping (never hashed, SCHEMA_VERSION stays 1, newest 8 kept); a follower re-pins only when the marker names its pinned owner and the roster says offline; a same-content re-pin keeps the breaker, Script and approval — A forged marker must not move followers of an online owner or release a tripped device; D-09 refined, T-04-49, T-04-52
+- [Phase 04]: 04-11: the select platform needs one devices-changed signal while an id is in neither devices nor mirrors before an owned device with the same id gets its mode select under the new subentry — Mirror to owned switch keeps the same uuid; D-13 revised
+- [Phase 04]: Plan 04-12: the local release never publishes; the device leaves devices first, then its subscriptions, Script, issues and published/revs/tripped/transfers records go, the Store is saved at once and only then are the subentries removed behind a _releasing guard; the duplicate id fix rotates the id and the next stop skips the offline for the shared id (D-08) — A tombstone or clear on the shared topics of a clone or an adopter would delete the original's devices for every instance, so byte-identical broker state is the proof
+- [Phase 04]: Plan 04-12: an old owner that recognizes a valid adopter document naming it goes silent for that device (no heal, no publish, no clear on delete) and raises a fixable issue; the flow releases locally and follows the adopter from the saved document, nothing steps down automatically (D-09 refined, A15) — Recognition is memory-only and bounded by the owned devices; the guard sits in async_publish_config and async_publish_discovery so every publish path is covered
+- [Phase 04]: Documentation is pinned to the code by tests: services.yaml, const.py, translations and the tested diagnostics key sets are read by tests/test_docs.py
+- [Phase 04]: A fenced documentation example may carry device_id only as the data field of an mqtt_actions service call, next to the instance-specific warning; responses use the key uuid
+- [Phase 04]: The pages state the known limits as they are: imports and adoption are owned content without approval, returning-owner recognition is in memory only, the new instance id is not in a per-instance ACL
+- [Phase 04]: 04-14: issue-level description removed from the three fixable Repairs issues; explanation lives in the confirm step (hassfest exclusion group fixable)
+- [Phase 04]: 04-14: ISSUES in tests/test_translations.py is read from en.json so every new issue is guarded against description plus fix_flow
 
 ### Pending Todos
 
@@ -142,6 +191,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-01T22:19:18.863Z
-Stopped at: Phase 03 complete, ready to plan Phase 4
+Last session: 2026-10-02T19:32:34.423Z
+Stopped at: Completed 04-14-PLAN.md
 Resume file: None

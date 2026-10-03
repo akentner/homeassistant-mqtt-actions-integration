@@ -251,6 +251,36 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "instances_online": {
+        "name": "Instances online"
+      }
+    },
+    "button": {
+      "resync": {
+        "name": "Resync"
+      }
+    },
+    "select": {
+      "device_mode": {
+        "name": "Mode",
+        "state": {
+          "run": "Run",
+          "observe": "Observe",
+          "disabled": "Disabled"
+        }
+      },
+      "instance_mode": {
+        "name": "Instance mode",
+        "state": {
+          "run": "Run",
+          "observe": "Observe",
+          "disabled": "Disabled"
+        }
+      }
+    }
+  },
   "issues": {
     "action_failed": {
       "title": "An action failed",
@@ -286,12 +316,11 @@
     },
     "approval_required": {
       "title": "A device from another instance wants to run actions here",
-      "description": "The device {device} from {owner} wants to run actions on this instance (hash prefix {hash}). The actions do not run until you approve them. Open this repair to review them.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Approve the actions of a device from another instance",
-            "description": "You are about to approve the device **{device}** from the instance **{owner}**.\n\nThe actions below run on this Home Assistant instance, with its full access, whenever the state of the device changes. If run on startup is true, they also run on the first state received after every start of Home Assistant, every reload of the integration and every reconnect to the broker.\n\nRun on startup: **{startup}**\n\n```yaml\n{actions}\n```\n\nTemplated service names (the real service is only known when the action runs):\n\n{templated}\n\nSteps that call scripts, automations, scenes, buttons, device actions or events, or turn something on or off generically (these are not restricted):\n\n{residual}\n\nTriggers whose actions do not validate on this instance:\n\n{invalid}\n\nThis approval is bound to the hash {hash}. It lapses when the owner changes the actions, and you are asked again. Nothing runs until you submit."
+            "description": "You are about to approve the device **{device}** from the instance **{owner}**.\n\nThe actions below run on this Home Assistant instance, with its full access, whenever the state of the device changes. If run on startup is true, they also run on the first state received after every start of Home Assistant, every reload of the integration and every reconnect to the broker.\n\nRun on startup: **{startup}**\n\nRun mode: **{run_mode}**. The circuit breaker pauses the device after more than **{breaker_max_runs}** runs within **{breaker_window}** seconds. The run mode and both limits are part of this approval, and a change of any of them asks for approval again.\n\n```yaml\n{actions}\n```\n\nTemplated service names (the real service is only known when the action runs):\n\n{templated}\n\nSteps that call scripts, automations, scenes, buttons, device actions or events, or turn something on or off generically (these are not restricted):\n\n{residual}\n\nTriggers whose actions do not validate on this instance:\n\n{invalid}\n\nThis approval is bound to the hash {hash}. It lapses when the owner changes the actions, and you are asked again. Nothing runs until you submit."
           }
         },
         "abort": {
@@ -308,6 +337,36 @@
     "denied_service_call": {
       "title": "An action from another instance was stopped",
       "description": "A run of {trigger} of {device} was stopped because a templated service name resolved to the forbidden service {service}. Actions received from other instances may never call this service."
+    },
+    "duplicate_instance_id": {
+      "title": "Another instance uses the same instance ID",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Give this instance a new instance ID",
+            "description": "Another Home Assistant instance sends heartbeats with the same instance ID as {instance}. This usually happens when a backup was restored on a second machine or a clone was started. Both instances then write the same topics on the MQTT broker.\n\nYou are about to give the instance {instance} a new instance ID.\n\nThis instance forgets its own {devices} devices locally. Nothing is deleted or changed on the MQTT broker: the topics, the discovery and the availability of the original stay exactly as they are, and the original keeps ownership of its devices.\n\nThen this instance reloads with the new ID and shows the same devices as read-only mirrors of the original. Devices that this instance should own independently have to be created again or imported afterwards.\n\nIf your MQTT broker restricts the topics per instance with an ACL, add the new instance ID to it, otherwise this instance can only read. Nothing happens until you submit."
+          }
+        },
+        "abort": {
+          "not_loaded": "MQTT Actions is not loaded, so nothing was changed. Try again when the integration is running.",
+          "changed": "The instance ID changed since this issue was raised, so nothing was changed. If the problem persists, a new issue appears in Repairs."
+        }
+      }
+    },
+    "transferred": {
+      "title": "A device you own was adopted by another instance",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Follow the new owner of a device",
+            "description": "The instance {claimant} adopted the device {device}, which this instance owned, and published it with itself as the new owner. This instance stopped publishing {device} so that the two instances do not overwrite each other. It still owns the device locally and runs its own actions for it until you release it. Nothing is removed automatically.\n\nYou are about to let this instance stop owning the device {device} and follow {claimant} instead.\n\nThis instance forgets the device locally. Nothing is changed or cleared on the MQTT broker: the configuration, the discovery and the state of the device stay exactly as {claimant} published them. Afterwards {device} shows up here as a read-only mirror of {claimant}, with the same entities. Because its actions now come from another instance, you have to approve them here before they run.\n\nIf you dismiss this repair instead, the device stays untouched and this instance stays silent about it until the next start. After a start this instance publishes the device once more, the new owner publishes it again, and this repair comes back. The Resync button of the new owner restores the discovery if it is needed. Nothing happens until you submit."
+          }
+        },
+        "abort": {
+          "not_loaded": "MQTT Actions is not loaded, so nothing was changed. Try again when the integration is running.",
+          "changed": "The device or its new owner changed since this issue was raised, so nothing was changed. If another instance adopted the device, a new issue appears in Repairs."
+        }
+      }
     }
   },
   "selector": {
@@ -316,6 +375,118 @@
         "serial": "Serial (queue runs)",
         "restart": "Restart (cancel the running run)"
       }
+    }
+  },
+  "services": {
+    "resync": {
+      "name": "Resync",
+      "description": "Publishes everything this instance owns to the broker again: the config documents, the discovery and the online status. A second call within a few seconds is refused."
+    },
+    "export_devices": {
+      "name": "Export devices",
+      "description": "Returns the devices this instance owns as a JSON document, and optionally writes the document to a private file in the mqtt_actions folder of the configuration directory. The export holds the actions and no device ids, so an import always creates new devices. Devices mirrored from other instances are never exported.",
+      "fields": {
+        "device_id": {
+          "name": "Devices",
+          "description": "The devices to export. Leave empty to export all devices of this instance."
+        },
+        "file_name": {
+          "name": "File name",
+          "description": "Also write the export to this file in the mqtt_actions folder of the configuration directory. Letters, digits, dot, dash and underscore only, ending in .json, at most 64 characters before the extension."
+        }
+      }
+    },
+    "import_devices": {
+      "name": "Import devices",
+      "description": "Creates the devices of an export as new devices owned by this instance. Pass the export as data, or the name of a file in the mqtt_actions folder of the configuration directory, but not both. Every device gets a new id and is checked as strictly as a device received from the broker; actions that call a service which imports may not use are refused. If one device is refused, nothing is created. Imported devices are published to every connected instance, where they need approval before they run.",
+      "fields": {
+        "data": {
+          "name": "Export",
+          "description": "The export as a JSON object, for example the response of the export action."
+        },
+        "file_name": {
+          "name": "File name",
+          "description": "Read the export from this file in the mqtt_actions folder of the configuration directory instead. Only a bare file name ending in .json is accepted."
+        }
+      }
+    },
+    "retrigger": {
+      "name": "Re-trigger",
+      "description": "Runs the actions of one device again on every instance that approved it, this one included, and returns who executed them. The trigger is the last state this instance acted on, or the state you name. The device state, the baseline and the circuit breaker are not changed. A second call for the same device within a few seconds is refused. The call waits up to five seconds for the answers of the connected instances.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The device whose actions are run again: a Switch or Select of this instance, or one mirrored from another instance."
+        },
+        "state": {
+          "name": "State",
+          "description": "The state whose actions are run, for example ON, or the value of a Select option. Capitalization is ignored. Leave empty to use the last state this instance acted on."
+        }
+      }
+    },
+    "adopt_device": {
+      "name": "Adopt device",
+      "description": "Takes over a device of another instance whose owner is gone. This instance becomes the owner under the same device uuid, keeps the entities and the last known state, and publishes the device with a transfer marker so the other instances follow. The actions of the device must be approved on this instance first (a device without actions needs no approval); a device blocked by the service denylist cannot be adopted. The call is refused while the owner may still be online, unless force is set.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The device to take over: a device that this instance mirrors from another instance."
+        },
+        "force": {
+          "name": "Force",
+          "description": "Adopt even though the owner is not known to be offline. Use this only when you are sure the other instance is gone for good, because two owners of one device overwrite each other's document. The approval is still required."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "MQTT Actions is not loaded. Check that the integration is set up and that MQTT is available."
+    },
+    "resync_throttled": {
+      "message": "A resync just ran. Wait a few seconds and try again."
+    },
+    "unknown_device": {
+      "message": "This device does not exist in the device registry."
+    },
+    "not_a_device": {
+      "message": "This is not a device of MQTT Actions. Pick the device of a Switch or Select."
+    },
+    "export_not_owned": {
+      "message": "Only devices owned by this instance can be used here. A mirror of another instance cannot."
+    },
+    "bad_file_name": {
+      "message": "The file name is not allowed. Use letters, digits, dot, dash and underscore only, start with a letter or digit, end in .json and keep it to 64 characters before the extension."
+    },
+    "export_write_failed": {
+      "message": "The export file could not be written. See the Home Assistant log for the reason."
+    },
+    "import_rejected": {
+      "message": "The import was rejected (position {index}, reason: {reason}). Nothing was created. The position is the number of the device in the export, a dash means the export as a whole. Reasons: bad_format (not an export of this integration), too_new (export of a newer version), too_many (more than 100 devices), too_large (the import or a device is too large), not_json (the text is not JSON), invalid_device (a field of the device is not valid), invalid_actions (the actions are not valid on this instance), denied_service (the actions call a service that imports may not use)."
+    },
+    "import_needs_exactly_one_source": {
+      "message": "Give either the export as data or the name of a file, not both and not neither."
+    },
+    "file_unreadable": {
+      "message": "The import file could not be read. It must be a regular UTF-8 text file in the mqtt_actions folder of the configuration directory, not a link, and at most 4 MiB. See the Home Assistant log for the reason code."
+    },
+    "retrigger_bad_state": {
+      "message": "This state does not belong to the device. Use ON or OFF for a Switch, or the value of one of the options of a Select."
+    },
+    "retrigger_no_state": {
+      "message": "This instance has not acted on a state of the device yet, so there is nothing to run again. Name the state in the call."
+    },
+    "retrigger_rate_limited": {
+      "message": "This device was just re-triggered. Wait a few seconds and try again."
+    },
+    "adopt_owner_not_offline": {
+      "message": "{owner} is not known to be offline, so {device} was not adopted. Wait until that instance is offline (a clean shutdown shows at once, a crash after 90 seconds), or call the service again with force: true to adopt anyway."
+    },
+    "adopt_not_approved": {
+      "message": "The actions of {device} are not approved on this instance, or the device is blocked. Approve it first in Repairs. A device that the service denylist blocks cannot be adopted, not even with force."
+    },
+    "adopt_not_a_mirror": {
+      "message": "This device does not come from another instance, so there is nothing to adopt. Pick a device that this instance mirrors from another instance."
     }
   }
 }

@@ -251,6 +251,36 @@
       }
     }
   },
+  "entity": {
+    "sensor": {
+      "instances_online": {
+        "name": "Verbundene Instanzen"
+      }
+    },
+    "button": {
+      "resync": {
+        "name": "Neu synchronisieren"
+      }
+    },
+    "select": {
+      "device_mode": {
+        "name": "Modus",
+        "state": {
+          "run": "Ausführen",
+          "observe": "Beobachten",
+          "disabled": "Deaktiviert"
+        }
+      },
+      "instance_mode": {
+        "name": "Instanzmodus",
+        "state": {
+          "run": "Ausführen",
+          "observe": "Beobachten",
+          "disabled": "Deaktiviert"
+        }
+      }
+    }
+  },
   "issues": {
     "action_failed": {
       "title": "Eine Aktion ist fehlgeschlagen",
@@ -286,12 +316,11 @@
     },
     "approval_required": {
       "title": "Ein Gerät einer anderen Instanz möchte hier Aktionen ausführen",
-      "description": "Das Gerät {device} von {owner} möchte auf dieser Instanz Aktionen ausführen (Hash-Anfang {hash}). Die Aktionen laufen erst, wenn du sie freigibst. Öffne diese Reparatur, um sie zu prüfen.",
       "fix_flow": {
         "step": {
           "confirm": {
             "title": "Aktionen eines Geräts einer anderen Instanz freigeben",
-            "description": "Du gibst gleich das Gerät **{device}** der Instanz **{owner}** frei.\n\nDie folgenden Aktionen laufen auf dieser Home-Assistant-Instanz mit vollem Zugriff, sobald sich der Zustand des Geräts ändert. Ist „Beim Start ausführen“ aktiv, laufen sie außerdem beim ersten empfangenen Zustand nach jedem Start von Home Assistant, jedem Neuladen der Integration und jeder Wiederverbindung zum Broker.\n\nBeim Start ausführen: **{startup}**\n\n```yaml\n{actions}\n```\n\nTemplatebasierte Servicenamen (der echte Service steht erst fest, wenn die Aktion läuft):\n\n{templated}\n\nSchritte, die Skripte, Automationen, Szenen, Buttons, Geräteaktionen oder Ereignisse aufrufen oder etwas allgemein ein- oder ausschalten (diese sind nicht eingeschränkt):\n\n{residual}\n\nTrigger, deren Aktionen auf dieser Instanz nicht gültig sind:\n\n{invalid}\n\nDiese Freigabe ist an den Hash {hash} gebunden. Sie erlischt, wenn die Besitzerin die Aktionen ändert, und du wirst erneut gefragt. Es läuft nichts, bis du bestätigst."
+            "description": "Du gibst gleich das Gerät **{device}** der Instanz **{owner}** frei.\n\nDie folgenden Aktionen laufen auf dieser Home-Assistant-Instanz mit vollem Zugriff, sobald sich der Zustand des Geräts ändert. Ist „Beim Start ausführen“ aktiv, laufen sie außerdem beim ersten empfangenen Zustand nach jedem Start von Home Assistant, jedem Neuladen der Integration und jeder Wiederverbindung zum Broker.\n\nBeim Start ausführen: **{startup}**\n\nAusführungsmodus: **{run_mode}**. Der Schutzschalter pausiert das Gerät bei mehr als **{breaker_max_runs}** Läufen innerhalb von **{breaker_window}** Sekunden. Der Ausführungsmodus und beide Grenzwerte sind Teil dieser Freigabe, und die Änderung eines davon fragt erneut nach der Freigabe.\n\n```yaml\n{actions}\n```\n\nTemplatebasierte Servicenamen (der echte Service steht erst fest, wenn die Aktion läuft):\n\n{templated}\n\nSchritte, die Skripte, Automationen, Szenen, Buttons, Geräteaktionen oder Ereignisse aufrufen oder etwas allgemein ein- oder ausschalten (diese sind nicht eingeschränkt):\n\n{residual}\n\nTrigger, deren Aktionen auf dieser Instanz nicht gültig sind:\n\n{invalid}\n\nDiese Freigabe ist an den Hash {hash} gebunden. Sie erlischt, wenn die Besitzerin die Aktionen ändert, und du wirst erneut gefragt. Es läuft nichts, bis du bestätigst."
           }
         },
         "abort": {
@@ -308,6 +337,36 @@
     "denied_service_call": {
       "title": "Eine Aktion einer anderen Instanz wurde gestoppt",
       "description": "Ein Lauf von {trigger} von {device} wurde gestoppt, weil ein templatebasierter Servicename zum verbotenen Service {service} aufgelöst wurde. Aktionen von anderen Instanzen dürfen diesen Service nie aufrufen."
+    },
+    "duplicate_instance_id": {
+      "title": "Eine andere Instanz verwendet dieselbe Instanz-ID",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Dieser Instanz eine neue Instanz-ID geben",
+            "description": "Eine andere Home-Assistant-Instanz sendet Heartbeats mit derselben Instanz-ID wie {instance}. Das passiert meist, wenn ein Backup auf einem zweiten Rechner wiederhergestellt oder ein Klon gestartet wurde. Beide Instanzen schreiben dann dieselben Topics auf dem MQTT-Broker.\n\nDu gibst gleich der Instanz {instance} eine neue Instanz-ID.\n\nDiese Instanz vergisst ihre eigenen {devices} Geräte nur lokal. Auf dem MQTT-Broker wird nichts gelöscht oder geändert: Die Topics, die Discovery und die Verfügbarkeit des Originals bleiben genau so, wie sie sind, und das Original bleibt Besitzer seiner Geräte.\n\nDanach lädt diese Instanz mit der neuen ID neu und zeigt dieselben Geräte als schreibgeschützte Spiegel des Originals. Geräte, die diese Instanz eigenständig besitzen soll, müssen danach neu angelegt oder importiert werden.\n\nBeschränkt dein MQTT-Broker die Topics pro Instanz mit einer ACL, trage die neue Instanz-ID dort ein, sonst kann diese Instanz nur lesen. Es passiert nichts, bis du bestätigst."
+          }
+        },
+        "abort": {
+          "not_loaded": "MQTT Actions ist nicht geladen, daher wurde nichts geändert. Versuche es erneut, wenn die Integration läuft.",
+          "changed": "Die Instanz-ID hat sich geändert, seit dieses Problem gemeldet wurde, daher wurde nichts geändert. Besteht das Problem weiter, erscheint in den Reparaturen ein neues."
+        }
+      }
+    },
+    "transferred": {
+      "title": "Ein Gerät, das dir gehörte, wurde von einer anderen Instanz übernommen",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Der neuen Besitzerin eines Geräts folgen",
+            "description": "Die Instanz {claimant} hat das Gerät {device}, das dieser Instanz gehörte, übernommen und mit sich selbst als neuer Besitzerin veröffentlicht. Diese Instanz hat aufgehört, {device} zu veröffentlichen, damit sich die beiden Instanzen nicht gegenseitig überschreiben. Sie besitzt das Gerät lokal weiterhin und führt dafür ihre eigenen Aktionen aus, bis du es freigibst. Es wird nichts automatisch entfernt.\n\nDu lässt gleich diese Instanz das Gerät {device} nicht mehr besitzen und stattdessen {claimant} folgen.\n\nDiese Instanz vergisst das Gerät lokal. Auf dem MQTT-Broker wird nichts geändert oder gelöscht: Die Konfiguration, die Discovery und der Zustand des Geräts bleiben genau so, wie {claimant} sie veröffentlicht hat. Danach erscheint {device} hier als schreibgeschützter Spiegel von {claimant}, mit denselben Entitäten. Weil seine Aktionen nun von einer anderen Instanz kommen, musst du sie hier freigeben, bevor sie laufen.\n\nSchließt du diese Reparatur stattdessen, bleibt das Gerät unverändert und diese Instanz schweigt dazu bis zum nächsten Start. Nach einem Start veröffentlicht diese Instanz das Gerät noch einmal, die neue Besitzerin veröffentlicht es erneut, und diese Reparatur kommt wieder. Die Schaltfläche „Neu synchronisieren“ der neuen Besitzerin stellt die Discovery wieder her, falls das nötig ist. Es passiert nichts, bis du bestätigst."
+          }
+        },
+        "abort": {
+          "not_loaded": "MQTT Actions ist nicht geladen, daher wurde nichts geändert. Versuche es erneut, wenn die Integration läuft.",
+          "changed": "Das Gerät oder seine neue Besitzerin hat sich geändert, seit dieses Problem gemeldet wurde, daher wurde nichts geändert. Hat eine andere Instanz das Gerät übernommen, erscheint in den Reparaturen ein neues Problem."
+        }
+      }
     }
   },
   "selector": {
@@ -316,6 +375,118 @@
         "serial": "Seriell (Ausführungen einreihen)",
         "restart": "Neustart (laufende Ausführung abbrechen)"
       }
+    }
+  },
+  "services": {
+    "resync": {
+      "name": "Neu synchronisieren",
+      "description": "Veröffentlicht alles, was diese Instanz besitzt, erneut auf dem Broker: die Konfigurationsdokumente, die Discovery und den Online-Status. Ein zweiter Aufruf innerhalb weniger Sekunden wird abgelehnt."
+    },
+    "export_devices": {
+      "name": "Geräte exportieren",
+      "description": "Gibt die Geräte dieser Instanz als JSON-Dokument zurück und schreibt es auf Wunsch in eine private Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses. Der Export enthält die Aktionen und keine Geräte-IDs, ein Import legt also immer neue Geräte an. Geräte, die von anderen Instanzen gespiegelt sind, werden nie exportiert.",
+      "fields": {
+        "device_id": {
+          "name": "Geräte",
+          "description": "Die zu exportierenden Geräte. Leer lassen, um alle Geräte dieser Instanz zu exportieren."
+        },
+        "file_name": {
+          "name": "Dateiname",
+          "description": "Schreibt den Export zusätzlich in diese Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses. Nur Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, mit der Endung .json und höchstens 64 Zeichen vor der Endung."
+        }
+      }
+    },
+    "import_devices": {
+      "name": "Geräte importieren",
+      "description": "Legt die Geräte eines Exports als neue Geräte an, die dieser Instanz gehören. Der Export wird als Daten übergeben oder als Name einer Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses, aber nicht beides. Jedes Gerät bekommt eine neue ID und wird so streng geprüft wie ein Gerät vom Broker; Aktionen, die einen für Importe gesperrten Dienst aufrufen, werden abgelehnt. Wird ein Gerät abgelehnt, wird nichts angelegt. Importierte Geräte werden an alle verbundenen Instanzen veröffentlicht und brauchen dort eine Freigabe, bevor sie laufen.",
+      "fields": {
+        "data": {
+          "name": "Export",
+          "description": "Der Export als JSON-Objekt, zum Beispiel die Antwort der Export-Aktion."
+        },
+        "file_name": {
+          "name": "Dateiname",
+          "description": "Liest den Export stattdessen aus dieser Datei im Ordner mqtt_actions des Konfigurationsverzeichnisses. Erlaubt ist nur ein reiner Dateiname mit der Endung .json."
+        }
+      }
+    },
+    "retrigger": {
+      "name": "Erneut auslösen",
+      "description": "Führt die Aktionen eines Geräts erneut auf jeder Instanz aus, die es freigegeben hat, diese eingeschlossen, und gibt zurück, wer sie ausgeführt hat. Ausgelöst wird der Zustand, auf den diese Instanz zuletzt reagiert hat, oder der angegebene Zustand. Der Gerätezustand, der Ausgangszustand und der Schutzschalter bleiben unverändert. Ein zweiter Aufruf für dasselbe Gerät innerhalb weniger Sekunden wird abgelehnt. Der Aufruf wartet bis zu fünf Sekunden auf die Antworten der verbundenen Instanzen.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Das Gerät, dessen Aktionen erneut ausgeführt werden: ein Schalter oder eine Auswahl dieser Instanz oder eine von einer anderen Instanz gespiegelte."
+        },
+        "state": {
+          "name": "Zustand",
+          "description": "Der Zustand, dessen Aktionen ausgeführt werden, zum Beispiel ON, oder der Wert einer Option einer Auswahl. Groß- und Kleinschreibung wird ignoriert. Leer lassen, um den Zustand zu verwenden, auf den diese Instanz zuletzt reagiert hat."
+        }
+      }
+    },
+    "adopt_device": {
+      "name": "Gerät übernehmen",
+      "description": "Übernimmt ein Gerät einer anderen Instanz, deren Besitzer weg ist. Diese Instanz wird unter derselben Geräte-UUID zum Besitzer, behält die Entitäten und den zuletzt bekannten Zustand und veröffentlicht das Gerät mit einer Übergabemarkierung, damit die anderen Instanzen folgen. Die Aktionen des Geräts müssen vorher auf dieser Instanz freigegeben sein (ein Gerät ohne Aktionen braucht keine Freigabe); ein Gerät, das von der Dienst-Sperrliste blockiert wird, kann nicht übernommen werden. Der Aufruf wird abgelehnt, solange der Besitzer noch online sein könnte, außer force ist gesetzt.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Das Gerät, das übernommen wird: ein Gerät, das diese Instanz von einer anderen Instanz spiegelt."
+        },
+        "force": {
+          "name": "Erzwingen",
+          "description": "Auch übernehmen, wenn der Besitzer nicht als offline bekannt ist. Nur verwenden, wenn die andere Instanz sicher dauerhaft weg ist, weil zwei Besitzer eines Geräts gegenseitig ihr Dokument überschreiben. Die Freigabe ist weiterhin nötig."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "MQTT Actions ist nicht geladen. Prüfe, ob die Integration eingerichtet und MQTT verfügbar ist."
+    },
+    "resync_throttled": {
+      "message": "Eine Neusynchronisierung ist gerade gelaufen. Warte ein paar Sekunden und versuche es erneut."
+    },
+    "unknown_device": {
+      "message": "Dieses Gerät existiert nicht in der Geräteregistrierung."
+    },
+    "not_a_device": {
+      "message": "Das ist kein Gerät von MQTT Actions. Wähle das Gerät eines Schalters oder einer Auswahl."
+    },
+    "export_not_owned": {
+      "message": "Hier können nur Geräte verwendet werden, die dieser Instanz gehören. Ein Spiegel einer anderen Instanz geht nicht."
+    },
+    "bad_file_name": {
+      "message": "Der Dateiname ist nicht erlaubt. Verwende nur Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich, beginne mit einem Buchstaben oder einer Ziffer, ende mit .json und bleibe bei höchstens 64 Zeichen vor der Endung."
+    },
+    "export_write_failed": {
+      "message": "Die Exportdatei konnte nicht geschrieben werden. Den Grund zeigt das Home-Assistant-Protokoll."
+    },
+    "import_rejected": {
+      "message": "Der Import wurde abgelehnt (Position {index}, Grund: {reason}). Es wurde nichts angelegt. Die Position ist die Nummer des Geräts im Export, ein Strich steht für den Export als Ganzes. Gründe: bad_format (kein Export dieser Integration), too_new (Export einer neueren Version), too_many (mehr als 100 Geräte), too_large (der Import oder ein Gerät ist zu groß), not_json (der Text ist kein JSON), invalid_device (ein Feld des Geräts ist ungültig), invalid_actions (die Aktionen sind auf dieser Instanz ungültig), denied_service (die Aktionen rufen einen Dienst auf, den Importe nicht verwenden dürfen)."
+    },
+    "import_needs_exactly_one_source": {
+      "message": "Gib entweder den Export als Daten oder den Namen einer Datei an, nicht beides und nicht keines von beiden."
+    },
+    "file_unreadable": {
+      "message": "Die Importdatei konnte nicht gelesen werden. Sie muss eine normale UTF-8-Textdatei im Ordner mqtt_actions des Konfigurationsverzeichnisses sein, kein Link, und höchstens 4 MiB groß. Den Grund-Code zeigt das Home-Assistant-Protokoll."
+    },
+    "retrigger_bad_state": {
+      "message": "Dieser Zustand gehört nicht zum Gerät. Verwende ON oder OFF für einen Schalter oder den Wert einer der Optionen einer Auswahl."
+    },
+    "retrigger_no_state": {
+      "message": "Diese Instanz hat auf noch keinen Zustand des Geräts reagiert, es gibt also nichts erneut auszuführen. Gib den Zustand im Aufruf an."
+    },
+    "retrigger_rate_limited": {
+      "message": "Dieses Gerät wurde gerade erst erneut ausgelöst. Warte ein paar Sekunden und versuche es erneut."
+    },
+    "adopt_owner_not_offline": {
+      "message": "{owner} ist nicht als offline bekannt, deshalb wurde {device} nicht übernommen. Warte, bis diese Instanz offline ist (ein sauberes Herunterfahren zeigt sich sofort, ein Absturz nach 90 Sekunden), oder rufe den Dienst erneut mit force: true auf, um trotzdem zu übernehmen."
+    },
+    "adopt_not_approved": {
+      "message": "Die Aktionen von {device} sind auf dieser Instanz nicht freigegeben, oder das Gerät ist blockiert. Gib es zuerst in den Reparaturen frei. Ein Gerät, das die Sperrliste der Dienste blockiert, kann nicht übernommen werden, auch nicht mit force."
+    },
+    "adopt_not_a_mirror": {
+      "message": "Dieses Gerät stammt nicht von einer anderen Instanz, es gibt also nichts zu übernehmen. Wähle ein Gerät, das diese Instanz von einer anderen Instanz spiegelt."
     }
   }
 }

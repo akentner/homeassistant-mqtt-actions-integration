@@ -49,9 +49,28 @@ NEW_ISSUES = {
     "discovery_removed": {"device", "count"},
     "owner_conflict": {"device", "owner", "claimant"},
     "schema_too_new": {"device", "version", "supported"},
-    "approval_required": {"device", "owner", "hash"},
     "mirror_blocked": {"device", "owner", "services"},
     "denied_service_call": {"device", "trigger", "service"},
+}
+
+# Fixable issues show their text in the confirm step of the fix flow (hassfest rejects an issue-level description next
+# to a fix_flow); issue key to the variables of that step
+FIXABLE_ISSUES = {
+    "approval_required": {
+        "device",
+        "owner",
+        "hash",
+        "actions",
+        "startup",
+        "run_mode",
+        "breaker_max_runs",
+        "breaker_window",
+        "templated",
+        "residual",
+        "invalid",
+    },
+    "duplicate_instance_id": {"instance", "devices"},
+    "transferred": {"device", "claimant"},
 }
 
 # The approval fix flow (plan 03-06): the confirm step and the three reasons it can abort
@@ -63,7 +82,39 @@ APPROVAL_FLOW_KEYS = (
     f"{APPROVAL_FLOW}.abort.too_large",
     f"{APPROVAL_FLOW}.abort.not_loaded",
 )
+# The duplicate instance id fix flow (plan 04-12): the confirm step and the two reasons it can abort
+DUPLICATE_FLOW = "issues.duplicate_instance_id.fix_flow"
+DUPLICATE_FLOW_KEYS = (
+    f"{DUPLICATE_FLOW}.step.confirm.title",
+    f"{DUPLICATE_FLOW}.step.confirm.description",
+    f"{DUPLICATE_FLOW}.abort.not_loaded",
+    f"{DUPLICATE_FLOW}.abort.changed",
+)
+# The returning old owner's release flow (plan 04-12): the confirm step and the two reasons it can abort
+TRANSFERRED_FLOW = "issues.transferred.fix_flow"
+TRANSFERRED_FLOW_KEYS = (
+    f"{TRANSFERRED_FLOW}.step.confirm.title",
+    f"{TRANSFERRED_FLOW}.step.confirm.description",
+    f"{TRANSFERRED_FLOW}.abort.not_loaded",
+    f"{TRANSFERRED_FLOW}.abort.changed",
+)
 FENCED_YAML = re.compile(r"```yaml\s*\{actions\}\s*```")
+
+# Phrases the confirm step of a fixable issue must contain, because that step is the only text the issue shows
+FIXABLE_WORDING = {
+    "duplicate_instance_id": {
+        "en": ("backup was restored", "same topics"),
+        "de": ("Backup", "dieselben Topics"),
+    },
+    "transferred": {
+        "en": ("adopted the device", "stopped publishing"),
+        "de": ("übernommen", "aufgehört"),
+    },
+    "approval_required": {
+        "en": ("Nothing runs until you submit", "bound to the hash"),
+        "de": ("Es läuft nichts, bis du bestätigst", "an den Hash"),
+    },
+}
 
 # Flow descriptions whose user-text placeholders the flow escapes with escape_markdown (G-03-2). A translation must use
 # them as bare words: wrapped in code, emphasis, link or quote markup they would render wrong or be escaped twice.
@@ -73,8 +124,29 @@ ESCAPED_FLOW_PLACEHOLDERS = {
     "config_subentries.select.step.menu.description": ("name", "options"),
     "config_subentries.select.step.edit_option_details.description": ("state_value",),
     "config_subentries.select.step.remove_confirm.description": ("friendly_name", "state_value"),
+    f"{DUPLICATE_FLOW}.step.confirm.description": ("instance",),
+    f"{TRANSFERRED_FLOW}.step.confirm.description": ("device", "claimant"),
 }
 MARKDOWN_CONTROL = r"\\`*_\[\]<>|~#"
+
+# Translated errors of the services; each carries fixed text and no placeholder
+SERVICE_EXCEPTIONS = (
+    "not_loaded",
+    "resync_throttled",
+    "unknown_device",
+    "not_a_device",
+    "export_not_owned",
+    "bad_file_name",
+    "export_write_failed",
+    "import_needs_exactly_one_source",
+    "file_unreadable",
+    "retrigger_bad_state",
+    "retrigger_no_state",
+    "retrigger_rate_limited",
+)
+
+# The message of a rejected import: exactly the position and the fixed reason code
+IMPORT_REJECTED_VARIABLES = {"index", "reason"}
 
 REQUIRED_KEYS = (
     "config.step.user.title",
@@ -119,8 +191,11 @@ REQUIRED_KEYS = (
     "issues.mqtt_discovery_disabled.description",
     "issues.circuit_breaker_tripped.title",
     "issues.circuit_breaker_tripped.description",
-    *(f"issues.{issue}.{part}" for issue in NEW_ISSUES for part in ("title", "description")),
+    *(f"issues.{issue}.title" for issue in (*NEW_ISSUES, *FIXABLE_ISSUES)),
+    *(f"issues.{issue}.description" for issue in NEW_ISSUES),
     *APPROVAL_FLOW_KEYS,
+    *DUPLICATE_FLOW_KEYS,
+    *TRANSFERRED_FLOW_KEYS,
     *(
         f"config_subentries.switch.step.{step}.data.{field}"
         for step in ("user", "edit_device")
@@ -128,6 +203,39 @@ REQUIRED_KEYS = (
     ),
     "config_subentries.switch.error.breaker_max_runs_range",
     "config_subentries.switch.error.breaker_window_range",
+    "entity.sensor.instances_online.name",
+    "entity.button.resync.name",
+    "services.resync.name",
+    "services.resync.description",
+    "services.export_devices.name",
+    "services.export_devices.description",
+    *(
+        f"services.export_devices.fields.{field}.{part}"
+        for field in ("device_id", "file_name")
+        for part in ("name", "description")
+    ),
+    "services.import_devices.name",
+    "services.import_devices.description",
+    *(
+        f"services.import_devices.fields.{field}.{part}"
+        for field in ("data", "file_name")
+        for part in ("name", "description")
+    ),
+    "services.retrigger.name",
+    "services.retrigger.description",
+    *(
+        f"services.retrigger.fields.{field}.{part}"
+        for field in ("device_id", "state")
+        for part in ("name", "description")
+    ),
+    "exceptions.import_rejected.message",
+    *(f"exceptions.{key}.message" for key in SERVICE_EXCEPTIONS),
+    *(f"entity.select.{key}.name" for key in ("device_mode", "instance_mode")),
+    *(
+        f"entity.select.{key}.state.{mode}"
+        for key in ("device_mode", "instance_mode")
+        for mode in ("run", "observe", "disabled")
+    ),
     *(
         f"config_subentries.switch.step.{step}.data_description.{field}"
         for step in ("user", "edit_device")
@@ -186,6 +294,44 @@ def _load(language: str) -> dict[str, str]:
     return _flatten(json.loads((TRANSLATIONS_DIR / f"{language}.json").read_text(encoding="utf-8")))
 
 
+def _raw(language: str) -> dict[str, Any]:
+    """The parsed language file with its structure (``_load`` flattens and cannot tell siblings apart)."""
+    return json.loads((TRANSLATIONS_DIR / f"{language}.json").read_text(encoding="utf-8"))
+
+
+def _issue_problems(node: Any) -> list[str]:
+    """Violations of the hassfest rule for one issue translation.
+
+    hassfest puts ``description`` and ``fix_flow`` in the exclusion group ``fixable`` (a fixable issue shows its text
+    in the steps of the flow) and requires at least one of them next to a title.
+    """
+    if not isinstance(node, dict):
+        return ["the issue translation is not an object"]
+    problems: list[str] = []
+    if not node.get("title"):
+        problems.append("title is missing or empty")
+    has_description, has_fix_flow = "description" in node, "fix_flow" in node
+    if has_description and has_fix_flow:
+        problems.append("description and fix_flow together violate the exclusion group 'fixable'")
+    if not has_description and not has_fix_flow:
+        problems.append("neither description nor fix_flow is present")
+    if has_fix_flow:
+        steps = node["fix_flow"].get("step") if isinstance(node["fix_flow"], dict) else None
+        if not isinstance(steps, dict) or not steps:
+            problems.append("fix_flow has no steps")
+        else:
+            problems.extend(
+                f"fix_flow step {name} has no description"
+                for name, step in steps.items()
+                if not isinstance(step, dict) or not step.get("description")
+            )
+    return problems
+
+
+# Every issue of the translations: the hassfest text-source rule holds for each of them in both languages
+ISSUES = tuple(sorted(_raw("en")["issues"]))
+
+
 def _variables(text: str) -> set[str]:
     return set(VARIABLE.findall(text))
 
@@ -222,19 +368,39 @@ def test_issue_strings_use_expected_variables(language: str) -> None:
     assert _variables(flat["issues.circuit_breaker_tripped.description"]) == {"device", "max_runs", "window"}
     assert _variables(flat["issues.owner_conflict.description"]) == {"device", "owner", "claimant"}
     assert _variables(flat["issues.schema_too_new.description"]) == {"device", "version", "supported"}
-    assert _variables(flat["issues.approval_required.description"]) == {"device", "owner", "hash"}
     assert _variables(flat[f"{APPROVAL_FLOW}.step.confirm.description"]) == {
         "device",
         "owner",
         "hash",
         "actions",
         "startup",
+        "run_mode",
+        "breaker_max_runs",
+        "breaker_window",
         "templated",
         "residual",
         "invalid",
     }
     assert _variables(flat["issues.mirror_blocked.description"]) == {"device", "owner", "services"}
     assert _variables(flat["issues.denied_service_call.description"]) == {"device", "trigger", "service"}
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_import_keys_exist_in_both_languages(language: str) -> None:
+    """The import service texts exist, and the rejection message uses exactly the position and the reason."""
+    flat = _load(language)
+    assert flat["services.import_devices.name"]
+    assert flat["services.import_devices.description"]
+    assert _variables(flat["exceptions.import_rejected.message"]) == IMPORT_REJECTED_VARIABLES
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_import_error_keys_exist_in_both_languages(language: str) -> None:
+    """The source rule and the unreadable file have a fixed message without placeholders."""
+    flat = _load(language)
+    for key in ("import_needs_exactly_one_source", "file_unreadable"):
+        assert flat[f"exceptions.{key}.message"]
+        assert _variables(flat[f"exceptions.{key}.message"]) == set()
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
@@ -250,6 +416,10 @@ def test_issue_texts_exist_in_both_languages(language: str) -> None:
     for issue, variables in NEW_ISSUES.items():
         assert flat[f"issues.{issue}.title"]
         assert _variables(flat[f"issues.{issue}.description"]) == variables
+    for issue, variables in FIXABLE_ISSUES.items():
+        assert flat[f"issues.{issue}.title"]
+        assert _variables(flat[f"issues.{issue}.fix_flow.step.confirm.description"]) == variables
+        assert f"issues.{issue}.description" not in flat
 
 
 def test_error_placeholders_are_the_ones_the_flow_supplies() -> None:
@@ -304,3 +474,112 @@ def test_escaped_flow_placeholders_are_not_wrapped_in_markup(language: str) -> N
             if re.search(f"[{MARKDOWN_CONTROL}]{variable}|{variable}[{MARKDOWN_CONTROL}]", text):
                 offenders.append((key, name))
     assert offenders == []
+
+
+RETRIGGER_KEYS = (
+    "services.retrigger.name",
+    "services.retrigger.description",
+    "services.retrigger.fields.device_id.name",
+    "services.retrigger.fields.device_id.description",
+    "services.retrigger.fields.state.name",
+    "services.retrigger.fields.state.description",
+    "exceptions.retrigger_bad_state.message",
+    "exceptions.retrigger_no_state.message",
+    "exceptions.retrigger_rate_limited.message",
+)
+
+
+def test_required_retrigger_keys_exist_in_both_languages() -> None:
+    """The re-trigger service texts and its three translated refusals exist in en and de, with fixed text only."""
+    for language in LANGUAGES:
+        flat = _load(language)
+        assert [key for key in RETRIGGER_KEYS if not flat.get(key)] == [], language
+        assert all(not _variables(flat[key]) for key in RETRIGGER_KEYS), language
+
+
+ADOPT_KEYS = (
+    "services.adopt_device.name",
+    "services.adopt_device.description",
+    "services.adopt_device.fields.device_id.name",
+    "services.adopt_device.fields.device_id.description",
+    "services.adopt_device.fields.force.name",
+    "services.adopt_device.fields.force.description",
+    "exceptions.adopt_owner_not_offline.message",
+    "exceptions.adopt_not_approved.message",
+    "exceptions.adopt_not_a_mirror.message",
+)
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_adopt_keys_exist_in_both_languages(language: str) -> None:
+    """The adoption service texts and its three refusals exist; the owner-not-offline text names force: true."""
+    flat = _load(language)
+    assert [key for key in ADOPT_KEYS if not flat.get(key)] == []
+    assert _variables(flat["exceptions.adopt_owner_not_offline.message"]) == {"device", "owner"}
+    assert _variables(flat["exceptions.adopt_not_approved.message"]) == {"device"}
+    assert _variables(flat["exceptions.adopt_not_a_mirror.message"]) == set()
+    assert "force: true" in flat["exceptions.adopt_owner_not_offline.message"]
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_duplicate_keys_exist_in_both_languages(language: str) -> None:
+    """The duplicate id issue and its flow have all texts, the exact variables, and say what the fix leaves alone."""
+    flat = _load(language)
+    assert [key for key in DUPLICATE_FLOW_KEYS if not flat.get(key)] == []
+    assert flat["issues.duplicate_instance_id.title"]
+    assert _variables(flat[f"{DUPLICATE_FLOW}.step.confirm.description"]) == {"instance", "devices"}
+    assert not _variables(flat[f"{DUPLICATE_FLOW}.abort.not_loaded"])
+    assert not _variables(flat[f"{DUPLICATE_FLOW}.abort.changed"])
+    # Only the local devices go, the broker topics stay, and a per-instance ACL needs the new id
+    description = flat[f"{DUPLICATE_FLOW}.step.confirm.description"]
+    assert "ACL" in description
+    assert "MQTT" in description or "Broker" in description or "broker" in description
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_required_transferred_keys_exist_in_both_languages(language: str) -> None:
+    """The returning owner's issue and its flow have all texts and exactly the variables the code supplies."""
+    flat = _load(language)
+    assert [key for key in TRANSFERRED_FLOW_KEYS if not flat.get(key)] == []
+    assert flat["issues.transferred.title"]
+    assert _variables(flat[f"{TRANSFERRED_FLOW}.step.confirm.description"]) == {"device", "claimant"}
+    assert not _variables(flat[f"{TRANSFERRED_FLOW}.abort.not_loaded"])
+    assert not _variables(flat[f"{TRANSFERRED_FLOW}.abort.changed"])
+
+
+@pytest.mark.parametrize("issue", ISSUES)
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_issue_has_one_text_source(language: str, issue: str) -> None:
+    """hassfest accepts an issue with a title and exactly one of description or fix_flow, in every language.
+
+    Local equivalent of the CI step: docker run --rm -v "$PWD":/github/workspace:Z ghcr.io/home-assistant/hassfest
+    """
+    assert _issue_problems(_raw(language)["issues"][issue]) == []
+
+
+def test_issue_guard_detects_the_hassfest_violations() -> None:
+    """The guard is pinned to the rule on synthetic data, so the real check cannot pass vacuously."""
+    step = {"step": {"confirm": {"title": "t", "description": "d"}}}
+    both = _issue_problems({"title": "t", "description": "d", "fix_flow": step})
+    assert both
+    assert any("fixable" in problem for problem in both)
+    assert _issue_problems({"title": "t"})
+    assert _issue_problems({"description": "d"})
+    assert _issue_problems({"title": "t", "fix_flow": {"step": {"confirm": {"title": "t", "description": ""}}}})
+    assert _issue_problems({"title": "t", "fix_flow": {}})
+    assert _issue_problems("text")
+    assert _issue_problems({"title": "t", "description": "d"}) == []
+    assert _issue_problems({"title": "t", "fix_flow": step}) == []
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_fixable_issue_text_keeps_its_explanation(language: str) -> None:
+    """A fixable issue shows only its confirm step, so that step holds the explanation (T-04-64)."""
+    flat = _load(language)
+    missing = [
+        (issue, phrase)
+        for issue, phrases in FIXABLE_WORDING.items()
+        for phrase in phrases[language]
+        if phrase not in flat[f"issues.{issue}.fix_flow.step.confirm.description"]
+    ]
+    assert missing == []

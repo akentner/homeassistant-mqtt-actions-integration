@@ -86,7 +86,9 @@ from .document import (
     parse_document,
     serialize_document,
     spec_has_actions,
+    with_native_marker,
 )
+from .entities import device_info_for
 from .model import DeviceSpec, TriggerSpec, shown, spec_from_subentry, trigger_key
 from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway
@@ -905,12 +907,16 @@ class Manager:
             if existing.mirror is not None and existing.mirror.content_hash == parsed.content_hash:
                 # The same content under a new owner is a re-pin after an adoption (D-09). Only the bookkeeping moves:
                 # a fresh breaker would release a tripped device and a rebuilt Script would drop its running queue.
-                existing.mirror = self._mirror_info(parsed)
+                was_native = existing.mirror.native
+                existing.mirror = self._mirror_info(parsed, keep_native=was_native)
+                self._follow_native_status(existing, was_native=was_native)
                 self._sync_approval_issues(existing)
                 self._schedule_save()
                 return
+            was_native = existing.mirror is not None and existing.mirror.native
             self._update_mirror(existing, parsed)
             self._rename_companion(device_id, parsed.spec.name)
+            self._follow_native_status(existing, was_native=was_native)
             # A changed document starts clean: a stale setup or denied-call issue belongs to the old actions
             self.runner.clear_issue(device_id)
             ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_DENIED_CALL_PREFIX}{device_id}")
@@ -1353,21 +1359,27 @@ class Manager:
             self._sync_approval_issues(device)
 
     @staticmethod
-    def _mirror_info(parsed: ParsedDocument) -> MirrorInfo:
-        """Return what a follower records of a document: its owner, both hashes, the payload and the static analysis."""
+    def _mirror_info(parsed: ParsedDocument, *, keep_native: bool = False) -> MirrorInfo:
+        """
+        Return what a follower records of a document: its owner, both hashes, the payload and the static analysis.
+
+        `keep_native` is set when the mirror this replaces was native: a document without the marker never reverts it
+        (T-5-11), and the stored payload then carries the marker so the status also survives a restart.
+        """
         analysis: ActionAnalysis = analyze_spec(parsed.spec)
+        carried = keep_native and not parsed.native
         return MirrorInfo(
             owner=parsed.owner,
             owner_name=parsed.owner_name,
             rev=parsed.rev,
             content_hash=parsed.content_hash,
             actions_hash=parsed.actions_hash,
-            payload=parsed.payload,
+            payload=with_native_marker(parsed.payload) if carried else parsed.payload,
             denied=analysis.denied,
             templated=analysis.templated,
             residual=analysis.residual,
             transferred_from=parsed.transferred_from,
-            native=parsed.native,
+            native=parsed.native or keep_native,
         )
 
     def _build_mirror(self, parsed: ParsedDocument, *, startup: bool) -> Device:
@@ -1399,7 +1411,8 @@ class Manager:
         StateValue of the new spec becomes unknown (D-15 of Phase 2, A11).
         """
         spec = parsed.spec
-        mirror = self._mirror_info(parsed)
+        # A mirror that was native stays native, whatever the new document says (T-5-11)
+        mirror = self._mirror_info(parsed, keep_native=device.mirror is not None and device.mirror.native)
         device.spec = spec
         device.mirror = mirror
         device.signature = canonical_json(parsed.content)
@@ -1411,6 +1424,28 @@ class Manager:
         self._delete_breaker_issue(device.device_id)
         self._tripped.pop(device.device_id, None)
         self._schedule_save()
+
+    @callback
+    def _follow_native_status(self, device: Device, *, was_native: bool) -> None:
+        """
+        Bring the companion of a mirror in line after its record was replaced and the mirror is native.
+
+        The device model names the owner. A mirror that just became native drops its test topic, gets its native
+        entities through the platforms and keeps the companion device it already had (D-07, MIG-03).
+        """
+        if device.mirror is None or not device.mirror.native:
+            return
+        device_registry = dr.async_get(self._hass)
+        companion = device_registry.async_get_device_by_identifier((DOMAIN, device.device_id), self._entry.entry_id)
+        model = device_info_for(self, device.device_id).get("model")
+        if companion is not None and model is not None and companion.model != model:
+            device_registry.async_update_device(companion.id, model=model)
+        if was_native:
+            return
+        if device.unsubscribe_test is not None:
+            device.unsubscribe_test()
+            device.unsubscribe_test = None
+        self._notify_devices_changed()
 
     async def _async_subscribe_mirror(self, device: Device) -> None:
         """Register a mirror and subscribe to its state and test topics; a failed subscribe leaves nothing behind."""

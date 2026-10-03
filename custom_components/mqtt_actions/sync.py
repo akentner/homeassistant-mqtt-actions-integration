@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.core import callback
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
 
 from .actions import ActionsInvalid, validate_spec_structure
@@ -51,6 +52,7 @@ from .const import (
     PUBLISHED_HASH_HISTORY,
     REPUBLISH_THROTTLE_SECONDS,
     SCHEMA_VERSION,
+    SIGNAL_ROSTER_UPDATED,
 )
 from .document import (
     DocumentRejectedError,
@@ -219,7 +221,9 @@ class SyncManager:
         unknown owner and never like an online one (D-10). The owner republishes documents before it announces online.
         """
         self._seen.clear()
-        self._instances.clear()
+        if self._instances:
+            self._instances.clear()
+            self._announce_presence_change()
         self.arm_prune()
 
     @callback
@@ -295,6 +299,7 @@ class SyncManager:
         if instance_id is None:
             return
         status = msg.payload.strip().lower()
+        stored_before = self._instances.get(instance_id)
         if not msg.payload:
             self._instances.pop(instance_id, None)
         elif status in {PRESENCE_ONLINE, PRESENCE_OFFLINE}:
@@ -312,7 +317,28 @@ class SyncManager:
                 # An owner that was offline or unknown when this instance started may have deleted devices meanwhile
                 self.arm_prune()
         # A clean shutdown shows in the roster at once, without waiting for the heartbeat timeout (D-05)
-        self._manager.presence.on_availability_changed()
+        roster_signalled = self._manager.presence.on_availability_changed()
+        if self._instances.get(instance_id) != stored_before and not roster_signalled:
+            # A native mirror re-reads its availability although the roster set is unchanged, for example when an
+            # owner without a heartbeat announces itself (D-07); a roster signal already makes every entity re-read
+            self._announce_presence_change(instance_id)
+
+    @callback
+    def _announce_presence_change(self, instance_id: str | None = None) -> None:
+        """
+        Tell the entities that an announced presence changed, when a native mirror follows it (D-07).
+
+        A native mirror is available while its owner is online, so only the owner of a native mirror matters; without
+        one (`instance_id` None means any owner) nothing is signalled and the roster signals stay exactly as they were.
+        """
+        manager = self._manager
+        if any(
+            device.mirror is not None
+            and device.mirror.native
+            and (instance_id is None or device.mirror.owner == instance_id)
+            for device in manager.mirrors.values()
+        ):
+            async_dispatcher_send(manager.hass, SIGNAL_ROSTER_UPDATED.format(manager.entry.entry_id))
 
     @callback
     def note_published(self, device_id: str, digest: str) -> None:
@@ -446,8 +472,9 @@ class SyncManager:
             # The pinned owner was adopted away: the document names it and the roster says it is gone (D-09)
             LOGGER.info("The mirrored device %s follows a new owner, because its previous owner was adopted", shown)
             await manager.async_apply_mirror(parsed)
-        elif info is None or parsed.content_hash != info.content_hash:
-            # The hash decides, never the rev: an owner that lost its Store restarts at rev 1 (D-15)
+        elif info is None or parsed.content_hash != info.content_hash or (parsed.native and not info.native):
+            # The hash decides, never the rev: an owner that lost its Store restarts at rev 1 (D-15); a marker that
+            # appears on unchanged content is the owner switching to native entities, which the mirror follows (D-07)
             await manager.async_apply_mirror(parsed)
         self._resolve(device_id)
 

@@ -7,7 +7,8 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
 
-from .const import DOMAIN, SIGNAL_DEVICE_STATE, SIGNAL_DEVICES_CHANGED, SUBENTRY_SELECT
+from .const import DOMAIN, SIGNAL_DEVICE_STATE, SIGNAL_DEVICES_CHANGED, SIGNAL_ROSTER_UPDATED, SUBENTRY_SELECT
+from .sync import PRESENCE_ONLINE
 
 if TYPE_CHECKING:
     from .manager import Manager
@@ -85,9 +86,9 @@ class MqttActionsEntity(Entity):
 
 
 class NativeDeviceEntity(MqttActionsEntity):
-    """Base of the native entities of one owned device: its device info and a state that follows the broker (D-03)."""
+    """Base of the native entities of one device: its device info and a state that follows the broker (D-03)."""
 
-    _signals = (SIGNAL_DEVICES_CHANGED,)
+    _signals = (SIGNAL_DEVICES_CHANGED, SIGNAL_ROSTER_UPDATED)
 
     def __init__(self, manager: Manager, device_id: str) -> None:
         """Initialize the entity of a device; it shares the device of the mode select."""
@@ -97,8 +98,15 @@ class NativeDeviceEntity(MqttActionsEntity):
 
     @property
     def available(self) -> bool:
-        """Return whether the device is still owned or mirrored here."""
-        return self._manager.has_device(self._device_id)
+        """
+        Return whether the device is still owned or mirrored here and, for a mirror, whether its owner is online.
+
+        An owner whose presence is unknown or offline makes the mirror unavailable, the behavior the availability
+        topic of the discovery payload gave (D-07).
+        """
+        if (device := self._manager.device(self._device_id)) is None:
+            return False
+        return device.mirror is None or self._manager.sync.instance_status(device.mirror.owner) == PRESENCE_ONLINE
 
     async def async_added_to_hass(self) -> None:
         """Also write the state when the accepted state of the device changes; the connection ends with the entity."""

@@ -289,9 +289,13 @@ class PresenceManager:
         self._refresh()
 
     @callback
-    def on_availability_changed(self) -> None:
-        """Re-evaluate the roster after the announced presence of an instance changed, for example a clean shutdown."""
-        self._refresh()
+    def on_availability_changed(self) -> bool:
+        """
+        Re-evaluate the roster after the announced presence of an instance changed, for example a clean shutdown.
+
+        Returns True when the set of online instances changed and the entities were told about it.
+        """
+        return self._refresh()
 
     async def async_publish_heartbeat(self) -> None:
         """Publish one heartbeat, not retained; an unavailable MQTT client is logged, never raised."""
@@ -393,8 +397,12 @@ class PresenceManager:
         return max(remaining, 0.0) + EXPIRY_MARGIN_SECONDS
 
     @callback
-    def _refresh(self) -> None:
-        """Re-evaluate who is online; tell the entities when the set changed and arm the timer of the next expiry."""
+    def _refresh(self) -> bool:
+        """
+        Re-evaluate who is online; tell the entities when the set changed and arm the timer of the next expiry.
+
+        Returns whether the set changed, which is whether the entities were told.
+        """
         online = frozenset(self._roster.online_ids())
         changed = online != self._announced
         self._announced = online
@@ -402,6 +410,7 @@ class PresenceManager:
         self._arm_expiry()
         if changed:
             self._send_signal()
+        return changed
 
     @callback
     def _arm_expiry(self) -> None:

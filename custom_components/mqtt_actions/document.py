@@ -185,6 +185,25 @@ def build_document(  # noqa: PLR0913
     return document
 
 
+def with_native_marker(payload: str) -> str:
+    """
+    Return a received payload with the native marker added, so a stored copy of a native mirror still reads as native.
+
+    Used when a later document of the pinned owner has no marker: the mirror stays native (T-5-11) and what is stored
+    for it must say so after a restart. A payload that cannot take the marker (not an object, or it would exceed the
+    size limit) is returned unchanged.
+    """
+    try:
+        value = json_loads(payload)
+    except ValueError:
+        return payload
+    if type(value) is not dict:
+        return payload
+    value[NATIVE_KEY] = NATIVE_VALUE
+    marked = canonical_json(value)
+    return marked if len(marked.encode(errors="replace")) <= MAX_DOCUMENT_BYTES else payload
+
+
 def serialize_document(document: dict[str, Any]) -> str:
     """Return the wire text of a document; deterministic, so an unchanged device always publishes the same bytes."""
     return canonical_json(document)

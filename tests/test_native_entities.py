@@ -721,7 +721,8 @@ async def test_a_native_mirror_is_unavailable_until_its_owner_is_online(
     await _presence(hass, "online")
     assert _mirror_state(hass, spec.device_id) == "unknown"
 
-    await _presence(hass, "offline")
+    # Core drops a second retained message per subscription, so the later change is a live one
+    await _presence(hass, "offline", retain=False)
     assert _mirror_state(hass, spec.device_id) == "unavailable"
 
     # An owned native entity needs no announcement: it is available while the manager runs
@@ -886,3 +887,22 @@ async def test_a_renamed_native_mirror_renames_its_device(
     assert companion is not None
     assert companion.name == ("Floor lamp" if user_name is None else "Lamp")
     assert companion.name_by_user == user_name
+
+
+async def test_a_cached_native_mirror_is_native_again_after_a_restart(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-09: the marker sits in the cached payload, so the status needs no Store key of its own."""
+    spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
+    hass_storage[STORE_KEY] = {
+        "version": STORE_VERSION,
+        "minor_version": 1,
+        "key": STORE_KEY,
+        "data": {STORE_MIRRORS: {spec.device_id: document_payload(spec, native=True)}},
+    }
+
+    entry = await _setup(hass, make_hub_entry())
+
+    assert _manager(entry).is_native(spec.device_id)
+    assert _entity_id(hass, "switch", spec.device_id) is not None
+    assert _manager(entry).mirrors[spec.device_id].unsubscribe_test is None

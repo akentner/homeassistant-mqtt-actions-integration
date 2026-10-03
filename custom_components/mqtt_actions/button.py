@@ -102,6 +102,7 @@ class RestorePreviousButton(NativeDeviceEntity, ButtonEntity):
     """Publishes the StateValue that was shown before the current one, exactly like choosing that option."""
 
     _attr_translation_key = "restore_previous"
+    _entity_id_part = "restore"
 
     def __init__(self, manager: Manager, device_id: str) -> None:
         """Initialize the button of one Select device."""

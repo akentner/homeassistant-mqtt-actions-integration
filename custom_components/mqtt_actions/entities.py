@@ -1,6 +1,6 @@
 """Shared base of the entities of the hub device: the device info and the dispatcher wiring (D-06, D-13)."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
@@ -68,11 +68,28 @@ class MqttActionsEntity(Entity):
     _attr_should_poll = False
     # Dispatcher signal templates (formatted with the config entry id) that make the entity write its state again
     _signals: tuple[str, ...] = ()
+    # Short English entity id part of a new entity; None keeps the part Home Assistant derives from the name
+    _entity_id_part: str | None = None
 
     def __init__(self, manager: Manager) -> None:
         """Initialize the entity for the manager of one config entry."""
         self._manager = manager
         self._attr_device_info = hub_device_info(manager)
+
+    @property
+    @override
+    def suggested_object_id(self) -> str | None:
+        """
+        Return the fixed English id part of the entity, or the core value when the class has none.
+
+        Home Assistant builds the entity id of a NEW registry entry from this property, puts the area and device parts
+        in front according to its own entity-id setting, and by default derives it from the name translated into the
+        language of the instance. A fixed English part makes the id independent of that language. An existing registry
+        entry is never renamed by it.
+        """
+        if self._entity_id_part is not None:
+            return self._entity_id_part
+        return super().suggested_object_id
 
     async def async_added_to_hass(self) -> None:
         """Connect every signal of the subclass; the connections end with the entity."""

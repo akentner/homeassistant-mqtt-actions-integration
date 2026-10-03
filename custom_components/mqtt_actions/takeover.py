@@ -172,6 +172,23 @@ async def async_take_over(  # noqa: PLR0913
     return TakeoverStatus.DONE
 
 
+def has_moved_entities(hass: HomeAssistant, entry: ConfigEntry, device_id: str) -> bool:
+    """
+    Return whether an entity of the device already sits under this integration in the entity registry.
+
+    After a takeover that raised halfway, the registry and not the return path says what happened: an entry that
+    moved cannot go back to core MQTT, so the device has to stay native for the run (WR-02).
+    """
+    entity_registry = er.async_get(hass)
+    return any(
+        entity.platform == DOMAIN
+        and entity.config_entry_id == entry.entry_id
+        and entity.domain in LEGACY_DOMAINS
+        and (entity.unique_id == device_id or entity.unique_id.startswith(f"{device_id}{LEGACY_TEST_PREFIX}"))
+        for entity in er.async_entries_for_config_entry(entity_registry, entry.entry_id)
+    )
+
+
 async def async_flush_registries(hass: HomeAssistant) -> bool:
     """
     Write the entity and device registry to disk now and return whether both writes went through.

@@ -498,6 +498,9 @@ class Manager:
         # Owned or mirrored devices whose takeover could not run yet; they use the legacy path for this run only and
         # their id stays pending in the Store, so the next setup retries (T-5-08)
         self._legacy_this_run: set[str] = set()
+        # Owned devices whose entities were moved to this integration but whose retained discovery could not be cleared
+        # yet: native for this run, pending in the Store, and the clear is retried on the next republish (WR-02)
+        self._clear_unconfirmed: set[str] = set()
         # The wait before the first cutover check, read once so a test can turn the timer off; None means none (D-09)
         self.cutover_settle_seconds: float | None = CUTOVER_SETTLE_SECONDS
         self._cancel_cutover: CALLBACK_TYPE | None = None
@@ -596,16 +599,16 @@ class Manager:
         True for an owned device that is listed as native or while the instance flag is set, and for a mirror whose
         pinned owner marked its document as native (D-07, D-09); False for an unknown id. A device that still waits for
         the takeover pass, or whose takeover was deferred for this run, is not native: its legacy entities exist, so a
-        native one next to them would be a duplicate (T-5-08).
+        native one next to them would be a duplicate (T-5-08). A device whose entities moved but whose retained clear
+        is still outstanding is native, as the registry says (WR-02).
         """
         if device_id in self._legacy_this_run:
             return False
         if (mirror := self.mirrors.get(device_id)) is not None:
             return mirror.mirror is not None and mirror.mirror.native
-        return (
-            device_id in self.devices
-            and device_id not in self._native_pending
-            and (self._native.instance or device_id in self._native_devices)
+        return device_id in self.devices and (
+            device_id in self._clear_unconfirmed
+            or (device_id not in self._native_pending and (self._native.instance or device_id in self._native_devices))
         )
 
     def heals_discovery(self, device_id: str) -> bool:
@@ -882,18 +885,23 @@ class Manager:
             *(self._async_take_over_one(target, mqtt_entry_id, skip=set(owned) - migrated) for target in targets),
             return_exceptions=True,
         )
-        if any(status is takeover.TakeoverStatus.DONE for status in results):
+        if any(status is takeover.TakeoverStatus.DONE or isinstance(status, BaseException) for status in results):
             # The registry files hold the move before any marker says it is done and before the retained clear goes out
             await takeover.async_flush_registries(self._hass)
         for target, status in zip(targets, results, strict=True):
             deferred = status is takeover.TakeoverStatus.DEFERRED
             if isinstance(status, BaseException):
                 # No registry or broker content in the log: a registry surprise must never keep the start from finishing
-                LOGGER.warning("The native takeover of a device failed unexpectedly, so it stays on the legacy path")
+                LOGGER.warning("The native takeover of a device raised an unexpected error")
                 LOGGER.debug("The native takeover failed with %s", type(status).__name__)
-                deferred = True
-            if deferred or not await self._async_finish_takeover(target.device_id, set(owned)):
+                # The registry decides, not the return path: entries that moved cannot go back to core MQTT
+                deferred = not takeover.has_moved_entities(self._hass, self._entry, target.device_id)
+            if deferred:
                 await self._async_defer_takeover(target.device_id)
+            elif not await self._async_finish_takeover(target.device_id, set(owned)):
+                # Moved, but the retained clear is still to do: native for this run, and the id stays pending in the
+                # Store so the next start and the next republish retry the clear (WR-02)
+                self._clear_unconfirmed.add(target.device_id)
         await self._store.async_save(self._data_to_save())
 
     async def _async_take_over_one(
@@ -1091,9 +1099,27 @@ class Manager:
         async with self._lock:
             if not self._running:
                 return
+            await self._async_retry_unconfirmed_clears()
             await self._async_publish_owned()
             await self._async_publish_availability(AvailabilityState.ONLINE)
             await self.presence.async_publish_heartbeat()
+
+    async def _async_retry_unconfirmed_clears(self) -> None:
+        """
+        Publish the retained discovery clear again for devices whose entities moved but whose clear failed (WR-02).
+
+        The caller holds the lock. A cleared device is no longer pending, so the Store forgets the marker.
+        """
+        if not self._clear_unconfirmed:
+            return
+        assert self._publisher is not None  # noqa: S101
+        for device_id in sorted(self._clear_unconfirmed):
+            if device_id not in self.devices:
+                self._clear_unconfirmed.discard(device_id)
+                continue
+            if await self._async_finish_takeover(device_id, {device_id}):
+                self._clear_unconfirmed.discard(device_id)
+                self._schedule_save()
 
     async def _async_publish_owned(self) -> None:
         """Publish every config document, then every discovery; the caller holds the lock and publishes availability."""
@@ -1480,6 +1506,7 @@ class Manager:
         self._native_pending.discard(device_id)
         self._native_devices.discard(device_id)
         self._legacy_this_run.discard(device_id)
+        self._clear_unconfirmed.discard(device_id)
 
     async def async_release_device_locally(self, device_id: str) -> bool:
         """

@@ -7,6 +7,7 @@ from unittest.mock import DEFAULT, AsyncMock, patch
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -421,6 +422,112 @@ async def test_a_deferred_takeover_leaves_the_device_legacy_for_this_run(
         moved = entity_registry.async_get(entity_id)
         assert moved is not None
         assert (moved.id, moved.platform) == (old.id, DOMAIN)
+
+
+async def _unloaded_legacy_device(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> tuple[Any, dict[str, er.RegistryEntry]]:
+    """Return a legacy device whose entry is unloaded and pending for the takeover, and its legacy registry entries."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    before = {
+        entity_id: entity_registry.async_get(entity_id) for entity_id in legacy_entity_ids(hass, legacy.device_id)
+    }
+    assert await hass.config_entries.async_unload(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _seed_native(hass_storage, pending=[legacy.device_id])
+    mqtt_mock.async_publish.reset_mock()
+    return legacy, before
+
+
+def _assert_moved_and_native(hass: HomeAssistant, legacy: Any, before: dict[str, er.RegistryEntry]) -> None:
+    """Assert that the entities of the device sit under this integration, loaded, and that the device is native."""
+    entity_registry = er.async_get(hass)
+    assert legacy.entry.runtime_data.is_native(legacy.device_id) is True
+    for entity_id, old in before.items():
+        moved = entity_registry.async_get(entity_id)
+        assert moved is not None
+        assert (moved.id, moved.platform) == (old.id, DOMAIN)
+        state = hass.states.get(entity_id)
+        assert state is not None
+        assert not state.attributes.get("restored")
+
+
+async def test_a_failed_retained_clear_after_the_move_keeps_the_device_native_and_is_retried(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """WR-02: the registry moved, so the device stays native; only the clear is pending and a resync retries it."""
+    legacy, before = await _unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    _loop_back_discovery(hass, mqtt_mock)
+    deliver = mqtt_mock.async_publish.side_effect
+    broker_down = True
+
+    def _publish(topic: str, payload: Any, *args: Any, **kwargs: Any) -> Any:
+        if broker_down and topic == legacy.topic and payload == CLEAR_PAYLOAD:
+            msg = "MQTT is not available"
+            raise HomeAssistantError(msg)
+        return deliver(topic, payload, *args, **kwargs)
+
+    mqtt_mock.async_publish.side_effect = _publish
+
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    _assert_moved_and_native(hass, legacy, before)
+    assert _stored_pending(hass_storage) == [legacy.device_id]
+    # No legacy discovery goes out again, or core MQTT would create the entities a second time
+    assert [
+        payload for payload, _retain in _publishes(mqtt_mock, legacy.topic) if payload and "components" in payload
+    ] == []
+
+    broker_down = False
+    assert await _manager(legacy.entry).async_resync()
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert (CLEAR_PAYLOAD, True) in _publishes(mqtt_mock, legacy.topic)
+    # The marker goes with the next save, which an unload forces
+    assert await hass.config_entries.async_unload(legacy.entry.entry_id)
+    assert _stored_pending(hass_storage) == []
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _assert_moved_and_native(hass, legacy, before)
+
+
+async def test_an_error_after_part_of_the_move_keeps_the_device_native(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """WR-02: an exception once entries moved is judged by the registry, so the device does not fall back to legacy."""
+    legacy, before = await _unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    _loop_back_discovery(hass, mqtt_mock)
+    real_take_over = takeover.async_take_over
+
+    async def _fail_after_the_move(*args: Any, **kwargs: Any) -> Any:
+        await real_take_over(*args, **kwargs)
+        msg = "registry surprise"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(takeover, "async_take_over", _fail_after_the_move)
+
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    _assert_moved_and_native(hass, legacy, before)
+    assert [
+        payload for payload, _retain in _publishes(mqtt_mock, legacy.topic) if payload and "components" in payload
+    ] == []
 
 
 async def test_a_deferred_mirror_keeps_its_legacy_companion_for_this_run(

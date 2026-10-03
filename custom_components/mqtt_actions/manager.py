@@ -488,6 +488,8 @@ class Manager:
         self._cutover_hint: tuple[str, ...] | None = None
         # Set once this manager asked for the reload that follows an owner into native entities; one reload is enough
         self._reload_scheduled = False
+        # The export option and prefix the topics on the broker reflect now; a change is applied by the reconcile (D-03)
+        self._export_applied = self._export_signature()
 
     @property
     def _native_pending(self) -> set[str]:
@@ -919,6 +921,36 @@ class Manager:
         """
         async with self._lock:
             await self._async_reconcile_locked(startup=startup)
+            await self._async_apply_export_options()
+
+    async def _async_apply_export_options(self) -> None:
+        """
+        Follow a change of the export option or its prefix: clear the old export topics, publish the new ones (D-03).
+
+        The entry update listener reaches this through the reconcile, so no reload is needed. Only owned native devices
+        have an export; a legacy device and a device another instance adopted are skipped. The caller holds the lock.
+        """
+        if not self._running:
+            return
+        current = self._export_signature()
+        (was_enabled, old_prefix), self._export_applied = self._export_applied, current
+        if current == (was_enabled, old_prefix):
+            return
+        assert self._publisher is not None  # noqa: S101
+        exported = [
+            device
+            for device in self.devices.values()
+            if self.is_native(device.device_id) and device.device_id not in self.sync.transferred_away
+        ]
+        if was_enabled:
+            for device in exported:
+                await _async_attempt(
+                    partial(self._publisher.async_clear_export, device.device_id, old_prefix),
+                    f"clear the discovery export of device {device.name}",
+                )
+        if current[0]:
+            for device in exported:
+                await self.async_publish_discovery(device)
 
     async def _async_reconcile_locked(self, *, startup: bool = False) -> None:
         """Reconcile the running devices with the subentries; the caller holds the lock."""

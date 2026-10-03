@@ -241,14 +241,21 @@
     "step": {
       "init": {
         "title": "MQTT Actions options",
-        "description": "Choose what happens to your devices when you remove this integration. The choice is read at the moment of removal, so set it before you remove the integration.",
+        "description": "Choose what happens to your devices when you remove this integration. The choice is read at the moment of removal, so set it before you remove the integration. You can also switch on an optional MQTT Discovery export of your devices for external consumers that are not Home Assistant.",
         "data": {
-          "delete_devices_on_remove": "Delete all devices when this integration is removed"
+          "delete_devices_on_remove": "Delete all devices when this integration is removed",
+          "discovery_export": "Publish an MQTT Discovery export",
+          "export_prefix": "Discovery export prefix"
         },
         "data_description": {
-          "delete_devices_on_remove": "Off by default: removing this integration leaves all its devices and their retained messages on the broker, and other instances keep them as orphans that show as unavailable. On: removing this integration deletes all devices created on this instance from the broker and from every connected instance."
+          "delete_devices_on_remove": "Off by default: removing this integration leaves all its devices and their retained messages on the broker, and other instances keep them as orphans that show as unavailable. On: removing this integration deletes all devices created on this instance from the broker and from every connected instance.",
+          "discovery_export": "Off by default. Home Assistant needs no discovery for the devices of this integration, so the export is only for other consumers of the broker. It lists each device with a single, disabled-by-default entity, without test buttons. It is best effort: nothing heals it if it is deleted on the broker.",
+          "export_prefix": "The topic prefix of the export. The default is not watched by Home Assistant. If you enter the discovery prefix that Home Assistant itself listens to, it creates a disabled duplicate of each device. No wildcards, no empty levels, no leading $."
         }
       }
+    },
+    "error": {
+      "invalid_export_prefix": "The export prefix must not be empty, must not contain # or +, must not start or end with a slash, must not contain empty levels, and must not start with $."
     }
   },
   "entity": {

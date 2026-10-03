@@ -198,14 +198,14 @@ Plans:
   5. MQTT Discovery is published only as an optional export and the documentation, ACL page and translations say so.
 
 **Depends on:** Phase 4
-**Plans:** 1/9 plans executed
+**Plans:** 2/9 plans executed
 
 Plans:
 **Wave 1**
 - [x] 05-01-PLAN.md — ADR with the four D-02 criteria, spike scenarios pinned as regression tests, requirement registration and the blocking-human Go gate (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 05-02-PLAN.md — Registry takeover module: fixed order, identity check, bounded unload wait, duplicate guard (wave 2)
+- [x] 05-02-PLAN.md — Registry takeover module: fixed order, identity check, bounded unload wait, duplicate guard (wave 2)
 - [ ] 05-03-PLAN.md — Native Switch, Select and test-button entities of owned devices, state from the echo, retained QoS 1 commands (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -237,7 +237,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Select Devices and Reliable Execution | 5/5 | Complete    | 2026-09-30 |
 | 3. Trust, Central Config and Ownership | 8/8 | Complete    | 2026-10-02 |
 | 4. Operations, Recovery and Release | 14/14 | Complete    | 2026-10-03 |
-| 5. Evaluate native switch/select entities instead of MQTT Discovery | 1/9 | In Progress|  |
+| 5. Evaluate native switch/select entities instead of MQTT Discovery | 2/9 | In Progress|  |
 
 ## Backlog
 

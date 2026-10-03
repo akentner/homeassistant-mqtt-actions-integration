@@ -483,6 +483,8 @@ class Manager:
         self._cutover_ready = False
         # The blocking peers the hint issue shows now, so an unchanged set does not rebuild the issue on every heartbeat
         self._cutover_hint: tuple[str, ...] | None = None
+        # Set once this manager asked for the reload that follows an owner into native entities; one reload is enough
+        self._reload_scheduled = False
 
     @property
     def _native_pending(self) -> set[str]:
@@ -1679,10 +1681,18 @@ class Manager:
         """
         Bring the companion of a mirror in line after its record was replaced and the mirror is native.
 
-        The device model names the owner. A mirror that just became native drops its test topic, gets its native
-        entities through the platforms and keeps the companion device it already had (D-07, MIG-03).
+        The device model names the owner. A mirror that was native already keeps its companion device in line. A running
+        legacy mirror that just became native stays legacy for this run and reloads the entry instead (D-07, D-12).
         """
         if device.mirror is None or not device.mirror.native:
+            return
+        if not was_native:
+            # A running legacy mirror whose owner just switched: its legacy entities are still the entities of the
+            # device, so it stays on the legacy path until the reload, whose start runs the takeover before the
+            # platform forward. A native entity created now would sit next to them in the registry and make the
+            # takeover drop the legacy entries, and with them the entity ids, instead of moving them (D-12, T-5-09).
+            self._legacy_this_run.add(device.device_id)
+            self._schedule_native_reload()
             return
         device_registry = dr.async_get(self._hass)
         companion = device_registry.async_get_device_by_identifier((DOMAIN, device.device_id), self._entry.entry_id)
@@ -1695,6 +1705,19 @@ class Manager:
             device.unsubscribe_test()
             device.unsubscribe_test = None
         self._notify_devices_changed()
+
+    @callback
+    def _schedule_native_reload(self) -> None:
+        """
+        Reload the entry once, so the takeover pass of the next setup moves the entities of a mirror that turned native.
+
+        Several flips before the stop ask once (T-5-15); the flag belongs to this manager, so the new one starts clean.
+        The final save of the stop persists the mirror records, marker included.
+        """
+        if self._reload_scheduled:
+            return
+        self._reload_scheduled = True
+        self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
 
     async def _async_subscribe_mirror(self, device: Device) -> None:
         """Register a mirror and subscribe to its state and test topics; a failed subscribe leaves nothing behind."""

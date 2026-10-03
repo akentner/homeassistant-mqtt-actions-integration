@@ -3,15 +3,15 @@ status: testing
 phase: 05-evaluate-native-switch-select-entities-instead-of-mqtt-disco
 source: [05-VERIFICATION.md]
 started: 2026-10-03T13:38:23Z
-updated: 2026-10-03T17:41:24Z
+updated: 2026-10-03T17:41:44Z
 ---
 
 ## Current Test
 
-number: 2
-name: Integration page counting (A1) on the follower
+number: 3
+name: Mixed fleet and live follower cutover (A5)
 expected: |
-  All devices and entities of the other instance appear, owner named in the model text, counts match
+  native_cutover_waiting names the v0.1.0 instance; after its update both switch, follower reloads on its own
 awaiting: user response
 
 ## Tests
@@ -23,7 +23,7 @@ note: fresh 0.1.0 -> 0.2.0 run on ha-a/ha-b; registry ids, entity ids, names, ar
 
 ### 2. Integration page counting (A1) on the follower
 expected: All devices and entities of the other instance appear, owner named in the model text, counts match
-result: [pending]
+result: pass
 
 ### 3. Mixed fleet and live follower cutover (A5)
 expected: native_cutover_waiting names the v0.1.0 instance; after its update both switch, follower reloads on its own
@@ -56,9 +56,9 @@ result: [pending]
 ## Summary
 
 total: 9
-passed: 1
+passed: 2
 issues: 0
-pending: 8
+pending: 7
 skipped: 0
 blocked: 0
 

@@ -1828,7 +1828,7 @@ class Manager:
         """
         Bring the companion of a mirror in line after its record was replaced and the mirror is native.
 
-        The device model names the owner. A mirror that was native already keeps its companion device in line. A running
+        A mirror that was native already keeps its companion device in line: the device model names the owner. A running
         legacy mirror that just became native stays legacy for this run and reloads the entry instead (D-07, D-12).
         """
         if device.mirror is None or not device.mirror.native:
@@ -1846,12 +1846,6 @@ class Manager:
         model = device_info_for(self, device.device_id).get("model")
         if companion is not None and model is not None and companion.model != model:
             device_registry.async_update_device(companion.id, model=model)
-        if was_native:
-            return
-        if device.unsubscribe_test is not None:
-            device.unsubscribe_test()
-            device.unsubscribe_test = None
-        self._notify_devices_changed()
 
     @callback
     def _schedule_native_reload(self) -> None:

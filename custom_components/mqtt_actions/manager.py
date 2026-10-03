@@ -87,7 +87,7 @@ from .document import (
     serialize_document,
     spec_has_actions,
 )
-from .model import DeviceSpec, shown, spec_from_subentry, trigger_key
+from .model import DeviceSpec, TriggerSpec, shown, spec_from_subentry, trigger_key
 from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .portability import subentry_payload
@@ -1816,25 +1816,46 @@ class Manager:
         message is a replay, never a press, so it must not run actions (T-02-09). Only a payload that equals a
         StateValue of the device runs anything (T-02-08). A device that is observed or disabled runs nothing.
         """
-        if msg.retain or (device := self._device(device_id)) is None:
-            return
-        # The test buttons follow the same mode as the state topic, so they cannot bypass it (D-14, T-04-19)
-        if (mode := self.effective_mode(device_id)) != MODE_RUN:
-            LOGGER.debug("The test press of device %s runs no actions in %s mode", shown(device.name), mode)
+        if msg.retain or (device := self._device(device_id)) is None or self._test_blocked(device):
             return
         value = device.spec.accepted.get(msg.payload.strip().lower())
         if value is None:
             self._log_ignored(device, msg.payload)
             return
-        trigger = device.spec.triggers.get(trigger_key(value))
-        if trigger is None or not self.runner.can_run(device_id, trigger.key):
+        if (trigger := device.spec.triggers.get(trigger_key(value))) is not None:
+            self._enqueue_test(device, trigger)
+
+    async def async_press_test(self, device_id: str, key: str) -> None:
+        """
+        Run the actions of one trigger of a device as a test, the way a native test button does (MIG-03).
+
+        The press never touches the tracker, the baseline or the state topic, and nothing is published. It passes the
+        same mode gate as the test topic; an unknown device id or trigger key does nothing.
+        """
+        if (device := self._device(device_id)) is None or (trigger := device.spec.triggers.get(key)) is None:
+            return
+        if not self._test_blocked(device):
+            self._enqueue_test(device, trigger)
+
+    def _test_blocked(self, device: Device) -> bool:
+        """Return whether the mode stops a test run; the test buttons follow the mode of the state topic (D-14)."""
+        if (mode := self.effective_mode(device.device_id)) == MODE_RUN:
+            return False
+        LOGGER.debug("The test press of device %s runs no actions in %s mode", shown(device.name), mode)
+        return True
+
+    @callback
+    def _enqueue_test(self, device: Device, trigger: TriggerSpec) -> None:
+        """Enqueue the actions of a trigger as a test run, unless the runner has no Script for it (T-04-19)."""
+        device_id = device.device_id
+        if not self.runner.can_run(device_id, trigger.key):
             return
         self.runner.enqueue(
             device_id,
             device.name,
             trigger.label,
             trigger.key,
-            {"device_id": device_id, "state": value},
+            {"device_id": device_id, "state": trigger.value},
             test=True,
         )
 

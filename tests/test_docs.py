@@ -383,3 +383,96 @@ def test_readme_limitations_are_current() -> None:
         "at least once",
     ):
         assert phrase in limitations, f"the Limitations section never says: {phrase}"
+
+
+def test_readme_documents_native_entities_and_the_upgrade() -> None:
+    """The upgrade section tells what the one-way migration does, what it cannot undo and who loses entities (D-05)."""
+    text = README.read_text(encoding="utf-8")
+    assert any(heading.startswith("upgrading from 0.1") for heading in _headings(text)), (
+        "the README has no Upgrading from 0.1.x section"
+    )
+    upgrade = _normalize(_section(text, "upgrading from 0.1")).replace("`", "")
+    for phrase in (
+        "the upgrade is automatic and one-way",
+        "rollback to 0.1.x is not supported",
+        "creates duplicate _2 entities",
+        "no online instance runs an older version",
+        "loses the entities of migrated devices",
+        "without a hint",
+        "native_cutover_waiting",
+        "entity ids, registry ids, device ids, areas, names and history are kept",
+        "removing the integration removes the entities",
+        "should not run concurrently",
+        "0.2.0",
+    ):
+        assert phrase in upgrade, f"the upgrade section never says: {phrase}"
+    assert "native entities" in _normalize(text)
+
+
+def test_readme_documents_the_discovery_export() -> None:
+    """The export section names the options, the default prefix and the duplicate warning (D-03, D-11)."""
+    text = README.read_text(encoding="utf-8")
+    assert any(heading.startswith("mqtt discovery export") for heading in _headings(text)), (
+        "the README has no MQTT Discovery export section"
+    )
+    export = _normalize(_section(text, "mqtt discovery export")).replace("`", "")
+    for phrase in (
+        "optional",
+        "off by default",
+        "publish an mqtt discovery export",
+        "discovery export prefix",
+        const.DEFAULT_EXPORT_PREFIX,
+        "enabled_by_default",
+        "no healing",
+        "no test buttons",
+    ):
+        assert phrase in export, f"the export section never says: {phrase}"
+    sentences = _sentences(_section(text, "mqtt discovery export"))
+    assert any("duplicate" in sentence and "disabled by default" in sentence for sentence in sentences), (
+        "the export section has no warning about duplicate entities that are disabled by default"
+    )
+
+
+def test_old_discovery_claims_are_gone() -> None:
+    """The pages no longer describe Discovery as the way the entities come into being (D-03)."""
+    readme = _normalize(README.read_text(encoding="utf-8"))
+    for stale in (
+        "healing a removed discovery recreates the mirrored entities",
+        "select entity through mqtt discovery",
+        "its entities come from the owner's mqtt discovery",
+        "the entities of the device itself stay on the core mqtt device",
+    ):
+        assert stale not in readme, f"the README still says: {stale}"
+    for document in _documents():
+        normalized = _normalize(document.read_text(encoding="utf-8"))
+        assert "instances need write access to the discovery prefix" not in normalized, (
+            f"{document.name} still says that every instance needs write access to the discovery prefix"
+        )
+        assert "every instance needs write access to the discovery prefix" not in normalized
+    operations = _normalize(_page(OPERATIONS))
+    assert "belong to the core mqtt integration and its own device" not in operations
+
+
+def test_acl_page_has_an_export_row_and_keeps_the_block() -> None:
+    """The export prefix has its own topic row, the legacy topics say so, and the tested block is still the only one."""
+    text = _page(BROKER_ACL)
+    rows = [line for line in _section(text, "topics").splitlines() if line.startswith("| `")]
+    first_cells = [row.split("|")[1].strip().strip("`") for row in rows]
+    assert any(topic.startswith("<export prefix>/") for topic in first_cells), "no <export prefix>/ row"
+    assert any(topic.startswith("<discovery prefix>/") for topic in first_cells), "no <discovery prefix>/ row"
+    test_row = next(row for row in rows if "/test`" in row.split("|")[1])
+    assert "legacy" in test_row.lower(), "the test topic row does not say that only legacy devices use it"
+    assert len(re.findall(r"^```acl\n", text, re.MULTILINE)) == 1
+    limits = _normalize(_section(text, "limits"))
+    assert "legacy path" in limits
+    assert "export" in limits
+
+
+def test_troubleshooting_explains_the_upgrade_problems() -> None:
+    """The two problems the one-way migration can cause have their own sections."""
+    headings = _headings(_page(TROUBLESHOOTING))
+    for problem in (
+        "duplicate _2 entities after a downgrade",
+        "entities are missing on an older instance",
+    ):
+        assert any(heading.startswith(problem) for heading in headings), f"troubleshooting has no {problem} section"

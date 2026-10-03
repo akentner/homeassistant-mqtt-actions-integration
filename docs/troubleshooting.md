@@ -114,6 +114,14 @@ successful run. The log has more detail.
 **Meaning:** MQTT Actions creates its entities through MQTT discovery, but discovery is disabled in the MQTT integration.
 **What to do:** enable discovery again in the options of the MQTT integration. No entity appears before that.
 
+### `native_cutover_waiting`
+
+**Meaning:** this instance still creates its entities through MQTT Discovery because the instances named in the issue run
+an older version of MQTT Actions that cannot use native entities. **Why:** switching earlier would make the entities of
+those instances disappear. **What to do:** update MQTT Actions on the named instances, or take them offline. This
+instance switches on its own within a heartbeat or a few seconds after the last of them is updated or offline; the
+issue then disappears. Nothing is lost while it waits.
+
 ### `circuit_breaker_tripped`
 
 **Meaning:** a device ran its actions more often than its limit allows within the window, by default more than 5 times

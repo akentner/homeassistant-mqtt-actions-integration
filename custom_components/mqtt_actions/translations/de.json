@@ -290,6 +290,10 @@
       "title": "MQTT Discovery ist deaktiviert",
       "description": "MQTT Actions erstellt seine Entitäten über MQTT Discovery, aber Discovery ist in der MQTT-Integration deaktiviert. Es erscheint keine Entität von MQTT Actions, bis Discovery in den Optionen der MQTT-Integration wieder aktiviert wird."
     },
+    "native_cutover_waiting": {
+      "title": "Diese Instanz nutzt noch MQTT Discovery",
+      "description": "Diese Instanzen verwenden eine ältere Version von MQTT Actions, die noch keine nativen Entitäten nutzen kann: {instances}. Diese Instanz nutzt für ihre Entitäten weiterhin MQTT Discovery, bis jene aktualisiert wurden oder offline gehen, und wechselt dann selbstständig zu nativen Entitäten. Solange sie wartet, geht nichts verloren: Geräte, Namen und Bereiche bleiben unverändert."
+    },
     "circuit_breaker_tripped": {
       "title": "Ein Gerät wurde vom Schutzschalter pausiert",
       "description": "{device} hat seine Aktionen öfter als {max_runs} Mal innerhalb von {window} Sekunden ausgeführt. Meist ändert dann eine Aktion den Zustand ihres eigenen Geräts und löst sich dadurch immer wieder selbst aus. MQTT Actions hat deshalb die laufenden Aktionen gestoppt und das Gerät pausiert. Änderungen am Status-Topic aktualisieren die Entität weiterhin, aber es laufen keine Aktionen, bis das Gerät freigegeben wird. Ändere dazu die Einstellungen des Geräts oder lade die Integration neu. Das Speichern des Geräts ohne eine Änderung gibt es nicht frei."

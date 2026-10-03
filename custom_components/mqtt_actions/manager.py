@@ -41,6 +41,7 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
+    CUTOVER_HINT_MAX_NAMES,
     CUTOVER_SETTLE_SECONDS,
     DOMAIN,
     ISSUE_APPROVAL_PREFIX,
@@ -50,6 +51,7 @@ from .const import (
     ISSUE_DEVICE_PREFIXES,
     ISSUE_DISCOVERY_DISABLED,
     ISSUE_DUPLICATE_INSTANCE_ID,
+    ISSUE_NATIVE_CUTOVER_WAITING,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
@@ -369,7 +371,7 @@ async def async_remove_local_state(hass: HomeAssistant, entry: ConfigEntry, *, s
     for domain, issue_id in list(registry.issues):
         if domain == DOMAIN and (
             issue_id.startswith(ISSUE_DEVICE_PREFIXES)
-            or issue_id in {ISSUE_DISCOVERY_DISABLED, ISSUE_DUPLICATE_INSTANCE_ID}
+            or issue_id in {ISSUE_DISCOVERY_DISABLED, ISSUE_DUPLICATE_INSTANCE_ID, ISSUE_NATIVE_CUTOVER_WAITING}
         ):
             ir.async_delete_issue(hass, domain, issue_id)
 
@@ -479,6 +481,8 @@ class Manager:
         self._cancel_cutover: CALLBACK_TYPE | None = None
         # Set once the settle time has passed; only then does a roster change start a cutover check
         self._cutover_ready = False
+        # The blocking peers the hint issue shows now, so an unchanged set does not rebuild the issue on every heartbeat
+        self._cutover_hint: tuple[str, ...] | None = None
 
     @property
     def _native_pending(self) -> set[str]:
@@ -750,13 +754,47 @@ class Manager:
         forward; nothing is moved or published here. Without such a device the flag alone is enough.
         """
         async with self._lock:
-            if not self._running or self._native.instance or self.presence.blocking_peers():
+            if not self._running or self._native.instance:
                 return
+            if blocking := self.presence.blocking_peers():
+                self._show_cutover_hint(tuple(blocking))
+                return
+            self._clear_cutover_hint()
             self._native.instance = True
             self._native_pending.update(self.devices.keys() - self._native_devices)
             await self._store.async_save(self._data_to_save())
             if self._native_pending:
                 self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
+
+    @callback
+    def _show_cutover_hint(self, blocking: tuple[str, ...]) -> None:
+        """
+        Explain in Repairs why this instance still uses MQTT Discovery; only the first names are shown (D-10, T-5-14).
+
+        The names come from the broker, so they are escaped and capped, and they are never logged. The issue is deleted
+        first so that a changed set of peers refreshes the text.
+        """
+        if blocking == self._cutover_hint:
+            return
+        self._cutover_hint = blocking
+        shown = ", ".join(escape_markdown(name) for name in blocking[:CUTOVER_HINT_MAX_NAMES])
+        instances = f"{shown} \u2026" if len(blocking) > CUTOVER_HINT_MAX_NAMES else shown
+        ir.async_delete_issue(self._hass, DOMAIN, ISSUE_NATIVE_CUTOVER_WAITING)
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            ISSUE_NATIVE_CUTOVER_WAITING,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_NATIVE_CUTOVER_WAITING,
+            translation_placeholders={"instances": instances},
+        )
+
+    @callback
+    def _clear_cutover_hint(self) -> None:
+        """Delete the hint; the cutover proceeds, so there is nothing left to wait for."""
+        self._cutover_hint = None
+        ir.async_delete_issue(self._hass, DOMAIN, ISSUE_NATIVE_CUTOVER_WAITING)
 
     async def _async_native_takeover(self) -> None:
         """

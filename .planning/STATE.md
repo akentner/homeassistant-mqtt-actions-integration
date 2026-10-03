@@ -204,6 +204,12 @@ None yet.
 - [Phase 3]: Needs deeper research before planning (`/gsd-plan-phase --research-phase 3`): prune strategy (grace window vs owner manifest), `FakeBroker` design, Repairs approval flow, discovered-entity registry cleanup, subentry deletion hooks, subentries as device store fit
 - [Phase 3]: Open decision: owner availability (heartbeat + graceful-shutdown publish vs. no tie to owner liveness); AVL-01 is deferred to v2
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261003-rmy | Native Select restore-previous-state button and previous_state attribute; new native test buttons diagnostic and disabled by default | 2026-10-03 | c7a537c | [261003-rmy-native-entities-test-buttons-disabled-by](./quick/261003-rmy-native-entities-test-buttons-disabled-by/) |
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:

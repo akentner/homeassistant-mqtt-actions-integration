@@ -148,7 +148,8 @@ async def test_a_legacy_install_without_peers_cuts_over_after_the_settle_time(
     switch_id = entity_registry.async_get_entity_id("switch", DOMAIN, device_id)
     assert switch_id == next(entity_id for entity_id in legacy_ids if entity_id.startswith("switch."))
     assert hass.states.get(switch_id) is not None
-    device = next(device for device in device_registry.devices.values() if (DOMAIN, device_id) in device.identifiers)
+    device = device_registry.async_get_device_by_identifier((DOMAIN, device_id), legacy.entry.entry_id)
+    assert device is not None
     assert (device.area_id, device.name_by_user) == ("kitchen", "Stehlampe")
     published = _discovery_publishes(mqtt_mock, device_id)
     assert [(json.loads(payload) if payload else payload, retain) for payload, retain in published] == [
@@ -209,7 +210,8 @@ async def test_a_capable_peer_does_not_block(
     enable_native_cutover: None,
 ) -> None:
     """D-10: a peer whose heartbeat carries the capability key lets the cutover proceed."""
-    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    subentry = make_switch_subentry("Lamp")
+    entry = await _setup(hass, make_hub_entry([subentry]))
     _peer(hass, "native-peer", native=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
@@ -218,7 +220,7 @@ async def test_a_capable_peer_does_not_block(
     native = _stored_native(hass_storage)
     assert native is not None
     assert native["instance"] is True
-    assert _manager(entry).is_native(_device_id(next(iter(entry.subentries.values())).data))
+    assert _manager(entry).is_native(_device_id(subentry))
 
 
 @pytest.mark.parametrize("how", ["announced_offline", "stale_heartbeat"])
@@ -290,7 +292,8 @@ async def test_a_legacy_peer_going_offline_triggers_the_cutover(
     await _settle(hass)
     assert _stored_native(hass_storage) is None
 
-    async_fire_mqtt_message(hass, availability_topic(BASE, "legacy-peer"), "offline", retain=True)
+    # Live: a broker delivers a change to a running subscriber without the retain flag, and core drops a second replay
+    async_fire_mqtt_message(hass, availability_topic(BASE, "legacy-peer"), "offline", retain=False)
     await hass.async_block_till_done(wait_background_tasks=True)
 
     native = _stored_native(hass_storage)
@@ -320,7 +323,7 @@ async def test_the_cutover_runs_once(
         _peer(hass, "legacy-peer", native=False)
         await hass.async_block_till_done(wait_background_tasks=True)
         await _settle(hass, 2 * HEARTBEAT_INTERVAL_SECONDS)
-        async_fire_mqtt_message(hass, availability_topic(BASE, "legacy-peer"), "offline", retain=True)
+        async_fire_mqtt_message(hass, availability_topic(BASE, "legacy-peer"), "offline", retain=False)
         await hass.async_block_till_done(wait_background_tasks=True)
 
         assert schedule_reload.call_count == 1

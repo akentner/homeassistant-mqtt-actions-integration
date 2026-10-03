@@ -37,6 +37,7 @@ from .const import (
     MAX_TRACKED_INSTANCES,
     SIGNAL_ROSTER_UPDATED,
 )
+from .document import NATIVE_KEY, NATIVE_VALUE
 from .model import invalid_name
 from .sync import PRESENCE_OFFLINE, PRESENCE_ONLINE
 from .topics import heartbeat_topic, heartbeat_wildcard, is_valid_device_id, parse_heartbeat_topic
@@ -64,6 +65,8 @@ class Heartbeat:
     version: str
     devices: int
     session: str
+    # True when the sender announced that its build can run native entities; a v0.1.0 heartbeat has no such key (D-10)
+    native: bool = False
 
 
 def valid_text(value: object) -> bool:
@@ -123,7 +126,14 @@ def parse_heartbeat(base_topic: str, topic: str, payload: str) -> Heartbeat | No
     topic_id, data = parsed
     name, version, devices, session = (data.get(key) for key in ("name", "version", "devices", "session"))
     if valid_text(name) and valid_text(version) and _valid_devices(devices) and valid_uuid(session):
-        return Heartbeat(instance_id=topic_id, name=name, version=version, devices=devices, session=session)
+        return Heartbeat(
+            instance_id=topic_id,
+            name=name,
+            version=version,
+            devices=devices,
+            session=session,
+            native=data.get(NATIVE_KEY) == NATIVE_VALUE,
+        )
     return None
 
 
@@ -150,6 +160,10 @@ class Roster:
         self._instance_status = instance_status
         self._peers: dict[str, _Peer] = {}
         self._listening_since = clock()
+
+    def listening_seconds(self) -> float:
+        """Return how long this instance has listened for heartbeats, on the roster clock."""
+        return self._clock() - self._listening_since
 
     def restart_listening(self) -> None:
         """Start counting the time this instance has listened for heartbeats again, for a start or a reconnect."""
@@ -186,6 +200,12 @@ class Roster:
     def online_ids(self) -> list[str]:
         """Return the ids of the peers that are online."""
         return [instance_id for instance_id, peer in self._peers.items() if self._online(peer)]
+
+    def legacy_online_names(self) -> list[str]:
+        """Return the names of the online peers whose heartbeat does not announce the native capability (D-10)."""
+        return [
+            peer.heartbeat.name for peer in self._peers.values() if self._online(peer) and not peer.heartbeat.native
+        ]
 
     def rows(self) -> list[dict[str, Any]]:
         """Return every peer row, online or not, in the order the peers were first heard."""
@@ -307,6 +327,8 @@ class PresenceManager:
                 "version": manager.version,
                 "devices": len(manager.devices),
                 "session": self.session,
+                # What this build can do, whether or not this instance already switched; legacy builds lack the key
+                NATIVE_KEY: NATIVE_VALUE,
             }
         )
         try:
@@ -358,6 +380,7 @@ class PresenceManager:
         self._announced = frozenset(self._roster.online_ids())
         self._arm_expiry()
         self._send_signal()
+        manager.on_roster_changed()
 
     @callback
     def _observe_duplicate(self) -> None:
@@ -410,6 +433,8 @@ class PresenceManager:
         self._arm_expiry()
         if changed:
             self._send_signal()
+        # The gate of the native cutover depends on more than the online set: an announced presence and the time too
+        self._manager.on_roster_changed()
         return changed
 
     @callback
@@ -456,6 +481,25 @@ class PresenceManager:
     def online_peers(self) -> list[dict[str, Any]]:
         """Return the rows of the peers that are online now, this instance excluded."""
         return [row for row in self._roster.rows() if row["online"]]
+
+    def blocking_peers(self) -> list[str]:
+        """
+        Return the display names of the online peers that keep this instance from switching to native entities (D-10).
+
+        A peer blocks when its heartbeat is fresh, it is not announced offline and its heartbeat lacks the capability
+        key. An instance that is announced online but never sent a heartbeat blocks too, by its shortened id, until
+        this instance listened for the offline timeout. Offline peers, stale heartbeats and long-silent instances never
+        block.
+        """
+        names = self._roster.legacy_online_names()
+        silent = [
+            instance_id[:8]
+            for instance_id in self._manager.sync.online_instance_ids()
+            if self._roster.status(instance_id) is None
+        ]
+        if self._roster.listening_seconds() >= HEARTBEAT_OFFLINE_SECONDS:
+            silent = []
+        return [*names, *silent]
 
     def peer_status(self, instance_id: str) -> str | None:
         """Return `online` or `offline` for a peer that sent a heartbeat, None for any other instance."""

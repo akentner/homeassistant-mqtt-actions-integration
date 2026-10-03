@@ -69,7 +69,7 @@ def test_parse_heartbeat_accepts_a_valid_message() -> None:
 async def test_heartbeat_is_published_non_retained_with_qos_0(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
 ) -> None:
-    """D-05: one heartbeat after the online availability, QoS 0, not retained, five keys."""
+    """D-05: one heartbeat after the online availability, QoS 0, not retained, five keys and the capability key."""
     sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
     entry = await _setup(hass, make_hub_entry([sub]))
     instance_id = entry.data[CONF_INSTANCE_ID]
@@ -81,7 +81,8 @@ async def test_heartbeat_is_published_non_retained_with_qos_0(
     assert qos == 0
     assert retain is False
     data = json.loads(payload)
-    assert set(data) == {"instance_id", "name", "version", "devices", "session"}
+    assert set(data) == {"instance_id", "name", "version", "devices", "session", "entities"}
+    assert data["entities"] == "native"
     assert data["instance_id"] == instance_id
     assert data["name"] == entry.data[CONF_INSTANCE_NAME]
     assert data["version"] == json.loads(MANIFEST.read_text())["version"]

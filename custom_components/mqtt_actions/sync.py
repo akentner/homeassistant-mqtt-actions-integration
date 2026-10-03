@@ -283,6 +283,15 @@ class SyncManager:
             1 for instance_id, status in self._instances.items() if instance_id != own and status == PRESENCE_ONLINE
         )
 
+    def online_instance_ids(self) -> list[str]:
+        """Return the ids of the instances other than this one that are currently announced as online."""
+        own = self._manager.instance_id
+        return [
+            instance_id
+            for instance_id, status in self._instances.items()
+            if instance_id != own and status == PRESENCE_ONLINE
+        ]
+
     def instance_status(self, instance_id: str) -> str | None:
         """Return the last announced presence of an instance (`online` or `offline`), None when it is not known."""
         return self._instances.get(instance_id)

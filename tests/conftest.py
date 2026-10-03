@@ -49,13 +49,13 @@ def disable_native_cutover(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Only the cutover tests turn the settle timer on, through `enable_native_cutover`.
     """
-    monkeypatch.setattr(manager_module, "CUTOVER_SETTLE_SECONDS", None, raising=False)
+    monkeypatch.setattr(manager_module, "CUTOVER_SETTLE_SECONDS", None)
 
 
 @pytest.fixture
 def enable_native_cutover(disable_native_cutover: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Restore the real settle time for the tests of the cutover; it depends on the autouse fixture for the order."""
-    monkeypatch.setattr(manager_module, "CUTOVER_SETTLE_SECONDS", const.CUTOVER_SETTLE_SECONDS, raising=False)
+    monkeypatch.setattr(manager_module, "CUTOVER_SETTLE_SECONDS", const.CUTOVER_SETTLE_SECONDS)
 
 
 @pytest.fixture

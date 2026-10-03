@@ -1,4 +1,4 @@
-"""The buttons: the resync button of the hub device and the native test buttons of owned and mirrored devices."""
+"""The buttons: resync, the native test buttons and the restore button of native Select devices."""
 
 from typing import TYPE_CHECKING
 
@@ -8,7 +8,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .const import DOMAIN, LOGGER, SIGNAL_DEVICES_CHANGED
+from .const import DOMAIN, LOGGER, SIGNAL_DEVICES_CHANGED, SUBENTRY_SELECT
 from .entities import MqttActionsEntity, NativeDeviceEntity
 
 if TYPE_CHECKING:
@@ -72,6 +72,27 @@ class DeviceTestButton(NativeDeviceEntity, ButtonEntity):
         await self._manager.async_press_test(self._device_id, self._trigger_key)
 
 
+def _restore_button_unique_id(device_id: str) -> str:
+    """Return the unique id of the restore button of a Select device."""
+    return f"{device_id}_restore_previous"
+
+
+class RestorePreviousButton(NativeDeviceEntity, ButtonEntity):
+    """Publishes the StateValue that was shown before the current one, exactly like choosing that option."""
+
+    _attr_translation_key = "restore_previous"
+
+    def __init__(self, manager: Manager, device_id: str) -> None:
+        """Initialize the button of one Select device."""
+        super().__init__(manager, device_id)
+        self._attr_unique_id = _restore_button_unique_id(device_id)
+
+    async def async_press(self) -> None:
+        """Restore the previous state; a press without a known previous state does nothing."""
+        if not await self._manager.async_restore_previous(self._device_id):
+            LOGGER.debug("The restore was ignored because no previous state is known")
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry[Manager],
@@ -105,7 +126,27 @@ async def async_setup_entry(
                 config_subentry_id=manager.subentry_id_of(device_id),
             )
 
+    added_restore: set[str] = set()
+
+    @callback
+    def _add_restore_buttons() -> None:
+        qualifying = {
+            device_id
+            for device_id, device in [*manager.devices.items(), *manager.mirrors.items()]
+            if device.spec.kind == SUBENTRY_SELECT and manager.is_native(device_id)
+        }
+        added_restore.intersection_update(qualifying)
+        for device_id in sorted(qualifying - added_restore):
+            added_restore.add(device_id)
+            async_add_entities(
+                [RestorePreviousButton(manager, device_id)], config_subentry_id=manager.subentry_id_of(device_id)
+            )
+
     _sync_test_buttons()
+    _add_restore_buttons()
     entry.async_on_unload(
         async_dispatcher_connect(hass, SIGNAL_DEVICES_CHANGED.format(entry.entry_id), _sync_test_buttons)
+    )
+    entry.async_on_unload(
+        async_dispatcher_connect(hass, SIGNAL_DEVICES_CHANGED.format(entry.entry_id), _add_restore_buttons)
     )

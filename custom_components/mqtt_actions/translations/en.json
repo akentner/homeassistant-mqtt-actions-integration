@@ -267,6 +267,9 @@
     "button": {
       "resync": {
         "name": "Resync"
+      },
+      "restore_previous": {
+        "name": "Restore previous state"
       }
     },
     "select": {

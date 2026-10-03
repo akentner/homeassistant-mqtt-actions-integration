@@ -267,6 +267,9 @@
     "button": {
       "resync": {
         "name": "Neu synchronisieren"
+      },
+      "restore_previous": {
+        "name": "Vorherigen Zustand wiederherstellen"
       }
     },
     "select": {

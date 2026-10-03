@@ -315,6 +315,14 @@ class NativeState:
     devices: set[str] = field(default_factory=set)
 
 
+@dataclass(frozen=True, slots=True)
+class SelectHistory:
+    """The last shown StateValue of a native Select and the different one that was shown before it."""
+
+    last: str
+    previous: str
+
+
 def _parse_native(stored: dict[str, Any]) -> NativeState:
     """Return the native state from a loaded Store payload; anything malformed means the defaults (D-03)."""
     native = stored.get(STORE_NATIVE)
@@ -495,6 +503,8 @@ class Manager:
         self._device_modes: dict[str, str] = {}
         # Which owned devices are native entities instead of MQTT discovery entities; local, kept in the Store (D-03)
         self._native = NativeState()
+        # Native Select device id -> the shown StateValue and the one before it; in memory here, local to this instance
+        self._previous: dict[str, SelectHistory] = {}
         # Owned or mirrored devices whose takeover could not run yet; they use the legacy path for this run only and
         # their id stays pending in the Store, so the next setup retries (T-5-08)
         self._legacy_this_run: set[str] = set()
@@ -2163,8 +2173,41 @@ class Manager:
         value = device.spec.accepted.get(payload.strip().lower())
         if value is None or value == device.value:
             return
+        old = device.value
         device.value = value
+        self._track_previous(device, old, value)
         async_dispatcher_send(self._hass, SIGNAL_DEVICE_STATE.format(self._entry.entry_id, device.device_id))
+
+    @callback
+    def _track_previous(self, device: Device, old: str | None, value: str) -> None:
+        """Remember the value that was shown before `value` for a native Select; other devices have no history."""
+        if device.spec.kind != SUBENTRY_SELECT or not self.is_native(device.device_id):
+            return
+        before = old
+        if before is None and (existing := self._previous.get(device.device_id)) is not None:
+            before = existing.last
+        if before is not None and before != value:
+            self._previous[device.device_id] = SelectHistory(last=value, previous=before)
+
+    def previous_value(self, device_id: str) -> str | None:
+        """Return the StateValue shown before the current one, None when unknown or no option any more."""
+        device = self._device(device_id)
+        if device is None or device.spec.kind != SUBENTRY_SELECT:
+            return None
+        if (history := self._previous.get(device_id)) is None:
+            return None
+        return history.previous if history.previous in device.spec.accepted.values() else None
+
+    async def async_restore_previous(self, device_id: str) -> bool:
+        """
+        Publish the previous StateValue like a select choice; False when there is none.
+
+        Nothing is changed locally: the echo of the broker moves the shown value and the history.
+        """
+        if (previous := self.previous_value(device_id)) is None:
+            return False
+        await self.async_send_state(device_id, previous)
+        return True
 
     async def async_send_state(self, device_id: str, value: str) -> None:
         """

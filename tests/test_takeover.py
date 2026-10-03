@@ -606,19 +606,17 @@ async def test_a_user_disabled_legacy_entry_is_moved_and_stays_disabled(
     assert moved.disabled_by is er.RegistryEntryDisabler.USER
 
 
-async def test_an_existing_native_entry_is_never_duplicated(
-    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
-) -> None:
-    """T-5-09: with native twins present the legacy duplicates are deleted and the emptied legacy device goes."""
-    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+async def _legacy_with_native_twins(
+    hass: HomeAssistant, legacy: LegacyDevice
+) -> tuple[dict[tuple[str, str], er.RegistryEntry], dict[str, er.RegistryEntry], dr.DeviceEntry, dr.DeviceEntry]:
+    """Create an auto-generated native twin for every legacy entry; return twins, legacy entries and both devices."""
     entity_registry = er.async_get(hass)
-    device_registry = dr.async_get(hass)
     device_id = legacy.device_id
     mqtt_device = _mqtt_device(hass, device_id)
-    native_device = device_registry.async_get_device_by_identifier((DOMAIN, device_id), legacy.entry.entry_id)
+    native_device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, device_id), legacy.entry.entry_id)
     assert native_device is not None
-    legacy_ids = legacy_entity_ids(hass, device_id)
-    keys = [(entry.domain, entry.unique_id) for entry in map(entity_registry.async_get, legacy_ids) if entry]
+    before = {entity_id: entity_registry.async_get(entity_id) for entity_id in legacy_entity_ids(hass, device_id)}
+    keys = [(entry.domain, entry.unique_id) for entry in before.values() if entry]
     assert len(keys) == 3
     await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
     natives = {
@@ -633,17 +631,66 @@ async def test_an_existing_native_entry_is_never_duplicated(
         )
         for domain, unique_id in keys
     }
+    return natives, before, mqtt_device, native_device
+
+
+async def test_an_existing_native_twin_never_replaces_the_legacy_identity(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """
+    T-5-09, WR-04: with auto-generated native twins present the older legacy entries keep entity id and registry id.
+
+    The twins are newer and carry no customization, so they are deleted and the legacy entries move; the emptied
+    native device is merged into the legacy device.
+    """
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    device_id = legacy.device_id
+    natives, before, mqtt_device, native_device = await _legacy_with_native_twins(hass, legacy)
 
     assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
 
-    for (domain, unique_id), native in natives.items():
+    for (domain, unique_id), twin in natives.items():
         same_key = [
             entry
             for entry in entity_registry.entities.values()
             if (entry.domain, entry.platform, entry.unique_id) == (domain, DOMAIN, unique_id)
         ]
+        original = next(old for old in before.values() if (old.domain, old.unique_id) == (domain, unique_id))
         assert [(entry.id, entry.entity_id, entry.device_id) for entry in same_key] == [
-            (native.id, native.entity_id, native_device.id)
+            (original.id, original.entity_id, mqtt_device.id)
+        ]
+        assert entity_registry.async_get(twin.entity_id) is None
+    assert legacy_entity_ids(hass, device_id) == []
+    taken = device_registry.async_get(mqtt_device.id)
+    assert taken is not None
+    assert taken.identifiers == {(DOMAIN, device_id)}
+    assert device_registry.async_get(native_device.id) is None
+
+
+async def test_a_customized_native_twin_is_kept_over_an_untouched_legacy_entry(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """WR-04: when only the native twin carries the user's choices it is the identity to keep; the legacy one goes."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    device_id = legacy.device_id
+    natives, _before, mqtt_device, native_device = await _legacy_with_native_twins(hass, legacy)
+    for twin in natives.values():
+        entity_registry.async_update_entity(twin.entity_id, name="My own name")
+
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+
+    for (domain, unique_id), twin in natives.items():
+        same_key = [
+            entry
+            for entry in entity_registry.entities.values()
+            if (entry.domain, entry.platform, entry.unique_id) == (domain, DOMAIN, unique_id)
+        ]
+        assert [(entry.id, entry.entity_id, entry.name, entry.device_id) for entry in same_key] == [
+            (twin.id, twin.entity_id, "My own name", native_device.id)
         ]
     assert legacy_entity_ids(hass, device_id) == []
     assert device_registry.async_get(mqtt_device.id) is None

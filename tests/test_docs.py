@@ -477,3 +477,22 @@ def test_troubleshooting_explains_the_upgrade_problems() -> None:
         "entities are missing on an older instance",
     ):
         assert any(heading.startswith(problem) for heading in headings), f"troubleshooting has no {problem} section"
+
+
+def test_docs_describe_the_restore_button_and_the_diagnostic_test_buttons() -> None:
+    """The restore button is named as its translation; the test buttons are diagnostic, disabled and not migrated."""
+    translations = json.loads(TRANSLATIONS.read_text(encoding="utf-8"))
+    name = _normalize(translations["entity"]["button"]["restore_previous"]["name"])
+    readme = _page(README)
+    operations = _page(OPERATIONS)
+    for page in (readme, operations):
+        text = _normalize(page)
+        assert name in text
+        assert "previous_state" in text
+        assert "diagnostic" in text
+        assert "disabled by default" in text
+    test_buttons = _normalize(_section(readme, "run mode, test buttons"))
+    assert "diagnostic" in test_buttons
+    assert "disabled by default" in test_buttons
+    assert "nothing is migrated" in test_buttons
+    assert "nothing is migrated" in _normalize(_section(operations, "upgrade notes"))

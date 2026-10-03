@@ -11,6 +11,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.entity_registry import RegistryEntryDisabler
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
 from custom_components.mqtt_actions import topics
@@ -463,14 +464,14 @@ def _all_publishes(mqtt_mock: Any, device_id: str) -> list[tuple]:
     return [call.args[:4] for call in mqtt_mock.async_publish.call_args_list if call.args[0] in watched]
 
 
-async def test_native_test_buttons_exist_per_trigger(
+async def test_new_native_test_buttons_are_diagnostic_and_disabled_by_default(
     hass: HomeAssistant,
     mqtt_mock: Any,
     hass_storage: dict[str, Any],
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
 ) -> None:
-    """MIG-03: one native button per trigger with the unique id, name and category of the legacy button."""
+    """MIG-03, Q-01: one native button per trigger with the legacy unique id and name, diagnostic and disabled."""
     entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
     registry = er.async_get(hass)
     (subentry_id,) = entry.subentries
@@ -482,7 +483,8 @@ async def test_native_test_buttons_exist_per_trigger(
         assert registered is not None
         assert registered.platform == DOMAIN
         assert registered.original_name == name
-        assert registered.entity_category is EntityCategory.CONFIG
+        assert registered.entity_category is EntityCategory.DIAGNOSTIC
+        assert registered.disabled_by is RegistryEntryDisabler.INTEGRATION
         assert registered.config_subentry_id == subentry_id
         device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, device_id), entry.entry_id)
         assert device is not None
@@ -491,6 +493,7 @@ async def test_native_test_buttons_exist_per_trigger(
 
 async def test_pressing_a_test_button_runs_that_trigger_once_and_changes_nothing(
     hass: HomeAssistant,
+    enabled_test_buttons: None,
     mqtt_mock: Any,
     hass_storage: dict[str, Any],
     make_hub_entry: Callable,
@@ -515,6 +518,7 @@ async def test_pressing_a_test_button_runs_that_trigger_once_and_changes_nothing
 
 async def test_observe_and_disabled_modes_block_the_press(
     hass: HomeAssistant,
+    enabled_test_buttons: None,
     mqtt_mock: Any,
     hass_storage: dict[str, Any],
     make_hub_entry: Callable,
@@ -672,7 +676,7 @@ async def test_an_unmarked_mirror_stays_on_the_legacy_path(
 
 
 async def test_a_native_mirror_has_test_buttons_that_run_locally_once_approved(
-    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+    hass: HomeAssistant, enabled_test_buttons: None, mqtt_mock: Any, make_hub_entry: Callable
 ) -> None:
     """MIG-03: the buttons of a native mirror run the trigger here, behind the approval, and publish nothing."""
     on_calls = async_mock_service(hass, "test", "on")
@@ -1355,3 +1359,90 @@ async def test_an_adoption_keeps_the_history_of_a_native_mirror(
     assert _manager(entry)._data_to_save()[STORE_PREVIOUS_STATES] == {
         spec.device_id: {"last": "Mixed Case", "previous": "a"}
     }
+
+
+# --- Quick 261003-rmy task 3: diagnostic, disabled test buttons ------------------------------------------------------
+
+
+async def test_every_new_test_button_is_diagnostic_and_disabled_and_the_restore_button_is_not(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """Q-01, Q-04: owned Switch, owned Select and a native mirror alike; the restore button stays visible."""
+    _seed_native(hass_storage)
+    switch = make_switch_subentry("Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    select = make_select_subentry("Mode", SELECT_OPTIONS)
+    await _setup(hass, make_hub_entry([switch, select]))
+    mirror = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS, name="Foreign lamp")
+    await _presence(hass, "online")
+    await _deliver(hass, mirror.device_id, document_payload(mirror, native=True))
+
+    registry = er.async_get(hass)
+    test_buttons = [entry for entry in _native_platform_entries(hass, "button") if "_test_" in entry.unique_id]
+    assert len(test_buttons) == 2 + 3 + 2
+    for entry in test_buttons:
+        assert entry.entity_category is EntityCategory.DIAGNOSTIC, entry.unique_id
+        assert entry.disabled_by is RegistryEntryDisabler.INTEGRATION, entry.unique_id
+        assert hass.states.get(entry.entity_id) is None, entry.unique_id
+
+    restore_id = _restore_id(hass, _device_id(select))
+    assert restore_id is not None
+    restore = registry.async_get(restore_id)
+    assert restore is not None
+    assert restore.entity_category is None
+    assert restore.disabled_by is None
+    assert hass.states.get(restore_id) is not None
+
+
+@pytest.mark.parametrize(
+    ("category", "disabled_by"),
+    [(EntityCategory.CONFIG, None), (None, None), (EntityCategory.CONFIG, RegistryEntryDisabler.USER)],
+    ids=["config-enabled", "no-category-enabled", "user-disabled"],
+)
+async def test_an_existing_test_button_entry_is_left_as_it_is(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    category: EntityCategory | None,
+    disabled_by: RegistryEntryDisabler | None,
+) -> None:
+    """P-05, T-261003-06: category, enabled state and registry id of an existing entry are never rewritten."""
+    _seed_native(hass_storage)
+    subentry = make_switch_subentry("Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    device_id = _device_id(subentry)
+    entry = make_hub_entry([subentry])
+    entry.add_to_hass(hass)
+    (subentry_id,) = entry.subentries
+    registry = er.async_get(hass)
+    before = registry.async_get_or_create(
+        "button",
+        DOMAIN,
+        f"{device_id}_test_{SWITCH_ON_KEY}",
+        config_entry=entry,
+        config_subentry_id=subentry_id,
+        entity_category=category,
+        disabled_by=disabled_by,
+    )
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    after = registry.async_get(before.entity_id)
+    assert after is not None
+    assert after.id == before.id
+    assert after.entity_category is category
+    assert after.disabled_by is disabled_by
+    assert (hass.states.get(before.entity_id) is None) == (disabled_by is not None)
+    # The sibling button that did not exist yet is new and therefore diagnostic and disabled
+    sibling_id = _button_id(hass, device_id, SWITCH_OFF_KEY)
+    assert sibling_id is not None
+    sibling = registry.async_get(sibling_id)
+    assert sibling is not None
+    assert sibling.entity_category is EntityCategory.DIAGNOSTIC
+    assert sibling.disabled_by is RegistryEntryDisabler.INTEGRATION

@@ -1,0 +1,72 @@
+# Requirements: MQTT Actions Integration
+
+**Defined:** 2026-10-04
+**Core Value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
+
+## v1.0.1 Requirements
+
+Requirements for the Hardening milestone. Each maps to a roadmap phase. The v1.0 requirements are archived in `milestones/v1.0-REQUIREMENTS.md`; numbering of existing categories continues.
+
+### Native Entities
+
+- [ ] **MIG-04**: A native mirror stays native after a restart, even when its config document is close to `MAX_DOCUMENT_BYTES` (review finding IN-02)
+- [ ] **MIG-05**: The takeover creates no duplicate entity when core MQTT replays retained legacy Discovery during startup (review finding IN-03); a test delivers the replay between the registry move and the retained clear
+
+### Quality
+
+- [ ] **QLT-01**: Phases 1 to 4 have a current verification; `init.manager` no longer reports them as stale
+- [ ] **QLT-02**: The full test suite passes three consecutive runs; the known flake `test_delete_device_own_subscription_never_sees_state_clear` no longer occurs
+- [ ] **QLT-03**: The CI and release workflows run on a pinned runner version instead of `ubuntu-latest` and pass
+
+### Verification on Real Instances
+
+- [ ] **UAT-01**: A v0.1.0 instance next to a native instance keeps running its actions, shows no entities for migrated devices and raises no error
+- [ ] **UAT-02**: Re-published retained legacy Discovery plus two restarts yield no `_2` duplicates (proves MIG-05)
+- [ ] **UAT-03**: A command on one of two real instances runs the actions exactly once on every approved instance; an unknown payload is ignored and the state stays unchanged
+- [ ] **UAT-04**: The Discovery export has `enabled_by_default` false and no buttons, the core prefix yields only disabled duplicates, and switching it off clears the topics
+
+## Future Requirements
+
+Deferred, tracked but not in the current roadmap.
+
+### Mirrors
+
+- **MAP-01**: Per-instance entity mapping for actions with instance-local entity IDs
+- **MIR-01**: Followers add their own local actions to a mirrored device (backlog 999.1)
+
+### Security
+
+- **SEC-01**: The cutover gate no longer relies on unauthenticated heartbeats (review finding WR-03); solved with the EMQX migration and per-instance ACLs
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| New features or new device domains | This is a hardening milestone for v1.0 residuals |
+| Rollback of the native upgrade | The upgrade is one-way by design (ADR 0001), documented in the README |
+| Authenticating heartbeats (WR-03) | Needs broker-level authentication and ACLs, planned with the EMQX migration |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| MIG-04 | TBD | Pending |
+| MIG-05 | TBD | Pending |
+| QLT-01 | TBD | Pending |
+| QLT-02 | TBD | Pending |
+| QLT-03 | TBD | Pending |
+| UAT-01 | TBD | Pending |
+| UAT-02 | TBD | Pending |
+| UAT-03 | TBD | Pending |
+| UAT-04 | TBD | Pending |
+
+**Coverage:**
+- v1.0.1 requirements: 9 total
+- Mapped to phases: 0
+- Unmapped: 9 ⚠️
+
+---
+*Requirements defined: 2026-10-04*
+*Last updated: 2026-10-04 after initial definition*

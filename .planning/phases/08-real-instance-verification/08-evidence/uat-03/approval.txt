@@ -1,0 +1,4 @@
+approval via Repairs fix flow API on ha-b
+start: type=form step_id=confirm
+submit: type=create_entry reason=-
+PASS check-marker approved (a: switch.uat_marker on; b: switch.uat_marker on)

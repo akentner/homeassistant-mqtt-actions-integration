@@ -39,7 +39,7 @@ release and not this checkout (D-03).
 |-------|-----------------------|--------|------|-----------|----------|
 | UAT-01 | UAT-01, ROADMAP criterion 1, 05-UAT test 4 | pending | - | - | - |
 | UAT-02 | UAT-02, ROADMAP criterion 2, 05-UAT test 5 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-02 |
-| UAT-03 | UAT-03, ROADMAP criterion 3, 05-UAT test 6 | pending | - | - | - |
+| UAT-03 | UAT-03, ROADMAP criterion 3, 05-UAT test 6 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-03 |
 | UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | pending | - | - | - |
 | P1-1 | Phase 1 item 1 (07-PROOF) | pending | - | - | - |
 | P1-2 | Phase 1 item 2 (07-PROOF) | pending | - | - | - |
@@ -73,7 +73,11 @@ note: Two startup rounds with retained legacy Discovery published while ha-a and
 
 ### 3. UAT-03: command across two real instances
 expected: A command issued on one of two real instances runs the actions exactly once on every approved instance, and an unknown payload is ignored and leaves the state unchanged.
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-04
+evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-03
+note: Marker device "UAT Marker" (owner ha-a, inert system_log.write actions) counted per instance in one process lifetime, each step followed by a wait. A (unapproved control, command on ha-a): ha-a +1, ha-b 0. Approval of the mirror on ha-b through the Repairs fix flow API. B (command on ha-a): +1 on ha-a and +1 on ha-b after 60 s. C (command on the ha-b mirror): +1 on ha-a and +1 on ha-b after 60 s. D (`banana`, QoS 1, not retained, published by uat_bridge): marker deltas 0 on both, `Ignoring unknown payload` +1 on each instance, entity state on both unchanged (on), retained broker value read back unchanged (ON). A subscriber's capture shows retain=0 for every live message, so the not-retained proof is the unchanged retained read-back.
 
 ### 4. UAT-04: Discovery export and core prefix
 expected: The Discovery export has `enabled_by_default` false and no buttons, the core MQTT prefix yields only disabled duplicates, and switching the export off clears its topics.
@@ -122,9 +126,9 @@ result: pending
 ## Summary
 
 total: 14
-passed: 1
+passed: 2
 issues: 0
-pending: 13
+pending: 12
 skipped: 0
 blocked: 0
 

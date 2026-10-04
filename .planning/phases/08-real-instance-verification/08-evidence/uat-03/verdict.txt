@@ -1,0 +1,2 @@
+PASS
+steps A, B, C and D hold on both instances (see result.txt and counts.txt)

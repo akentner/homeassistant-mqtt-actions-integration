@@ -1,0 +1,16 @@
+step A
+  columns: a_on a_off a_unknown b_on b_off b_unknown
+  before: 0 0 0 0 0 0
+  after:  1 0 0 0 0 0
+step B
+  columns: a_on a_off a_unknown b_on b_off b_unknown
+  before: 1 0 0 0 0 0
+  after:  1 1 0 0 1 0
+step C
+  columns: a_on a_off a_unknown b_on b_off b_unknown
+  before: 1 1 0 0 1 0
+  after:  2 1 0 1 1 0
+step D
+  columns: a_on a_off a_unknown b_on b_off b_unknown
+  before: 2 1 0 1 1 0
+  after:  2 1 1 1 1 1

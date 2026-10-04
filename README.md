@@ -348,9 +348,6 @@ Every device gets a random UUID. Its state topic, which is also its command topi
   authenticated. A forged retained `offline` availability message for an older instance lifts its block, and an older
   instance that is cleanly offline when the cutover is checked is not waited for. Restrict who can publish to the
   instance topics with the per-instance ACL in [docs/broker-acl.md](docs/broker-acl.md).
-- A native mirror whose config document is close to the size limit can read as a legacy mirror again after a restart,
-  and a retained Discovery replay while Home Assistant starts can briefly create a duplicate entity that the next
-  start cleans up.
 - A re-trigger reaches only instances that are connected and approved. Acknowledgements are advisory and can be forged,
   and `executed` means started. Requests are delivered at least once; a repeated request id runs nothing.
 - Adoption and import put content under the administrator's responsibility: the devices are owned, so they run without

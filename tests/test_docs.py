@@ -388,6 +388,17 @@ def test_readme_limitations_are_current() -> None:
         assert phrase in limitations, f"the Limitations section never says: {phrase}"
 
 
+def test_readme_limitations_no_longer_list_the_native_residuals() -> None:
+    """Phase 6 fixed the near-limit native mirror and the boot-time replay duplicate; the README must not list them."""
+    limitations = _normalize(_section(README.read_text(encoding="utf-8"), "limitations")).replace("`", "")
+    for phrase in (
+        "close to the size limit",
+        "read as a legacy mirror again",
+        "discovery replay while home assistant starts",
+    ):
+        assert phrase not in limitations, f"the Limitations section still says: {phrase}"
+
+
 def test_readme_documents_native_entities_and_the_upgrade() -> None:
     """The upgrade section tells what the one-way migration does, what it cannot undo and who loses entities (D-05)."""
     text = README.read_text(encoding="utf-8")

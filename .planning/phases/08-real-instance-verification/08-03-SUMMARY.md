@@ -20,7 +20,7 @@ tech-stack:
     - "headless approval of a mirrored device through the Repairs fix flow API"
 key-files:
   created:
-    - .planning/phases/08-real-instance-verification/08-evidence/uat-03/ (10 files)
+    - .planning/phases/08-real-instance-verification/08-evidence/uat-03/ (11 files)
     - .planning/phases/08-real-instance-verification/08-evidence/p1-5/ (6 files)
   modified:
     - .planning/phases/08-real-instance-verification/08-UAT.md
@@ -60,6 +60,8 @@ UAT-03 and P1-5 both pass at the pinned build: a command on either instance runs
 
 **4. Not-retained proof.** A subscriber receives every live message with retain flag 0, so `topic-capture.txt` showing `retain=0` for `banana` is weak on its own. The real proof is the retained read-back: `1 ON` before and after D (`states-before.json`, `states-after.json`).
 
+**4b. Orphaned capture process.** The background `mosquitto_sub` of `check-uat03.sh` survived the script (the kill hit the wrapper function, not the child) and kept appending to `topic-capture.txt` during P1-5. I killed the orphan, removed its temporary options file and restored the committed capture, so `topic-capture.txt` shows only the UAT-03 run. Bench-script defect to fix in `lib.sh`/`check-uat03.sh` if the script is reused or published in plan 08-10.
+
 **5. Plan-commit ledger.** The sandbox refuses writes to the shared git directory from this worktree, so the `gsd-plan-head-before-08-03` ledger file could not be written; `commits:` was measured as `git rev-list --count f116455..HEAD` = 3 (the base given by the orchestrator, verified by `git merge-base` at start). The SUMMARY commit follows as a fourth.
 
 ## Findings
@@ -84,5 +86,5 @@ None beyond the plan's register. T-08-08: the marker actions are inert (`system_
 
 ## Self-Check: PASSED
 
-- Evidence folders `uat-03` (10 files) and `p1-5` (6 files) and this SUMMARY exist and are committed; commits 9100348, a716e15, 35b5f8e exist on the branch.
+- Evidence folders `uat-03` (11 files) and `p1-5` (6 files) and this SUMMARY exist and are committed; commits 9100348, a716e15, 35b5f8e exist on the branch.
 - `check-recorded.sh UAT-03`, `check-recorded.sh P1-5`, `check-marker.sh approved`, `check-evidence-clean.sh` and `check-preflight.sh --quick` print PASS.

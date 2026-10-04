@@ -16,7 +16,7 @@ permissions: {}
 jobs:
   hassfest:
     name: hassfest
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -27,7 +27,7 @@ jobs:
 
   hacs:
     name: HACS
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
         with:

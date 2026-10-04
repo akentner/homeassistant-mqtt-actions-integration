@@ -8,6 +8,16 @@ A Home Assistant custom integration (HACS-ready) that turns MQTT state changes i
 
 A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
 
+## Current Milestone: v1.0.1 Hardening
+
+**Goal:** Close the known residuals of v1.0: two small native-entity fixes, clean verification, stable tests and CI, and the Phase 5 UAT debt on real instances.
+
+**Target features:**
+- A native mirror stays native after a restart, even near the document size limit (IN-02)
+- The takeover survives a boot-time retained Discovery replay without a duplicate (IN-03)
+- Phases 1 to 4 re-verified, flaky test stabilized, CI and release on a pinned runner version
+- Manual verification on real instances: straggler v0.1.0, late replay race, commands across two instances, Discovery export on/off
+
 ## Requirements
 
 ### Validated
@@ -27,9 +37,12 @@ A state change on one MQTT-backed device reliably triggers the configured action
 
 ### Active
 
-- [ ] Per-instance local actions on mirrored devices (followers add their own actions, backlog 999.1, relates to MAP-01)
-- [ ] Close the UAT debt of Phase 5: straggler v0.1.0 instance, late replay race, commands across two real instances, Discovery export on/off
-- [ ] Decide on the accepted review residuals WR-03, IN-02, IN-03 (README Limitations)
+- [ ] A native mirror stays native after a restart, even near `MAX_DOCUMENT_BYTES` (IN-02) — v1.0.1
+- [ ] The takeover survives a boot-time retained Discovery replay without a duplicate entity (IN-03) — v1.0.1
+- [ ] Phases 1 to 4 re-verified, flaky test stabilized, CI and release on a pinned runner version — v1.0.1
+- [ ] Phase 5 UAT debt closed on real instances (tests 4 to 7) — v1.0.1
+- [ ] Per-instance local actions on mirrored devices (backlog 999.1, relates to MAP-01) — later milestone
+- [ ] Authenticate or ACL-protect the cutover gate (WR-03) — with the EMQX migration
 
 ### Out of Scope
 
@@ -83,4 +96,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-03 after v1.0 milestone*
+*Last updated: 2026-10-04 after starting milestone v1.0.1*

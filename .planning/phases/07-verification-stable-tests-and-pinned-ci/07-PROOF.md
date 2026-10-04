@@ -111,3 +111,27 @@ All four runs report `headSha` `d92b87f3ebf427c6f63d3ccf0d95dd14c93af961`. The t
   `37206309249` as the newest release run; no run started from the deletion (assumption A2 confirmed)
 - **Push-event runs (informational):** none for the branch pushes `d92b87f..4d24fb4` and `4d24fb4..8a93a2f`;
   `gh run list --branch gsd/phase-06-native-entity-residual-fixes` still lists only the four dispatch runs of plan 07-03
+
+## QLT-01 re-verification (plan 07-05)
+
+### Freeze (Task 1)
+
+- **Frozen sha the verifiers judge:** `81db888c5e49389ea7dc27626100f6e090535e61` (branch `gsd/phase-07-verification-stable-tests-and-pinned-ci`,
+  `git status --porcelain` empty before this section was written; this ledger section is the only change after the freeze and
+  touches no covered file)
+- Preconditions: manifest version `1.0.0`; no local or remote tag `v1.0.1-rc1`; ledger holds `release run conclusion: success`
+
+### Before state (`verification status ARCHIVED_DIR --pick status`)
+
+| Phase | Archived directory | Status before | PLAN + SUMMARY files |
+|-------|--------------------|---------------|----------------------|
+| 1 | `.planning/milestones/v1.0-phases/01-walking-skeleton-installable-switch` | stale | 12 |
+| 2 | `.planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution` | stale | 10 |
+| 3 | `.planning/milestones/v1.0-phases/03-trust-central-config-and-ownership` | stale | 16 |
+| 4 | `.planning/milestones/v1.0-phases/04-operations-recovery-and-release` | stale | 28 |
+| 5 (surfaced, out of scope) | `.planning/milestones/v1.0-phases/05-evaluate-native-switch-select-entities-instead-of-mqtt-disco` | stale | 18 |
+
+- `init.manager` lists only phases 6, 7, 8 and 999.1 (milestone v1.0.1); it never listed Phases 1 to 5, so it was vacuously
+  clean (`verification_stale_check_indeterminate: false` for all four) and cannot be the gate.
+- Phase 5 reads stale for the same cause (stored `covered_files` name pre-archive paths). QLT-01 names Phases 1 to 4 only, so it is
+  not re-verified in this plan; surfaced for the owner.

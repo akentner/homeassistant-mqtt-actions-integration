@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v1.0.1
 milestone_name: Hardening
-current_phase: 07
-current_phase_name: Verification, Stable Tests and Pinned CI
+current_phase: 08
+current_phase_name: real-instance-verification
 status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-10-04T14:02:22.530Z"
+last_updated: "2026-10-04T15:21:42.205Z"
 last_activity: 2026-10-04
 last_activity_desc: Phase 07 execution started
-state_head: 99e71c4c9343b1b408f35022748d70ec8bab949a
+state_head: "0b359c571a1063eadd1ba24681a3c4bab5f1af84"
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 7
+  total_plans: 17
   completed_plans: 7
   percent: 33
 ---
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-10-04)
 
 ## Current Position
 
-Phase: 07 (Verification, Stable Tests and Pinned CI) — EXECUTING
+Phase: 08 (real-instance-verification) — READY TO EXECUTE
 Plan: 1 of 5
-Status: Executing Phase 07
+Status: Ready to execute
 Last activity: 2026-10-04 — Phase 07 execution started
 
 Progress: [███░░░░░░░] 33%

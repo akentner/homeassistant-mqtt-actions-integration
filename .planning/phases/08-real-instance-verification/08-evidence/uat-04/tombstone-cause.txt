@@ -1,0 +1,21 @@
+Cause analysis of the X7/X8 failures (observation after the run; the expectations were coded before the run).
+
+Core (HA 2026.9.4, homeassistant/helpers/entity_registry.py lines 1498-1508, read in the ha-a container):
+        deleted_entity = self.deleted_entities.pop((domain, platform, unique_id), None)
+        options: Mapping[str, Mapping[str, Any]] | None
+        if deleted_entity is not None:
+            aliases = deleted_entity.aliases
+            area_id = deleted_entity.area_id
+            categories = deleted_entity.categories
+            compat_aliases = deleted_entity.compat_aliases
+            created_at = deleted_entity.created_at
+            device_class = deleted_entity.device_class
+            if deleted_entity.disabled_by is not UNDEFINED:
+                disabled_by = deleted_entity.disabled_by
+
+Tombstones (deleted_entities, platform mqtt, switch or select unique id = device id) on ha-a after the run:
+switch.lampe_test_2	11111111-aaaa-4aaa-8aaa-000000000001	disabled_by=null
+select.bar_select_2	b6bd2c0e-6d81-49ea-8025-4bd087bd718a	disabled_by=null
+
+Live mqtt rows on ha-a after the run (the control device UAT Marker was never part of UAT-02, so it had no tombstone):
+switch.uat_marker_2	81d53f84-469e-4937-a3bb-09b24f11e4e4	disabled_by=integration

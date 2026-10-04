@@ -170,6 +170,10 @@ next start after a core-prefix export, the release HACS reports).
 - Reload path (plan 08-03): research assumption A5 named `POST /api/config_entries/entry/{id}/reload`, which answers 404 on HA 2026.9.4; the working path is `POST /api/config/config_entries/entry/{id}/reload`. The first P1-5 run aborted at that point (bench problem, no result) after one restart; the check was re-run completely and the recorded evidence is that second run.
 - Repairs API (plan 08-03): the approval of a mirrored device works headless through `POST /api/repairs/issues/fix` (handler `mqtt_actions`, issue id `approval_{uuid}`) followed by `POST /api/repairs/issues/fix/{flow_id}` with `{}` (ends in `create_entry`). Plans needing an approval can reuse it.
 
+- Restart cleanup of the core-prefix duplicates (plan 08-04, research assumption A4, Pitfall 4): after the export was switched off, the live registries of ha-a and ha-b still held one disabled leftover `mqtt` row each (`switch.uat_marker_2`, `disabled_by` integration; the two enabled duplicates of Lampe Test and Bar Select were already gone with the clear). After one `podman restart ha-a ha-b` (90 s margin, graceful stop, file read) both registries held zero `mqtt` rows and zero `_2` entity ids, and 34 `mqtt_actions` rows each (evidence: `08-evidence/uat-04/registry-after-off-{a,b}.json`, `post-restart-{a,b}.json`). A4 is confirmed: the start removes the leftovers. This is an observation, not a failure.
+- Enabled export duplicates (plan 08-04, UAT-04 clause 2): on the core prefix the duplicates of Lampe Test and Bar Select were enabled, the one of the UAT Marker disabled; see the Gaps entry for test 4 and `08-evidence/uat-04/tombstone-cause.txt`. The clear step removed the enabled duplicates from the registry (they became tombstones) and left the disabled one until the next start.
+- Options flow path (plan 08-04): the hub options flow works headless through `POST /api/config/config_entries/options/flow` (body `{"handler": "<entry id>"}`) and `POST /api/config/config_entries/options/flow/{flow_id}`; like the reload endpoint the prefix is `/api/config/`, not `/api/` as the plan text assumed. The export option applies without a reload. The stored prefix was reset to the default at the end (export off), so the hub options of ha-a now read `discovery_export` false, `export_prefix` `mqtt_actions_export`.
+
 ## Owner decisions
 
 | Decision id | Option | Date |
@@ -188,4 +192,7 @@ broker and hosts are untouched.
 - Backup of the instances and the broker configuration taken before the first restart (path in `08-evidence/00-preflight/backup-manifest.txt`).
 - Long-lived tokens `~/ha-test/.token-a` and `~/ha-test/.token-b` (mode 0600, owner decision API-ACCESS). The owner revokes them in the
   two profile security pages after the phase.
+- ACL rows `topic readwrite mqtt_actions_export/#` in the `ha_one` and `ha_two` blocks of `~/ha-test/mosquitto/acl` (plan 08-04; copy
+  before the edit: `~/ha-test/mosquitto/acl.bak-phase8-04`; diff: `08-evidence/uat-04/acl-diff.txt`).
+- The "UAT Marker" device (plan 08-03) on ha-a and its approved mirror on ha-b, retained on the broker; to be removed at phase end.
 - Helper scripts in `~/ha-test/bin/` (outside the repository; a scrubbed copy is added to the evidence by plan 08-10).

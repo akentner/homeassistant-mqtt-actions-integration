@@ -1,0 +1,26 @@
+Wave gate after the scripted group (UAT-02, UAT-03, P1-5, UAT-04), 2026-10-04T21:00:29Z
+
+== check-preflight.sh --quick
+PASS preflight (quick) /home/akentner/Projects/homeassistant-mqtt-actions-integration/.claude/worktrees/agent-a994c58b019bb1501/.planning/phases/08-real-instance-verification/08-evidence/00-preflight
+exit: 0
+
+== ACL read-back
+export rows in the acl file (expect 2, one in the ha_one block and one in the ha_two block):
+  ha_one: topic readwrite mqtt_actions_export/#
+  ha_two: topic readwrite mqtt_actions_export/#
+export rows in the file as the broker container sees it: 2
+retained availability of ha-a (second client uat_probe): mqtt_actions/v1/instances/3851f34f-fa67-4f3c-bba0-122465013c3d/availability retain=1 payload=online
+retained availability of ha-b (second client uat_probe): mqtt_actions/v1/instances/a09499e4-5674-48d5-b3d6-4860d5226fcb/availability retain=1 payload=online
+retained under mqtt_actions_export/# : 0 message(s)
+retained under homeassistant/device/#: 0 message(s)
+
+== check-uat02.sh clean (bench equals the baseline; the marker fixture rows are excluded by design)
+PASS UAT-02 clean /home/akentner/Projects/homeassistant-mqtt-actions-integration/.claude/worktrees/agent-a994c58b019bb1501/.planning/phases/08-real-instance-verification/08-evidence/uat-02
+exit: 0
+
+== check-stale-anchor.sh
+recorded build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+empty mount-source (0cd08e124bd18a44cbae6b87a76e1fa9aee62851): git diff --stat b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 0cd08e124bd18a44cbae6b87a76e1fa9aee62851 -- custom_components tests .github
+empty this-checkout (ece75f7020e3f39d88a251bf504eeecd53d58a92): git diff --stat b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 ece75f7020e3f39d88a251bf504eeecd53d58a92 -- custom_components tests .github
+PASS stale anchor: custom_components, tests and .github unchanged since the recorded build sha
+exit: 0

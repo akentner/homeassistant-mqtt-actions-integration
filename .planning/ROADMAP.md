@@ -3,6 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-10-03)
+- 🚧 **v1.0.1 Hardening** — Phases 6-8 (in progress)
 
 ## Phases
 
@@ -18,6 +19,63 @@
 Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
 </details>
+
+### 🚧 v1.0.1 Hardening (In Progress)
+
+**Milestone Goal:** Close the known residuals of v1.0: two small native-entity fixes, clean verification, stable tests and CI on a pinned runner, and the Phase 5 UAT debt on real instances. No new features. Phase numbering continues from v1.0.
+
+**Ordering rationale:** The two code fixes change the code that Phases 1 to 4 and the test suite verify, so Phase 6 comes first and Phase 7 re-verifies and stabilizes the final code. The real-instance checks in Phase 8 need the fixed build (UAT-02 proves MIG-05 on real instances) and cannot be automated, so they close the milestone. TDD mode is on: each fix starts with a failing test commit.
+
+- [ ] **Phase 6: Native Entity Residual Fixes** - A native mirror survives a restart near the size limit, and a boot-time retained Discovery replay creates no duplicate during the takeover
+- [ ] **Phase 7: Verification, Stable Tests and Pinned CI** - Phases 1 to 4 re-verified, the flaky test fixed, and CI and release on a pinned runner
+- [ ] **Phase 8: Real-Instance Verification** - The four skipped Phase 5 UAT checks run and recorded on real instances
+
+## Phase Details
+
+### Phase 6: Native Entity Residual Fixes
+**Goal**: A native mirror stays native after a restart even when its config document is near the size limit, and a retained legacy Discovery replay during startup never leaves a duplicate entity behind the takeover. Both are the accepted v1.0 review residuals IN-02 and IN-03.
+**Depends on**: Phase 5 (shipped in v1.0)
+**Requirements**: MIG-04, MIG-05
+**Success Criteria** (what must be TRUE):
+  1. A native mirror whose config document is at `MAX_DOCUMENT_BYTES` (where the native marker no longer fits) is still native after a restart: it is not rebuilt as a legacy mirror, starts no test-topic subscription and triggers no extra reload when the next document arrives.
+  2. When core MQTT replays retained legacy Discovery between the takeover's registry move and the retained clear, no `_2` duplicate entity appears and the migrated entities keep their registry ids and entity ids; a test delivers the replay at exactly that point.
+  3. Both regression tests fail on the v1.0.0 code and pass with the fixes, and the existing takeover, native-entity and cutover test suites stay green.
+  4. The README Limitations section no longer lists the size-limit and boot-time replay residuals.
+**Plans**: TBD
+
+### Phase 7: Verification, Stable Tests and Pinned CI
+**Goal**: The v1.0.1 build is verifiably sound: Phases 1 to 4 have a current verification of the final code, the test suite is deterministic, and CI and release no longer drift with the floating `ubuntu-latest` image.
+**Depends on**: Phase 6 (verification and the three-run proof must run against the final code)
+**Requirements**: QLT-01, QLT-02, QLT-03
+**Success Criteria** (what must be TRUE):
+  1. Phases 1 to 4 each have a current verification, and `init.manager` no longer reports any of them as stale.
+  2. The full test suite (unit, real-Mosquitto and multi-instance tiers) passes three consecutive runs, and `test_delete_device_own_subscription_never_sees_state_clear` no longer flakes because its cause is fixed, not because it is retried or skipped.
+  3. No job in `ci.yml`, `validate.yml` or `release.yml` runs on `ubuntu-latest`; every job names one pinned runner version, and the CI and Validate workflows are green on it.
+  4. The release workflow runs on the same pinned runner and passes end to end (check-version, CI, validate and release jobs), shown by a prerelease tag run.
+**Plans**: TBD
+
+### Phase 8: Real-Instance Verification
+**Goal**: The Phase 5 UAT debt is closed: the four checks the owner skipped in v1.0 are run by hand on real instances against the v1.0.1 build, and each result is recorded with its evidence. This is a manual verification phase (ha-one and ha-two, or the production instances); no code changes are planned, and a failed check becomes a gap, not an accepted skip.
+**Depends on**: Phase 7 (the checks run against the fixed, verified build; transitively Phase 6 for UAT-02)
+**Requirements**: UAT-01, UAT-02, UAT-03, UAT-04
+**Success Criteria** (what must be TRUE):
+  1. With a v0.1.0 instance running next to a native instance, the v0.1.0 instance keeps running its actions for the migrated devices, shows no entities for them and raises no error.
+  2. After re-publishing retained legacy Discovery and restarting twice, no `_2` duplicate entities exist on the instance, which proves MIG-05 outside the test harness.
+  3. A command issued on one of two real instances runs the actions exactly once on every approved instance, and an unknown payload is ignored and leaves the state unchanged.
+  4. The Discovery export has `enabled_by_default` false and no buttons, the core MQTT prefix yields only disabled duplicates, and switching the export off clears its topics.
+  5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 6 → 7 → 8
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 6. Native Entity Residual Fixes | 0/TBD | Not started | - |
+| 7. Verification, Stable Tests and Pinned CI | 0/TBD | Not started | - |
+| 8. Real-Instance Verification | 0/TBD | Not started | - |
 
 ## Backlog
 

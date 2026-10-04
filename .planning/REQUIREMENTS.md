@@ -52,21 +52,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MIG-04 | TBD | Pending |
-| MIG-05 | TBD | Pending |
-| QLT-01 | TBD | Pending |
-| QLT-02 | TBD | Pending |
-| QLT-03 | TBD | Pending |
-| UAT-01 | TBD | Pending |
-| UAT-02 | TBD | Pending |
-| UAT-03 | TBD | Pending |
-| UAT-04 | TBD | Pending |
+| MIG-04 | Phase 6 | Pending |
+| MIG-05 | Phase 6 | Pending |
+| QLT-01 | Phase 7 | Pending |
+| QLT-02 | Phase 7 | Pending |
+| QLT-03 | Phase 7 | Pending |
+| UAT-01 | Phase 8 | Pending |
+| UAT-02 | Phase 8 | Pending |
+| UAT-03 | Phase 8 | Pending |
+| UAT-04 | Phase 8 | Pending |
 
 **Coverage:**
 - v1.0.1 requirements: 9 total
-- Mapped to phases: 0
-- Unmapped: 9 ⚠️
+- Mapped to phases: 9
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-04*
-*Last updated: 2026-10-04 after initial definition*
+*Last updated: 2026-10-04 after roadmap creation (Phases 6-8)*

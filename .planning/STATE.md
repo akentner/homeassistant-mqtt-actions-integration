@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.0.1
 milestone_name: Hardening
 status: planning
-last_updated: "2026-10-04T07:57:09.152Z"
+last_updated: "2026-10-04T08:30:00.000Z"
 last_activity: 2026-10-04
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-03)
+See: .planning/PROJECT.md (updated 2026-10-04)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Planning next milestone (v1.0 shipped; backlog 999.1 and Phase 5 UAT debt open)
+**Current focus:** Phase 6 - Native Entity Residual Fixes (milestone v1.0.1 Hardening, Phases 6-8)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-10-04 — Milestone v1.0.1 started
+Phase: 6 of 8 (Native Entity Residual Fixes)
+Plan: — of — in current phase
+Status: Ready to plan
+Last activity: 2026-10-04 — Roadmap created for milestone v1.0.1 (3 phases, 9 requirements mapped)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -187,6 +189,7 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-08: heals_discovery gates healing to owned legacy devices; a deferred device is legacy again (in _legacy_this_run), only the pass window is excluded
 - [Phase 05]: 05-08: the discovery export is a best-effort second publish path (disabled by default, own prefix, no subscription, no healing); option changes apply from async_reconcile without reload
 - [Phase 5]: 05-09: ACL block unchanged; the export prefix has its own row and the discovery prefix is a legacy-path and export concern
+- [Roadmap v1.0.1]: Three phases continue the numbering at 6 (coarse granularity): 6 code fixes (MIG-04, MIG-05), 7 verification, stable tests and pinned CI (QLT-01 to QLT-03), 8 manual real-instance UAT (UAT-01 to UAT-04); Phase 7 follows the fixes so re-verification and the three-run proof cover the final code, Phase 8 follows both and is a manual verification phase, not code plans
 
 ### Pending Todos
 
@@ -199,6 +202,8 @@ None yet.
 - [Phase 2]: Spike needed: generated Select `value_template`/`command_template` with escaping, tested against a real HA MQTT discovery run
 - [Phase 3]: Needs deeper research before planning (`/gsd-plan-phase --research-phase 3`): prune strategy (grace window vs owner manifest), `FakeBroker` design, Repairs approval flow, discovered-entity registry cleanup, subentry deletion hooks, subentries as device store fit
 - [Phase 3]: Open decision: owner availability (heartbeat + graceful-shutdown publish vs. no tie to owner liveness); AVL-01 is deferred to v2
+- [Phase 7]: QLT-03 says the release workflow must pass on the pinned runner; it is tag-triggered, so proving it needs a prerelease tag push on the public repo (decide the method at plan time)
+- [Phase 8]: UAT-01 to UAT-04 need real instances (ha-one, ha-two or production) and a v0.1.0 instance for UAT-01; the owner must provide the mixed fleet, it cannot be automated
 
 ### Quick Tasks Completed
 
@@ -217,10 +222,10 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T12:53:13.727Z
-Stopped at: Phase 5 complete — all phases complete
+Last session: 2026-10-04T08:30:00.000Z
+Stopped at: Roadmap for milestone v1.0.1 written (Phases 6-8), awaiting approval
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan the first phase with /gsd-plan-phase 6 (or /gsd-discuss-phase 6 first)

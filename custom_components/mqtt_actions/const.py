@@ -136,7 +136,8 @@ STORE_DEVICE_MODES: Final = "device_modes"
 STORE_TRANSFERS: Final = "transfers"
 # The native entity switch of Phase 5 (D-03): a dict with `instance` (bool, the owned devices of this instance are
 # native), `pending` (owned device ids whose takeover is still to run) and `devices` (owned device ids that are native
-# although the instance flag is not set); local to this instance, never part of a document
+# although the instance flag is not set); local to this instance, never part of a document. `mirrors` lists the ids of
+# the mirrors that are native (Phase 6, D-01) and is written only when it is not empty
 STORE_NATIVE: Final = "native"
 # device id -> the last shown and the previous StateValue of a native Select (`last`, `previous`); local to this
 # instance, written only while a device has a history, never part of a document or a hash

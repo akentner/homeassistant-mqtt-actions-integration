@@ -95,7 +95,6 @@ from .document import (
     parse_document,
     serialize_document,
     spec_has_actions,
-    with_native_marker,
 )
 from .entities import device_info_for
 from .model import DeviceSpec, TriggerSpec, shown, spec_from_subentry, trigger_key
@@ -309,11 +308,17 @@ def _parse_mirrors(stored: dict[str, Any]) -> dict[str, ParsedDocument]:
 
 @dataclass(slots=True)
 class NativeState:
-    """The persisted native switch of this instance (D-03): the instance flag and two sets of owned device ids."""
+    """
+    The persisted native switch of this instance (D-03): the instance flag and two sets of owned device ids.
+
+    It also holds the ids of the mirrors that are native (D-01): the flag of a mirror lives here and never in the stored
+    payload, so no size of a document can drop it.
+    """
 
     instance: bool = False
     pending: set[str] = field(default_factory=set)
     devices: set[str] = field(default_factory=set)
+    mirrors: set[str] = field(default_factory=set)
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,6 +337,7 @@ def _parse_native(stored: dict[str, Any]) -> NativeState:
     instance = native.get("instance")
     pending = native.get("pending")
     devices = native.get("devices")
+    mirrors = native.get("mirrors")
     return NativeState(
         instance=instance if isinstance(instance, bool) else False,
         pending={item for item in pending if isinstance(item, str) and is_valid_device_id(item)}
@@ -339,6 +345,12 @@ def _parse_native(stored: dict[str, Any]) -> NativeState:
         else set(),
         devices={item for item in devices if isinstance(item, str) and is_valid_device_id(item)}
         if isinstance(devices, list)
+        else set(),
+        # The Store is untrusted: valid ids only, and never more than a follower mirrors, cut in a stable order
+        mirrors=set(
+            sorted({item for item in mirrors if isinstance(item, str) and is_valid_device_id(item)})[:MAX_MIRRORS]
+        )
+        if isinstance(mirrors, list)
         else set(),
     )
 
@@ -1225,6 +1237,9 @@ class Manager:
                 "pending": sorted(self._native.pending),
                 "devices": sorted(self._native.devices),
             }
+            # Same pattern: the list of native mirrors is only written once a mirror is native
+            if self._native.mirrors:
+                data[STORE_NATIVE]["mirrors"] = sorted(self._native.mirrors)
         # Same pattern: a Store without any history keeps its exact key set
         if self._previous:
             data[STORE_PREVIOUS_STATES] = {
@@ -1288,6 +1303,7 @@ class Manager:
                 # a fresh breaker would release a tripped device and a rebuilt Script would drop its running queue.
                 was_native = existing.mirror.native
                 existing.mirror = self._mirror_info(parsed, keep_native=was_native)
+                self._remember_native_mirror(existing)
                 self._follow_native_status(existing, was_native=was_native)
                 self._sync_approval_issues(existing)
                 self._schedule_save()
@@ -1798,18 +1814,18 @@ class Manager:
         """
         Return what a follower records of a document: its owner, both hashes, the payload and the static analysis.
 
-        `keep_native` is set when the mirror this replaces was native: a document without the marker never reverts it
-        (T-5-11), and the stored payload then carries the marker so the status also survives a restart.
+        `keep_native` is set when the mirror this replaces was native, or the Store lists it as native: a document
+        without the marker never reverts it (T-5-11). The flag is persisted in the Store set of native mirrors, so the
+        payload is kept exactly as received and no document size can drop the flag (D-01).
         """
         analysis: ActionAnalysis = analyze_spec(parsed.spec)
-        carried = keep_native and not parsed.native
         return MirrorInfo(
             owner=parsed.owner,
             owner_name=parsed.owner_name,
             rev=parsed.rev,
             content_hash=parsed.content_hash,
             actions_hash=parsed.actions_hash,
-            payload=with_native_marker(parsed.payload) if carried else parsed.payload,
+            payload=parsed.payload,
             denied=analysis.denied,
             templated=analysis.templated,
             residual=analysis.residual,
@@ -1833,7 +1849,7 @@ class Manager:
             # The canonical content stands in for the subentry fingerprint, so the persisted breaker hash still works
             signature=canonical_json(parsed.content),
             breaker=self._new_breaker(spec),
-            mirror=self._mirror_info(parsed),
+            mirror=self._mirror_info(parsed, keep_native=parsed.device_id in self._native.mirrors),
         )
         self._restore_tripped(device)
         return device
@@ -1850,6 +1866,7 @@ class Manager:
         mirror = self._mirror_info(parsed, keep_native=device.mirror is not None and device.mirror.native)
         device.spec = spec
         device.mirror = mirror
+        self._remember_native_mirror(device)
         device.signature = canonical_json(parsed.content)
         device.tracker.run_on_startup = spec.run_on_startup
         device.tracker.accepted = spec.accepted
@@ -1859,6 +1876,12 @@ class Manager:
         self._delete_breaker_issue(device.device_id)
         self._tripped.pop(device.device_id, None)
         self._schedule_save()
+
+    @callback
+    def _remember_native_mirror(self, device: Device) -> None:
+        """Record a native mirror in the persisted set, so a restart rebuilds it as native whatever its payload says."""
+        if device.mirror is not None and device.mirror.native:
+            self._native.mirrors.add(device.device_id)
 
     @callback
     def _follow_native_status(self, device: Device, *, was_native: bool) -> None:
@@ -1917,6 +1940,8 @@ class Manager:
                 device.unsubscribe()
             await self.runner.async_unload(device_id)
             raise
+        # Only a mirror that is registered for good is listed, so a failed subscribe leaves no id behind
+        self._remember_native_mirror(device)
 
     def _device(self, device_id: str) -> Device | None:
         """Return the owned device or the mirror with this id; the two sets never share an id."""

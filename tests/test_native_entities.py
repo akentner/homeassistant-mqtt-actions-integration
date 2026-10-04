@@ -28,7 +28,6 @@ from custom_components.mqtt_actions.const import (
     SUBENTRY_SELECT,
 )
 from custom_components.mqtt_actions.discovery import build_discovery
-from custom_components.mqtt_actions.document import parse_document
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY, trigger_key
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 from tests.documents import FOREIGN_OWNER, FOREIGN_OWNER_NAME, document_payload, make_spec
@@ -775,10 +774,10 @@ async def test_an_unmarked_document_never_reverts_a_native_mirror(
     assert manager.mirrors[spec.device_id].spec.name == "Floor lamp"
     assert _switch_state(hass, spec.device_id) == "unknown"
     assert _companion(hass, entry, spec.device_id).model == f"Switch device (mirror of {FOREIGN_OWNER_NAME})"
-    # It stays native after a restart too: what is persisted for the mirror still carries the marker
+    # It stays native after a restart too: the Store lists the mirror (D-01), the payload is kept as received
+    assert manager._data_to_save()["native"]["mirrors"] == [spec.device_id]
     stored = manager._data_to_save()[STORE_MIRRORS][spec.device_id]
-    assert parse_document(spec.device_id, stored).native is True
-    assert parse_document(spec.device_id, stored).spec.name == "Floor lamp"
+    assert stored == document_payload(changed, rev=2)
 
 
 async def test_a_marker_appearing_on_an_unchanged_document_makes_a_legacy_mirror_native(

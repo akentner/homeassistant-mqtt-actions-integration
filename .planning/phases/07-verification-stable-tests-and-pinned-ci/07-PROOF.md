@@ -62,3 +62,52 @@ All four runs report `headSha` `d92b87f3ebf427c6f63d3ccf0d95dd14c93af961`. The t
 - **Push-event runs (informational, not counted):** none. `gh run list --branch gsd/phase-06-native-entity-residual-fixes
   --event push` returned an empty list at the dispatch time and again after the last run; GitHub did not start push-event
   runs for the branch creation.
+
+## Release proof (plan 07-04)
+
+- **Approval (D-13):** owner answered `approve` at the blocking-human checkpoint (Task 1) in the session of 2026-10-04,
+  before any bump, tag or push; the executor was dispatched with that answer.
+- **PRE (commit before the bump):** `3a37790d6774f4f0826da07f44e515f82a558735`
+- **Bump commit:** `4d24fb429514c627fab2f3298ca66f9dfabaaecf` (`chore(07-04): manifest 1.0.1-rc1 for the release proof`)
+- **Local pre-push check:** `tests/test_repo_structure.py tests/test_discovery.py tests/test_presence.py tests/test_docs.py`:
+  147 passed with the manifest at 1.0.1-rc1
+- **Tag:** `v1.0.1-rc1` on `4d24fb4`, pushed 2026-10-04T13:37:59Z together with
+  `HEAD:refs/heads/gsd/phase-06-native-entity-residual-fixes` (fast-forward `d92b87f..4d24fb4`)
+- **Run URL:** https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/37206309249
+  (event push, head branch `v1.0.1-rc1`, headSha `4d24fb429514c627fab2f3298ca66f9dfabaaecf` = the tag commit)
+- release run conclusion: success
+
+| Job | Conclusion |
+|-----|------------|
+| Tag matches manifest version | success |
+| CI / Ruff | success |
+| CI / Unit tests | success |
+| CI / Broker tests (Mosquitto) | success |
+| CI / Multi-instance tests | success |
+| Validate / hassfest | success |
+| Validate / HACS | success |
+| Create GitHub release | success |
+
+- **Job count:** `gh run view ... --json jobs` returned 8 jobs.
+- **Runner image (from `gh run view --log`):** `Image: ubuntu-24.04` appears 8 times and is the only distinct image value
+  (one per job); `Version: 20260927.320.1` (runner image version) appears 8 times
+- **Prerelease flag:** `gh release view v1.0.1-rc1 --json isPrerelease` returned `isPrerelease: true`
+- **A1 (Latest marker):** while the prerelease existed `gh release list` showed `v1.0.1-rc1 Pre-release`, `v1.0.0 Latest`,
+  `v0.1.0`; v1.0.0 kept the Latest marker (assumption A1 confirmed)
+
+### Cleanup (Task 3, ran after the green run)
+
+- `gh release delete v1.0.1-rc1 --cleanup-tag --yes` removed the release and the remote tag; the follow-up
+  `git tag -d v1.0.1-rc1` reported the local tag as already absent (the `gh` call or the earlier state had removed it)
+- Manifest reset: `git restore --source=3a37790... --staged --worktree -- custom_components/mqtt_actions/manifest.json`;
+  `git diff --exit-code 3a37790... -- custom_components/mqtt_actions/manifest.json` exited 0 (byte-identical);
+  `jq -r .version` printed `1.0.0`
+- Reset commit: `8a93a2f5d6252471038a993a67c0d9b3b534232b` (`chore(07-04): reset the manifest version after the release proof`),
+  pushed `4d24fb4..8a93a2f` to `gsd/phase-06-native-entity-residual-fixes`
+- `git ls-remote --tags origin v1.0.1-rc1`: empty; `git tag -l v1.0.1-rc1`: empty
+- `gh release list --limit 5`: `v1.0.0 Latest`, `v0.1.0` only
+- Remote branch manifest (`git show origin/gsd/phase-06-native-entity-residual-fixes:custom_components/mqtt_actions/manifest.json`): version `1.0.0`
+- **A2 (tag deletion starts no workflow):** `gh run list --workflow release.yml --limit 3` after the cleanup showed the rc run
+  `37206309249` as the newest release run; no run started from the deletion (assumption A2 confirmed)
+- **Push-event runs (informational):** none for the branch pushes `d92b87f..4d24fb4` and `4d24fb4..8a93a2f`;
+  `gh run list --branch gsd/phase-06-native-entity-residual-fixes` still lists only the four dispatch runs of plan 07-03

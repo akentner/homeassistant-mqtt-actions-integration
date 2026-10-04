@@ -840,3 +840,53 @@ async def test_native_mirror_set_takes_over_a_marker_only_store_of_the_previous_
     await _restart(hass, entry)
     assert _manager(entry).is_native(spec.device_id)
     assert _native_mirror_ids(_manager(entry)) == [spec.device_id]
+
+
+async def test_native_mirror_set_is_cleared_by_a_tombstone(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-03: the owner deleting the device ends the mirror, and with it the id in the persisted set."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver_document(hass, spec.device_id, document_payload(spec, native=True))
+    manager = _manager(entry)
+    assert _native_mirror_ids(manager) == [spec.device_id]
+
+    await _deliver_document(hass, spec.device_id, "")
+
+    assert spec.device_id not in manager.mirrors
+    assert _native_mirror_ids(manager) == []
+
+
+async def test_native_mirror_set_moves_to_the_owned_devices_at_adoption(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-03: an adopted native mirror is an owned native device now, so the owned set applies and the id leaves."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _approved_mirror(hass, entry, spec, native=True)
+    manager = _manager(entry)
+    assert _native_mirror_ids(manager) == [spec.device_id]
+
+    await manager.async_adopt(spec.device_id, force=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _native_mirror_ids(manager) == []
+    assert manager._data_to_save()["native"]["devices"] == [spec.device_id]
+
+
+async def test_native_mirror_set_never_marks_a_later_legacy_mirror_native(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-06-01: an id without a cached mirror is pruned at the start and cannot make a later unmarked mirror native."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS)
+    _seed(hass_storage, {"native": {"instance": False, "pending": [], "devices": [], "mirrors": [spec.device_id]}})
+    entry = await _setup(hass, make_hub_entry())
+    manager = _manager(entry)
+    assert _native_mirror_ids(manager) == []
+
+    await _deliver_document(hass, spec.device_id, document_payload(spec))
+
+    assert manager.is_native(spec.device_id) is False
+    assert manager.mirrors[spec.device_id].unsubscribe_test is not None
+    assert _native_mirror_ids(manager) == []

@@ -20,6 +20,7 @@ WORKFLOW_FILES = ("validate.yml", "ci.yml", "release.yml")
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 SHA_PIN = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
+RUNNER = re.compile(r"^ubuntu-\d{2}\.\d{2}$")
 HACS_REQUIRED_MANIFEST_KEYS = ("codeowners", "documentation", "domain", "issue_tracker", "name", "version")
 HACS_ALLOWED_KEYS = {
     "name",
@@ -58,6 +59,43 @@ def _uses_refs(document: dict[Any, Any]) -> list[str]:
     # Job-level reusable workflows also carry a `uses` key.
     refs += [job["uses"] for job in document["jobs"].values() if "uses" in job]
     return refs
+
+
+def workflow_runners(directory: Path) -> dict[tuple[str, str], Any]:
+    """Return the `runs-on` value of every job in every workflow file of a directory.
+
+    The directory is globbed (`*.yml` and `*.yaml`), so a new workflow file cannot escape the guard.
+    A job without `runs-on` (a caller of a reusable workflow) is skipped.
+    """
+    runners: dict[tuple[str, str], Any] = {}
+    for path in sorted([*directory.glob("*.yml"), *directory.glob("*.yaml")]):
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        jobs = document.get("jobs") if isinstance(document, dict) else None
+        if not isinstance(jobs, dict):
+            continue
+        for name, job in jobs.items():
+            if isinstance(job, dict) and "runs-on" in job:
+                runners[(path.name, str(name))] = job["runs-on"]
+    return runners
+
+
+def pinned_runner_problems(runners: dict[tuple[str, str], Any]) -> list[str]:
+    """Describe every way the runners of a workflow directory miss the single pinned runner.
+
+    Pinned means one OS label (`ubuntu-NN.NN`), not one image build: GitHub still rolls the
+    hosted image of that label weekly, so reproducibility is bounded by the OS label.
+    """
+    problems = [
+        f"{filename}:{job} runs on {value!r}"
+        for (filename, job), value in runners.items()
+        if not (isinstance(value, str) and RUNNER.match(value))
+    ]
+    distinct = sorted({str(value) for value in runners.values()})
+    if len(distinct) > 1:
+        problems.append(f"more than one runner version: {distinct}")
+    if not runners:
+        problems.append("no workflow job declares a runner")
+    return problems
 
 
 workflow_files = pytest.mark.parametrize("filename", WORKFLOW_FILES)
@@ -403,3 +441,7 @@ def test_release_creates_the_release_with_generated_notes() -> None:
     assert any("gh release create" in run and "--verify-tag" in run and "--generate-notes" in run for run in commands)
     assert any(step.get("env", {}).get("GH_TOKEN") for step in job["steps"]) or "GH_TOKEN" in job.get("env", {})
     assert not any("uses" in step for step in job["steps"]), "the release job must not use any action"
+
+
+def test_every_job_runs_on_one_pinned_runner() -> None:
+    assert pinned_runner_problems(workflow_runners(WORKFLOWS)) == []

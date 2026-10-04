@@ -33,6 +33,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 ## Phase Details
 
 ### Phase 6: Native Entity Residual Fixes
+
 **Goal**: A native mirror stays native after a restart even when its config document is near the size limit, and a retained legacy Discovery replay during startup never leaves a duplicate entity behind the takeover. Both are the accepted v1.0 review residuals IN-02 and IN-03.
 **Depends on**: Phase 5 (shipped in v1.0)
 **Requirements**: MIG-04, MIG-05
@@ -41,9 +42,18 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   2. When core MQTT replays retained legacy Discovery between the takeover's registry move and the retained clear, no `_2` duplicate entity appears and the migrated entities keep their registry ids and entity ids; a test delivers the replay at exactly that point.
   3. Both regression tests fail on the v1.0.0 code and pass with the fixes, and the existing takeover, native-entity and cutover test suites stay green.
   4. The README Limitations section no longer lists the size-limit and boot-time replay residuals.
-**Plans**: TBD
+
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+- [ ] 06-01-PLAN.md — IN-02 (MIG-04): the native flag of a mirror is persisted as a set of ids in the Store, sticky until the mirror ends; the payload marker writer is retired
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 06-02-PLAN.md — IN-03 (MIG-05): registry-only duplicate catch right after the move and after a quiet period over every native device; README Limitations updated
 
 ### Phase 7: Verification, Stable Tests and Pinned CI
+
 **Goal**: The v1.0.1 build is verifiably sound: Phases 1 to 4 have a current verification of the final code, the test suite is deterministic, and CI and release no longer drift with the floating `ubuntu-latest` image.
 **Depends on**: Phase 6 (verification and the three-run proof must run against the final code)
 **Requirements**: QLT-01, QLT-02, QLT-03
@@ -52,9 +62,11 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   2. The full test suite (unit, real-Mosquitto and multi-instance tiers) passes three consecutive runs, and `test_delete_device_own_subscription_never_sees_state_clear` no longer flakes because its cause is fixed, not because it is retried or skipped.
   3. No job in `ci.yml`, `validate.yml` or `release.yml` runs on `ubuntu-latest`; every job names one pinned runner version, and the CI and Validate workflows are green on it.
   4. The release workflow runs on the same pinned runner and passes end to end (check-version, CI, validate and release jobs), shown by a prerelease tag run.
+
 **Plans**: TBD
 
 ### Phase 8: Real-Instance Verification
+
 **Goal**: The Phase 5 UAT debt is closed: the four checks the owner skipped in v1.0 are run by hand on real instances against the v1.0.1 build, and each result is recorded with its evidence. This is a manual verification phase (ha-one and ha-two, or the production instances); no code changes are planned, and a failed check becomes a gap, not an accepted skip.
 **Depends on**: Phase 7 (the checks run against the fixed, verified build; transitively Phase 6 for UAT-02)
 **Requirements**: UAT-01, UAT-02, UAT-03, UAT-04
@@ -64,6 +76,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   3. A command issued on one of two real instances runs the actions exactly once on every approved instance, and an unknown payload is ignored and leaves the state unchanged.
   4. The Discovery export has `enabled_by_default` false and no buttons, the core MQTT prefix yields only disabled duplicates, and switching the export off clears its topics.
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
+
 **Plans**: TBD
 
 ## Progress
@@ -73,7 +86,7 @@ Phases execute in numeric order: 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Native Entity Residual Fixes | 0/TBD | Not started | - |
+| 6. Native Entity Residual Fixes | 0/2 | Planned | - |
 | 7. Verification, Stable Tests and Pinned CI | 0/TBD | Not started | - |
 | 8. Real-Instance Verification | 0/TBD | Not started | - |
 

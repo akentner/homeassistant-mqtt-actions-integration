@@ -948,8 +948,10 @@ class Manager:
         """
         Move the legacy MQTT entities of pending owned devices and native mirrors here (D-05, D-09, D-12, MIG-01).
 
-        The order for an owned device is fixed: the live migrate payload, then the registry takeover, then the
-        retained clear. A device whose legacy entities stay loaded is deferred: nothing moves, nothing is cleared, it
+        The order for an owned device is fixed: the live migrate payload, then the registry takeover, then the catch
+        for duplicates that a replayed discovery created meanwhile, then the registry flush, then the retained clear.
+        The same catch runs again after a quiet period (`_async_replay_catch`), because the replay can also arrive
+        after the clear. A device whose legacy entities stay loaded is deferred: nothing moves, nothing is cleared, it
         stays pending and runs on the legacy path for this run (T-5-08). Only ids that are owned devices are ever
         published for (T-5-02). A follower publishes nothing. The caller holds the lock; the platforms are not
         forwarded yet.
@@ -987,8 +989,17 @@ class Manager:
             *(self._async_take_over_one(target, mqtt_entry_id, skip=set(owned) - migrated) for target in targets),
             return_exceptions=True,
         )
+        # A replay that core MQTT delivered after the move created a second set of entities next to the moved ones; they
+        # go now, so the retained clear below finds nothing loaded. A deferred device moved nothing, and an exception is
+        # judged by the registry in the loop below, so neither is touched (D-05)
+        self._remove_replay_twins(
+            target.device_id
+            for target, status in zip(targets, results, strict=True)
+            if status is takeover.TakeoverStatus.DONE
+        )
         if any(status is takeover.TakeoverStatus.DONE or isinstance(status, BaseException) for status in results):
-            # The registry files hold the move before any marker says it is done and before the retained clear goes out
+            # The registry files hold the move and the removal before any marker says it is done and before the
+            # retained clear goes out
             await takeover.async_flush_registries(self._hass)
         for target, status in zip(targets, results, strict=True):
             deferred = status is takeover.TakeoverStatus.DEFERRED

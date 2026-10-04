@@ -1,250 +1,212 @@
 ---
 phase: 02-select-devices-and-reliable-execution
-verified: 2026-09-29T18:00:00Z
-status: passed
+verified: 2026-10-04T16:00:00Z
+status: human_needed
 score: 10/10 must-haves verified
 covered_files:
-  - .planning/phases/02-select-devices-and-reliable-execution/02-01-PLAN.md
-  - .planning/phases/02-select-devices-and-reliable-execution/02-01-SUMMARY.md
-  - .planning/phases/02-select-devices-and-reliable-execution/02-02-PLAN.md
-  - .planning/phases/02-select-devices-and-reliable-execution/02-02-SUMMARY.md
-  - .planning/phases/02-select-devices-and-reliable-execution/02-03-PLAN.md
-  - .planning/phases/02-select-devices-and-reliable-execution/02-03-SUMMARY.md
-  - .planning/phases/02-select-devices-and-reliable-execution/02-04-PLAN.md
-  - .planning/phases/02-select-devices-and-reliable-execution/02-04-SUMMARY.md
-  - .planning/phases/02-select-devices-and-reliable-execution/02-05-PLAN.md
-  - .planning/phases/02-select-devices-and-reliable-execution/02-05-SUMMARY.md
+  - .github/workflows/ci.yml
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-01-PLAN.md
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-01-SUMMARY.md
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-02-PLAN.md
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-02-SUMMARY.md
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-03-PLAN.md
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-03-SUMMARY.md
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-04-PLAN.md
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-04-SUMMARY.md
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-05-PLAN.md
+  - .planning/milestones/v1.0-phases/02-select-devices-and-reliable-execution/02-05-SUMMARY.md
   - README.md
   - custom_components/mqtt_actions/__init__.py
-  - custom_components/mqtt_actions/actions.py
   - custom_components/mqtt_actions/breaker.py
+  - custom_components/mqtt_actions/button.py
   - custom_components/mqtt_actions/config_flow.py
   - custom_components/mqtt_actions/const.py
   - custom_components/mqtt_actions/discovery.py
+  - custom_components/mqtt_actions/entities.py
   - custom_components/mqtt_actions/manager.py
   - custom_components/mqtt_actions/model.py
   - custom_components/mqtt_actions/mqtt_gateway.py
   - custom_components/mqtt_actions/runner.py
+  - custom_components/mqtt_actions/select.py
   - custom_components/mqtt_actions/state.py
   - custom_components/mqtt_actions/topics.py
   - custom_components/mqtt_actions/translations/de.json
   - custom_components/mqtt_actions/translations/en.json
-  - tests/__init__.py
+  - docs/adr/0001-native-entities-instead-of-mqtt-discovery.md
+  - tests/broker/test_acl.py
+  - tests/broker/test_retain_semantics.py
   - tests/conftest.py
   - tests/test_breaker.py
-  - tests/test_config_flow.py
   - tests/test_config_flow_select.py
-  - tests/test_device_ids.py
-  - tests/test_discovery.py
   - tests/test_discovery_select.py
-  - tests/test_manager.py
   - tests/test_manager_breaker.py
   - tests/test_manager_select.py
   - tests/test_model.py
-  - tests/test_repo_structure.py
+  - tests/test_multi_instance.py
+  - tests/test_native_entities.py
+  - tests/test_retrigger.py
   - tests/test_runner_modes.py
   - tests/test_state.py
+  - tests/test_sync_follower.py
   - tests/test_test_buttons.py
-  - tests/test_toolchain.py
-  - tests/test_topics.py
-  - tests/test_tracer.py
   - tests/test_translations.py
-
-covered_digest: "v2:sha256:39207b84898088ecda1ef3685249ff88dc29a50b1788e6dfcb5410c5cb62d1dd"
+covered_digest: "v2:sha256:848ac826e92b4db4cbe4a467aa29c09ed2e2008d753664eac9ebdc21625f4d05"
 behavior_unverified: 0
-overrides_applied: 0
+overrides_applied: 1
+overrides:
+  - must_have: "Plan truth (02-03): test-button lifecycle follows options (add, rename keeps unique_id, remove tombstones the entity, device delete clears all)"
+    reason: "superseded by Phase 5: native switch and select entities with native test buttons replaced MQTT Discovery as the default (ADR 0001, D-03). A native test button needs no tombstone and no discovery clear: removing an option removes its registry entry, a rename follows live and keeps the unique id (derived from the immutable trigger key), and the test topic is not subscribed for a native device. The Discovery tombstone path stays only as the compatibility path for devices that are not native yet and its tests still pass. Evidence: docs/adr/0001-native-entities-instead-of-mqtt-discovery.md; tests/test_native_entities.py::test_removing_an_option_removes_its_native_button_entry, ::test_a_native_device_subscribes_no_test_topic, ::test_new_native_test_buttons_are_diagnostic_and_disabled_by_default, ::test_an_existing_test_button_entry_is_left_as_it_is, ::test_pressing_a_test_button_runs_that_trigger_once_and_changes_nothing; legacy path: tests/test_test_buttons.py::test_removed_option_removes_its_button_entity, ::test_renamed_option_renames_button_and_keeps_unique_id, ::test_delete_device_clears_buttons_with_the_discovery_clear"
+    accepted_by: "D-03 (owner decision, Phase 7 context, 2026-10-04)"
+    accepted_at: "2026-10-04T16:00:00Z"
 gaps: []
 deferred: []
 human_verification:
-  - test: "Create a Select device in a real HA UI. On the MQTT Actions integration page choose 'Add select device', enter a name and settings, add three options (StateValue, StateFriendlyName, actions built with the action editor), then Done."
-    expected: "The menu loop works in the frontend (Done only appears after two options, the option list is shown in the menu text, the action editor renders in the option step, invalid actions and device_id targets produce the warning). A select entity plus one 'Test <name>' button per option appear."
-    why_human: "The flow is verified through the flow manager API only; frontend rendering of menus, the ActionSelector inside a subentry step, and the translated labels cannot be checked without a real HA UI."
-  - test: "Against a real broker, choose each option in the select entity in the HA UI, then publish each StateValue (also with different case and surrounding whitespace) with an external client (mosquitto_pub) to <base>/v1/devices/<id>/state, and publish an unknown payload."
-    expected: "Exactly the chosen option's actions run once per real change and no other option's. The unknown payload is ignored: a warning naming the device is logged, no action runs, and the entity keeps its state."
-    why_human: "Tests use the mqtt_mock fixture and async_fire_mqtt_message; the UI-to-broker-to-manager round trip is covered in two halves (publish of the exact StateValue, and message to actions), not across a real broker."
-  - test: "Reconfigure the Select device: edit an option's friendly name and actions, add an option, remove an option (confirmation), and check that the StateValue is not editable. Remove or rename the currently selected option."
-    expected: "Only StateFriendlyName and actions are editable. A renamed option renames its test button and keeps the button's unique_id. A removed option's button entity disappears from the entity list. The select entity shows 'unknown' after the current option is renamed or removed and recovers on the next valid payload."
-    why_human: "Button-entity removal by tombstone and the unknown display are pinned against real HA core MQTT discovery in tests, but the registry and UI behavior across a real running instance is not observable in tests."
-  - test: "Set a device to run mode 'restart', give an option actions with a delay of about 10 seconds plus a marker (for example a persistent notification), and switch state twice quickly. Repeat with 'serial'."
-    expected: "Restart: the first run is cancelled and produces no Repairs issue and no error log, only the second run finishes. Serial: both runs complete one after another in order."
-    why_human: "The tests use a held test service; real-time behavior with real delay actions and the HA trace/UI is not exercised."
-  - test: "Create a device whose action flips its own state (for example a Switch whose ON and OFF actions call mqtt.publish to its own state topic with the opposite value), with the default breaker (5 runs in 10 seconds). Trigger it once."
-    expected: "The loop stops after 5 runs, the device is paused, a warning is logged, and a Repairs issue 'circuit breaker' appears in English and German naming the device and the limits and explaining how to release. Reconfiguring the device (or reloading the integration) releases it and the issue disappears. A test button still works while paused. After an HA restart the paused state and the issue are still there."
-    why_human: "The automated loop test simulates the broker with async_fire_mqtt_message. A real broker delivering a message from another task, the rendered Repairs text and a real HA restart persistence are not covered."
-  - test: "Press the test buttons in the HA UI (Switch: Test ON and Test OFF, Select: one per option), including on a device that is already in that state."
-    expected: "The trigger's actions run locally, the entity state does not change, nothing is published to the state topic, and a failing action shows the normal Repairs issue. Buttons are listed under Configuration."
-    why_human: "Button entity creation and pressing through the frontend cannot be exercised in tests."
+  - test: "Open the real HA frontend and run the Select subentry flow (Add select device, name and settings, three options with actions from the action editor, Done), then reconfigure it (edit an option, add one, remove one with the confirmation), in English and in German."
+    expected: "The menu loop renders, Done appears only after two options, the option list text and the translated labels are correct, the ActionSelector renders inside the option step, invalid actions and device_id targets show the warning, and StateValue is not editable on reconfigure."
+    why_human: "The flow is covered through the flow manager API (tests/test_config_flow_select.py) and the translation key parity (tests/test_translations.py), but no automated test renders the frontend, and Phase 8 (UAT-01 to UAT-04) does not name this check. The owner recorded a pass in 02-UAT.md on 2026-09-30, but config_flow.py and the translations changed afterwards (03-08 escaping, Phase 4 flows, Phase 5 native entities), so that pass is not evidence for the final code. Accept it as an override under the owner's name or run it again."
+  - test: "Against a real broker and a real Home Assistant, build a device whose action publishes the opposite value to its own state topic (default breaker, 5 runs in 10 seconds), trigger it once, check the rendered Repairs card in English and German, release it by reconfigure or reload, and restart HA while it is paused."
+    expected: "The loop stops after 5 runs, a warning is logged, the 'circuit breaker' Repairs card names the device and the limits and explains the release, a test button still works while paused, release removes the issue, and the paused state and issue are back after a real HA restart."
+    why_human: "The loop, the trip, the release paths and the persistence across a manager restart are covered with the mqtt_mock and the fake broker (tests/test_manager_breaker.py), but no automated test runs the self-flipping loop through a real Mosquitto and a real HA process, and none renders the Repairs card. Phase 8 UAT-03 names a command across two real instances and an unknown payload, not the breaker loop. Accept as an override under the owner's name, add a test, or run it in Phase 8."
 ---
 
 # Phase 2: Select Devices and Reliable Execution Verification Report
 
 **Phase Goal:** As a Home Assistant user, I want to create Select devices whose options each run their own actions, so that multi-state MQTT devices drive my setup predictably.
-**Verified:** 2026-09-29T18:00:00Z
+**Verified:** 2026-10-04T16:00:00Z
 **Status:** human_needed
-**Re-verification:** No, initial verification (no previous 02-VERIFICATION.md existed)
+**Re-verification:** Yes. The previous report (2026-09-29, status passed in frontmatter, human_needed in the body, 10/10) was judged against the pre-Phase-5 code, and its stored `covered_files` named the pre-archive `.planning/phases/` paths, so the tooling read it as stale. This run judges the frozen sha `81db888c5e49389ea7dc27626100f6e090535e61`, which contains Phases 5, 6 and the Phase 7 test and CI changes (HEAD `ad98080` differs from it only by the ledger `07-PROOF.md`).
 
 ## Goal Achievement
 
-The goal is achieved in the code. Every roadmap success criterion has an implementation that is substantive, wired and covered by a passing test. The status is `human_needed` only because the surfaces that need a real HA frontend or a real broker were not, and cannot be, exercised by the automated tests (see Human Verification Required). No gap was found, and none of the four review warnings blocks a must-have.
+The goal still holds on the current code. All five roadmap success criteria and the five plan truths have a substantive, wired implementation and passing behavioral tests. One truth is carried as `superseded by Phase 5` (the Discovery test-button lifecycle), under the owner decision D-03. No truth failed, so there is no regression and no gap. The status is `human_needed` because two of the six previous human items still have a part that no automated test covers and Phase 8 does not name (frontend rendering of the Select flow; the breaker loop end to end on a real broker and a real HA with the rendered Repairs card).
+
+Phase 5 changed how the user-visible entities are produced (ADR 0001): a native `DeviceSelect` and native test buttons are the default, and the Phase 2 Discovery select with mapping templates and the test topic is only the compatibility path for a device that is not native yet (`Manager.is_native`, manager.py:636). The behavior that Phase 2 promises (options run their own actions, unknown payloads are ignored, run modes, test press, circuit breaker) lives in code that both paths share (`Manager._on_message`, `_run_trigger`, `ActionRunner`, `CircuitBreaker`, `StateTracker`) and is unchanged in substance.
 
 ### Observable Truths
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | SC1: User can create a Select device with several options (StateValue, StateFriendlyName, actions); choosing an option in the UI or publishing its StateValue to the state topic runs that option's actions | ✓ VERIFIED | `SelectSubentryFlow` (config_flow.py:282-552) registered in `async_get_supported_subentry_types` (config_flow.py:120); `model.spec_from_data` builds one `TriggerSpec` per option; `Manager._on_message` (manager.py:454-485) maps the decided value to `trigger_key` and enqueues only that trigger. Tests: `test_tracer_select_flow_creates_two_option_device_that_runs_actions`, `test_tracer_select_option_payload_runs_only_that_option`, `test_select_payload_is_trimmed_and_case_insensitive`, `test_select_entity_options_and_state_round_trip` (real core select entity: `select_option` service publishes the exact StateValue retained, qos 1). UI half and payload half are separate tests; see human item 2. |
-| 2 | SC2: User can later edit an option's StateFriendlyName and actions; StateValue is locked after creation | ✓ VERIFIED | `async_step_reconfigure` loads a deep-copied draft (config_flow.py:297-314); `async_step_edit_option_details` schema has no StateValue field (config_flow.py:472-478) and calls `validate_option(..., editing=True)`; `Done` replaces data and re-injects the device id (config_flow.py:527-545). Tests: `test_edit_option_form_has_no_state_value_field`, `test_edit_option_changes_friendly_name_and_actions_only`, `test_flow_never_mutates_stored_data_before_done`, `test_reconfigure_replaces_data_and_keeps_device_id`. |
-| 3 | SC3: A Select payload that matches no StateValue is ignored and logged; no actions run and the entity keeps its state | ✓ VERIFIED | `state.decide` returns `ignored=True` for an unknown payload without moving the baseline (state.py:45-47); `Manager._log_ignored` logs device name and truncated repr (manager.py:588-595); the discovery `value_template` renders `''` for unknown values, which core ignores. Tests: `test_select_unknown_payload_is_ignored_and_logged`, `test_select_unknown_retained_payload_sets_no_baseline`, `test_select_unknown_payload_keeps_state_without_core_warning` (real core: state stays, no warning), `test_template_and_tracker_normalize_identically`. |
-| 4 | SC4: Per device serial (default) or restart run mode, and a test button that runs a device's actions locally without changing state | ✓ VERIFIED | `ActionRunner._async_build_script` builds ONE `Script` per device with `script_mode="queued"` (serial) or `"restart"`, `max_runs=SERIAL_QUEUE_LIMIT` (runner.py:93-102); missing `run_mode` maps to serial (model.py:168); the flow offers the run mode for Switch and Select (config_flow.py:156-175). Buttons: `discovery._button_component` per trigger with a non-retained test topic; `Manager._on_test_message` (manager.py:562-586) enqueues with `test=True` and never touches tracker, baseline, state topic or breaker; retained messages ignored. Behavioral tests: `test_restart_mode_newer_change_cancels_running_run`, `test_restart_mode_cancels_across_select_options`, `test_serial_mode_keeps_order_across_select_options`, `test_serial_queue_is_bounded_and_overflow_is_dropped_with_warning`, `test_press_runs_only_that_triggers_actions_locally`, `test_test_run_failure_uses_normal_repairs_issue`, `test_retained_test_message_is_ignored`. |
-| 5 | SC5: An action that toggles its own device is stopped by a per-device circuit breaker and the user is told why | ✓ VERIFIED | `CircuitBreaker.record` (breaker.py:27-38); `Manager._on_message` counts only real changes that would run (manager.py:471-477); `_trip` logs a warning, creates Repairs issue `circuit_breaker_<id>` and stops queued runs (manager.py:496-515); issue text present in en.json and de.json (`circuit_breaker_tripped`, key parity 128/128 checked). Behavioral test: `test_self_toggling_action_is_stopped` (a real flipping service is called exactly `max_runs` times, breaker tripped, issue present), plus `test_change_after_max_runs_trips_pauses_and_informs`, `test_trip_stops_running_and_queued_runs`. |
-| 6 | Plan truth (02-02): each device runs through one Script that dispatches on the trigger, so ordering and cancellation hold across triggers; a cancelled or dropped run never raises or clears an issue wrongly | ✓ VERIFIED | `choose` dispatch on hashed `trigger_key` only (runner.py:75-87); `CancelledError` is never caught (runner.py:177-187); generation guard on `clear_issue`. Tests: `test_one_script_per_device`, `test_superseded_run_does_not_clear_failure_issue`, `test_dropped_run_does_not_clear_failure_issue`, `test_unload_stops_running_and_queued_runs`, `test_restart_mode_action_less_trigger_change_does_not_cancel_running_run`. |
-| 7 | Plan truth (02-03): test-button lifecycle follows options (add, rename keeps unique_id, remove tombstones the entity, device delete clears all) | ✓ VERIFIED | `button_component_key`, `build_discovery` tombstones (`{"platform": "button"}`) for `retired` keys (discovery.py:113-137); `_async_change_device` maintains `retired_components` (manager.py:379-383). Tests: `test_removed_option_removes_its_button_entity`, `test_renamed_option_renames_button_and_keeps_unique_id`, `test_omitted_component_is_not_removed_but_tombstone_is` (characterization against real core discovery), `test_delete_device_clears_buttons_with_the_discovery_clear`. Limitation: tombstones are memory-only (review IN-06). |
-| 8 | Plan truth (02-04): tripped state persists across restart as a config hash, is released by a config change or unload/reload, and is cleaned up on delete and hub removal | ✓ VERIFIED | `_tripped` map saved via `_data_to_save` (manager.py:316-326); `_restore_tripped` compares the hash (manager.py:518-537); `release_all_breakers` called from `async_unload_entry` (__init__.py:46-49); `async_stop` deliberately does not release. Tests: `test_tripped_device_stays_paused_after_restart`, `test_tripped_entry_with_different_hash_is_dropped_at_start`, `test_config_change_releases_the_breaker`, `test_unchanged_save_does_not_release`, `test_reload_releases_the_breaker`, `test_stop_without_unload_keeps_the_tripped_state`, `test_delete_device_forgets_tripped_entry_and_deletes_issue`, `test_hub_removal_deletes_breaker_issues`, `test_malformed_tripped_store_is_dropped_and_setup_succeeds`. |
-| 9 | Plan truth (02-05/D-04): option validation (at least two options, StateValue non-empty, unique ignoring case, no surrounding whitespace, friendly name required, unique, never `none`); breaker fields range-validated; Phase 1 Switch data prefills defaults | ✓ VERIFIED | `model.validate_option` (model.py:186-218) and `validate_breaker` (model.py:226-233), called from the flow; menu hides Done below two options and Remove at two (config_flow.py:348-371). Tests: `test_add_option_validation`, `test_edit_option_validation`, `test_menu_visibility`, `test_select_flow_settings_validation`, `test_select_flow_stores_settings_as_ints`, `test_reconfigure_prefills_defaults_for_a_select_without_settings`. |
-| 10 | Regression: Phase 1 Switch behavior and Phase 1 must-haves still hold | ✓ VERIFIED | Phase 1 tests (`test_tracer.py`, `test_state.py`, `test_manager.py`, `test_discovery.py`, `test_config_flow.py`, `test_device_ids.py`, and the broker tier) are part of the passing run: 422 passed in the main tier plus 4 passed in `tests/broker`. `SWITCH_ACCEPTED` keeps ON/OFF semantics; run-on-startup and baseline logic unchanged in `state.decide`. See WR-02 for one Switch inconsistency (whitespace-padded payload). |
+| 1 | SC1: User can create a Select device with several options (StateValue, StateFriendlyName, actions); choosing an option in the UI or publishing its StateValue to the state topic runs that option's actions | ✓ VERIFIED | `SelectSubentryFlow` (config_flow.py:392) is registered in `async_get_supported_subentry_types` (config_flow.py:136); `model.spec_from_data` builds one `TriggerSpec` per option; `Manager._on_message` (manager.py:2285) decides on the accepted map and `_run_trigger` (manager.py:2363) enqueues only the matching trigger. Native UI half: `DeviceSelect.async_select_option` (select.py:~145) maps the friendly name to the StateValue and calls `Manager.async_send_state`, which publishes the exact StateValue retained at QoS 1 (manager.py:2349). Tests (all pass): tests/test_config_flow_select.py::test_tracer_select_flow_creates_two_option_device_that_runs_actions; tests/test_manager_select.py::test_tracer_select_option_payload_runs_only_that_option, ::test_select_payload_is_trimmed_and_case_insensitive; tests/test_native_entities.py::test_choosing_an_option_publishes_the_state_value_not_the_friendly_name, ::test_native_select_offers_the_friendly_names_and_shows_the_current_one; legacy path: tests/test_discovery_select.py::test_select_entity_options_and_state_round_trip. |
+| 2 | SC2: User can later edit an option's StateFriendlyName and actions; StateValue is locked after creation | ✓ VERIFIED | `async_step_edit_option_details` (config_flow.py:563) has no StateValue field and calls `validate_option(..., editing=True)` (config_flow.py:576); the flow works on a deep-copied draft and replaces the data only at Done. Tests: tests/test_config_flow_select.py::test_edit_option_form_has_no_state_value_field, ::test_edit_option_changes_friendly_name_and_actions_only, ::test_flow_never_mutates_stored_data_before_done, ::test_reconfigure_replaces_data_and_keeps_device_id; native follow-through of a rename: tests/test_native_entities.py::test_renaming_an_option_is_followed_live. |
+| 3 | SC3: A Select payload that matches no StateValue is ignored and logged; no actions run and the entity keeps its state | ✓ VERIFIED | `state.decide` returns `ignored=True` without moving the baseline (state.py:46); `Manager._on_message` logs it through `_log_ignored` (manager.py:2527, device name and truncated repr, a warning; the empty retained clear is only debug) and returns; `_record_value` (manager.py:2307) records only accepted values, so the native entity keeps its current option. Tests: tests/test_manager_select.py::test_select_unknown_payload_is_ignored_and_logged, ::test_select_unknown_retained_payload_sets_no_baseline; tests/test_native_entities.py::test_an_unknown_select_payload_keeps_the_state (state stays, also for the empty retained clear); legacy path: tests/test_discovery_select.py::test_select_unknown_payload_keeps_state_without_core_warning, ::test_template_and_tracker_normalize_identically. |
+| 4 | SC4: Per device serial (default) or restart run mode, and a test button that runs a device's actions locally without changing state | ✓ VERIFIED | One `Script` per device with `script_mode="queued"` (serial) or `"restart"`, `max_runs=SERIAL_QUEUE_LIMIT`, `max_exceeded="WARNING"` (runner.py:131-133); a missing `run_mode` maps to serial (model.py:179); the Switch and Select flows offer the field. The native test button `DeviceTestButton.async_press` (button.py:~95) calls `Manager.async_press_test` (manager.py:2492), which goes through the mode gate `_test_blocked`, never touches tracker, baseline, breaker or the state topic, and publishes nothing. Behavioral tests: tests/test_runner_modes.py::test_restart_mode_newer_change_cancels_running_run, ::test_restart_mode_cancels_across_select_options, ::test_serial_mode_keeps_order_across_select_options, ::test_serial_queue_is_bounded_and_overflow_is_dropped_with_warning; tests/test_native_entities.py::test_pressing_a_test_button_runs_that_trigger_once_and_changes_nothing, ::test_observe_and_disabled_modes_block_the_press, ::test_press_of_an_unknown_trigger_does_nothing; legacy test topic: tests/test_test_buttons.py::test_press_runs_only_that_triggers_actions_locally, ::test_retained_test_message_is_ignored, ::test_test_run_failure_uses_normal_repairs_issue. Phase 5 note: a new native test button is diagnostic and disabled by default (an existing registry entry keeps its state), so the user enables it first; the criterion (a button that runs the actions locally without changing state) holds. |
+| 5 | SC5: An action that toggles its own device is stopped by a per-device circuit breaker and the user is told why | ✓ VERIFIED | `CircuitBreaker.record` (breaker.py:27) trips on the call after `max_runs` within the window; `_run_trigger` counts only real changes that would run (manager.py:2386-2390); `_trip` (manager.py:2402) warns, creates Repairs issue `circuit_breaker_<id>`, stores the tripped hash and stops queued and running runs; the issue text exists in en.json and de.json (`circuit_breaker_tripped`). Tests: tests/test_manager_breaker.py::test_self_toggling_action_is_stopped (a real flipping service is called exactly `max_runs` times, breaker tripped, issue present), ::test_change_after_max_runs_trips_pauses_and_informs, ::test_trip_stops_running_and_queued_runs, ::test_test_press_is_not_counted_and_works_while_paused; tests/test_breaker.py. |
+| 6 | Plan truth (02-02): each device runs through one Script that dispatches on the trigger, so ordering and cancellation hold across triggers; a cancelled or dropped run never raises or clears an issue wrongly | ✓ VERIFIED | `choose` dispatch on the hashed trigger key in one Script per device (runner.py); `CancelledError` is a `BaseException` and is never caught (runner.py:209 comment and handling). Tests: tests/test_runner_modes.py::test_one_script_per_device, ::test_superseded_run_does_not_clear_failure_issue, ::test_dropped_run_does_not_clear_failure_issue, ::test_unload_stops_running_and_queued_runs, ::test_restart_mode_action_less_trigger_change_does_not_cancel_running_run. Behavior-dependent truth; backed by named passing behavioral tests. |
+| 7 | Plan truth (02-03): test-button lifecycle follows options (add, rename keeps unique_id, remove tombstones the entity, device delete clears all) | ✓ PASSED (override) | Superseded by Phase 5 (D-03), see the `overrides` entry and the Superseded Items section. The user-visible outcome (add, rename keeps unique id, remove drops the entity, delete clears all) holds on the native default through registry removal, not Discovery tombstones. |
+| 8 | Plan truth (02-04): tripped state persists across restart as a config hash, is released by a config change or unload/reload, and is cleaned up on delete and hub removal | ✓ VERIFIED | `_tripped` is saved in `_base_data_to_save` (manager.py:1349) and parsed by `_parse_tripped` (manager.py:221); `_restore_tripped` (manager.py:2424) compares the hash and re-pauses or drops it; `_async_change_device` pops it on a config change (manager.py:2105); `release_all_breakers` (manager.py:1173) is called from the unload path (__init__.py:77); delete, hub removal, release and mirror drop pop the entry (manager.py:1542, 1631, 1808, 2158). Tests (all pass): tests/test_manager_breaker.py::test_tripped_device_stays_paused_after_restart, ::test_tripped_entry_with_different_hash_is_dropped_at_start, ::test_config_change_releases_the_breaker, ::test_unchanged_save_does_not_release, ::test_reload_releases_the_breaker, ::test_stop_without_unload_keeps_the_tripped_state, ::test_delete_device_forgets_tripped_entry_and_deletes_issue, ::test_hub_removal_deletes_breaker_issues, ::test_malformed_tripped_store_is_dropped_and_setup_succeeds; mirrors: tests/test_sync_follower.py::test_update_releases_a_tripped_breaker_and_sanitizes_the_baseline. |
+| 9 | Plan truth (02-05/D-04): option validation (at least two options, StateValue non-empty, unique ignoring case, no surrounding whitespace, friendly name required, unique, never `none`); breaker fields range-validated; Phase 1 Switch data prefills defaults | ✓ VERIFIED | `model.validate_option` (model.py:202) and `validate_breaker` (model.py:242), called from the flow; the menu hides Done below two options. Tests: tests/test_config_flow_select.py::test_add_option_validation, ::test_edit_option_validation, ::test_menu_visibility, ::test_select_flow_settings_validation, ::test_select_flow_stores_settings_as_ints, ::test_reconfigure_prefills_defaults_for_a_select_without_settings; tests/test_model.py. |
+| 10 | Regression: Phase 1 Switch behavior and Phase 1 must-haves still hold | ✓ VERIFIED | `SWITCH_ACCEPTED` keeps ON/OFF (state.py:12); baseline and run-on-startup logic are unchanged in `state.decide`. The full suite is green on the frozen code: 1490 passed in each of three local runs and in three CI dispatch runs (1308 unit, 17 broker, 165 multi-instance), Ruff and format clean (07-PROOF.md, sections "Local three-run proof" and "CI proof on ubuntu-24.04"). Targeted re-run in this verification: tests/test_state.py, tests/test_discovery.py, tests/test_config_flow.py pass. The native Switch counterpart is tests/test_native_entities.py::test_native_switch_state_follows_the_state_topic, ::test_the_echo_runs_the_actions_once. |
 
-**Score:** 10/10 truths verified (0 present, behavior-unverified). Truths 4, 5, 6 and 8 are behavior-dependent (cancellation, cleanup and ordering invariants) and each is backed by a named passing behavioral test, not by symbol presence.
+**Score:** 10/10 truths verified (9 VERIFIED, 1 PASSED by override), 0 present and behavior-unverified. Truths 4, 5, 6 and 8 are behavior-dependent (cancellation, cleanup and ordering invariants) and each has a named passing behavioral test that was run in this verification.
+
+### Superseded Items (Phase 5, D-03)
+
+| Item | What changed | Evidence of the new behavior | Scored as |
+|------|--------------|------------------------------|-----------|
+| Truth 7: Discovery button tombstones and discovery clear for test buttons | Native test buttons need no tombstone: a removed option removes the registry entry, the test topic is not subscribed for a native device, new buttons are diagnostic and disabled by default | ADR 0001 (decision D-03, criterion b); tests/test_native_entities.py::test_removing_an_option_removes_its_native_button_entry, ::test_a_native_device_subscribes_no_test_topic, ::test_new_native_test_buttons_are_diagnostic_and_disabled_by_default | PASSED (override), 1 override entry |
+| Review finding IN-06 (button tombstones are memory-only) | Moot for native devices; remains only on the legacy path | same as above | informational |
+| Mechanism evidence of Truths 1 and 3 (Discovery select with `value_template` and `command_template`) | The default select is the native `DeviceSelect`; the Discovery select remains the compatibility path and its tests still pass | tests/test_native_entities.py::test_native_select_offers_the_friendly_names_and_shows_the_current_one, ::test_an_unknown_select_payload_keeps_the_state, ::test_removing_the_selected_option_leaves_the_state_unknown; ADR 0001 consequence "A select no longer stays on a stale state after an option is renamed or removed" | the truths themselves are VERIFIED on the native evidence, no override needed |
 
 ### Required Artifacts
 
-`verify.artifacts` against 02-05-PLAN.md: 5/5 passed. Manual checks for the other plans:
-
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `custom_components/mqtt_actions/model.py` | Pure DeviceSpec/TriggerSpec, `spec_from_data`, `validate_option`, `validate_breaker` | ✓ VERIFIED | 233 lines, tolerant loader, used by manager, runner, discovery and flow |
-| `custom_components/mqtt_actions/state.py` | `decide()` and `StateTracker` driven by accepted map | ✓ VERIFIED | 70 lines; `accepted` map wired from `spec.accepted` |
-| `custom_components/mqtt_actions/runner.py` | One Script per device, run modes, queue bound | ✓ VERIFIED | `SERIAL_QUEUE_LIMIT`, `async_build_device`, `enqueue`, `async_stop_runs` |
-| `custom_components/mqtt_actions/discovery.py` | Select and button components, mapping templates, tombstones | ✓ VERIFIED | `build_value_template`, `build_command_template`, `button_component_key` |
-| `custom_components/mqtt_actions/topics.py` | `test_topic` | ✓ VERIFIED | Used by discovery and manager |
-| `custom_components/mqtt_actions/breaker.py` | Pure sliding-window breaker | ✓ VERIFIED | 47 lines, injected clock |
-| `custom_components/mqtt_actions/manager.py` | Select-capable manager, test topic, breaker, tripped persistence | ✓ VERIFIED | 595 lines, all paths reviewed above |
-| `custom_components/mqtt_actions/config_flow.py` | `SelectSubentryFlow` with menu loop | ✓ VERIFIED | Registered in supported subentry types |
-| `translations/en.json`, `translations/de.json` | New steps, errors, selector options, Repairs text | ✓ VERIFIED | Key sets identical (128 leaf keys each); `tests/test_translations.py` parity test passes |
-| `README.md` | Select, run mode, test buttons, breaker, unknown-state and test-topic docs | ✓ VERIFIED | Sections "Select devices" and "Run mode, test buttons and the circuit breaker" present |
+| `custom_components/mqtt_actions/model.py` | Pure DeviceSpec/TriggerSpec, `spec_from_data`, `validate_option`, `validate_breaker` | ✓ VERIFIED | Used by manager, runner, discovery, flow and the native entities |
+| `custom_components/mqtt_actions/state.py` | `decide()` and `StateTracker` driven by the accepted map | ✓ VERIFIED | 70 lines, wired from `spec.accepted` |
+| `custom_components/mqtt_actions/runner.py` | One Script per device, run modes, queue bound | ✓ VERIFIED | `script_mode`, `max_runs`, `max_exceeded` at runner.py:131-133 |
+| `custom_components/mqtt_actions/breaker.py` | Pure sliding-window breaker, injected clock | ✓ VERIFIED | 47 lines, used by `_new_breaker` |
+| `custom_components/mqtt_actions/manager.py` | Select-capable manager, breaker, tripped persistence, native press and send | ✓ VERIFIED | Paths read above; shared by the legacy and the native path |
+| `custom_components/mqtt_actions/config_flow.py` | `SelectSubentryFlow` with the option menu loop | ✓ VERIFIED | Registered in the supported subentry types |
+| `custom_components/mqtt_actions/select.py`, `button.py`, `entities.py` | Native `DeviceSelect`, `DeviceTestButton`, `RestorePreviousButton` (Phase 5, the default) | ✓ VERIFIED | Platform setup adds them per owned device and mirror when `is_native` |
+| `custom_components/mqtt_actions/discovery.py`, `topics.py` | Legacy Select/button discovery, `test_topic` (compatibility path) | ✓ VERIFIED | Still published for a device that is not native; tests pass |
+| `translations/en.json`, `translations/de.json` | Flow steps, errors, Repairs text | ✓ VERIFIED | tests/test_translations.py passes (key parity) |
+| `README.md` | Select, run mode, test buttons, breaker docs | ✓ VERIFIED | Pinned by tests/test_docs.py in the Phase 7 runs |
 
 ### Key Link Verification
 
-`verify.key-links` on 02-04-PLAN.md: 3/3 verified. Remaining links checked by reading the code:
-
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| manager.py | model.py | `spec_from_subentry` builds the DeviceSpec used by tracker, runner, discovery | WIRED | manager.py:337, 377 |
-| model.py | state.py | `DeviceSpec.accepted` handed to `StateTracker` | WIRED | manager.py:343-348, 386 |
-| discovery.py | `json_dumps` | every user string enters templates as a `json_dumps` literal | WIRED | discovery.py:26-33; hostile-string tests through real Template |
-| runner.py | `Script` | `script_mode` queued or restart, `max_runs`, `max_exceeded` | WIRED | runner.py:93-102 |
-| discovery.py | topics.py | button `command_topic` is `test_topic(...)` | WIRED | discovery.py:128-130 |
-| manager.py | runner.py | `_on_test_message` enqueues with `test=True`, never touches tracker | WIRED | manager.py:579-586 |
-| manager.py | breaker.py | `_on_message` calls `breaker.record()` between `decision.act` and `enqueue` | WIRED | manager.py:475 |
-| `__init__.py` | manager.py | `async_unload_entry` calls `release_all_breakers` before `async_stop` | WIRED | __init__.py:46-49 |
-| config_flow.py | manager.py (via update listener) | `async_create_entry` and `async_update_and_abort` trigger `_async_entry_updated` and `async_reconcile` | WIRED | __init__.py:39-42 |
+| manager.py | model.py | `spec_from_subentry` builds the DeviceSpec for tracker, runner, discovery, entities | WIRED | read in `_async_add_device` |
+| model.py | state.py | `DeviceSpec.accepted` handed to `StateTracker` | WIRED | `_on_message` uses `device.tracker.handle` |
+| manager.py | runner.py | `_run_trigger` and `_enqueue_test` call `runner.enqueue` | WIRED | manager.py:2386-2397, 2512 |
+| manager.py | breaker.py | `_run_trigger` calls `device.breaker.record()` before `enqueue`, `_trip` on False | WIRED | manager.py:2388-2390 |
+| `__init__.py` | manager.py | unload calls `release_all_breakers` | WIRED | __init__.py:77 |
+| select.py / button.py | manager.py | `async_send_state`, `async_press_test`, `async_restore_previous` | WIRED | select.py, button.py |
+| config_flow.py | manager.py | update listener reconciles after `async_create_entry` / `async_update_and_abort` | WIRED | tests/test_config_flow_select.py::test_reconfigure_replaces_data_and_keeps_device_id |
 
 ### Data-Flow Trace (Level 4)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |----------|---------------|--------|--------------------|--------|
-| Select discovery payload | `options`, `value_template`, `command_template` | `spec.triggers` built from stored subentry options | Yes, round-trip test with real core discovery | ✓ FLOWING |
+| Native `DeviceSelect` | `options`, `current_option` | `device.spec.triggers` and `device.value`, recorded by `_record_value` from the state topic | Yes, tests drive real core select entities | ✓ FLOWING |
 | Script per device | `sequence` | `trigger.actions` validated per trigger from stored options | Yes | ✓ FLOWING |
-| Breaker issue text | `device`, `max_runs`, `window` | `device.name`, `spec.breaker_*` from stored data | Yes | ✓ FLOWING |
-| Flow menu placeholders | `options`, `count`, `name` | in-memory draft | Yes | ✓ FLOWING |
+| Breaker issue text | `device`, `max_runs`, `window` | `device.name`, `spec.breaker_*` | Yes | ✓ FLOWING |
+| Native test button name | `trigger.friendly_name` | live spec, refreshed by `_on_signal` | Yes | ✓ FLOWING |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Main test tier | `uv run pytest tests -q --ignore=tests/broker` | 422 passed in 19.89s | ✓ PASS |
-| Real-Mosquitto tier | `uv run pytest tests/broker -q` | 4 passed | ✓ PASS |
-| Lint | `uv run ruff check .` | All checks passed | ✓ PASS |
-| Format | `uv run ruff format --check .` | 36 files already formatted | ✓ PASS |
-| Translation parity | key-set comparison of en.json and de.json | equal, 128 keys | ✓ PASS |
-| Artifact check | `verify.artifacts` 02-05-PLAN.md | 5/5 passed | ✓ PASS |
-| Key links | `verify.key-links` 02-04-PLAN.md | 3/3 verified | ✓ PASS |
-
-The full workspace suite was run once. Per-truth evidence names the tests by enumeration in `tests/`; they are part of that run.
+| Phase 2 test files (breaker, flow, discovery select, manager select and breaker, run modes, test buttons, model, state, translations) | `uv run --locked pytest -q -p no:cacheprovider tests/test_breaker.py tests/test_config_flow_select.py tests/test_discovery_select.py tests/test_manager_select.py tests/test_manager_breaker.py tests/test_runner_modes.py tests/test_test_buttons.py tests/test_model.py tests/test_state.py tests/test_translations.py` | 320 passed in 20.08s | ✓ PASS |
+| Native entities, multi-instance, follower, retrigger, real-Mosquitto tier, config flow, discovery | `MQTT_ACTIONS_REQUIRE_BROKER=1 uv run --locked pytest -q -p no:cacheprovider tests/test_native_entities.py tests/test_multi_instance.py tests/test_sync_follower.py tests/test_retrigger.py tests/broker tests/test_config_flow.py tests/test_discovery.py` | 291 passed in 37.14s | ✓ PASS |
+| Full suite on the final code (cited, not re-run) | 07-PROOF.md | 1490 passed, three local runs plus three CI dispatch runs, Validate and the release run on `v1.0.1-rc1` green | ✓ PASS (cited) |
+| Debt markers | `grep -nE "TBD\|FIXME\|XXX\|TODO\|HACK"` over custom_components, translations, README | no matches | ✓ PASS |
 
 ### Probe Execution
 
-Step 7c: SKIPPED. The plans declare no `probe-*.sh` scripts and no `scripts/*/tests/probe-*.sh` exist.
+Step 7c: SKIPPED. The plans declare no `probe-*.sh` scripts and none exist.
 
 ### Requirements Coverage
 
-Requirement IDs declared in PLAN frontmatter: 02-01 DEV-03, STA-07; 02-02 DEV-06; 02-03 DEV-07; 02-04 STA-06; 02-05 DEV-03, DEV-04, DEV-06, STA-06. REQUIREMENTS.md maps exactly DEV-03, DEV-04, DEV-06, DEV-07, STA-06, STA-07 to Phase 2. All six are claimed by at least one plan; no orphaned requirement.
-
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-------------|-------------|--------|----------|
-| DEV-03 | 02-01, 02-05 | Create a Select device with multiple options (StateValue, StateFriendlyName, actions) | ✓ SATISFIED | Truth 1; `SelectSubentryFlow`, `model._select_triggers`, tracer tests. Frontend rendering: human item 1 |
-| DEV-04 | 02-05 | Edit StateFriendlyName and actions of an option; StateValue immutable | ✓ SATISFIED | Truth 2; edit step has no StateValue field, `editing=True` skips the check |
-| DEV-06 | 02-02, 02-05 | Per-device run mode, serial default or restart | ✓ SATISFIED | Truth 4 and 6; Script mode mapping plus flow field. Real-time behavior: human item 4 |
-| DEV-07 | 02-03 | Test button runs actions locally without changing state | ✓ SATISFIED | Truth 4 and 7; `_on_test_message`. UI press: human item 6 |
-| STA-06 | 02-04, 02-05 | Per-device circuit breaker stops self-triggering loops | ✓ SATISFIED | Truth 5 and 8. Real broker loop and Repairs rendering: human item 5 |
+| DEV-03 | 02-01, 02-05 | Create a Select device with multiple options (StateValue, StateFriendlyName, actions) | ✓ SATISFIED | Truth 1 |
+| DEV-04 | 02-05 | Edit StateFriendlyName and actions of an option; StateValue immutable | ✓ SATISFIED | Truth 2 |
+| DEV-06 | 02-02, 02-05 | Per-device run mode, serial default or restart | ✓ SATISFIED | Truths 4 and 6 |
+| DEV-07 | 02-03 | Test button runs actions locally without changing state | ✓ SATISFIED | Truths 4 and 7 (native buttons, diagnostic and disabled by default since Phase 5) |
+| STA-06 | 02-04, 02-05 | Per-device circuit breaker stops self-triggering loops | ✓ SATISFIED | Truths 5 and 8 |
 | STA-07 | 02-01 | Select payload matching no StateValue is ignored and logged | ✓ SATISFIED | Truth 3 |
 
-REQUIREMENTS.md already marks all six `[x]` and "Complete" in the traceability table, which matches the evidence.
+REQUIREMENTS.md (v1.0) maps exactly these six IDs to Phase 2 and marks them complete; all six are claimed by plans, none is orphaned.
 
 ### Anti-Patterns Found
 
-Debt-marker scan (`TBD|FIXME|XXX|TODO|HACK`) across `custom_components/`, translations and README: no matches. No stubs, placeholder returns, or hollow props in the phase files.
+No debt markers, stubs, placeholder returns or hollow props in the files of this phase. The advisory review findings of 02-REVIEW.md stay recorded as `open` in 02-REVIEW-DISPOSITION.md and are not blockers (none defeats a success criterion); they are unchanged by this re-verification, except IN-06, which Phase 5 made moot for native devices.
 
-The advisory code review (02-REVIEW.md: 0 critical, 4 warnings, 6 info) is recorded with all findings still `open` in 02-REVIEW-DISPOSITION.md. I re-read the cited code and confirmed each warning is real. None defeats a roadmap success criterion, so none is a blocker, but they should be triaged.
+### Human-Verification Items of the Previous Report (D-04)
 
-| File | Line | Pattern | Severity | Impact |
-|------|------|---------|----------|--------|
-| manager.py | 333-366 | WR-01: `self.devices[device_id]` set before subscribe and discovery succeed; a `HomeAssistantError` during a live reconcile leaves a dead device that later reconciles skip until reload | ⚠️ Warning | Only in a live reconcile when the MQTT client errors on subscribe; startup path converts it to `ConfigEntryNotReady` |
-| discovery.py | 67 | WR-02: Switch `value_template` is `{{ value \| upper }}` without `trim`, while the tracker trims; a payload like `" ON"` runs the actions but the entity ignores it | ⚠️ Warning | Entity and actions can disagree for whitespace-padded Switch payloads; Select is correct (`trim \| lower`) |
-| manager.py | 561-586 | WR-03: the test topic bypasses the breaker (documented as D-13 intent, but the README does not call out that this second trigger path has no loop protection) | ⚠️ Warning | Does not affect SC5 (state-path loops); an action that publishes to the test topic could loop |
-| runner.py | 52-61, 104-108, 186-187 | WR-04: invalid-trigger setup error and runtime failure share the issue id `action_failed_<id>`; a successful run of another option clears the setup issue | ⚠️ Warning | An invalid option can stay broken with no persistent Repairs issue |
-| runner.py | 104-108 | IN-01: setup Repairs issue omits the offending option name | ℹ️ Info | Harder to locate the broken option |
-| manager.py | 576-578 | IN-02: test press on a trigger without runnable actions is silent | ℹ️ Info | No user feedback |
-| model.py / discovery.py | 125-143 / 71-85 | IN-03: all-invalid stored options publish `"options": []` | ℹ️ Info | Only for corrupted storage |
-| config_flow.py | 410-422, 482 | IN-04: reconfigure indexes option keys the loader treats as optional | ℹ️ Info | `KeyError` on malformed stored option |
-| manager.py | 92-98 | IN-05: `signature_hash` only used by tests | ℹ️ Info | Possible drift between test helper and production path |
-| manager.py | 69, 379-383 | IN-06: button tombstones are memory-only | ℹ️ Info | Relevant to Phase 3 multi-instance; should be noted in the Phase 3 plan |
+Each of the six items of the previous report is covered by the automated tier named below, or is reported as a human item. The owner's 02-UAT.md (six passes on 2026-09-30) was recorded on the pre-Phase-5, pre-Phase-4 code and is history, not evidence for the final code.
+
+| # | Previous item | Automated tier that covers it (test node ids) | Remaining |
+|---|---------------|-----------------------------------------------|-----------|
+| 1 | Create a Select device in the real UI | Flow manager API: tests/test_config_flow_select.py::test_tracer_select_flow_creates_two_option_device_that_runs_actions, ::test_menu_visibility, ::test_add_option_validation; translations: tests/test_translations.py | Frontend rendering has no automated test and is not named in Phase 8: **human item 1** (status human_needed). The earlier expectation of "one Test button per option appears" is superseded: a new native test button is diagnostic and disabled by default. |
+| 2 | Select round trip against a real broker | Real Mosquitto tier: tests/broker/test_retain_semantics.py::test_replay_on_subscribe_has_retain_true, ::test_live_forward_has_retain_false, ::test_retained_clear_is_a_live_empty_message; tests/broker/test_acl.py::test_external_publisher_can_only_write_state; the two halves: tests/test_native_entities.py::test_choosing_an_option_publishes_the_state_value_not_the_friendly_name and tests/test_manager_select.py::test_select_payload_is_trimmed_and_case_insensitive, ::test_select_unknown_payload_is_ignored_and_logged; multi-instance fan-out: tests/test_multi_instance.py::test_fanout_runs_on_every_approved_instance_and_only_there | The command and unknown-payload check on real instances is Phase 8 UAT-03. Covered, no human item. |
+| 3 | Reconfigure and option lifecycle | Real HA core registries in the hass fixture: tests/test_native_entities.py::test_renaming_an_option_is_followed_live, ::test_removing_the_selected_option_leaves_the_state_unknown, ::test_removing_an_option_removes_its_native_button_entry; tests/test_config_flow_select.py::test_edit_option_form_has_no_state_value_field, ::test_edit_option_changes_friendly_name_and_actions_only; legacy: tests/test_test_buttons.py::test_renamed_option_renames_button_and_keeps_unique_id, ::test_removed_option_removes_its_button_entity | The editing form rendering falls under human item 1. Covered, no separate item. |
+| 4 | Run modes with real delays | tests/test_runner_modes.py::test_restart_mode_newer_change_cancels_running_run, ::test_serial_mode_keeps_order_across_select_options, ::test_superseded_run_does_not_clear_failure_issue (a real core `Script` with a service held on an event; cancellation, queueing and the absence of a Repairs issue are the integration's logic, a `delay` action blocks in the same way) | None. Covered; the tests use a held service, not a literal `delay` action. |
+| 5 | Circuit breaker end to end | tests/test_manager_breaker.py::test_self_toggling_action_is_stopped, ::test_tripped_device_stays_paused_after_restart, ::test_reload_releases_the_breaker, ::test_config_change_releases_the_breaker, ::test_test_press_is_not_counted_and_works_while_paused; translations: tests/test_translations.py | The loop through a real Mosquitto and a real HA process, the rendered EN/DE Repairs card and a real HA restart are not exercised, and Phase 8 does not name them: **human item 2** (status human_needed). |
+| 6 | Test buttons in the UI | tests/test_native_entities.py::test_pressing_a_test_button_runs_that_trigger_once_and_changes_nothing, ::test_observe_and_disabled_modes_block_the_press, ::test_every_new_test_button_is_diagnostic_and_disabled_and_the_restore_button_is_not; legacy: tests/test_test_buttons.py::test_press_runs_only_that_triggers_actions_locally, ::test_test_run_failure_uses_normal_repairs_issue | A frontend press calls the same `button.press` service the tests call through real core. The expectation "buttons are listed under Configuration" is superseded by Phase 5 (diagnostic, disabled by default). Covered, no human item. |
 
 ### Human Verification Required
 
-These need a real HA frontend or a real broker, so they are not guessed here.
+#### 1. Select flow in the real frontend
 
-#### 1. Create a Select device in the UI
+**Test:** Run "Add select device" and a reconfigure in a real HA frontend, in English and German.
+**Expected:** Menu loop, option list text, ActionSelector, warnings and labels render correctly; Done appears only after two options; StateValue is not editable on reconfigure.
+**Why human:** No automated test renders the frontend, Phase 8 does not name it, and the code changed after the owner's 2026-09-30 pass.
 
-**Test:** On the integration page choose "Add select device", enter a name and settings, add three options with actions from the action editor, then Done.
-**Expected:** The menu loop, the option list text, the action editor and the German/English labels render correctly; Done only appears after two options; a select entity and one test button per option appear.
-**Why human:** The flow is tested through the flow manager API only.
+#### 2. Circuit breaker end to end on a real broker and a real HA
 
-#### 2. Select round trip against a real broker
+**Test:** A device whose action flips its own state through a real Mosquitto, with the default limits; check the Repairs card in both languages, release it, restart HA while paused.
+**Expected:** The loop stops after 5 runs, the card names the device and limits, release removes the issue, and the paused state survives a real restart.
+**Why human:** Only the mqtt_mock and fake-broker tiers exercise the loop; no test renders the card or restarts a real HA, and Phase 8 UAT-03 does not cover the breaker.
 
-**Test:** Choose each option in the select entity, then publish each StateValue (varied case, surrounding whitespace) and an unknown payload with `mosquitto_pub` to the state topic.
-**Expected:** Only the chosen option's actions run, once per real change; the unknown payload is logged and ignored, and the entity keeps its state.
-**Why human:** Tests use `mqtt_mock`; the UI publish and the message-to-actions halves are verified separately.
-
-#### 3. Reconfigure and option lifecycle
-
-**Test:** Edit an option's friendly name and actions, add an option, remove one after the confirmation, and remove or rename the currently selected option.
-**Expected:** StateValue is not editable; the button is renamed keeping its unique_id; a removed option's button disappears; the select shows `unknown` until the next valid payload.
-**Why human:** Entity-registry and UI behavior on a running instance.
-
-#### 4. Run modes with real delays
-
-**Test:** Restart mode with an option that delays about 10 seconds, switch twice quickly; then the same in serial mode.
-**Expected:** Restart cancels the first run silently (no Repairs issue, no error log); serial completes both in order.
-**Why human:** Tests use a held service; real-time behavior is not exercised.
-
-#### 5. Circuit breaker end to end
-
-**Test:** Build a device whose action publishes the opposite state to its own state topic, keep defaults (5 in 10 seconds), trigger it once, then release by reconfiguring or reloading, and restart HA while paused.
-**Expected:** The loop stops after 5 runs, a warning is logged, the Repairs issue appears in English and German with the release instructions, the test button still works while paused, release removes the issue, and a restart keeps the paused state.
-**Why human:** The automated loop test simulates the broker; real broker delivery, rendered Repairs text and real restart persistence are not covered.
-
-#### 6. Test buttons in the UI
-
-**Test:** Press each test button, including for the option that is already selected.
-**Expected:** Actions run locally, the entity state does not change, nothing is published to the state topic, a failing action creates the normal Repairs issue, and the buttons are listed under Configuration.
-**Why human:** Frontend button entities cannot be pressed in tests.
+Both items return to the orchestrator: the owner either accepts them as overrides under his own name, asks for a test in a fix plan, or runs them. They are not turned into passed here.
 
 ### Gaps Summary
 
-No gaps. All five roadmap success criteria and five plan-level truths are verified against the code with passing behavioral tests (422 main tier, 4 real-Mosquitto tier, Ruff and format clean, translations in parity). All six requirement IDs (DEV-03, DEV-04, DEV-06, DEV-07, STA-06, STA-07) are declared by plans and satisfied, with none orphaned.
-
-The status is `human_needed` because six checks (listed above) require a real HA UI or broker. The four review warnings (WR-01 to WR-04) are all still open in 02-REVIEW-DISPOSITION.md. They are not blockers but should be triaged, ideally WR-02 (one-line template fix) and WR-04 (separate issue id) before release. WR-03 should at least be documented, and IN-06 belongs in the Phase 3 plan.
+No gaps and no regression: every truth holds on the frozen code, one is carried as superseded by Phase 5. The status is `human_needed` solely because of the two human items above.
 
 ---
 
-_Verified: 2026-09-29T18:00:00Z_
+_Verified: 2026-10-04T16:00:00Z_
 _Verifier: Claude (gsd-verifier)_

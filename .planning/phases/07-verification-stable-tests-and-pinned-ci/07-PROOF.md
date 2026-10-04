@@ -135,3 +135,131 @@ All four runs report `headSha` `d92b87f3ebf427c6f63d3ccf0d95dd14c93af961`. The t
   clean (`verification_stale_check_indeterminate: false` for all four) and cannot be the gate.
 - Phase 5 reads stale for the same cause (stored `covered_files` name pre-archive paths). QLT-01 names Phases 1 to 4 only, so it is
   not re-verified in this plan; surfaced for the owner.
+
+### Result (Task 3): QLT-01 gate NOT fully met
+
+The four `gsd-verifier` runs (orchestrator-spawned, Task 2) regenerated the four archived reports. `verification status
+ARCHIVED_DIR --pick status` afterwards prints **human_needed, human_needed, human_needed, passed**, not four times `passed`.
+No report has `gaps_found`: no truth regressed. Phases 1 to 3 read `human_needed` because the verifier found checks that only a
+real HA frontend, a real HACS client or a real HA core with a real broker can make, and that Phase 8 (UAT-01 to UAT-04) does not name.
+
+**Owner decision 2026-10-04:** these open human-verification items are **deferred to Phase 8 (UAT)**. They are not accepted as
+overrides, and the reports were not edited to read `passed` (no frontmatter was changed by hand). The acceptance gate of plan
+07-05 ("`passed` for all four") is therefore **not met for Phases 1 to 3**; it is met for Phase 4.
+
+| Phase | Status before | Status after | Verified | Score | Covered files | Overrides | Open human items |
+|-------|---------------|--------------|----------|-------|---------------|-----------|------------------|
+| 1 | stale | **human_needed** | 2026-10-04T13:46:34Z | 8/8 | 54 | 1 | 6 |
+| 2 | stale | **human_needed** | 2026-10-04T16:00:00Z | 10/10 | 46 | 1 | 2 |
+| 3 | stale | **human_needed** | 2026-10-04T13:48:18Z | 5/5 | 83 | 1 | 2 |
+| 4 | stale | **passed** | 2026-10-04T13:50:00Z | 5/5 | 102 | 2 | 0 |
+
+Other checks: each report carries a `covered_digest: "v2:sha256:..."` line; no report lists a `.planning/phases/` path in
+`covered_files` (0 of 0 in each); `git ls-files .planning/phases` holds no directory for Phases 1 to 5 (only 06, 07, 999.1);
+`init.manager` lists phases 6 (passed), 7, 8 and 999.1 (missing, not yet verified) with `verification_stale_check_indeterminate: false`
+and no stale phase (it still never listed Phases 1 to 4).
+
+#### Items superseded by Phase 5 (D-03, `accepted_by: D-03 (owner decision, Phase 7 context, 2026-10-04)`)
+
+- **Phase 1** (1): "The Switch appears in HA through MQTT Discovery (UUID unique_id, availability, device info)". Native entities
+  replace Discovery as the default (ADR 0001, `docs/adr/0001-native-entities-instead-of-mqtt-discovery.md`); the unique_id stays the
+  device UUID. Evidence: `tests/test_cutover.py::test_a_legacy_install_without_peers_cuts_over_after_the_settle_time`,
+  `tests/test_native_entities.py::test_native_switch_is_registered_under_the_subentry`,
+  `::test_native_device_publishes_no_legacy_discovery_and_shares_one_device_with_the_mode_select`; compatibility path intact:
+  `tests/test_native_entities.py::test_an_instance_without_the_native_flag_keeps_the_legacy_path`,
+  `tests/test_discovery.py::test_discovery_creates_switch_entity`, `tests/test_tracer.py::test_switch_end_to_end`.
+- **Phase 2** (1): "Plan truth 02-03: test-button lifecycle follows options (rename keeps unique_id, remove tombstones the entity,
+  device delete clears all)". Native test buttons need no tombstone. Evidence:
+  `tests/test_native_entities.py::test_removing_an_option_removes_its_native_button_entry`,
+  `::test_a_native_device_subscribes_no_test_topic`, `::test_new_native_test_buttons_are_diagnostic_and_disabled_by_default`,
+  `::test_an_existing_test_button_entry_is_left_as_it_is`, `::test_pressing_a_test_button_runs_that_trigger_once_and_changes_nothing`;
+  legacy path: `tests/test_test_buttons.py::test_removed_option_removes_its_button_entity`,
+  `::test_renamed_option_renames_button_and_keeps_unique_id`, `::test_delete_device_clears_buttons_with_the_discovery_clear`.
+- **Phase 3** (1): "If a follower removes the discovered entity the owner republishes its discovery (roadmap truth 4, second
+  clause; DSC-03)". A native device has no Discovery entity to remove. Evidence:
+  `tests/test_native_cleanup.py::test_a_native_owner_never_heals_its_discovery`; legacy path:
+  `tests/test_multi_instance.py::test_follower_entity_deletion_heals_the_discovery`,
+  `tests/test_sync_owner.py::test_empty_discovery_for_an_owned_device_republishes_discovery`.
+- **Phase 4** (2):
+  - "Manual resync republishes config and discovery of all owned devices (ROADMAP SC3, DSC-04, discovery clause)". A native device
+    publishes no Discovery on resync. Evidence: `tests/test_discovery_export.py::test_a_native_device_publishes_the_export_when_enabled`,
+    `::test_the_export_is_off_by_default`,
+    `tests/test_native_entities.py::test_native_device_publishes_no_legacy_discovery_and_shares_one_device_with_the_mode_select`;
+    config, availability and heartbeat still republished: `tests/test_hub_entities.py::test_resync_button_republishes_in_the_phase_3_order`,
+    `tests/test_services.py::test_resync_service_republishes_in_the_phase_3_order`.
+  - "Per instance and device mode selects live on a separate companion device (ROADMAP SC4 evidence, D-13, UAT test 4)". The
+    companion device is merged into the native device (ADR 0001, "Cutover design"). Evidence:
+    `tests/test_native_entities.py::test_the_mode_select_shares_the_device_of_the_native_entities`,
+    `::test_a_marked_mirror_is_a_native_entity_directly_under_the_entry`,
+    `tests/test_takeover.py::test_full_takeover_sequence_keeps_identity`, `::test_a_mirror_moves_directly_under_the_entry`;
+    companion path for legacy instances still tested: `tests/test_companions.py`,
+    `tests/test_modes.py::test_owned_device_has_a_companion_device_under_its_subentry`.
+
+#### Open human-verification items: deferred to Phase 8 by owner decision 2026-10-04 (QLT-01 gate not fully met)
+
+None of these is an override and none is marked verified. Each is a check no automated tier performs; the tests cited are the
+automated coverage the verifier found for the surrounding behavior. Phase 4 has none (`human_verification: []`).
+
+**Phase 1 (6 items, `human_needed`)**
+
+1. HACS client install on a real host (custom repository, download, restart, add MQTT Actions, second add aborts, icon shown).
+   Cited: `tests/test_repo_structure.py::test_manifest_has_hacs_required_keys`, `::test_hacs_json_keys_allowed_and_floor`,
+   `::test_brand_icon_is_valid_png`; HACS validation green on the release run of `v1.0.1-rc1` (this ledger);
+   `tests/test_config_flow.py::test_hub_flow_creates_entry_with_instance_id`, `::test_hub_flow_aborts_without_mqtt`,
+   `::test_hub_flow_single_instance`. Earlier owner pass on the pre-Phase-5 build: 01-UAT.md test 1 (2026-09-29).
+2. English and German strings in the real frontend (hub flow, Add switch device dialog, Repairs text). Cited:
+   `tests/test_translations.py::test_en_and_de_have_identical_keys`, `::test_placeholders_match_between_languages`,
+   `::test_required_keys_present` (240 flattened keys each). Earlier pass: 01-UAT.md test 2.
+3. Action editor and validation banners in the current build (invalid YAML action, literal `device_id` submitted twice). Cited:
+   `tests/test_config_flow.py::test_switch_flow_schema_serializes_action_selector`, `::test_switch_flow_rejects_invalid_actions`,
+   `::test_switch_flow_device_id_warns_then_saves_on_resubmit`, `::test_switch_flow_entity_targets_do_not_warn`,
+   `::test_switch_reconfigure_applies_validation_and_warning`, `tests/test_device_ids.py`. Earlier pass: 01-UAT.md test 3.
+4. Repairs dialog of a failing action in the real frontend. Cited: `tests/test_manager.py::test_issue_created_when_action_fails`,
+   `::test_issue_updated_in_place_on_repeated_failure`, `::test_issue_cleared_after_next_success`,
+   `::test_issue_dismissed_stays_dismissed_while_failing`, `::test_issue_error_text_is_truncated`,
+   `::test_issue_for_invalid_stored_actions_at_setup`, `tests/test_runner_modes.py::test_dropped_run_does_not_clear_failure_issue`.
+   Earlier owner check was API-level only (01-UAT.md test 5).
+5. Retained-versus-live chain on the current build with a real HA core MQTT client and a real retaining broker (toggle in UI, full
+   HA restart, broker reconnect: no action run for replayed state). Cited: `tests/test_state.py`,
+   `tests/test_manager.py::test_retain_replay_sets_baseline_without_actions`, `::test_retain_replay_after_reconnect_runs_nothing`,
+   `::test_startup_flag_runs_retained_state_once`, `::test_startup_flag_not_reapplied_on_replay`,
+   `::test_baseline_persisted_across_reload`, `::test_reload_keeps_single_subscription`,
+   `::test_unload_publishes_offline_and_never_clears_discovery`, `tests/test_native_entities.py::test_the_echo_runs_the_actions_once`,
+   `tests/broker/test_retain_semantics.py::test_replay_on_subscribe_has_retain_true`, `::test_live_forward_has_retain_false`,
+   `::test_resubscribe_replays_last_value_with_retain_true`. Phase 8 UAT-02 and UAT-03 do not check this. Earlier partial pass:
+   01-UAT.md test 4 (UI toggle, full restart and broker reconnect left open).
+6. Core version of the second real host (hassio-n2plus, "Backup"): read it in Settings > About, expect 2026.9.0 or newer.
+   Informational, no code consequence. Cited: `tests/test_toolchain.py::test_home_assistant_floor`, `::test_python_floor`,
+   `tests/test_repo_structure.py::test_hacs_json_keys_allowed_and_floor`. 01-UAT.md test 9 (inferred only).
+
+**Phase 2 (2 items, `human_needed`)**
+
+1. Select subentry flow in the real frontend (add select device, three options, Done after two, reconfigure edit/add/remove, English
+   and German). Cited: `tests/test_config_flow_select.py` (flow manager API), `tests/test_translations.py`. The owner pass of
+   02-UAT.md (2026-09-30) predates later changes to `config_flow.py` and the translations, so it is not evidence for the final code.
+2. Breaker loop (a device whose action flips its own state topic, 5 runs in 10 seconds) against a real Mosquitto and a real HA
+   process, rendered Repairs card in English and German, release by reconfigure or reload, restart while paused. Cited:
+   `tests/test_manager_breaker.py` (mqtt_mock and fake broker). Phase 8 UAT-03 does not name the breaker loop.
+
+**Phase 3 (2 items, `human_needed`)**
+
+1. Approval request of a mirrored device in the real frontend (Settings > Repairs) with a device name, owner name and action YAML
+   containing backticks, underscores, pipes and a templated service name. Cited:
+   `tests/test_repairs_flow.py::test_flow_shows_device_owner_yaml_hash_and_templates`,
+   `::test_flow_states_the_startup_flag_the_hash_binds`, `::test_submit_approves_and_the_issue_disappears`, `tests/test_trust.py`.
+   Earlier real-frontend evidence: 03-UAT.md test 1 (2026-10-02) and 04-UAT.md test 11; rendering sources unchanged since, not re-run
+   at the frozen sha.
+2. Delete of a device with a name containing backticks and `<b>` in a real frontend (own delete step and the generic core dialog,
+   whose text an integration cannot change; documented limitation in the README). Cited:
+   `tests/test_config_flow_escaping.py::test_delete_confirmation_shows_the_device_name_as_plain_text`,
+   `tests/test_config_flow_delete.py`, `tests/test_multi_instance.py::test_delete_removes_the_device_everywhere`. Earlier
+   real-frontend evidence: 03-UAT.md test 2 (retested after plan 03-08); dialog code and text unchanged since.
+
+**Consequence for QLT-01 and success criterion 1:** the criterion "`verification status` prints `passed` for the four archived
+directories" holds for Phase 4 only. Phases 1 to 3 stay `human_needed` until Phase 8 runs these ten checks (or the owner later
+accepts any of them as an override under the owner's name) and the verifier or `/gsd-verify-work` is re-run. This is recorded
+honestly; no status was edited. Phase 8 should add these ten checks to its UAT scope or its own owner decision should name them.
+
+**Later edits (expected re-staling):** an edit of a file covered by a Phase 1 to 4 report (`tests/conftest.py`,
+`tests/test_repo_structure.py`, `tests/test_manager_breaker.py`, `tests/test_hub_removal.py`, the three workflows, `manifest.json`)
+turns that phase stale again; refresh the digest from `verification.fingerprint` with a dated note and re-check the status.

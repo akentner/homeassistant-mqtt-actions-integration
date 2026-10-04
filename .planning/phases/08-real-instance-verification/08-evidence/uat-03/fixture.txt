@@ -1,0 +1,7 @@
+marker name: UAT Marker
+marker uuid: 81d53f84-469e-4937-a3bb-09b24f11e4e4
+owner: ha-a (3851f34f-fa67-4f3c-bba0-122465013c3d)
+entity ha-a: switch.uat_marker
+entity ha-b: switch.uat_marker
+actions: system_log.write level warning, message 'UAT03-MARKER on' (to on) and 'UAT03-MARKER off' (to off)
+created: 2026-10-04T20:22:36Z via mqtt_actions.import_devices (data)

@@ -1,0 +1,3 @@
+retained config document of the marker: run_on_startup=false
+ha-a: POST /api/config/config_entries/entry/<mqtt entry id 01M3WG6JGS0N6DASJC4CT17H6B>/reload -> {"require_restart":false}
+ha-b: POST /api/config/config_entries/entry/<mqtt entry id 01M3WMX5FCPHWH7605DFGP9EYD>/reload -> {"require_restart":false}

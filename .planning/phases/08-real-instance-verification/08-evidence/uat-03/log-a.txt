@@ -1,0 +1,4 @@
+2026-10-04 22:25:30.292 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER on
+2026-10-04 22:26:36.571 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER off
+2026-10-04 22:27:36.985 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER on
+2026-10-04 22:28:38.733 WARNING (MainThread) [custom_components.mqtt_actions] Ignoring unknown payload 'banana' for device UAT Marker

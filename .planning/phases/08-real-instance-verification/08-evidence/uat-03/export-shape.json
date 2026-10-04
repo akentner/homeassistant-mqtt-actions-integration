@@ -1,0 +1,36 @@
+{
+  "changed_states": [],
+  "service_response": {
+    "export": {
+      "devices": [
+        {
+          "breaker_max_runs": 5,
+          "breaker_window": 10,
+          "kind": "switch",
+          "name": "Lampe Test",
+          "on_change_to_off": [
+            {
+              "action": "persistent_notification.create",
+              "data": {
+                "message": "lampe off"
+              }
+            }
+          ],
+          "on_change_to_on": [
+            {
+              "action": "persistent_notification.create",
+              "data": {
+                "message": "lampe on"
+              }
+            }
+          ],
+          "run_mode": "serial",
+          "run_on_startup": false
+        }
+      ],
+      "export_version": 1,
+      "format": "mqtt_actions_export"
+    },
+    "file": null
+  }
+}

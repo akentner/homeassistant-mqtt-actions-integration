@@ -34,6 +34,7 @@ from custom_components.mqtt_actions.const import (
     STORE_VERSION,
 )
 from custom_components.mqtt_actions.manager import async_remove_all_devices, signature_hash
+from tests.log_helpers import own_warnings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -92,7 +93,7 @@ def _breaker_issue(hass: HomeAssistant, device_id: str) -> ir.IssueEntry | None:
 
 
 def _warnings(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
-    return [record for record in caplog.records if record.levelno == logging.WARNING]
+    return own_warnings(caplog, exact=True)
 
 
 def _limited(make_switch_subentry: Callable, name: str = "Lamp", **kwargs: Any) -> ConfigSubentryData:

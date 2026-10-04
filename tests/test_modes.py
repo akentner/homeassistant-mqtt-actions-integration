@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 from custom_components.mqtt_actions import topics
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, DOMAIN, STORE_KEY, STORE_VERSION
 from custom_components.mqtt_actions.document import build_content, build_document
+from tests.log_helpers import OWN_LOGGER
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -131,7 +132,11 @@ async def test_observe_logs_and_runs_nothing_but_tracks_the_baseline(
 
     assert on_calls == []
     assert device.tracker.last_acted == "ON"
-    lines = [record.getMessage() for record in caplog.records if "observe" in record.getMessage().lower()]
+    lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name.startswith(OWN_LOGGER) and "observe" in record.getMessage().lower()
+    ]
     assert len(lines) == 1
     assert "'Lamp'" in lines[0]
     assert "'onChangeToOn'" in lines[0]

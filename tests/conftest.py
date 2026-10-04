@@ -1,5 +1,6 @@
 """Shared pytest configuration for the MQTT Actions integration tests."""
 
+import asyncio
 import uuid
 from typing import TYPE_CHECKING, Any
 from unittest.mock import PropertyMock, patch
@@ -42,6 +43,17 @@ if TYPE_CHECKING:
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Allow Home Assistant to load integrations from custom_components in every test."""
+
+
+@pytest.fixture(autouse=True)
+async def always_slow_event_loop(enable_event_loop_debug: None) -> None:
+    """
+    Count every callback as slow, so asyncio logs its slow-callback WARNING all the time (QLT-02, D-07).
+
+    A test that depends on the absence of that foreign record fails every time instead of once in a hundred runs.
+    It requests the PHACC fixture by name, so debug mode is on before the threshold is lowered.
+    """
+    asyncio.get_running_loop().slow_callback_duration = 0.0
 
 
 @pytest.fixture(autouse=True)

@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v1.0.1
 milestone_name: Hardening
 current_phase: 08
-current_phase_name: real-instance-verification
+current_phase_name: Real-Instance Verification
 status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-10-04T15:21:42.205Z"
+last_updated: "2026-10-04T19:51:46.780Z"
 last_activity: 2026-10-04
-last_activity_desc: Phase 07 execution started
-state_head: "0b359c571a1063eadd1ba24681a3c4bab5f1af84"
+last_activity_desc: Phase 08 execution started
+state_head: 8079806f6f9d406a472a8d37eed8736c84af406d
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 17
-  completed_plans: 7
+  completed_plans: 8
   percent: 33
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-04)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 07 — Verification, Stable Tests and Pinned CI
+**Current focus:** Phase 08 — Real-Instance Verification
 
 ## Current Position
 
-Phase: 08 (real-instance-verification) — READY TO EXECUTE
-Plan: 1 of 5
+Phase: 08 (Real-Instance Verification) — EXECUTING
+Plan: 2 of 10
 Status: Ready to execute
-Last activity: 2026-10-04 — Phase 07 execution started
+Last activity: 2026-10-04 — Phase 08 execution started
 
 Progress: [███░░░░░░░] 33%
 

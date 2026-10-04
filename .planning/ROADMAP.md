@@ -63,12 +63,12 @@ Plans:
   3. No job in `ci.yml`, `validate.yml` or `release.yml` runs on `ubuntu-latest`; every job names one pinned runner version, and the CI and Validate workflows are green on it.
   4. The release workflow runs on the same pinned runner and passes end to end (check-version, CI, validate and release jobs), shown by a prerelease tag run.
 
-**Plans**: 5 plans
+**Plans**: 2/5 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 07-01-PLAN.md — QLT-03: pin every workflow job to `ubuntu-24.04` and keep it pinned with a guard test over the whole workflow directory (TDD)
-- [ ] 07-02-PLAN.md — QLT-02: fix the cause of the flake (permanent always-slow loop probe, own-logger log assertions) and prove 50 repetitions under load
+- [x] 07-01-PLAN.md — QLT-03: pin every workflow job to `ubuntu-24.04` and keep it pinned with a guard test over the whole workflow directory (TDD)
+- [x] 07-02-PLAN.md — QLT-02: fix the cause of the flake (permanent always-slow loop probe, own-logger log assertions) and prove 50 repetitions under load
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 07-03-PLAN.md — QLT-02, QLT-03: three consecutive local full-suite runs, owner decision on the push, three CI dispatch runs and Validate on the pinned runner
@@ -101,7 +101,7 @@ Phases execute in numeric order: 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
-| 7. Verification, Stable Tests and Pinned CI | 0/TBD | Not started | - |
+| 7. Verification, Stable Tests and Pinned CI | 2/5 | In Progress|  |
 | 8. Real-Instance Verification | 0/TBD | Not started | - |
 
 ## Backlog

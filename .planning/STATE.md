@@ -2,9 +2,14 @@
 gsd_state_version: "1.0"
 milestone: v1.0.1
 milestone_name: Hardening
+current_phase: 6
+current_phase_name: Native Entity Residual Fixes
 status: planning
-last_updated: "2026-10-04T08:30:00.000Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-10-04T08:17:44.748Z"
 last_activity: 2026-10-04
+last_activity_desc: Roadmap created for milestone v1.0.1 (3 phases, 9 requirements mapped)
+state_head: aec19406cb81f1db28cb3e41d4e85a7b84c2328c
 progress:
   total_phases: 3
   completed_phases: 0
@@ -222,9 +227,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-04T08:30:00.000Z
-Stopped at: Roadmap for milestone v1.0.1 written (Phases 6-8), awaiting approval
-Resume file: None
+Last session: 2026-10-04T08:17:44.724Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/06-native-entity-residual-fixes/06-CONTEXT.md
 
 ## Operator Next Steps
 

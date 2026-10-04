@@ -3,13 +3,13 @@ gsd_state_version: "1.0"
 milestone: v1.0.1
 milestone_name: Hardening
 current_phase: 07
-current_phase_name: verification-stable-tests-and-pinned-ci
+current_phase_name: Verification, Stable Tests and Pinned CI
 status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-10-04T11:52:20.462Z"
+last_updated: "2026-10-04T12:50:41.421Z"
 last_activity: 2026-10-04
-last_activity_desc: Phase 6 complete, transitioned to Phase 7
-state_head: f32b52aa5e7b00ecad1f2debdffb3c72a78417bb
+last_activity_desc: Phase 07 execution started
+state_head: 66f783f510e709fe2156f7c8c3c21f9e26287183
 progress:
   total_phases: 3
   completed_phases: 1
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-04)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 06 — Native Entity Residual Fixes
+**Current focus:** Phase 07 — Verification, Stable Tests and Pinned CI
 
 ## Current Position
 
-Phase: 07 (verification-stable-tests-and-pinned-ci) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-10-04 — Phase 6 complete, transitioned to Phase 7
+Phase: 07 (Verification, Stable Tests and Pinned CI) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 07
+Last activity: 2026-10-04 — Phase 07 execution started
 
 Progress: [███░░░░░░░] 29%
 

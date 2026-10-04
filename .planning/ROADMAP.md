@@ -92,7 +92,38 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: TBD
+**Plans**: 0/10 plans executed
+
+Plans:
+**Wave 1**
+- [ ] 08-01-PLAN.md — Bench preflight (tracer): pin and prove the build, backup, guard, bench broker users, 08-UAT.md ledger, owner decision on API access
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 08-02-PLAN.md — UAT-02: legacy Discovery replay with two startup rounds on ha-a and ha-b, live-republish observation, owner classification of WR-03
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 08-03-PLAN.md — UAT-03 and P1-5: marker fixture, exactly-once commands across two instances, unknown payload, retained-versus-live chain
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 08-04-PLAN.md — UAT-04: export shape, core-prefix disabled duplicates, export off clears; restart cleanup observed; re-run entry for the scripted group
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 08-05-PLAN.md — UAT-01: owner wording decision, v0.1.0 straggler ha-c next to the native fleet
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 08-06-PLAN.md — Frontend items P1-3, P1-4 and P3-2 on ha-a (browser MCP, owner review)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 08-07-PLAN.md — Frontend items P2-1 and P2-2 (select flow EN/DE, breaker loop and card)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 08-08-PLAN.md — Frontend items P1-2 and P3-1 (hub re-add on ha-b with hostile instance name, approval rendering EN/DE)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 08-09-PLAN.md — Production items P1-1 (HACS client install) and P1-6 (core version), owner-run
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 08-10-PLAN.md — Final ledger, stale anchor, verifier refresh of the Phase 1 to 3 reports
 
 ## Progress
 
@@ -103,7 +134,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 0/TBD | Not started | - |
+| 8. Real-Instance Verification | 0/10 | Planned | - |
 
 ## Backlog
 

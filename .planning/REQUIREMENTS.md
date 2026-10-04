@@ -9,8 +9,8 @@ Requirements for the Hardening milestone. Each maps to a roadmap phase. The v1.0
 
 ### Native Entities
 
-- [ ] **MIG-04**: A native mirror stays native after a restart, even when its config document is close to `MAX_DOCUMENT_BYTES` (review finding IN-02)
-- [ ] **MIG-05**: The takeover creates no duplicate entity when core MQTT replays retained legacy Discovery during startup (review finding IN-03); a test delivers the replay between the registry move and the retained clear
+- [x] **MIG-04**: A native mirror stays native after a restart, even when its config document is close to `MAX_DOCUMENT_BYTES` (review finding IN-02)
+- [x] **MIG-05**: The takeover creates no duplicate entity when core MQTT replays retained legacy Discovery during startup (review finding IN-03); a test delivers the replay between the registry move and the retained clear
 
 ### Quality
 
@@ -52,8 +52,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MIG-04 | Phase 6 | Pending |
-| MIG-05 | Phase 6 | Pending |
+| MIG-04 | Phase 6 | Complete |
+| MIG-05 | Phase 6 | Complete |
 | QLT-01 | Phase 7 | Pending |
 | QLT-02 | Phase 7 | Pending |
 | QLT-03 | Phase 7 | Pending |

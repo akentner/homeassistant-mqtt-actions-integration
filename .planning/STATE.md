@@ -4,17 +4,17 @@ milestone: v1.0.1
 milestone_name: Hardening
 current_phase: 06
 current_phase_name: Native Entity Residual Fixes
-status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-10-04T10:33:27.171Z"
+status: verifying
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-10-04T10:47:00.994Z"
 last_activity: 2026-10-04
 last_activity_desc: Phase 06 execution started
-state_head: 56bdc71b8b6dba19f0a878dc7f30406c9c9b6ad1
+state_head: 4883f70f7f4763b3cd4956333561f8c759e5ffd2
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-04)
 
 Phase: 06 (Native Entity Residual Fixes) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-04 — Phase 06 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -100,6 +100,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05 P08 | 60min | 3 tasks | 10 files |
 | Phase 5 P09 | 35min | 2 tasks | 8 files |
 | Phase 06 P01 | 8 min | 2 tasks | 6 files |
+| Phase 06 P02 | 13 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -199,6 +200,8 @@ Recent decisions affecting current work:
 - [Phase 06]: Native flag of a mirror is a set of device ids in the native Store dict; the stored payload is kept as received (D-01)
 - [Phase 06]: A mirror is native when the set lists it or its payload carries the 1.0.0 marker; only the set is written from now on (D-02)
 - [Phase 06]: The native flag is sticky: the id leaves the set only at tombstone, prune or adoption and is pruned at start to the restored mirrors (D-03, T-06-01)
+- [Phase 06]: 06-02: the replay catch is registry-only and its quiet period is an async_call_later timer (5.0 s), not a sleep — A sleeping task hangs the freezer fixture; the timer follows the cutover pattern and publishes nothing (T-06-07, T-06-09)
+- [Phase 06]: 06-02: the emptied replayed MQTT device is removed only when nothing at all remains on it — Removing a device removes the entries on it, so a check on MQTT entries alone could delete moved native entities
 
 ### Pending Todos
 
@@ -231,8 +234,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-04T10:33:27.144Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-10-04T10:47:00.962Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

@@ -29,6 +29,7 @@ from custom_components.mqtt_actions.const import (
 )
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 from tests.fake_broker import FakeBroker, FakeGateway
+from tests.log_helpers import own_warnings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -274,7 +275,7 @@ async def test_keep_mode_needs_no_mqtt(
     publish.assert_not_called()
     assert hass.config_entries.async_get_entry(entry.entry_id) is None
     assert STORE_KEY not in hass_storage
-    assert [r for r in caplog.records if r.levelno == logging.WARNING and "MQTT" in r.getMessage()] == []
+    assert [r for r in own_warnings(caplog, exact=True) if "MQTT" in r.getMessage()] == []
 
 
 # ------------------------------------------------------------------------------------------ test seams

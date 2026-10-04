@@ -1,0 +1,2 @@
+PASS
+toggle +1, restart 0, mqtt entry reload 0, positive control +1, on both instances (see result.txt and counts.txt)

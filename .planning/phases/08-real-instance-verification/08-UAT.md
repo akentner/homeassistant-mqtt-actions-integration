@@ -45,7 +45,7 @@ release and not this checkout (D-03).
 | P1-2 | Phase 1 item 2 (07-PROOF) | pending | - | - | - |
 | P1-3 | Phase 1 item 3 (07-PROOF) | pending | - | - | - |
 | P1-4 | Phase 1 item 4 (07-PROOF) | pending | - | - | - |
-| P1-5 | Phase 1 item 5 (07-PROOF) | pending | - | - | - |
+| P1-5 | Phase 1 item 5 (07-PROOF) | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-5 |
 | P1-6 | Phase 1 item 6 (07-PROOF) | pending | - | - | - |
 | P2-1 | Phase 2 item 1 (07-PROOF) | pending | - | - | - |
 | P2-2 | Phase 2 item 2 (07-PROOF) | pending | - | - | - |
@@ -101,7 +101,11 @@ result: pending
 
 ### 9. P1-5: retained-versus-live chain
 expected: On the current build with a real HA core MQTT client and a real retaining broker (toggle in the UI, full HA restart, broker reconnect), no action runs for replayed state.
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-04
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p1-5
+note: Counted marker lines of the "UAT Marker" device (startup flag off, read from the retained config document) per instance. 1 toggle (the service call the frontend toggle makes, `switch.turn_on` on ha-a, state off before): +1 on ha-a and +1 on ha-b. 2 full restart (`podman restart ha-a ha-b`, new process lifetime, 90 s margin): 0 lines on both while the retained state was replayed. 3 broker reconnect (reload of the core `mqtt` config entry on each instance through `POST /api/config/config_entries/entry/{id}/reload`, response `require_restart: false`; 60 s): still 0 on both. 4 positive control (`switch.turn_off` on ha-a): +1 on both. `mosq` was not restarted (StartedAt unchanged). The toggle was the service call, not a click in the rendered frontend; rendering is not what P1-5 judges.
 
 ### 10. P1-6: core version of hassio-n2plus
 expected: The core version of the second real host (hassio-n2plus, "Backup"), read in Settings > About, is 2026.9.0 or newer (informational, no code consequence).
@@ -126,9 +130,9 @@ result: pending
 ## Summary
 
 total: 14
-passed: 2
+passed: 3
 issues: 0
-pending: 12
+pending: 11
 skipped: 0
 blocked: 0
 
@@ -146,6 +150,9 @@ next start after a core-prefix export, the release HACS reports).
 - Mapping: 05-UAT tests 4, 5, 6, 7 are UAT-01, UAT-02, UAT-03, UAT-04.
 - Live-republish (WR-03, plan 08-02): with legacy Discovery published while ha-a and ha-b were running, six `mqtt`-platform `_2` entities appeared on each instance within 20 s, stayed through 45 s and a graceful stop, and were gone after the next start (see `08-evidence/uat-02/live-variant.txt`). Classified by the owner as an accepted known limit (`WR03-LIVE-REPLAY`): it stays documented, there is no Gaps entry, and UAT-02's own result (startup replay) is unchanged.
 - Catch asymmetry (plan 08-02): in the startup rounds ha-b logged the INFO line "Removed 3 duplicate entities…" while ha-a logged none, although both registries ended clean and both hold six `_2` tombstones; the path that cleaned ha-a is not identified (evidence: `08-evidence/uat-02/log-a.txt`, `twin-tombstones.txt`).
+
+- Reload path (plan 08-03): research assumption A5 named `POST /api/config_entries/entry/{id}/reload`, which answers 404 on HA 2026.9.4; the working path is `POST /api/config/config_entries/entry/{id}/reload`. The first P1-5 run aborted at that point (bench problem, no result) after one restart; the check was re-run completely and the recorded evidence is that second run.
+- Repairs API (plan 08-03): the approval of a mirrored device works headless through `POST /api/repairs/issues/fix` (handler `mqtt_actions`, issue id `approval_{uuid}`) followed by `POST /api/repairs/issues/fix/{flow_id}` with `{}` (ends in `create_entry`). Plans needing an approval can reuse it.
 
 ## Owner decisions
 

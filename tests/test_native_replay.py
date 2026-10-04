@@ -197,3 +197,41 @@ async def test_the_replay_catch_is_armed_only_for_an_instance_with_a_native_devi
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert _manager(legacy.entry)._cancel_replay_catch is not None
+
+
+async def test_a_replay_right_after_the_move_is_removed_before_the_clear(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-05: the first catch runs between the registry move and the retained clear, with no quiet period to wait for."""
+    legacy, before = await _unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    _loop_back_discovery(hass, mqtt_mock)
+    replayed: list[list[str]] = []
+    left_at_the_clear: list[list[str]] = []
+    real_take_over = takeover.async_take_over
+    real_clear = DiscoveryPublisher.async_clear_device
+
+    async def _take_over_then_replay(*args: Any, **kwargs: Any) -> Any:
+        status = await real_take_over(*args, **kwargs)
+        replayed.append(await _replay(hass, legacy.topic, legacy.payload, legacy.device_id))
+        return status
+
+    async def _clear_after_a_look(self: DiscoveryPublisher, device_id: str) -> None:
+        left_at_the_clear.append(legacy_entity_ids(hass, device_id))
+        await real_clear(self, device_id)
+
+    monkeypatch.setattr(takeover, "async_take_over", _take_over_then_replay)
+    monkeypatch.setattr(DiscoveryPublisher, "async_clear_device", _clear_after_a_look)
+
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert len(replayed) == 1
+    assert len(replayed[0]) == 3
+    assert left_at_the_clear == [[]]  # nothing is left when the clear goes out
+    _assert_clean(hass, legacy.device_id, replayed[0])
+    _assert_moved_and_native(hass, legacy, before)

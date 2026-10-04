@@ -21,7 +21,7 @@ and entity ids. The README Limitations section drops both residuals. No new capa
 - **D-02:** Loading: a mirror is native if its id is in the set OR its stored payload carries the v1.0.0 marker, so v1.0.0 Stores stay native. Only the set is written from now on; `with_native_marker` (`document.py:188`) stops being the persistence path and is removed. The first save moves old marker-only mirrors into the set.
 
 ### IN-02: lifecycle of the flag
-- **D-03:** An id leaves the set only when the mirror ends: device deleted, adoption (it becomes owned, then `NativeState.devices` applies) or release. A document without the marker never resets it (T-5-11 stays). A re-pin to another owner keeps the flag only if that owner's document carries the marker.
+- **D-03:** The flag is sticky. An id leaves the set only when the mirror ends: device deleted (tombstone or prune), adoption (it becomes owned, then `NativeState.devices` applies) or release. A document without the marker, from the same owner or from a re-pinned owner, never resets it (T-5-11 stays). This replaces the earlier last sentence of D-03 on re-pins (the flag no longer depends on the new owner's document), per the decision of the planning session.
 
 ### IN-03: strategy against the replay
 - **D-04:** Keep the order migrate payload, registry takeover, retained clear (D-12 of Phase 5; a clear before the move deletes the legacy registry entries, T-5-08). The fix is a duplicate catch after the move: new `mqtt`-platform entities of the device id are detected and removed or merged so the migrated entities keep their registry ids and entity ids. Reuse the twin logic and `_carries_the_identity` in `takeover.py`. Waiting for the MQTT discovery queue is rejected: core exposes no public settle signal.

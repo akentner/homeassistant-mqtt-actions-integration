@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v1.0.1
 milestone_name: Hardening
 current_phase: 06
-current_phase_name: native-entity-residual-fixes
+current_phase_name: Native Entity Residual Fixes
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-10-04T10:15:00.602Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-10-04T10:33:27.171Z"
 last_activity: 2026-10-04
-last_activity_desc: Roadmap created for milestone v1.0.1 (3 phases, 9 requirements mapped)
-state_head: 8cab590158ebbb9a30c72dc1eca9c7efe2a816d0
+last_activity_desc: Phase 06 execution started
+state_head: 56bdc71b8b6dba19f0a878dc7f30406c9c9b6ad1
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 2
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-04)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 6 - Native Entity Residual Fixes (milestone v1.0.1 Hardening, Phases 6-8)
+**Current focus:** Phase 06 — Native Entity Residual Fixes
 
 ## Current Position
 
-Phase: 06 (native-entity-residual-fixes) — READY TO EXECUTE
-Plan: — of — in current phase
+Phase: 06 (Native Entity Residual Fixes) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-10-04 — Roadmap created for milestone v1.0.1 (3 phases, 9 requirements mapped)
+Last activity: 2026-10-04 — Phase 06 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -99,6 +99,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05 P07 | 45min | 2 tasks | 6 files |
 | Phase 05 P08 | 60min | 3 tasks | 10 files |
 | Phase 5 P09 | 35min | 2 tasks | 8 files |
+| Phase 06 P01 | 8 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -195,6 +196,9 @@ Recent decisions affecting current work:
 - [Phase 05]: 05-08: the discovery export is a best-effort second publish path (disabled by default, own prefix, no subscription, no healing); option changes apply from async_reconcile without reload
 - [Phase 5]: 05-09: ACL block unchanged; the export prefix has its own row and the discovery prefix is a legacy-path and export concern
 - [Roadmap v1.0.1]: Three phases continue the numbering at 6 (coarse granularity): 6 code fixes (MIG-04, MIG-05), 7 verification, stable tests and pinned CI (QLT-01 to QLT-03), 8 manual real-instance UAT (UAT-01 to UAT-04); Phase 7 follows the fixes so re-verification and the three-run proof cover the final code, Phase 8 follows both and is a manual verification phase, not code plans
+- [Phase 06]: Native flag of a mirror is a set of device ids in the native Store dict; the stored payload is kept as received (D-01)
+- [Phase 06]: A mirror is native when the set lists it or its payload carries the 1.0.0 marker; only the set is written from now on (D-02)
+- [Phase 06]: The native flag is sticky: the id leaves the set only at tombstone, prune or adoption and is pruned at start to the restored mirrors (D-03, T-06-01)
 
 ### Pending Todos
 
@@ -227,9 +231,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-04T08:17:44.724Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-native-entity-residual-fixes/06-CONTEXT.md
+Last session: 2026-10-04T10:33:27.144Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

@@ -43,11 +43,11 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   3. Both regression tests fail on the v1.0.0 code and pass with the fixes, and the existing takeover, native-entity and cutover test suites stay green.
   4. The README Limitations section no longer lists the size-limit and boot-time replay residuals.
 
-**Plans**: 2 plans
+**Plans**: 1/2 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 06-01-PLAN.md — IN-02 (MIG-04): the native flag of a mirror is persisted as a set of ids in the Store, sticky until the mirror ends; the payload marker writer is retired
+- [x] 06-01-PLAN.md — IN-02 (MIG-04): the native flag of a mirror is persisted as a set of ids in the Store, sticky until the mirror ends; the payload marker writer is retired
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 06-02-PLAN.md — IN-03 (MIG-05): registry-only duplicate catch right after the move and after a quiet period over every native device; README Limitations updated
@@ -86,7 +86,7 @@ Phases execute in numeric order: 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Native Entity Residual Fixes | 0/2 | Planned | - |
+| 6. Native Entity Residual Fixes | 1/2 | In Progress|  |
 | 7. Verification, Stable Tests and Pinned CI | 0/TBD | Not started | - |
 | 8. Real-Instance Verification | 0/TBD | Not started | - |
 

@@ -445,3 +445,41 @@ def test_release_creates_the_release_with_generated_notes() -> None:
 
 def test_every_job_runs_on_one_pinned_runner() -> None:
     assert pinned_runner_problems(workflow_runners(WORKFLOWS)) == []
+
+
+def test_pinned_runner_guard_accepts_one_pinned_version() -> None:
+    runners = {("ci.yml", "lint"): "ubuntu-24.04", ("release.yml", "release"): "ubuntu-24.04"}
+    assert pinned_runner_problems(runners) == []
+
+
+@pytest.mark.parametrize("label", ["ubuntu-latest", "macos-latest", "windows-latest"])
+def test_pinned_runner_guard_rejects_a_floating_label(label: str) -> None:
+    problems = pinned_runner_problems({("ci.yml", "lint"): label})
+    assert problems == [f"ci.yml:lint runs on {label!r}"]
+
+
+def test_pinned_runner_guard_rejects_two_runner_versions() -> None:
+    runners = {("ci.yml", "lint"): "ubuntu-24.04", ("ci.yml", "unit"): "ubuntu-26.04"}
+    problems = pinned_runner_problems(runners)
+    assert len(problems) == 1
+    assert problems[0].startswith("more than one runner version")
+
+
+@pytest.mark.parametrize("value", [["ubuntu-24.04", "self-hosted"], "${{ matrix.os }}"])
+def test_pinned_runner_guard_rejects_a_non_string_runner(value: Any) -> None:
+    problems = pinned_runner_problems({("ci.yml", "unit"): value})
+    assert any(problem.startswith("ci.yml:unit runs on") for problem in problems)
+
+
+def test_pinned_runner_guard_rejects_a_directory_without_runners() -> None:
+    assert pinned_runner_problems({}) == ["no workflow job declares a runner"]
+
+
+def test_workflow_runners_skip_caller_jobs_and_read_every_yaml_file(tmp_path: Path) -> None:
+    (tmp_path / "a.yml").write_text(
+        "jobs:\n  build:\n    runs-on: ubuntu-24.04\n  call:\n    uses: ./.github/workflows/b.yaml\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "b.yaml").write_text("jobs:\n  test:\n    runs-on: ubuntu-24.04\n", encoding="utf-8")
+    (tmp_path / "c.yml").write_text("name: no jobs here\n", encoding="utf-8")
+    assert workflow_runners(tmp_path) == {("a.yml", "build"): "ubuntu-24.04", ("b.yaml", "test"): "ubuntu-24.04"}

@@ -74,11 +74,14 @@ def _loop_back_discovery(hass: HomeAssistant, mqtt_mock: Any) -> None:
     The mocked paho client already loops a publish back with the publish's own retain flag, so a retained clear would
     reach core as a retained replay, which core drops when it saw a retained message on the topic before. A live
     delivery makes core handle the clear like it does in production. The migrate payload is live either way.
+
+    Core removes a loaded duplicate by publishing an empty retained payload, which the mocked client hands on as None;
+    `async_fire_mqtt_message` cannot take None, so it gets the empty string, the same removal on the wire.
     """
 
     def _deliver(topic: str, payload: Any, *_args: Any, **_kwargs: Any) -> Any:
         if topic.startswith(f"{PREFIX}/"):
-            async_fire_mqtt_message(hass, topic, payload, retain=False)
+            async_fire_mqtt_message(hass, topic, "" if payload is None else payload, retain=False)
         return DEFAULT
 
     mqtt_mock.async_publish.side_effect = _deliver

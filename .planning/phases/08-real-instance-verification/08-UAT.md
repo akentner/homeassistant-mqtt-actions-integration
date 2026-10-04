@@ -40,7 +40,7 @@ release and not this checkout (D-03).
 | UAT-01 | UAT-01, ROADMAP criterion 1, 05-UAT test 4 | pending | - | - | - |
 | UAT-02 | UAT-02, ROADMAP criterion 2, 05-UAT test 5 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-02 |
 | UAT-03 | UAT-03, ROADMAP criterion 3, 05-UAT test 6 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-03 |
-| UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | pending | - | - | - |
+| UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | issue | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-04 |
 | P1-1 | Phase 1 item 1 (07-PROOF) | pending | - | - | - |
 | P1-2 | Phase 1 item 2 (07-PROOF) | pending | - | - | - |
 | P1-3 | Phase 1 item 3 (07-PROOF) | pending | - | - | - |
@@ -81,7 +81,13 @@ note: Marker device "UAT Marker" (owner ha-a, inert system_log.write actions) co
 
 ### 4. UAT-04: Discovery export and core prefix
 expected: The Discovery export has `enabled_by_default` false and no buttons, the core MQTT prefix yields only disabled duplicates, and switching the export off clears its topics.
-result: pending
+result: issue
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-04
+evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-04
+reported: 2026-10-04, scripted run of plan 08-04 (`check-uat04.sh run`, expectations coded before the run)
+severity: minor
+note: Clause 1 holds (export on, default prefix `mqtt_actions_export`, ACL rows added first, read back by a second client): a retained payload exists for each of the three owned native devices (Lampe Test, Bar Select, UAT Marker), every component is `switch` or `select` with `enabled_by_default` false, no button, no `test_` key, no `/test` topic, and nothing is retained on `homeassistant/device`. Clause 3 holds (export off): `mqtt_actions_export/#` and `homeassistant/device/#` read back empty. Clause 2 FAILS for two of three devices on BOTH instances (export prefix `homeassistant`, no restart): the UAT Marker (control) got exactly one `mqtt` row, unique id = device id, `disabled_by` integration, as expected, but Lampe Test and Bar Select got an ENABLED `mqtt` row (`switch.lampe_test_2`, `select.bar_select_2`, `disabled_by` null) on ha-a and on ha-b; the native rows stayed present and enabled. The published payload is correct (enabled_by_default false, X3 passes); the enabled state is the likely effect of core MQTT restoring `disabled_by` from the deleted-entity tombstones that the UAT-02 legacy replay left for the same (domain, platform, unique id) on these two devices (HA 2026.9.4 `entity_registry.py` lines 1498-1508; `uat-04/tombstone-cause.txt`). The marker never had a tombstone. This is an inference from the control and the core source, not an isolated reproduction.
 
 ### 5. P1-1: HACS client install on a production host
 expected: On a real host: custom repository added, integration downloaded, Home Assistant restarted, MQTT Actions added, a second add aborts, the icon is shown; then the integration and the repository are removed again (add and remove only, no device created).
@@ -131,8 +137,8 @@ result: pending
 
 total: 14
 passed: 3
-issues: 0
-pending: 11
+issues: 1
+pending: 10
 skipped: 0
 blocked: 0
 
@@ -140,7 +146,17 @@ blocked: 0
 
 <!-- Replace the empty list with entries in the gap format of ~/.claude/gsd-core/templates/UAT.md when a check fails (D-08):
      one entry per failed block, with `test:` set to the block number. -->
-[]
+- truth: "With the export on the core MQTT prefix, every exported device yields only a disabled duplicate on every instance that listens (no enabled mqtt entity)"
+  status: failed
+  reason: "Scripted result (plan 08-04, UAT-04 clause 2): after `export_prefix` was set to `homeassistant` (no restart), ha-a and ha-b each held an ENABLED mqtt row for Lampe Test (`switch.lampe_test_2`) and Bar Select (`select.bar_select_2`); only the UAT Marker duplicate was `disabled_by: integration`. The export payload itself has `enabled_by_default` false on every component. The enabled rows follow core's restore of `disabled_by` from tombstones of earlier legacy entities (UAT-02 replay twins) with the same unique id. Needs an owner decision: product gap (for example a documented warning or a guard when legacy twins existed) or bench artifact of running UAT-02 before UAT-04 on the same instances."
+  severity: minor
+  test: 4
+  root_cause: "Likely: HA core `async_get_or_create` restores `disabled_by` from a deleted entity with the same (domain, platform, unique_id); inferred from the marker control and the core source, not reproduced in isolation"
+  artifacts:
+    - path: ".planning/phases/08-real-instance-verification/08-evidence/uat-04/tombstone-cause.txt"
+      issue: "core source lines and the tombstones that explain the enabled rows"
+  missing: []
+  debug_session: ""
 
 ## Observations
 
@@ -153,6 +169,10 @@ next start after a core-prefix export, the release HACS reports).
 
 - Reload path (plan 08-03): research assumption A5 named `POST /api/config_entries/entry/{id}/reload`, which answers 404 on HA 2026.9.4; the working path is `POST /api/config/config_entries/entry/{id}/reload`. The first P1-5 run aborted at that point (bench problem, no result) after one restart; the check was re-run completely and the recorded evidence is that second run.
 - Repairs API (plan 08-03): the approval of a mirrored device works headless through `POST /api/repairs/issues/fix` (handler `mqtt_actions`, issue id `approval_{uuid}`) followed by `POST /api/repairs/issues/fix/{flow_id}` with `{}` (ends in `create_entry`). Plans needing an approval can reuse it.
+
+- Restart cleanup of the core-prefix duplicates (plan 08-04, research assumption A4, Pitfall 4): after the export was switched off, the live registries of ha-a and ha-b still held one disabled leftover `mqtt` row each (`switch.uat_marker_2`, `disabled_by` integration; the two enabled duplicates of Lampe Test and Bar Select were already gone with the clear). After one `podman restart ha-a ha-b` (90 s margin, graceful stop, file read) both registries held zero `mqtt` rows and zero `_2` entity ids, and 34 `mqtt_actions` rows each (evidence: `08-evidence/uat-04/registry-after-off-{a,b}.json`, `post-restart-{a,b}.json`). A4 is confirmed: the start removes the leftovers. This is an observation, not a failure.
+- Enabled export duplicates (plan 08-04, UAT-04 clause 2): on the core prefix the duplicates of Lampe Test and Bar Select were enabled, the one of the UAT Marker disabled; see the Gaps entry for test 4 and `08-evidence/uat-04/tombstone-cause.txt`. The clear step removed the enabled duplicates from the registry (they became tombstones) and left the disabled one until the next start.
+- Options flow path (plan 08-04): the hub options flow works headless through `POST /api/config/config_entries/options/flow` (body `{"handler": "<entry id>"}`) and `POST /api/config/config_entries/options/flow/{flow_id}`; like the reload endpoint the prefix is `/api/config/`, not `/api/` as the plan text assumed. The export option applies without a reload. The stored prefix was reset to the default at the end (export off), so the hub options of ha-a now read `discovery_export` false, `export_prefix` `mqtt_actions_export`.
 
 ## Owner decisions
 
@@ -172,4 +192,7 @@ broker and hosts are untouched.
 - Backup of the instances and the broker configuration taken before the first restart (path in `08-evidence/00-preflight/backup-manifest.txt`).
 - Long-lived tokens `~/ha-test/.token-a` and `~/ha-test/.token-b` (mode 0600, owner decision API-ACCESS). The owner revokes them in the
   two profile security pages after the phase.
+- ACL rows `topic readwrite mqtt_actions_export/#` in the `ha_one` and `ha_two` blocks of `~/ha-test/mosquitto/acl` (plan 08-04; copy
+  before the edit: `~/ha-test/mosquitto/acl.bak-phase8-04`; diff: `08-evidence/uat-04/acl-diff.txt`).
+- The "UAT Marker" device (plan 08-03) on ha-a and its approved mirror on ha-b, retained on the broker; to be removed at phase end.
 - Helper scripts in `~/ha-test/bin/` (outside the repository; a scrubbed copy is added to the evidence by plan 08-10).

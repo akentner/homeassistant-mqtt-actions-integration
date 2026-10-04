@@ -36,3 +36,29 @@ Runs 1 and 2 report the same duration to the hundredth of a second. They are sep
 about 113 seconds apart); the equal figure is a coincidence of the rounded pytest timer.
 
 - **Ruff:** `uv run ruff check .` printed `All checks passed!`; `uv run ruff format --check .` printed `91 files already formatted`
+
+## CI proof on ubuntu-24.04 (plan 07-03)
+
+- **Date:** 2026-10-04 (runs 13:26Z to 13:33Z)
+- **Remote branch:** `gsd/phase-06-native-entity-residual-fixes` (owner decision `push-branch-as-is`; created on origin by
+  `git push origin HEAD:refs/heads/gsd/phase-06-native-entity-residual-fixes`; no tag, no release)
+- **Proven sha:** `d92b87f3ebf427c6f63d3ccf0d95dd14c93af961` (the local-proof docs commit; code identical to the head of the
+  local three-run proof `0f9ad70`, which differs only by planning documents)
+- **Runner image (read from each job log):** `Image: ubuntu-24.04`, `Version: 20260927.320.1`, Ubuntu 24.04.5 LTS
+- **Broker in CI (read from the broker job log):** Ubuntu archive package `mosquitto 2.0.18-1build3` (local broker is 2.1.2)
+- **Retries:** none; each run was dispatched once, after the previous one had finished, and the next run id was taken only
+  after it was newer than the previous one
+
+| Run | Workflow | URL | Conclusion | Jobs (all success) | Image | Test counts |
+|-----|----------|-----|------------|--------------------|-------|-------------|
+| 1 | ci.yml | https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/37205596675 | success | Ruff, Unit tests, Broker tests (Mosquitto), Multi-instance tests | ubuntu-24.04 / 20260927.320.1 | 1308 unit, 17 broker, 165 multi-instance |
+| 2 | ci.yml | https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/37205721595 | success | Ruff, Unit tests, Broker tests (Mosquitto), Multi-instance tests | ubuntu-24.04 / 20260927.320.1 | 1308 unit, 17 broker, 165 multi-instance |
+| 3 | ci.yml | https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/37205851615 | success | Ruff, Unit tests, Broker tests (Mosquitto), Multi-instance tests | ubuntu-24.04 / 20260927.320.1 | 1308 unit, 17 broker, 165 multi-instance |
+| V | validate.yml | https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/37205956233 | success | hassfest, HACS | ubuntu-24.04 / 20260927.320.1 | HACS: `All (9) checks passed` |
+
+All four runs report `headSha` `d92b87f3ebf427c6f63d3ccf0d95dd14c93af961`. The three CI runs are consecutive dispatch runs
+(no failure in between). 1308 + 17 + 165 = 1490, the same total as the local runs.
+
+- **Push-event runs (informational, not counted):** none. `gh run list --branch gsd/phase-06-native-entity-residual-fixes
+  --event push` returned an empty list at the dispatch time and again after the last run; GitHub did not start push-event
+  runs for the branch creation.

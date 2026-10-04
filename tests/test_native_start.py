@@ -23,6 +23,7 @@ from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     DOMAIN,
+    MAX_DOCUMENT_BYTES,
     STORE_KEY,
     STORE_MIRRORS,
     STORE_VERSION,
@@ -748,3 +749,94 @@ async def test_adoption_on_a_legacy_instance_of_a_legacy_mirror_is_unchanged(
     assert [json.loads(payload)["components"] and retain for payload, retain in published] == [True]
     document = json.loads(_publishes(mqtt_mock, config_topic(BASE, spec.device_id))[-1][0])
     assert "entities" not in document
+
+
+# --- Phase 6: the native flag of a mirror lives in the Store, not in the payload (IN-02, MIG-04) --------------------
+
+
+async def _deliver_document(hass: HomeAssistant, device_id: str, payload: str, *, retain: bool = False) -> None:
+    async_fire_mqtt_message(hass, config_topic(BASE, device_id), payload, retain=retain)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _native_mirror_ids(manager: Manager) -> list[str]:
+    """Return the persisted native mirror ids; `.get` makes a missing key an assertion failure, not a KeyError."""
+    return manager._data_to_save().get("native", {}).get("mirrors", [])
+
+
+def _padded_to_the_limit(spec: Any, rev: int) -> str:
+    """Return the unmarked document of a spec, padded with an ignored top-level key to exactly MAX_DOCUMENT_BYTES."""
+    plain = document_payload(spec, rev=rev)
+    # The canonical JSON cost of an empty `pad` key: a comma plus `"pad":""`
+    pad = MAX_DOCUMENT_BYTES - len(plain.encode()) - len(',"pad":""')
+    payload = document_payload(spec, rev=rev, tamper=lambda document: document.update(pad="x" * pad))
+    assert len(payload.encode()) == MAX_DOCUMENT_BYTES
+    return payload
+
+
+async def test_a_native_mirror_at_the_size_limit_stays_native_after_a_restart(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """IN-02: the native flag of a mirror survives a restart whatever the size of its last document."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS)
+    # The content must change: an ignored key is never hashed, so padding alone would not even be applied
+    changed = make_spec(device_id=spec.device_id, name="Foreign lamp", on=OFF_ACTIONS)
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver_document(hass, spec.device_id, document_payload(spec, native=True))
+    await _deliver_document(hass, spec.device_id, _padded_to_the_limit(changed, rev=2))
+    assert _manager(entry).is_native(spec.device_id)
+
+    await _restart(hass, entry)
+
+    manager = _manager(entry)
+    assert manager.is_native(spec.device_id)
+    assert manager.mirrors[spec.device_id].unsubscribe_test is None
+    with patch.object(hass.config_entries, "async_schedule_reload") as schedule_reload:
+        await _deliver_document(hass, spec.device_id, document_payload(changed, rev=3, native=True))
+    schedule_reload.assert_not_called()
+
+
+async def test_native_mirror_set_ignores_malformed_and_unlisted_ids(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-06-01, T-06-03: only a valid listed id of a cached mirror makes it native; the Store is untrusted input."""
+    listed = make_spec(name="Listed lamp", on=ON_ACTIONS)
+    unlisted = make_spec(name="Unlisted lamp", on=ON_ACTIONS)
+    _seed(
+        hass_storage,
+        {
+            STORE_MIRRORS: {
+                listed.device_id: document_payload(listed),
+                unlisted.device_id: document_payload(unlisted),
+            },
+            "native": {
+                "instance": False,
+                "pending": [],
+                "devices": [],
+                "mirrors": [listed.device_id, 42, "../bad", "x" * 300],
+            },
+        },
+    )
+
+    entry = await _setup(hass, make_hub_entry())
+
+    manager = _manager(entry)
+    assert manager.is_native(listed.device_id)
+    assert not manager.is_native(unlisted.device_id)
+    assert _native_mirror_ids(manager) == [listed.device_id]
+
+
+async def test_native_mirror_set_takes_over_a_marker_only_store_of_the_previous_release(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-02: a 1.0.0 Store has the marker in the cached payload and no native key; it loads native and is migrated."""
+    spec = make_spec(name="Foreign lamp", on=ON_ACTIONS)
+    _seed(hass_storage, {STORE_MIRRORS: {spec.device_id: document_payload(spec, native=True)}})
+
+    entry = await _setup(hass, make_hub_entry())
+
+    assert _manager(entry).is_native(spec.device_id)
+    assert _native_mirror_ids(_manager(entry)) == [spec.device_id]
+    await _restart(hass, entry)
+    assert _manager(entry).is_native(spec.device_id)
+    assert _native_mirror_ids(_manager(entry)) == [spec.device_id]

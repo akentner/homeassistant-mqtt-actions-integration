@@ -7,6 +7,10 @@ to the hub entry of this integration. It is registry logic only: it never publis
 integration. The migrate payload that unloads the discovered entities and the retained clear that follows belong to
 the caller, which keeps the broker order, a fixed rule of the phase, in one place.
 
+The module also removes the duplicates that a replayed legacy discovery creates after a takeover: core MQTT replays
+retained discovery at its own pace, so a second set of `mqtt` entities can appear next to the moved ones. That catch is
+registry logic as well; it still never publishes and never imports the MQTT integration.
+
 The order of the steps is load-bearing and each edge is pinned by a core test in `tests/test_takeover.py`:
 nothing moves while a legacy entity is loaded, entities move before their device, and the companion device of the
 mode select is merged last.
@@ -32,6 +36,9 @@ if TYPE_CHECKING:
 
 TAKEOVER_UNLOAD_TIMEOUT = 10.0
 TAKEOVER_RETRY_INTERVAL = 0.25
+# Core MQTT replays retained discovery at its own pace and exposes no signal for "done"; its own discovery cooldown is
+# 5 seconds, which is the quiet period the catch for replayed duplicates waits for
+REPLAY_QUIET_SECONDS = 5.0
 
 # The domain of core MQTT is a literal: only `mqtt_gateway.py` may import the MQTT integration
 MQTT_DOMAIN = "mqtt"
@@ -176,6 +183,41 @@ async def async_take_over(  # noqa: PLR0913
     )
     _merge_companion(hass, entry, target, device)
     return TakeoverStatus.DONE
+
+
+def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str) -> int:
+    """
+    Remove the legacy entries a replayed discovery created next to the moved entities of a device; return the count.
+
+    A candidate is a legacy entry of the core MQTT device of the id that has a native twin under this config entry.
+    It goes only when the twin carries the identity: an older or customized legacy entry is left to the takeover pass,
+    and an entry without a twin is no duplicate. The twin is never removed. Registry logic only: nothing is published
+    here, although core MQTT itself publishes an empty retained discovery for a loaded entity that goes. The emptied
+    MQTT device goes too, unless an entry remains on it, whether this integration created it or not.
+    """
+    if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
+        return 0
+    entity_registry = er.async_get(hass)
+    removed = 0
+    for legacy in _legacy_entries(hass, device, device_id, mqtt_entry_id):
+        twin_id = entity_registry.async_get_entity_id(legacy.domain, DOMAIN, legacy.unique_id)
+        if twin_id is None:
+            continue
+        twin = entity_registry.entities[twin_id]
+        if twin.config_entry_id != entry_id or _carries_the_identity(legacy, twin):
+            continue
+        entity_registry.async_remove(legacy.entity_id)
+        removed += 1
+    if not removed:
+        return 0
+    # Removing a device removes the entries on it, so it goes only when nothing at all is left on it
+    if not er.async_entries_for_device(entity_registry, device.id, include_disabled_entities=True):
+        device_registry = dr.async_get(hass)
+        # Removing the entities may have dropped the device already
+        if device_registry.async_get(device.id) is not None:
+            device_registry.async_remove_device(device.id)
+    LOGGER.info("Removed %d duplicate entities that a replayed legacy discovery created", removed)
+    return removed
 
 
 def has_moved_entities(hass: HomeAssistant, entry: ConfigEntry, device_id: str) -> bool:

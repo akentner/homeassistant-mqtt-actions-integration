@@ -543,6 +543,8 @@ class Manager:
         # The wait before the first cutover check, read once so a test can turn the timer off; None means none (D-09)
         self.cutover_settle_seconds: float | None = CUTOVER_SETTLE_SECONDS
         self._cancel_cutover: CALLBACK_TYPE | None = None
+        # The timer of the catch for duplicates a replayed legacy discovery creates; None while none is armed (D-05)
+        self._cancel_replay_catch: CALLBACK_TYPE | None = None
         # Set once the settle time has passed; only then does a roster change start a cutover check
         self._cutover_ready = False
         # The blocking peers the hint issue shows now, so an unchanged set does not rebuild the issue on every heartbeat
@@ -806,6 +808,9 @@ class Manager:
         await self._async_publish_availability(AvailabilityState.ONLINE)
         await self.presence.async_publish_heartbeat()
         self._arm_cutover()
+        # Core replays retained discovery at its own pace and the order of its messages is no signal, so the catch for
+        # replayed duplicates waits a quiet period instead of a settle event that does not exist (D-05)
+        self._arm_replay_catch()
 
     @callback
     def _arm_cutover(self) -> None:
@@ -820,6 +825,60 @@ class Manager:
         self._cancel_cutover = None
         self._cutover_ready = True
         self._start_cutover_check()
+
+    def _native_device_ids(self) -> list[str]:
+        """Return the sorted ids of the owned devices and mirrors that are native; a deferred device is never one."""
+        return sorted(device_id for device_id in {*self.devices, *self.mirrors} if self.is_native(device_id))
+
+    @callback
+    def _remove_replay_twins(self, device_ids: Iterable[str]) -> int:
+        """
+        Remove the duplicates a replayed legacy discovery created for these devices; return how many went (D-04, D-05).
+
+        Registry logic only: nothing is published and no migrate payload is sent for a mirror (T-5-02). One device that
+        raises must not keep the others, or the start, from finishing.
+        """
+        if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None:
+            return 0
+        removed = 0
+        for device_id in device_ids:
+            try:
+                removed += takeover.remove_replay_twins(
+                    self._hass, self._entry.entry_id, device_id, mqtt_entry_id=mqtt_entry_id
+                )
+            except Exception as err:  # noqa: BLE001
+                # No registry or broker content in the log: this check must never keep the manager from running
+                LOGGER.warning("The check for duplicate entities of a device raised an unexpected error")
+                LOGGER.debug("The check for duplicate entities failed with %s", type(err).__name__)
+        return removed
+
+    @callback
+    def _arm_replay_catch(self) -> None:
+        """Start the quiet period before the catch for replayed duplicates; a legacy instance has no native device."""
+        if not self._running or not self._native_device_ids():
+            return
+        if self._cancel_replay_catch is not None:
+            self._cancel_replay_catch()
+        self._cancel_replay_catch = async_call_later(
+            self._hass, takeover.REPLAY_QUIET_SECONDS, self._on_replay_catch_due
+        )
+
+    @callback
+    def _on_replay_catch_due(self, _now: object) -> None:
+        """Start the catch in a background task of the entry; it takes the lock, which a callback cannot await."""
+        self._cancel_replay_catch = None
+        if not self._running:
+            return
+        self._entry.async_create_background_task(self._hass, self._async_replay_catch(), name=f"{DOMAIN} replay catch")
+
+    async def _async_replay_catch(self) -> None:
+        """Remove the duplicates that a replay created after the quiet period, for every native device (D-05)."""
+        async with self._lock:
+            if not self._running:
+                return
+            if self._remove_replay_twins(self._native_device_ids()):
+                # The removal is on disk like the move before it (WR-01)
+                await takeover.async_flush_registries(self._hass)
 
     @callback
     def on_roster_changed(self) -> None:
@@ -1076,6 +1135,9 @@ class Manager:
             if self._cancel_cutover is not None:
                 self._cancel_cutover()
                 self._cancel_cutover = None
+            if self._cancel_replay_catch is not None:
+                self._cancel_replay_catch()
+                self._cancel_replay_catch = None
             self.sync.async_stop()
             self.presence.async_stop()
             self.retrigger.async_stop()

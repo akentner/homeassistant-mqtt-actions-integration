@@ -29,7 +29,13 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN
 from custom_components.mqtt_actions.discovery import build_discovery
-from custom_components.mqtt_actions.takeover import TakeoverStatus, TakeoverTarget, async_take_over, is_legacy_entity
+from custom_components.mqtt_actions.takeover import (
+    TakeoverStatus,
+    TakeoverTarget,
+    async_take_over,
+    is_legacy_entity,
+    remove_replay_twins,
+)
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
 
@@ -851,3 +857,146 @@ def test_is_legacy_entity_needs_every_part_of_the_identity(changes: dict[str, st
     entity = SimpleNamespace(**{**fields, **changes})
 
     assert is_legacy_entity(entity, "dev", "mqtt-entry", "mqtt-device") is expected  # type: ignore[arg-type]
+
+
+# --- the takeover module: the catch for replayed duplicates (D-04, D-05, T-06-06) --------------------------------
+
+
+async def _moved_and_replayed(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> tuple[LegacyDevice, dict[str, er.RegistryEntry], list[str]]:
+    """Take a legacy device over, clear its discovery and replay it live; return it, the moved entries, the replay."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+    await _deliver(hass, legacy.topic, CLEAR_PAYLOAD)
+    moved = {entity_id: entity_registry.async_get(entity_id) for entity_id in _moved_entity_ids(hass, legacy.device_id)}
+    assert len(moved) == 3
+    await _deliver(hass, legacy.topic, legacy.payload)
+    replayed = legacy_entity_ids(hass, legacy.device_id)
+    assert len(replayed) == 3
+    return legacy, moved, replayed
+
+
+def _remove_replay_twins_of(hass: HomeAssistant, legacy: LegacyDevice) -> int:
+    return remove_replay_twins(hass, legacy.entry.entry_id, legacy.device_id, mqtt_entry_id=_mqtt_entry_id(hass))
+
+
+async def test_remove_replay_twins_removes_the_loaded_duplicates_and_the_emptied_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """The loaded duplicates of a replay and the emptied MQTT device go; every moved entry and the device stay."""
+    legacy, moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    taken_device = device_registry.async_get_device_by_identifier((DOMAIN, legacy.device_id), legacy.entry.entry_id)
+    assert taken_device is not None
+    assert all(hass.states.get(entity_id) is not None for entity_id in replayed)
+
+    assert _remove_replay_twins_of(hass, legacy) == 3
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert legacy_entity_ids(hass, legacy.device_id) == []
+    for entity_id in replayed:
+        assert entity_registry.async_get(entity_id) is None
+        assert hass.states.get(entity_id) is None
+    for entity_id, old in moved.items():
+        assert entity_registry.async_get(entity_id) == old
+    assert device_registry.async_get(taken_device.id) is not None
+    assert (
+        device_registry.async_get_device_by_identifier(("mqtt", f"{DOMAIN}_{legacy.device_id}"), _mqtt_entry_id(hass))
+        is None
+    )
+
+
+async def test_remove_replay_twins_leaves_an_entry_without_a_native_twin_and_keeps_the_device(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """An entry that has no counterpart under this integration is no duplicate: it stays, and so does its device."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+    await _deliver(hass, legacy.topic, CLEAR_PAYLOAD)
+    button_id = next(entity_id for entity_id in _moved_entity_ids(hass, legacy.device_id) if "button." in entity_id)
+    entity_registry.async_remove(button_id)  # this entry has no native twin when the replay comes
+    await _deliver(hass, legacy.topic, legacy.payload)
+    replayed = legacy_entity_ids(hass, legacy.device_id)
+    assert len(replayed) == 3
+
+    assert _remove_replay_twins_of(hass, legacy) == 2
+
+    left = legacy_entity_ids(hass, legacy.device_id)
+    assert len(left) == 1
+    assert left[0].startswith("button.")
+    assert _mqtt_device(hass, legacy.device_id) is not None
+
+
+async def test_remove_replay_twins_leaves_an_older_entry_that_carries_the_identity_to_the_takeover(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """WR-04: an older legacy entry is the identity the user knows; the takeover pass resolves it, not the catch."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+
+    assert _remove_replay_twins_of(hass, legacy) == 0
+
+    entity_registry = er.async_get(hass)
+    for entity_id, old in before.items():
+        assert entity_registry.async_get(entity_id) == old
+    for twin in natives.values():
+        assert entity_registry.async_get(twin.entity_id) == twin
+
+
+async def test_remove_replay_twins_never_touches_a_foreign_mqtt_entity(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """T-5-01, T-06-06: an unrelated MQTT entity that carries the device id as unique id stays where it is."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    foreign_payload = {
+        "device": {"identifiers": ["somebody_else"], "name": "Somebody else"},
+        "origin": {"name": "Somebody else"},
+        "components": {
+            "other": {
+                "platform": "button",
+                "unique_id": legacy.device_id,
+                "name": "Foreign button",
+                "command_topic": "somebody/else/set",
+            }
+        },
+    }
+    async_fire_mqtt_message(hass, discovery_topic(PREFIX, "somebody_else"), json.dumps(foreign_payload), retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    foreign_id = entity_registry.async_get_entity_id("button", "mqtt", legacy.device_id)
+    assert foreign_id is not None
+    foreign_before = entity_registry.async_get(foreign_id)
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+    await _deliver(hass, legacy.topic, CLEAR_PAYLOAD)
+    await _deliver(hass, legacy.topic, legacy.payload)
+    assert len(legacy_entity_ids(hass, legacy.device_id)) == 4  # three replayed entries and the foreign button
+
+    assert _remove_replay_twins_of(hass, legacy) == 3
+
+    assert entity_registry.async_get(foreign_id) == foreign_before
+    assert legacy_entity_ids(hass, legacy.device_id) == [foreign_id]
+
+
+async def test_remove_replay_twins_without_a_legacy_device_does_nothing_and_publishes_nothing(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """A device id without a core MQTT device returns 0, changes no registry entry and sends nothing to the broker."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    await _deliver(hass, legacy.topic, MIGRATE_PAYLOAD)
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+    await _deliver(hass, legacy.topic, CLEAR_PAYLOAD)
+    snapshot = _mqtt_entry_state(hass)
+    mqtt_mock.async_publish.reset_mock()
+
+    assert _remove_replay_twins_of(hass, legacy) == 0
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _mqtt_entry_state(hass) == snapshot
+    assert mqtt_mock.async_publish.call_args_list == []

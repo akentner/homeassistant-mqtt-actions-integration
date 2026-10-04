@@ -19,13 +19,15 @@ from tests.test_native_start import (
     _assert_moved_and_native,
     _legacy_mirror,
     _loop_back_discovery,
+    _manager,
     _mqtt_device_of,
     _publishes,
     _restart,
+    _seed_native,
     _store_the_mirror_as_native,
     _unloaded_legacy_device,
 )
-from tests.test_takeover import MIGRATE_PAYLOAD, PREFIX, legacy_entity_ids
+from tests.test_takeover import MIGRATE_PAYLOAD, PREFIX, legacy_entity_ids, setup_legacy_device
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -175,3 +177,23 @@ async def test_a_replay_before_a_restart_of_a_finished_native_owner_is_cleaned_a
         await _quiet_period_passes(hass)
         _assert_clean(hass, legacy.device_id, replayed)
         _assert_moved_and_native(hass, legacy, before)
+
+
+async def test_the_replay_catch_is_armed_only_for_an_instance_with_a_native_device(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """A legacy instance arms no catch; one with a native device arms the timer."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    assert _manager(legacy.entry)._cancel_replay_catch is None
+
+    assert await hass.config_entries.async_unload(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _seed_native(hass_storage, pending=[])
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _manager(legacy.entry)._cancel_replay_catch is not None

@@ -92,14 +92,14 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: 1/10 plans executed
+**Plans**: 2/10 plans executed
 
 Plans:
 **Wave 1**
 - [x] 08-01-PLAN.md — Bench preflight (tracer): pin and prove the build, backup, guard, bench broker users, 08-UAT.md ledger, owner decision on API access
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 08-02-PLAN.md — UAT-02: legacy Discovery replay with two startup rounds on ha-a and ha-b, live-republish observation, owner classification of WR-03
+- [x] 08-02-PLAN.md — UAT-02: legacy Discovery replay with two startup rounds on ha-a and ha-b, live-republish observation, owner classification of WR-03
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 08-03-PLAN.md — UAT-03 and P1-5: marker fixture, exactly-once commands across two instances, unknown payload, retained-versus-live chain
@@ -134,7 +134,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 1/10 | In Progress|  |
+| 8. Real-Instance Verification | 2/10 | In Progress|  |
 
 ## Backlog
 

@@ -26,7 +26,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
 **Ordering rationale:** The two code fixes change the code that Phases 1 to 4 and the test suite verify, so Phase 6 comes first and Phase 7 re-verifies and stabilizes the final code. The real-instance checks in Phase 8 need the fixed build (UAT-02 proves MIG-05 on real instances) and cannot be automated, so they close the milestone. TDD mode is on: each fix starts with a failing test commit.
 
-- [ ] **Phase 6: Native Entity Residual Fixes** - A native mirror survives a restart near the size limit, and a boot-time retained Discovery replay creates no duplicate during the takeover
+- [x] **Phase 6: Native Entity Residual Fixes** - A native mirror survives a restart near the size limit, and a boot-time retained Discovery replay creates no duplicate during the takeover (completed 2026-10-04)
 - [ ] **Phase 7: Verification, Stable Tests and Pinned CI** - Phases 1 to 4 re-verified, the flaky test fixed, and CI and release on a pinned runner
 - [ ] **Phase 8: Real-Instance Verification** - The four skipped Phase 5 UAT checks run and recorded on real instances
 
@@ -43,7 +43,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
   3. Both regression tests fail on the v1.0.0 code and pass with the fixes, and the existing takeover, native-entity and cutover test suites stay green.
   4. The README Limitations section no longer lists the size-limit and boot-time replay residuals.
 
-**Plans**: 2/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -86,7 +86,7 @@ Phases execute in numeric order: 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Native Entity Residual Fixes | 2/2 | In Progress|  |
+| 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 0/TBD | Not started | - |
 | 8. Real-Instance Verification | 0/TBD | Not started | - |
 

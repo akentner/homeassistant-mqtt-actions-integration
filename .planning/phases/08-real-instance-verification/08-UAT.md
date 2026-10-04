@@ -6,7 +6,7 @@ source:
   - .planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md
   - .planning/milestones/v1.0-phases/05-evaluate-native-switch-select-entities-instead-of-mqtt-disco/05-UAT.md
 started: 2026-10-04T18:55:00Z
-updated: 2026-10-04T18:55:00Z
+updated: 2026-10-04T20:15:00Z
 ---
 
 ## Current Test
@@ -38,7 +38,7 @@ release and not this checkout (D-03).
 | Check | Requirement or source | Result | Date | Build SHA | Evidence |
 |-------|-----------------------|--------|------|-----------|----------|
 | UAT-01 | UAT-01, ROADMAP criterion 1, 05-UAT test 4 | pending | - | - | - |
-| UAT-02 | UAT-02, ROADMAP criterion 2, 05-UAT test 5 | pending | - | - | - |
+| UAT-02 | UAT-02, ROADMAP criterion 2, 05-UAT test 5 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-02 |
 | UAT-03 | UAT-03, ROADMAP criterion 3, 05-UAT test 6 | pending | - | - | - |
 | UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | pending | - | - | - |
 | P1-1 | Phase 1 item 1 (07-PROOF) | pending | - | - | - |
@@ -65,7 +65,11 @@ result: pending
 
 ### 2. UAT-02: late legacy Discovery replay, two starts (MIG-05)
 expected: After retained legacy Discovery is re-published (while the instance is stopped) and the instance is started twice, no `_2` duplicate entities exist and the entity ids, registry ids and device ids are unchanged, which proves MIG-05 outside the test harness.
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-04
+evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-02
+note: Two startup rounds with retained legacy Discovery published while ha-a and ha-b were stopped; after each graceful stop both registries held no `mqtt` row, no `_2` id, no legacy `mqtt` device and the 30 `mqtt_actions` rows (entity id, registry id, unique id, device id) identical to the baseline (E1 to E4). The replay really created the twins (six `_2` tombstones per instance in `deleted_entities`) and they were removed. Live variant (observation only): published while running, six `_2` entities appeared on both instances within 20 s, stayed through a graceful stop, and were gone after the next start.
 
 ### 3. UAT-03: command across two real instances
 expected: A command issued on one of two real instances runs the actions exactly once on every approved instance, and an unknown payload is ignored and leaves the state unchanged.
@@ -118,9 +122,9 @@ result: pending
 ## Summary
 
 total: 14
-passed: 0
+passed: 1
 issues: 0
-pending: 14
+pending: 13
 skipped: 0
 blocked: 0
 

@@ -1,0 +1,24 @@
+INFO baseline ha-a :: equals the 00-preflight registry baseline
+INFO baseline ha-b :: equals the 00-preflight registry baseline
+INFO log round 1 ha-a :: INFO catch line count in the log so far: 0
+INFO log round 1 ha-b :: INFO catch line count in the log so far: 2
+INFO retained round 1 :: legacy topics gone after the start (core MQTT cleared them)
+PASS E1 round 1 ha-a :: no row with platform mqtt
+PASS E2 round 1 ha-a :: no entity id ending in _2
+PASS E3 round 1 ha-a :: no mqtt device mqtt_actions_<id>
+PASS E4 round 1 ha-a :: 30 mqtt_actions rows identical to the baseline
+PASS E1 round 1 ha-b :: no row with platform mqtt
+PASS E2 round 1 ha-b :: no entity id ending in _2
+PASS E3 round 1 ha-b :: no mqtt device mqtt_actions_<id>
+PASS E4 round 1 ha-b :: 30 mqtt_actions rows identical to the baseline
+INFO log round 2 ha-a :: INFO catch line count in the log so far: 0
+INFO log round 2 ha-b :: INFO catch line count in the log so far: 2
+INFO retained round 2 :: legacy topics gone after the start (core MQTT cleared them)
+PASS E1 round 2 ha-a :: no row with platform mqtt
+PASS E2 round 2 ha-a :: no entity id ending in _2
+PASS E3 round 2 ha-a :: no mqtt device mqtt_actions_<id>
+PASS E4 round 2 ha-a :: 30 mqtt_actions rows identical to the baseline
+PASS E1 round 2 ha-b :: no row with platform mqtt
+PASS E2 round 2 ha-b :: no entity id ending in _2
+PASS E3 round 2 ha-b :: no mqtt device mqtt_actions_<id>
+PASS E4 round 2 ha-b :: 30 mqtt_actions rows identical to the baseline

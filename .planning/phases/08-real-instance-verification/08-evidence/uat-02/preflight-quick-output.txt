@@ -1,0 +1,4 @@
+FAIL preflight (quick)
+  - build.txt sha (b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3) differs from the mounted checkout HEAD (f0124aa096e4a4d4f4c2bfeced280f1255f26ee0)
+  - ha-a StartedAt (2026-10-04 20:48:48.42921211 +0200) is not later than the commit time (2026-10-04T21:51:49+02:00)
+  - ha-b StartedAt (2026-10-04 20:48:48.475145642 +0200) is not later than the commit time (2026-10-04T21:51:49+02:00)

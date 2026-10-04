@@ -1,0 +1,3 @@
+PASS
+E1 to E4 hold in round 1 and round 2 on ha-a and ha-b
+build: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3

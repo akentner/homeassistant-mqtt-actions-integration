@@ -1,0 +1,16 @@
+deleted_entities tombstones with platform mqtt in the entity registry files (flushed by the last graceful stop of round 2).
+They show that the legacy twins were created by the replay and then removed; the backup taken before the phase holds none.
+== ha-a
+button.bar_select_test_a_2	b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b
+button.bar_select_test_b_2	b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039
+button.lampe_test_test_off_2	11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806
+button.lampe_test_test_on_2	11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725
+select.bar_select_2	b6bd2c0e-6d81-49ea-8025-4bd087bd718a
+switch.lampe_test_2	11111111-aaaa-4aaa-8aaa-000000000001
+== ha-b
+button.bar_select_test_a_2	b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b
+button.bar_select_test_b_2	b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039
+button.lampe_test_test_off_2	11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806
+button.lampe_test_test_on_2	11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725
+select.bar_select_2	b6bd2c0e-6d81-49ea-8025-4bd087bd718a
+switch.lampe_test_2	11111111-aaaa-4aaa-8aaa-000000000001

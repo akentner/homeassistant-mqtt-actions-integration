@@ -773,6 +773,9 @@ class Manager:
         current = {subentry.data[CONF_DEVICE_ID] for subentry in _device_subentries(self._entry)}
         # Cached mirrors exist before the broker replays anything, so a restart never loses a mirror (SYN-02)
         await self._async_restore_mirrors(current)
+        # Only a mirror that was restored can be native: an id whose cached payload no longer parses, or whose device
+        # is owned now, must not linger and turn a later legacy mirror of that id native (T-06-01)
+        self._native.mirrors.intersection_update(self.mirrors)
         kept = current | self.mirrors.keys()
         self._stored_last_acted = {
             device_id: value for device_id, value in self._stored_last_acted.items() if device_id in kept
@@ -1429,6 +1432,9 @@ class Manager:
             self._native_pending.discard(device_id)
             if approval is not None:
                 self._approvals[device_id] = approval
+            if info.native:
+                # The payload is kept as received and may carry no marker: only the set keeps the mirror native
+                self._native.mirrors.add(device_id)
             await self.sync.async_restore_mirror(device_id, info.payload)
             raise
         LOGGER.info("Adopted device %s from an instance that is offline or was forced", shown(spec.name))
@@ -1451,6 +1457,8 @@ class Manager:
         """
         device_id = mirror.device_id
         self.mirrors.pop(device_id, None)
+        # An adopted native mirror is an owned native device from here on, and `NativeState.devices` applies (D-03)
+        self._native.mirrors.discard(device_id)
         if mirror.unsubscribe is not None:
             mirror.unsubscribe()
         if mirror.unsubscribe_test is not None:
@@ -1714,6 +1722,8 @@ class Manager:
             return
         if (device := self.mirrors.pop(device_id, None)) is None:
             return
+        # The mirror ends here, and so does its native flag (D-03)
+        self._native.mirrors.discard(device_id)
         if device.unsubscribe is not None:
             device.unsubscribe()
         if device.unsubscribe_test is not None:

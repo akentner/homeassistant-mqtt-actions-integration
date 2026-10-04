@@ -1,6 +1,7 @@
 """The native takeover pass at the start of the manager: owners, followers, deferral and adoption (D-05, D-09, D-12)."""
 
 import json
+import uuid
 from typing import TYPE_CHECKING, Any
 from unittest.mock import DEFAULT, AsyncMock, patch
 
@@ -24,11 +25,13 @@ from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     DOMAIN,
     MAX_DOCUMENT_BYTES,
+    MAX_MIRRORS,
     STORE_KEY,
     STORE_MIRRORS,
     STORE_VERSION,
 )
 from custom_components.mqtt_actions.discovery import build_discovery
+from custom_components.mqtt_actions.manager import _parse_native
 from custom_components.mqtt_actions.topics import config_topic, discovery_topic, state_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
 from tests.test_takeover import (
@@ -890,3 +893,37 @@ async def test_native_mirror_set_never_marks_a_later_legacy_mirror_native(
     assert manager.is_native(spec.device_id) is False
     assert manager.mirrors[spec.device_id].unsubscribe_test is not None
     assert _native_mirror_ids(manager) == []
+
+
+async def test_native_mirror_set_survives_a_failed_adoption(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-03: when the subentry cannot be added, the restored mirror is native again although no document marks it."""
+    spec = make_spec(name="Foreign lamp")
+    changed = make_spec(device_id=spec.device_id, name="Renamed lamp")
+    entry = await _setup(hass, make_hub_entry())
+    await _deliver_document(hass, spec.device_id, document_payload(spec, native=True))
+    await _deliver_document(hass, spec.device_id, document_payload(changed, rev=2))
+    manager = _manager(entry)
+    assert manager.is_native(spec.device_id)
+
+    with (
+        patch.object(hass.config_entries, "async_add_subentry", side_effect=RuntimeError("boom")),
+        pytest.raises(RuntimeError),
+    ):
+        await manager.async_adopt(spec.device_id, force=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert spec.device_id in manager.mirrors
+    assert manager.is_native(spec.device_id)
+    assert _native_mirror_ids(manager) == [spec.device_id]
+
+
+def test_native_mirror_set_parser_cuts_and_validates() -> None:
+    """T-06-03: the persisted set keeps valid ids only, at most MAX_MIRRORS of them, and anything else is empty."""
+    valid = sorted(str(uuid.uuid4()) for _ in range(MAX_MIRRORS + 1))
+    assert _parse_native({"native": {"mirrors": valid}}).mirrors == set(valid[:MAX_MIRRORS])
+    mixed = ["../bad", 42, None, valid[0], "x" * 300]
+    assert _parse_native({"native": {"mirrors": mixed}}).mirrors == {valid[0]}
+    for not_a_list in ("text", {"a": "b"}, None, 7):
+        assert _parse_native({"native": {"mirrors": not_a_list}}).mirrors == set()

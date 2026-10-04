@@ -1,0 +1,30 @@
+user ha_one
+topic readwrite mqtt_actions/v1/devices/+/retrigger
+topic readwrite mqtt_actions/v1/instances/+/acks
+topic readwrite mqtt_actions/v1/instances/+/heartbeat
+topic readwrite mqtt_actions/v1/devices/+/config
+topic readwrite mqtt_actions/v1/devices/+/state
+topic readwrite mqtt_actions/v1/devices/+/test
+topic readwrite homeassistant/#
+topic read mqtt_actions/v1/instances/+/availability
+topic write mqtt_actions/v1/instances/3851f34f-fa67-4f3c-bba0-122465013c3d/availability
+
+user ha_two
+topic readwrite mqtt_actions/v1/devices/+/retrigger
+topic readwrite mqtt_actions/v1/instances/+/acks
+topic readwrite mqtt_actions/v1/instances/+/heartbeat
+topic readwrite mqtt_actions/v1/devices/+/config
+topic readwrite mqtt_actions/v1/devices/+/state
+topic readwrite mqtt_actions/v1/devices/+/test
+topic readwrite homeassistant/#
+topic read mqtt_actions/v1/instances/+/availability
+topic write mqtt_actions/v1/instances/a09499e4-5674-48d5-b3d6-4860d5226fcb/availability
+
+user bridge
+topic readwrite mqtt_actions/v1/devices/+/state
+
+user uat_probe
+topic readwrite #
+
+user uat_bridge
+topic readwrite mqtt_actions/v1/devices/+/state

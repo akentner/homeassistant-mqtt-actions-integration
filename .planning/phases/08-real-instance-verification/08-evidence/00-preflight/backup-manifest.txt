@@ -1,0 +1,47 @@
+backup: /home/akentner/ha-test/_backup-pre-phase8-20261004T184824Z
+restore: podman stop ha-a ha-b; copy /home/akentner/ha-test/_backup-pre-phase8-20261004T184824Z/{a,b,mosquitto} back over /home/akentner/ha-test with cp -a; podman start ha-a ha-b;
+         podman kill --signal HUP mosq (never restart mosq: persistence is off)
+taken_utc: 20261004T184824Z (ha-a and ha-b stopped, mosq running)
+total: 27M
+entries (type size name, two levels):
+d 504 a
+f 2 a/automations.yaml
+d 32 a/blueprints
+d 12 a/.cache
+d 0 a/.cloud
+f 265 a/configuration.yaml
+d 24 a/custom_components
+d 0 a/deps
+f 83 a/.ha_run.lock
+f 8 a/.HA_VERSION
+f 232470 a/home-assistant.log
+f 13953 a/home-assistant.log.1
+f 8306688 a/home-assistant_v2.db
+f 32768 a/home-assistant_v2.db-shm
+f 4165352 a/home-assistant_v2.db-wal
+f 0 a/scenes.yaml
+f 0 a/scripts.yaml
+f 161 a/secrets.yaml
+d 824 a/.storage
+d 0 a/tts
+d 402 b
+d 32 b/blueprints
+d 12 b/.cache
+d 0 b/.cloud
+f 43 b/configuration.yaml
+d 24 b/custom_components
+d 0 b/deps
+f 83 b/.ha_run.lock
+f 8 b/.HA_VERSION
+f 232513 b/home-assistant.log
+f 11368 b/home-assistant.log.1
+f 7843840 b/home-assistant_v2.db
+f 32768 b/home-assistant_v2.db-shm
+f 4194192 b/home-assistant_v2.db-wal
+d 930 b/.storage
+d 0 b/tts
+d 68 mosquitto
+f 1028 mosquitto/acl
+f 718 mosquitto/acl.bak-uat
+f 124 mosquitto/mosquitto.conf
+f 579 mosquitto/passwd

@@ -141,6 +141,7 @@ next start after a core-prefix export, the release HACS reports).
 
 | Decision id | Option | Date |
 |-------------|--------|------|
+| API-ACCESS | owner-tokens (token a ok, token b ok; files mode 0600 in ~/ha-test, outside the repo; revoke after the phase) | 2026-10-04 |
 
 ## Bench state left behind
 
@@ -151,4 +152,6 @@ broker and hosts are untouched.
   (mode 0600). Removal: `~/ha-test/bin/bench-users.sh remove`.
 - An INFO `logger` block for `custom_components.mqtt_actions` in the `configuration.yaml` of ha-a and ha-b.
 - Backup of the instances and the broker configuration taken before the first restart (path in `08-evidence/00-preflight/backup-manifest.txt`).
+- Long-lived tokens `~/ha-test/.token-a` and `~/ha-test/.token-b` (mode 0600, owner decision API-ACCESS). The owner revokes them in the
+  two profile security pages after the phase.
 - Helper scripts in `~/ha-test/bin/` (outside the repository; a scrubbed copy is added to the evidence by plan 08-10).

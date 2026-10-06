@@ -1,0 +1,32 @@
+P1-3 screenshots: none (browser-mcp unavailable, see browser.txt). The owner performs the click path.
+
+Pre-checked by Claude through the subentry flow REST API on ha-a (build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3), flow aborted afterwards, no device created:
+  - an item `{foo: bar}` as onChangeToOn: step "user" again with errors {"base":"invalid_actions"}, placeholders field=onChangeToOn,
+    error="Unable to determine action at '[0]'"  (the frontend shows this as the form banner)
+  - a system_log.write action with a literal target.device_id: errors {"base":"device_id_warning"} on the first submit
+That proves the data path only. What the owner judges is the rendering of the banner and the wording in the real frontend.
+
+Owner click path (ha-a, http://localhost:8123, profile language English):
+  Settings > Devices & services > MQTT Actions > Add switch device
+  Action editor: switch "On change to on" to YAML mode (three-dot menu of the editor > Edit in YAML), replace the content.
+  (a) Name `UAT P1-3a`, YAML
+        - foo: bar
+      Submit. Expected: an error banner naming "onChangeToOn" and a short message, nothing saved.
+  (b) Same dialog, replace the YAML with
+        - action: system_log.write
+          data:
+            message: UAT P1-3a
+            level: info
+          target:
+            device_id: 0123456789abcdef0123456789abcdef
+      Submit. Expected: a warning banner about device IDs that exist only on this instance, nothing saved.
+      Submit again unchanged. Expected: the device saves.
+  (c) Add switch device again, name `UAT P1-3b`, YAML
+        - action: system_log.write
+          data:
+            message: UAT P1-3b
+            level: info
+          target:
+            entity_id: switch.uat_marker
+      Submit once. Expected: it saves with no warning.
+UAT P1-3a and UAT P1-3b are throwaway devices; Claude removes them after the owner's answer (task 3).

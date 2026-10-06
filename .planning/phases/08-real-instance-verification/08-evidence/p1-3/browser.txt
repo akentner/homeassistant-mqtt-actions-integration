@@ -1,0 +1,7 @@
+browser-mcp: unavailable
+checked: 2026-10-06, executing session of plan 08-06 (worktree agent). The chrome-devtools browser MCP tools are not present in this session
+  (no navigate/screenshot tool is exposed to the agent, and the tool search that could load deferred tools is disabled for subagents).
+allowed origins (T-08-18): http://localhost:8123 and http://localhost:8124 only; nothing was navigated to, no page was opened or screenshotted by Claude.
+never opened or screenshotted: /profile/security (T-08-17).
+consequence (planner decision 2 of plan 08-06): no screenshots exist for P1-3, P1-4 and P3-2. The fixtures that can be built without a browser were
+  created on ha-a and the owner performs the click paths listed in each screens.txt (login typed by the owner, never read by Claude).

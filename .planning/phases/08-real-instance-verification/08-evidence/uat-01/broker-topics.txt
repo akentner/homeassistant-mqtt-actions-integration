@@ -1,0 +1,18 @@
+# retained topics now (topic only; payload shown for availability topics)
+mqtt_actions/v1/devices/11111111-aaaa-4aaa-8aaa-000000000001/config 1 (payload not listed)
+mqtt_actions/v1/devices/11111111-aaaa-4aaa-8aaa-000000000001/state 1 (payload not listed)
+mqtt_actions/v1/devices/22222222-bbbb-4bbb-8bbb-000000000002/config 1 (payload not listed)
+mqtt_actions/v1/devices/22222222-bbbb-4bbb-8bbb-000000000002/state 1 (payload not listed)
+mqtt_actions/v1/devices/51f224e0-fa1d-4cf0-b92e-b02e5b637c40/config 1 (payload not listed)
+mqtt_actions/v1/devices/53ee0f1e-5f4d-4e9e-9893-1e698270a960/config 1 (payload not listed)
+mqtt_actions/v1/devices/53ee0f1e-5f4d-4e9e-9893-1e698270a960/state 1 (payload not listed)
+mqtt_actions/v1/devices/81d53f84-469e-4937-a3bb-09b24f11e4e4/config 1 (payload not listed)
+mqtt_actions/v1/devices/81d53f84-469e-4937-a3bb-09b24f11e4e4/state 1 (payload not listed)
+mqtt_actions/v1/devices/b6bd2c0e-6d81-49ea-8025-4bd087bd718a/config 1 (payload not listed)
+mqtt_actions/v1/devices/e2890912-ec2c-4588-a590-0f2555297fc9/config 1 (payload not listed)
+mqtt_actions/v1/devices/e2890912-ec2c-4588-a590-0f2555297fc9/state 1 (payload not listed)
+mqtt_actions/v1/instances/3851f34f-fa67-4f3c-bba0-122465013c3d/availability 1 online
+mqtt_actions/v1/instances/a09499e4-5674-48d5-b3d6-4860d5226fcb/availability 1 online
+mqtt_actions/v1/instances/f292c620-c6e8-4563-ae3c-38f64d4b344e/availability 1 online
+# new retained topics compared with 00-preflight/retained-snapshot.txt: mqtt_actions/v1/devices/81d53f84-469e-4937-a3bb-09b24f11e4e4/config mqtt_actions/v1/devices/81d53f84-469e-4937-a3bb-09b24f11e4e4/state mqtt_actions/v1/instances/f292c620-c6e8-4563-ae3c-38f64d4b344e/availability 
+# topics of the snapshot no longer retained: none

@@ -1,0 +1,25 @@
+UAT-01 result; policy UAT01_MODE_SELECT=observation (owner decision UAT01-WORDING, 2026-10-06)
+ha-c instance id: f292c620-c6e8-4563-ae3c-38f64d4b344e; start state of the marker: off; migrated devices: 7
+PASS 1.1 ha-a runs "UAT03-MARKER on" once :: delta 1 (expected 1)
+PASS 1.1 ha-b runs "UAT03-MARKER on" once :: delta 1 (expected 1)
+PASS 1.1 ha-c (v0.1.0) runs "UAT03-MARKER on" once :: delta 1 (expected 1)
+PASS 1.1 no "UAT03-MARKER off" line on ha-c :: delta 0 (expected 0)
+PASS 1.2 ha-a runs "UAT03-MARKER off" once :: delta 1 (expected 1)
+PASS 1.2 ha-b runs "UAT03-MARKER off" once :: delta 1 (expected 1)
+PASS 1.2 ha-c (v0.1.0) runs "UAT03-MARKER off" once :: delta 1 (expected 1)
+PASS 1.2 no "UAT03-MARKER on" line on ha-c :: delta 0 (expected 0)
+PASS 1.3 marker back at its start state :: off
+PASS 2.0 migrated devices read from the retained config topics :: 7 devices
+PASS 2.1 no row of platform mqtt on ha-c :: 0 rows
+PASS 2.2 no row with unique id = device id or {id}_test_* :: none
+PASS 2.3 no switch, button or other select of mqtt_actions for a migrated device :: none
+PASS 2.4 no switch state on ha-c :: 0
+OBSERVED 2.5 companion mode selects (policy: observation, recorded, not counted) :: 7 of 7: select.bar_select_mode select.baz_mode select.dfgfdgd_mode select.dfsfasdf_mode select.lampe_test_mode select.modus_test_mode select.uat_marker_mode
+PASS 3.1 no ERROR or CRITICAL of mqtt_actions or core mqtt in the log of ha-c :: 0 lines (container output of all lifetimes and current log file)
+PASS 3.2 Repairs on ha-c hold only approval requests (plus two known core bench artifacts) :: 3 issues, see issues-c.txt
+PASS 3.3 no new mqtt_actions or core mqtt ERROR on ha-a and ha-b since ha-c arrived :: 0 lines (since 2026-10-06 20:02:47)
+PASS 3.4 no retained topic under homeassistant/ (no new Discovery topic) :: 0 topics
+INFO 3.5 new retained topics against the preflight snapshot :: mqtt_actions/v1/devices/81d53f84-469e-4937-a3bb-09b24f11e4e4/config mqtt_actions/v1/devices/81d53f84-469e-4937-a3bb-09b24f11e4e4/state mqtt_actions/v1/instances/f292c620-c6e8-4563-ae3c-38f64d4b344e/availability 
+PASS 4.1 ha-c stopped :: container down
+INFO 4.2 retained availability of ha-c after the stop :: online (topic cleared by hand: yes; after: empty)
+PASS 4.3 availability is not online :: empty

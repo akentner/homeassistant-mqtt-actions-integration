@@ -1,0 +1,3 @@
+homeassistant/country_not_configured
+http/yaml_still_present_after_migration
+mqtt_actions/approval_11111111-aaaa-4aaa-8aaa-000000000001

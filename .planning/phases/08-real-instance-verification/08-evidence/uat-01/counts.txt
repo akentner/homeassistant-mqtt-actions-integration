@@ -1,0 +1,7 @@
+UAT-01 marker counts (log lines with the exact text, one process lifetime per instance)
+columns: a_on a_off b_on b_off c_on c_off   (a = ha-a native owner, b = ha-b native, c = ha-c v0.1.0 straggler)
+start state of the marker on ha-a: off; change 1: switch.turn_on ("UAT03-MARKER on"); change 2: switch.turn_off ("UAT03-MARKER off")
+change 1 before: 0 0 0 0 0 0
+change 1 after:  1 0 1 0 1 0
+change 2 before: 1 0 1 0 1 0
+change 2 after:  1 1 1 1 1 1

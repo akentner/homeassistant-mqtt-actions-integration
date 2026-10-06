@@ -1,0 +1,12 @@
+ha-c instance id: f292c620-c6e8-4563-ae3c-38f64d4b344e
+ha-c instance name: Test HA Three v0.1.0 (base topic mqtt_actions, hub entry of the v0.1.0 component)
+image: ghcr.io/home-assistant/home-assistant:2026.9 (2026.9.4)
+container started: 2026-10-06 20:02:55.810990541 +0200 CEST
+port: 8125 (host network, TZ Europe/Berlin, restart policy no, not privileged; read from podman inspect ha-b)
+mounts: ~/ha-test/c as /config; ~/ha-test/v010/custom_components/mqtt_actions read-only over the component folder
+mqtt user: ha_three (protocol 5), own ACL block with the availability write line for the id above (acl-diff.txt)
+ACL read-back (second client uat_probe): availability online, heartbeat heard
+mqtt entry: loaded; mqtt_actions entry: loaded
+switch and select entities on ha-c at setup time (count): 8
+marker mirror approval issue still pending on ha-c: 0 (0 = approved)
+written: 2026-10-06T18:04:34Z

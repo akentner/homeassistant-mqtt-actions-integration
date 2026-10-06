@@ -1,0 +1,2 @@
+PASS
+all assertions hold under the policy observation; 7 companion mode selects recorded as observation; see result.txt

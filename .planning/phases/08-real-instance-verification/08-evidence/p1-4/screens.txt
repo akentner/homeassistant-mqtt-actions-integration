@@ -1,0 +1,14 @@
+P1-4 screenshots: none (browser-mcp unavailable, see ../p1-3/browser.txt). The owner looks live.
+
+Fixture built by Claude on ha-a (build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3):
+  - owned switch `UAT P1-4` (entity switch.uat_p1_4), created with mqtt_actions.import_devices because the add dialog is covered by P1-3; its
+    onChangeToOn action calls the unknown service uat_missing.nothing, which deep validation accepts and the run fails
+  - `switch.turn_on` on switch.uat_p1_4 through ha-test-guard; the Repairs issue appeared
+  - repairs/list_issues read back (values of the issue, no secret):
+      domain mqtt_actions, severity error, translation_key action_failed, is_fixable false
+      placeholders: device "UAT P1-4", trigger "onChangeToOn", error "Action uat_missing.nothing not found", time 2026-10-06T20:27:24+02:00
+
+Owner click path (ha-a, http://localhost:8123, profile language English):
+  Settings > Repairs > the entry about the failing action of `UAT P1-4` > open it.
+  Expected: the dialog names the device and the trigger, shows the time and a short truncated error text, and reads correctly.
+The issue and the device stay in place until the owner has answered; Claude removes both afterwards (task 3).

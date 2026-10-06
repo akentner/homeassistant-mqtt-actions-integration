@@ -1,0 +1,10 @@
+check: P1-4 Repairs dialog of a failing action
+result: pass
+date: 2026-10-06
+build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+owner statement (verbatim, chat): "approved P1-3 P1-4 P3-2"
+performed by: the owner in their own browser on ha-a; browser MCP unavailable (browser.txt), so there are no screenshots
+screenshots: none
+Fixture: UAT P1-4 with action uat_missing.nothing; issue action_failed_{uuid} (severity error, trigger onChangeToOn, error "Action uat_missing.nothing not found")
+was listed by repairs/list_issues before the checkpoint (screens.txt). ha-a and ha-b were restarted afterwards by the orchestrator; the issue was no longer listed
+at cleanup. The device was removed in task 3.

@@ -1,0 +1,16 @@
+P3-2 screenshots: none (browser-mcp unavailable, see ../p1-3/browser.txt). The owner performs the deletes.
+
+Fixtures built by Claude on ha-a with mqtt_actions.import_devices (build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3), inert actions
+(system_log.write at info level, message "UAT P3-2 inert"), names are printable text only (T-08-16):
+  - device a: UAT P3-2a `code` <b>bold</b>   (to be deleted through the integration's own delete step)
+  - device b: UAT P3-2b `code` <b>bold</b>   (to be deleted through the generic core dialog)
+Both are owned by ha-a and mirrored on ha-b (unapproved, so no actions run there). Their ids are in ~/ha-test/.fixtures-frontend.env (outside the repo).
+Unlike the plan text (Claude deletes and screenshots) the devices are still present: the owner deletes them, then Claude reads the retained topics back.
+
+Owner click path (ha-a, http://localhost:8123, profile language English):
+  Settings > Devices & services > MQTT Actions. Each device shows with its three-dot menu.
+  1. Device a: three dots > Reconfigure > Delete device. The integration's own step asks for confirmation and names the device and the number of
+     connected instances. Expected: the name shows as plain text (the backticks and the <b> tag are not rendered as code or bold). Confirm the delete.
+  2. Device b: three dots > Delete (the generic Home Assistant dialog). Expected: it cannot name the other instances (documented core limitation, README
+     "Deleting devices and removing the integration"). Confirm the delete.
+After the owner answers, Claude runs `check-frontend.sh readback p3-2`, which writes topics-after-delete.txt (both retained config topics must be empty).

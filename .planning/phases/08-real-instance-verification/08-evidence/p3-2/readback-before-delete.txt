@@ -1,0 +1,7 @@
+# retained topics under mqtt_actions/v1/devices/{uuid}/# read back after the deletes (2026-10-06T18:44:24Z)
+device: integration delete step (device a) uuid: fa2c9638-d3f9-4fe0-a6d2-ea80f94f8446
+  mqtt_actions/v1/devices/fa2c9638-d3f9-4fe0-a6d2-ea80f94f8446/config 1
+  subentry: STILL PRESENT
+device: generic core dialog (device b) uuid: 5dc40538-b3ce-4052-a6ef-8f2ed5e9ee8e
+  mqtt_actions/v1/devices/5dc40538-b3ce-4052-a6ef-8f2ed5e9ee8e/config 1
+  subentry: STILL PRESENT

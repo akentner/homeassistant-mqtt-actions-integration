@@ -1,0 +1,9 @@
+check: P1-3 action editor and validation banners
+result: pass
+date: 2026-10-06
+build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+owner statement (verbatim, chat): "approved P1-3 P1-4 P3-2"
+performed by: the owner in their own browser on ha-a; browser MCP unavailable (browser.txt), so there are no screenshots
+screenshots: none
+Claude's data-path pre-check through the subentry flow REST API (flow aborted, nothing saved) is in screens.txt.
+At recording time no UAT P1-3a or UAT P1-3b device existed on ha-a (nothing was saved or it was removed); the owner's pass rests on the statement.

@@ -1,0 +1,12 @@
+P3-2 delete sequence (2026-10-06, ha-a, build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3)
+
+1. The owner answered the checkpoint "approved P1-3 P1-4 P3-2" but the two hostile-named devices were still present on ha-a with their retained
+   config topics when Claude read back (readback-before-delete.txt: both subentries present, both retained config topics 1 message each).
+   ha-a and ha-b had been restarted by the orchestrator in between (mosq untouched); this does not delete devices.
+2. So the deletes were performed by Claude through the same two code paths the dialogs use, headless over the guard:
+   - device a (integration's own step): subentry reconfigure flow on ha-a, menu step delete_device, then delete_confirmed. The step's placeholders
+     were name = "UAT P3-2a \`code\` \<b\>bold\</b\>" (markdown-escaped, plain text, no markup) and count = 1 (the online instance); the flow ended
+     in abort reason device_deleted.
+   - device b (generic core path): WebSocket config_entries/subentries/delete on ha-a (what the core Delete dialog of the subentry sends).
+3. After 20 s, check-frontend.sh readback p3-2 wrote topics-after-delete.txt: both retained config topics empty, both subentries gone.
+The rendering judgement of both dialogs is the owner's statement in result.txt; this file only evidences the removal and the broker read-back.

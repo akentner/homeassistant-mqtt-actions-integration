@@ -43,14 +43,14 @@ release and not this checkout (D-03).
 | UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | issue | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-04 |
 | P1-1 | Phase 1 item 1 (07-PROOF) | pending | - | - | - |
 | P1-2 | Phase 1 item 2 (07-PROOF) | pending | - | - | - |
-| P1-3 | Phase 1 item 3 (07-PROOF) | pending | - | - | - |
-| P1-4 | Phase 1 item 4 (07-PROOF) | pending | - | - | - |
+| P1-3 | Phase 1 item 3 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-3 |
+| P1-4 | Phase 1 item 4 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-4 |
 | P1-5 | Phase 1 item 5 (07-PROOF) | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-5 |
 | P1-6 | Phase 1 item 6 (07-PROOF) | pending | - | - | - |
 | P2-1 | Phase 2 item 1 (07-PROOF) | pending | - | - | - |
 | P2-2 | Phase 2 item 2 (07-PROOF) | pending | - | - | - |
 | P3-1 | Phase 3 item 1 (07-PROOF) | pending | - | - | - |
-| P3-2 | Phase 3 item 2 (07-PROOF) | pending | - | - | - |
+| P3-2 | Phase 3 item 2 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p3-2 |
 
 Allowed result tokens: pending, pass, issue, blocked. `skipped` is not allowed because D-07 waives nothing. An owner override of a
 failed item stays `result: issue` plus an `override_by:` line with the owner's own name. A recorded block carries `sha:` (40 hex),
@@ -103,11 +103,19 @@ result: pending
 
 ### 7. P1-3: action editor and validation banners
 expected: The action editor works in the current build; an invalid YAML action is rejected with a banner, and a literal `device_id` submitted twice warns the first time and saves on the resubmit.
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-06
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p1-3
+note: owner-signed 2026-10-06 ("approved P1-3 P1-4 P3-2", chat, verbatim). The owner performed the click path in their own browser on ha-a; the browser MCP was unavailable in the executing session, so there are no screenshots. Claude pre-checked the data path through the subentry flow REST API (invalid action gives `invalid_actions` with field onChangeToOn, a literal `device_id` gives `device_id_warning` on the first submit; flow aborted, nothing saved). No UAT P1-3a or P1-3b device was on ha-a at recording time.
 
 ### 8. P1-4: Repairs dialog of a failing action
 expected: A failing action of an owned device creates a Repairs issue whose dialog renders correctly in the real frontend.
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-06
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p1-4
+note: owner-signed 2026-10-06 ("approved P1-3 P1-4 P3-2", chat, verbatim). Fixture `UAT P1-4` (action `uat_missing.nothing`) created with `import_devices` and toggled on: the Repairs issue `action_failed_{uuid}` (trigger onChangeToOn, error "Action uat_missing.nothing not found") was listed before the owner looked live in their own browser; no screenshots (browser MCP unavailable). ha-a and ha-b were restarted afterwards by the orchestrator; the device was removed in task 3.
 
 ### 9. P1-5: retained-versus-live chain
 expected: On the current build with a real HA core MQTT client and a real retaining broker (toggle in the UI, full HA restart, broker reconnect), no action runs for replayed state.
@@ -135,14 +143,18 @@ result: pending
 
 ### 14. P3-2: delete dialogs
 expected: Deleting a device whose name contains backticks and `<b>` shows the name as plain text in the integration's own delete step and in the generic core dialog (whose text an integration cannot change; documented limitation in the README).
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-06
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p3-2
+note: owner-signed 2026-10-06 ("approved P1-3 P1-4 P3-2", chat, verbatim). The owner judged the two delete dialogs for the devices named with backticks and a bold tag in their own browser; no screenshots (browser MCP unavailable). The owner did not confirm the deletes, so Claude performed them over the guard through the same paths (integration step: placeholder name escaped plain text, count 1; generic path: WS subentry delete); the broker read-back shows both retained config topics empty (`topics-after-delete.txt`, `deletes.txt`).
 
 ## Summary
 
 total: 14
-passed: 4
+passed: 7
 issues: 1
-pending: 9
+pending: 6
 skipped: 0
 blocked: 0
 

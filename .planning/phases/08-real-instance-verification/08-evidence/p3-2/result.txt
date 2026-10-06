@@ -1,0 +1,10 @@
+check: P3-2 delete dialogs
+result: pass
+date: 2026-10-06
+build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+owner statement (verbatim, chat): "approved P1-3 P1-4 P3-2"
+performed by: the owner judged the dialogs in their own browser on ha-a; browser MCP unavailable (browser.txt), so there are no screenshots
+screenshots: none
+The owner did not confirm the deletes: both hostile-named devices were still present at readback. Claude performed the two deletes over the guard through the
+same paths (deletes.txt; the integration step's name placeholder was escaped plain text, count 1) and topics-after-delete.txt shows both retained config
+topics empty and both subentries gone.

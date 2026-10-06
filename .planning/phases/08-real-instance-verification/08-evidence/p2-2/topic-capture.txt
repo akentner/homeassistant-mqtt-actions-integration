@@ -1,0 +1,16 @@
+# live capture of mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state (probe client, started before the first external publish)
+# format: ISO time, topic, r=<retain flag> then payload; r=0 lines are live messages, r=1 is the retained replay at subscribe
+2026-10-06T21:02:22+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 ON
+2026-10-06T21:02:22+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 OFF
+2026-10-06T21:02:22+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 ON
+2026-10-06T21:02:22+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 OFF
+2026-10-06T21:02:22+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 ON
+2026-10-06T21:02:22+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 OFF
+2026-10-06T21:02:29+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 OFF
+2026-10-06T21:04:23+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 ON
+2026-10-06T21:04:45+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 OFF
+2026-10-06T21:04:45+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 ON
+2026-10-06T21:04:45+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 OFF
+2026-10-06T21:04:45+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 ON
+2026-10-06T21:04:45+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 OFF
+2026-10-06T21:04:45+0200 mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state r=0 ON

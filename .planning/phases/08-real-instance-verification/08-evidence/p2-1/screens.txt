@@ -1,0 +1,46 @@
+P2-1 select subentry flow: no screenshots (browser MCP unavailable in the executing session, see ../p1-3/browser.txt)
+
+State left on ha-a for the owner: device "UAT P2-1" with three options (One edited / one, Three / three, Four / four), created and reconfigured
+headless over the subentry flow REST API (flow-precheck.txt holds every step and the menu entries each step offered).
+Owner click path, http://localhost:8123 with your own login, Settings > Devices & services > MQTT Actions:
+  A. Add a select device (menu: Add select device), name it e.g. "UAT P2-1b": settings form, then the option menu. With ZERO and ONE option there
+     must be no "Save the device" (the Done entry); add options one/One and two/Two: now "Save the device" appears, "Remove an option" does not.
+  B. Add a third option: "Remove an option" appears. Save the device.
+  C. Reconfigure "UAT P2-1" (three dots of its row > Reconfigure): edit option One's friendly name, remove one option (confirmation menu),
+     add another option, save. At two options "Remove an option" must be hidden.
+  D. Switch the profile language to German (Profil > Sprache) and repeat the menus and forms; switch back to English afterwards.
+  Note: the menu entry called "Done" in the plan reads "Save the device" (EN) / "Gerät speichern" (DE) in the build.
+
+Menu entry wording of the select flow (from the mounted translations, identical to the build under test):
+  key             | English                      | Deutsch
+  add_option      | Add an option                | Option hinzufügen
+  edit_option     | Edit an option               | Option bearbeiten
+  remove_option   | Remove an option             | Option entfernen
+  settings        | Edit name and settings       | Name und Einstellungen bearbeiten
+  done            | Save the device              | Gerät speichern
+  delete_device   | Delete the device            | Gerät löschen
+
+step user:
+  EN title: Add select device
+  DE title: Auswahl-Gerät hinzufügen
+step settings:
+  EN title: Edit name and settings
+  DE title: Name und Einstellungen bearbeiten
+step menu:
+  EN title: Options
+  DE title: Optionen
+step add_option:
+  EN title: Add option
+  DE title: Option hinzufügen
+step edit_option:
+  EN title: Edit an option
+  DE title: Option bearbeiten
+step edit_option_details:
+  EN title: Edit option
+  DE title: Option bearbeiten
+step remove_option:
+  EN title: Remove an option
+  DE title: Option entfernen
+step remove_confirm:
+  EN title: Remove the option?
+  DE title: Option entfernen?

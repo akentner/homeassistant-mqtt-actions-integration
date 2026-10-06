@@ -1,0 +1,13 @@
+  [32m2026-10-06 21:02:22.502 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [32m2026-10-06 21:02:22.506 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [32m2026-10-06 21:02:22.548 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [32m2026-10-06 21:02:22.550 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [32m2026-10-06 21:02:22.552 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [33m2026-10-06 21:02:22.553 WARNING (MainThread) [custom_components.mqtt_actions] Circuit breaker tripped for device UAT Loop: more than 5 runs within 10 seconds, so the device is paused[0m
+  [33m2026-10-06 21:02:54.718 WARNING (MainThread) [custom_components.mqtt_actions] Circuit breaker of device UAT Loop is still tripped: it stays paused until its settings change or the integration is reloaded[0m
+  [32m2026-10-06 21:04:45.245 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [32m2026-10-06 21:04:45.259 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [32m2026-10-06 21:04:45.298 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [32m2026-10-06 21:04:45.303 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [32m2026-10-06 21:04:45.306 INFO (MainThread) [custom_components.mqtt_actions] UAT Loop: Running mqtt_actions script[0m
+  [33m2026-10-06 21:04:45.309 WARNING (MainThread) [custom_components.mqtt_actions] Circuit breaker tripped for device UAT Loop: more than 5 runs within 10 seconds, so the device is paused[0m

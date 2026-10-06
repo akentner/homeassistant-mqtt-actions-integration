@@ -1,0 +1,17 @@
+PASS
+step 3: external ON published (retained, QoS 1)
+step 3: live messages on the state topic after the trip: 6 (expected 6, accepted range 5..8)
+step 3: breaker warnings in the log of ha-a since the run started: 1 (expected exactly 1)
+step 3b (paused): external OFF, live message delta 1 (expected exactly 1)
+step 5: podman restart ha-a ...
+step 5: issue still listed after the restart
+step 5b (paused across the restart): external ON, live message delta 1 (expected exactly 1)
+step 6: hub entry reloaded
+step 6: issue gone after the reload
+step 6b: external OFF published after the release
+step 6b: new live messages after the release: 6 (expected 6, accepted range 5..8: it ran, then tripped again)
+step 6b: issue present again at the end (left in place for the owner's live look)
+total live messages in the capture: 14
+
+scripted run of check-p22.sh run, build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3, 2026-10-06T19:04:51Z
+owner part (card rendering EN and DE, restart and release as seen in the frontend) is judged in the checkpoint, not here.

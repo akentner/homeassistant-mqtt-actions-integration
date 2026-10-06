@@ -1,0 +1,15 @@
+P2-2 loop device configuration proof (2026-10-06T19:01:01Z)
+device: UAT Loop uuid: 08851328-b0e1-4808-a62e-c56f73839ab5
+state topic: mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state
+set through the subentry reconfigure flow (step edit_device) over REST; the browser action editor was not used (no browser MCP).
+
+mqtt.publish actions found in the retained config document (action, topic, payload, retain):
+[{"action":"mqtt.publish","topic":"mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state","payload":"ON","retain":false},{"action":"mqtt.publish","topic":"mqtt_actions/v1/devices/08851328-b0e1-4808-a62e-c56f73839ab5/state","payload":"OFF","retain":false}]
+
+trigger lists of the retained document (keys only):
+["breaker_max_runs","breaker_window","device_id","entities","hash","kind","name","on_change_to_off","on_change_to_on","owner","owner_name","rev","run_mode","run_on_startup","schema_version"]
+PASS loop document carries both mqtt.publish actions with the device's own state topic
+
+ha-b (never approved by this plan), issues naming the loop device:
+  mqtt_actions blocked_08851328-b0e1-4808-a62e-c56f73839ab5
+(a blocked_{uuid} issue means mqtt.publish is denied for actions received from the broker: the loop cannot run on ha-b at all)

@@ -1,0 +1,24 @@
+P2-1 headless pre-check of the select subentry flow on ha-a (2026-10-06T18:55:05Z)
+Driven over the subentry flow REST API (the endpoints the frontend uses), build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3.
+Rendering (labels, wording, layout) is NOT judged here; that is the owner's part. Only menu entries and data are asserted.
+
+1 start (settings form): {"type":"form","step_id":"user","menu_options":null,"errors":{},"reason":null,"placeholders":null}
+2 settings submitted, 0 options: {"type":"menu","step_id":"menu","menu_options":["add_option","settings"],"errors":null,"reason":null,"placeholders":{"name":"UAT P2-1","count":"0","options":""}}
+3 add option form: {"type":"form","step_id":"add_option","menu_options":null,"errors":{},"reason":null,"placeholders":{}}
+4 one option added: {"type":"menu","step_id":"menu","menu_options":["add_option","edit_option","settings"],"errors":null,"reason":null,"placeholders":{"name":"UAT P2-1","count":"1","options":"- One (one)"}}
+5 two options: Done offered, Remove hidden: {"type":"menu","step_id":"menu","menu_options":["add_option","edit_option","settings","done"],"errors":null,"reason":null,"placeholders":{"name":"UAT P2-1","count":"2","options":"- One (one)\n- Two (two)"}}
+6 three options: Remove offered: {"type":"menu","step_id":"menu","menu_options":["add_option","edit_option","remove_option","settings","done"],"errors":null,"reason":null,"placeholders":{"name":"UAT P2-1","count":"3","options":"- One (one)\n- Two (two)\n- Three (three)"}}
+7 Done (create): {"type":"create_entry","step_id":null,"menu_options":null,"errors":null,"reason":null,"placeholders":null}
+8 reconfigure menu (3 options, delete offered): {"type":"menu","step_id":"menu","menu_options":["add_option","edit_option","remove_option","settings","done","delete_device"],"errors":null,"reason":null,"placeholders":{"name":"UAT P2-1","count":"3","options":"- One (one)\n- Two (two)\n- Three (three)"}}
+9 edit: choose option: {"type":"form","step_id":"edit_option","menu_options":null,"errors":null,"reason":null,"placeholders":null}
+10 edit: details of One (state value locked): {"type":"form","step_id":"edit_option_details","menu_options":null,"errors":{},"reason":null,"placeholders":{"state_value":"one"}}
+11 One renamed: {"type":"menu","step_id":"menu","menu_options":["add_option","edit_option","remove_option","settings","done","delete_device"],"errors":null,"reason":null,"placeholders":{"name":"UAT P2-1","count":"3","options":"- One edited (one)\n- Two (two)\n- Three (three)"}}
+12 remove: choose option: {"type":"form","step_id":"remove_option","menu_options":null,"errors":null,"reason":null,"placeholders":null}
+13 remove: confirm Two: {"type":"menu","step_id":"remove_confirm","menu_options":["remove_confirmed","keep_option"],"errors":null,"reason":null,"placeholders":{"friendly_name":"Two","state_value":"two"}}
+14 Two removed (2 options): Remove hidden again: {"type":"menu","step_id":"menu","menu_options":["add_option","edit_option","settings","done","delete_device"],"errors":null,"reason":null,"placeholders":{"name":"UAT P2-1","count":"2","options":"- One edited (one)\n- Three (three)"}}
+15 Four added (3 options): Remove offered: {"type":"menu","step_id":"menu","menu_options":["add_option","edit_option","remove_option","settings","done","delete_device"],"errors":null,"reason":null,"placeholders":{"name":"UAT P2-1","count":"3","options":"- One edited (one)\n- Three (three)\n- Four (four)"}}
+16 Done (reconfigure saved): {"type":"abort","step_id":null,"menu_options":null,"errors":null,"reason":"reconfigure_successful","placeholders":null}
+
+retained config document after the reconfigure (options only):
+[{"state_value":"one","friendly_name":"One edited"},{"state_value":"three","friendly_name":"Three"},{"state_value":"four","friendly_name":"Four"}]
+PASS check-p22 p21 (flow pre-check) /home/akentner/Projects/homeassistant-mqtt-actions-integration/.claude/worktrees/agent-ae8942053c430c03e/.planning/phases/08-real-instance-verification/08-evidence/p2-1/flow-precheck.txt

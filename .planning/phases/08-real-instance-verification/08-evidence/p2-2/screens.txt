@@ -1,0 +1,26 @@
+P2-2 breaker Repairs card: no screenshots (browser MCP unavailable in the executing session, see ../p1-3/browser.txt)
+
+State left on ha-a for the owner: device "UAT Loop" (switch, loop actions) TRIPPED, so the Repairs issue circuit_breaker_{uuid} is listed.
+The scripted assertions (trip, pause, restart while paused, release by reload, re-trip) are in result.txt and verdict.txt; the owner judges only
+the rendering of the card.
+
+Owner click path, http://localhost:8123 with your own login:
+  1. Settings > System > Repairs: one card "A device was paused by the circuit breaker" for UAT Loop.
+  2. Read the card in English. It names the device and the two limits (5 runs, 10 seconds), explains that the actions stopped and the device is
+     paused, and says how to release it (change the settings of the device or reload the integration).
+  3. Switch the profile language to German (Profil > Sprache) and read the card again; switch back to English afterwards.
+
+Expected text of the card (from the mounted translations, identical to the build under test; {device} = UAT Loop, {max_runs} = 5, {window} = 10):
+
+EN title:       A device was paused by the circuit breaker
+EN description: {device} ran its actions more than {max_runs} times within {window} seconds. This usually means an action changes the state of its own
+                device and keeps triggering itself, so MQTT Actions stopped the running actions and paused the device. Changes on the state topic
+                still update the entity, but no actions run until the device is released. To release it, change the settings of the device or
+                reload the integration. Saving the device without changing anything does not release it.
+
+DE title:       Ein Gerät wurde vom Schutzschalter pausiert
+DE description: {device} hat seine Aktionen öfter als {max_runs} Mal innerhalb von {window} Sekunden ausgeführt. Meist ändert dann eine Aktion den
+                Zustand ihres eigenen Geräts und löst sich dadurch immer wieder selbst aus. MQTT Actions hat deshalb die laufenden Aktionen gestoppt
+                und das Gerät pausiert. Änderungen am Status-Topic aktualisieren die Entität weiterhin, aber es laufen keine Aktionen, bis das Gerät
+                freigegeben wird. Ändere dazu die Einstellungen des Geräts oder lade die Integration neu. Das Speichern des Geräts ohne eine Änderung
+                gibt es nicht frei.

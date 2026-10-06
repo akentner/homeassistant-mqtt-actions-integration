@@ -1,0 +1,8 @@
+[after trip] 19:02:27 mqtt_actions issues:
+  mqtt_actions circuit_breaker_08851328-b0e1-4808-a62e-c56f73839ab5
+[after restart] 19:04:21 mqtt_actions issues:
+  mqtt_actions circuit_breaker_08851328-b0e1-4808-a62e-c56f73839ab5
+{"require_restart":false}
+[after release] 19:04:38 mqtt_actions issues:
+[after re-trip] 19:04:50 mqtt_actions issues:
+  mqtt_actions circuit_breaker_08851328-b0e1-4808-a62e-c56f73839ab5

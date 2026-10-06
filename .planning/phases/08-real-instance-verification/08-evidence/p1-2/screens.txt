@@ -1,0 +1,22 @@
+P1-2 screenshots: none (browser-mcp unavailable, see ../p1-3/browser.txt). The owner looks live; the hub flow is performed by the owner because it only
+appears when the integration is added.
+
+Claude, scripted, plan 08-08 (build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3):
+  - ha-b stopped, state copied to ~/ha-test/_backup-pre-p12-b-20261006T195117Z (cp -a, `diff -rq` against the source: identical), ha-b started again
+  - gates before the destructive step: UAT-01..04 and P1-5 recorded, check-hac.sh stopped, check-preflight.sh --quick, check-marker.sh approved,
+    check-frontend.sh cleanup all PASS (hub-before.txt)
+  - hub of ha-b removed through DELETE /api/config/config_entries/entry/{entry id} (hub option delete_devices_on_remove at its default: off),
+    the same call the frontend's Delete button makes; response {"require_restart": false}; the retained availability of the old instance id
+    reads `offline` afterwards; the four devices owned by ha-b stay retained on the broker (orphans until the new hub is up)
+
+Owner click path 1 (ha-b, http://localhost:8124, login typed by the owner), expected state: ha-b has NO MQTT Actions hub:
+  1. profile language English: Settings > Devices & services > Add integration > MQTT Actions.
+     Look at the form (title, description, labels "Instance name" and "Base topic", helper texts). Close the dialog WITHOUT submitting.
+  2. profile language German: Add integration > MQTT Actions again. Look at the form (labels "Instanzname" and "Basis-Topic", helper texts).
+     Finish it: instance name `Haus `x` | _ab_ <b>fett</b>` (typed as text, 27 characters), base topic left at the default mqtt_actions.
+  Expected: both forms read correctly in their language; the hub is created; no error text appears for the hostile name (it is printable and
+  at most 64 characters).
+
+Owner click path 2 (after Claude restored broker access and imported the hostile device; second checkpoint):
+  - ha-b, Add switch device dialog (Settings > Devices & services > MQTT Actions > Add switch device), German and English; cancel without creating.
+  - ha-a, Settings > Repairs, the approval request of the hostile device, German and English (shared with p3-1/screens.txt).

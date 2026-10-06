@@ -92,7 +92,7 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: 6/10 plans executed
+**Plans**: 7/10 plans executed
 
 Plans:
 **Wave 1**
@@ -114,7 +114,7 @@ Plans:
 - [x] 08-06-PLAN.md — Frontend items P1-3, P1-4 and P3-2 on ha-a (browser MCP, owner review)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 08-07-PLAN.md — Frontend items P2-1 and P2-2 (select flow EN/DE, breaker loop and card)
+- [x] 08-07-PLAN.md — Frontend items P2-1 and P2-2 (select flow EN/DE, breaker loop and card)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 - [ ] 08-08-PLAN.md — Frontend items P1-2 and P3-1 (hub re-add on ha-b with hostile instance name, approval rendering EN/DE)
@@ -134,7 +134,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 6/10 | In Progress|  |
+| 8. Real-Instance Verification | 7/10 | In Progress|  |
 
 ## Backlog
 

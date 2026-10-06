@@ -37,7 +37,7 @@ release and not this checkout (D-03).
 
 | Check | Requirement or source | Result | Date | Build SHA | Evidence |
 |-------|-----------------------|--------|------|-----------|----------|
-| UAT-01 | UAT-01, ROADMAP criterion 1, 05-UAT test 4 | pending | - | - | - |
+| UAT-01 | UAT-01, ROADMAP criterion 1, 05-UAT test 4 | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-01 |
 | UAT-02 | UAT-02, ROADMAP criterion 2, 05-UAT test 5 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-02 |
 | UAT-03 | UAT-03, ROADMAP criterion 3, 05-UAT test 6 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-03 |
 | UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | issue | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-04 |
@@ -61,7 +61,11 @@ failed item stays `result: issue` plus an `override_by:` line with the owner's o
 
 ### 1. UAT-01: straggler v0.1.0 instance
 expected: A v0.1.0 instance (ha-c) next to the native instances keeps running its actions for the migrated devices, shows no `mqtt`-platform entity and no switch or button entity of `mqtt_actions` for them and raises no error; the v0.1.0 companion mode selects (`select.{name}_mode`, unique id `{device id}_mode`) are recorded under Observations and do not fail the check (owner decision UAT01-WORDING, observation).
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-06
+evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-01
+note: Policy `observation` (UAT01-WORDING, coded in `check-uat01.sh` before the run). ha-c ran the v0.1.0 component (26 `.py` files equal to the tag, manifest 0.1.0) with its own MQTT user and ACL block (availability read back online, heartbeat heard) next to the native ha-a and ha-b; seven migrated devices on the broker, the marker approved on ha-c, the others left unapproved. Outcome 1 (runs its actions): two marker state changes on ha-a (`switch.turn_on`, then `switch.turn_off`, the bench state was off; 60 s after each) gave a delta of exactly +1 on ha-a, ha-b and ha-c each, 0 for the other text on ha-c. Outcome 2 (no entities): ha-c's registry holds no `mqtt` row, no row with a unique id equal to a device id or `{id}_test_*`, no switch or button of `mqtt_actions` for a migrated device and no switch state; the 7 companion mode selects (`select.{name}_mode`) exist and are recorded below. Outcome 3 (no error): no ERROR or CRITICAL naming `custom_components.mqtt_actions` or `homeassistant.components.mqtt` in the container output of ha-c (all lifetimes) or on ha-a and ha-b since ha-c arrived; Repairs on ha-c hold one approval request (Lampe Test) plus two core bench artifacts; no retained topic under `homeassistant/`, the only new retained topics are ha-c's availability and the marker's config and state. ha-c was stopped afterwards; its retained availability still read `online` and was cleared by hand (see Observations).
 
 ### 2. UAT-02: late legacy Discovery replay, two starts (MIG-05)
 expected: After retained legacy Discovery is re-published (while the instance is stopped) and the instance is started twice, no `_2` duplicate entities exist and the entity ids, registry ids and device ids are unchanged, which proves MIG-05 outside the test harness.
@@ -136,9 +140,9 @@ result: pending
 ## Summary
 
 total: 14
-passed: 3
+passed: 4
 issues: 1
-pending: 10
+pending: 9
 skipped: 0
 blocked: 0
 
@@ -174,6 +178,11 @@ next start after a core-prefix export, the release HACS reports).
 - Enabled export duplicates (plan 08-04, UAT-04 clause 2): on the core prefix the duplicates of Lampe Test and Bar Select were enabled, the one of the UAT Marker disabled; see the Gaps entry for test 4 and `08-evidence/uat-04/tombstone-cause.txt`. The clear step removed the enabled duplicates from the registry (they became tombstones) and left the disabled one until the next start.
 - Options flow path (plan 08-04): the hub options flow works headless through `POST /api/config/config_entries/options/flow` (body `{"handler": "<entry id>"}`) and `POST /api/config/config_entries/options/flow/{flow_id}`; like the reload endpoint the prefix is `/api/config/`, not `/api/` as the plan text assumed. The export option applies without a reload. The stored prefix was reset to the default at the end (export off), so the hub options of ha-a now read `discovery_export` false, `export_prefix` `mqtt_actions_export`.
 
+- Companion mode selects (plan 08-05, UAT-01, policy `observation`): the v0.1.0 straggler ha-c created one `select.{name}_mode` per mirrored device, 7 of 7 (`select.bar_select_mode`, `select.baz_mode`, `select.dfgfdgd_mode`, `select.dfsfasdf_mode`, `select.lampe_test_mode`, `select.modus_test_mode`, `select.uat_marker_mode`; platform `mqtt_actions`, unique id `{device id}_mode`, entity category config), next to the instance entities of its own hub (sensor, resync button, instance mode select). They are the v0.1.0 design and are not the switch, select or buttons of the migrated device; evidence: `08-evidence/uat-01/registry-c.json`.
+- Stopped straggler stays online (plan 08-05): after `podman stop -t 60 ha-c` (a clean shutdown, exit code 0) the retained availability `mqtt_actions/v1/instances/{ha-c id}/availability` still read `online`; the v0.1.0 instance did not publish `offline` on an HA shutdown. It was cleared by hand with an empty retained publish so a hub re-added in plan 08-08 does not hit `native_cutover_waiting` (Pitfall 10). Not judged here (no gap raised); the heartbeat topic is not retained, so peers that rely on the 90 s heartbeat rule would still see it go stale (inference from `v010/presence.py`, not observed).
+- Fresh-instance HTTP config (plan 08-05, bench only): HA 2026.9.4 stores the YAML `http:` block of a new instance as a pending config and reverts to the stable default (port 8123, held by ha-a) with a restart if nobody confirms it within 5 minutes; ha-c ended in recovery mode at 20:08 because of that. Fixed in the bench by promoting the pending config in `~/ha-test/c/.storage/http` (`ha-c-setup.sh --step 9`). Not an integration finding.
+- Core Repairs issues on ha-c (plan 08-05): besides the approval request, a fresh instance carries `homeassistant/country_not_configured` and `http/yaml_still_present_after_migration` (the second one is on ha-b as well); both are unrelated to the integration and were allowed explicitly in the check, listed in `uat-01/issues-c.txt`.
+
 ## Owner decisions
 
 | Decision id | Option | Date |
@@ -196,4 +205,5 @@ broker and hosts are untouched.
 - ACL rows `topic readwrite mqtt_actions_export/#` in the `ha_one` and `ha_two` blocks of `~/ha-test/mosquitto/acl` (plan 08-04; copy
   before the edit: `~/ha-test/mosquitto/acl.bak-phase8-04`; diff: `08-evidence/uat-04/acl-diff.txt`).
 - The "UAT Marker" device (plan 08-03) on ha-a and its approved mirror on ha-b, retained on the broker; to be removed at phase end.
+- Instance `ha-c` (plan 08-05): container created, now STOPPED (not removed), directory `~/ha-test/c`, port 8125, v0.1.0 component mounted read-only from `~/ha-test/v010`; its owner password in `~/ha-test/.ha-c-owner` and long-lived token `~/ha-test/.token-c` (both mode 0600; the owner revokes the token with the others); broker user `ha_three` (password in `~/ha-test/.mqtt-uat.env`) with an ACL block in `~/ha-test/mosquitto/acl` (copy before the edit: `~/ha-test/mosquitto/acl.bak-phase8-05`; diff: `08-evidence/uat-01/acl-diff.txt`). Its retained availability topic was cleared; remove the container, `~/ha-test/c` and the user at phase end.
 - Helper scripts in `~/ha-test/bin/` (outside the repository; a scrubbed copy is added to the evidence by plan 08-10).

@@ -1,0 +1,4 @@
+# ha-a and ha-b: lines at WARNING, ERROR or CRITICAL naming mqtt_actions or core mqtt since ha-c arrived (2026-10-06 20:02:47 local, hub entry created 2026-10-06T18:02:47.902288+00:00)
+## ha-a
+## ha-b
+# (empty sections mean none)

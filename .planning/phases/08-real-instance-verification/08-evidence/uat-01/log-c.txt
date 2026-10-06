@@ -1,0 +1,11 @@
+# ha-c log, filtered: lines naming custom_components.mqtt_actions, homeassistant.components.mqtt or the marker texts
+2026-10-06 20:17:27.285 INFO (MainThread) [custom_components.mqtt_actions] UAT Marker: Running mqtt_actions script
+2026-10-06 20:17:27.286 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER on
+2026-10-06 20:18:27.690 INFO (MainThread) [custom_components.mqtt_actions] UAT Marker: Running mqtt_actions script
+2026-10-06 20:18:27.691 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER off
+
+# ha-c log: other ERROR or CRITICAL lines (not part of the criterion; container capability limits of the bench image)
+2026-10-06 20:13:34.319 ERROR (MainThread) [habluetooth.manager] Missing required permissions for Bluetooth management. Automatic adapter recovery is unavailable. Add NET_ADMIN and NET_RAW capabilitie
+2026-10-06 20:13:36.478 ERROR (SyncWorker_6) [aiodhcpwatcher] Cannot watch for dhcp packets: [Errno 1] Operation not permitted
+
+# whole container output of ha-c since its creation (all process lifetimes): lines at ERROR or CRITICAL naming mqtt_actions or core mqtt: 0; current log file: 0

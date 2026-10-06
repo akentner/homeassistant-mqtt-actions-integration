@@ -1,0 +1,167 @@
+{
+  "registry_rows": [
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "button.test_ha_three_v0_1_0_resync",
+      "unique_id": "01M4963S6Y2GNV1FXTD0J70RFZ_resync",
+      "device_id": "aca1aaf3464d6fbe41d6f12c3f3e77af",
+      "disabled_by": null,
+      "entity_category": "config"
+    },
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "select.bar_select_mode",
+      "unique_id": "b6bd2c0e-6d81-49ea-8025-4bd087bd718a_mode",
+      "device_id": "ce0888e9ad5a87ee810bb13e1bd9e54d",
+      "disabled_by": null,
+      "entity_category": "config"
+    },
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "select.baz_mode",
+      "unique_id": "e2890912-ec2c-4588-a590-0f2555297fc9_mode",
+      "device_id": "af621210e013848349ae165136595aed",
+      "disabled_by": null,
+      "entity_category": "config"
+    },
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "select.dfgfdgd_mode",
+      "unique_id": "53ee0f1e-5f4d-4e9e-9893-1e698270a960_mode",
+      "device_id": "d79ea31485c674c22a7d409f4f53942b",
+      "disabled_by": null,
+      "entity_category": "config"
+    },
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "select.dfsfasdf_mode",
+      "unique_id": "51f224e0-fa1d-4cf0-b92e-b02e5b637c40_mode",
+      "device_id": "eed62b634c8d6436f8da573d758fe3ee",
+      "disabled_by": null,
+      "entity_category": "config"
+    },
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "select.lampe_test_mode",
+      "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_mode",
+      "device_id": "d70a957a1af70d1f7bac07be4e64b2dc",
+      "disabled_by": null,
+      "entity_category": "config"
+    },
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "select.modus_test_mode",
+      "unique_id": "22222222-bbbb-4bbb-8bbb-000000000002_mode",
+      "device_id": "1fde4c16fff257166620b05c42357508",
+      "disabled_by": null,
+      "entity_category": "config"
+    },
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "select.test_ha_three_v0_1_0_instance_mode",
+      "unique_id": "01M4963S6Y2GNV1FXTD0J70RFZ_instance_mode",
+      "device_id": "aca1aaf3464d6fbe41d6f12c3f3e77af",
+      "disabled_by": null,
+      "entity_category": "config"
+    },
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "select.uat_marker_mode",
+      "unique_id": "81d53f84-469e-4937-a3bb-09b24f11e4e4_mode",
+      "device_id": "a09983cc20a62dd11a5de363d7a52cce",
+      "disabled_by": null,
+      "entity_category": "config"
+    },
+    {
+      "platform": "mqtt_actions",
+      "entity_id": "sensor.test_ha_three_v0_1_0_instances_online",
+      "unique_id": "01M4963S6Y2GNV1FXTD0J70RFZ_roster",
+      "device_id": "aca1aaf3464d6fbe41d6f12c3f3e77af",
+      "disabled_by": null,
+      "entity_category": "diagnostic"
+    }
+  ],
+  "registry_row_count_all_platforms": 27,
+  "states": [
+    {
+      "entity_id": "button.test_ha_three_v0_1_0_resync",
+      "state": "unknown"
+    },
+    {
+      "entity_id": "select.bar_select_mode",
+      "state": "run"
+    },
+    {
+      "entity_id": "select.baz_mode",
+      "state": "run"
+    },
+    {
+      "entity_id": "select.dfgfdgd_mode",
+      "state": "run"
+    },
+    {
+      "entity_id": "select.dfsfasdf_mode",
+      "state": "run"
+    },
+    {
+      "entity_id": "select.lampe_test_mode",
+      "state": "run"
+    },
+    {
+      "entity_id": "select.modus_test_mode",
+      "state": "run"
+    },
+    {
+      "entity_id": "select.test_ha_three_v0_1_0_instance_mode",
+      "state": "run"
+    },
+    {
+      "entity_id": "select.uat_marker_mode",
+      "state": "run"
+    },
+    {
+      "entity_id": "sensor.backup_backup_manager_state",
+      "state": "idle"
+    },
+    {
+      "entity_id": "sensor.backup_last_attempted_automatic_backup",
+      "state": "unknown"
+    },
+    {
+      "entity_id": "sensor.backup_last_successful_automatic_backup",
+      "state": "unknown"
+    },
+    {
+      "entity_id": "sensor.backup_next_scheduled_automatic_backup",
+      "state": "unknown"
+    },
+    {
+      "entity_id": "sensor.sun_next_dawn",
+      "state": "2026-10-07T05:23:34+00:00"
+    },
+    {
+      "entity_id": "sensor.sun_next_dusk",
+      "state": "2026-10-07T18:12:05+00:00"
+    },
+    {
+      "entity_id": "sensor.sun_next_midnight",
+      "state": "2026-10-06T23:47:50+00:00"
+    },
+    {
+      "entity_id": "sensor.sun_next_noon",
+      "state": "2026-10-07T11:47:58+00:00"
+    },
+    {
+      "entity_id": "sensor.sun_next_rising",
+      "state": "2026-10-07T05:44:43+00:00"
+    },
+    {
+      "entity_id": "sensor.sun_next_setting",
+      "state": "2026-10-07T17:50:55+00:00"
+    },
+    {
+      "entity_id": "sensor.test_ha_three_v0_1_0_instances_online",
+      "state": "3"
+    }
+  ]
+}

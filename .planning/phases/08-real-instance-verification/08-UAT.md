@@ -60,7 +60,7 @@ failed item stays `result: issue` plus an `override_by:` line with the owner's o
 ## Tests
 
 ### 1. UAT-01: straggler v0.1.0 instance
-expected: A v0.1.0 instance (ha-c) next to the native instances keeps running its actions for the migrated devices, shows no switch, select or button entities for them and raises no error; the pass wording for the companion mode selects is fixed by the owner decision of plan 08-05.
+expected: A v0.1.0 instance (ha-c) next to the native instances keeps running its actions for the migrated devices, shows no `mqtt`-platform entity and no switch or button entity of `mqtt_actions` for them and raises no error; the v0.1.0 companion mode selects (`select.{name}_mode`, unique id `{device id}_mode`) are recorded under Observations and do not fail the check (owner decision UAT01-WORDING, observation).
 result: pending
 
 ### 2. UAT-02: late legacy Discovery replay, two starts (MIG-05)
@@ -180,6 +180,7 @@ next start after a core-prefix export, the release HACS reports).
 |-------------|--------|------|
 | API-ACCESS | owner-tokens (token a ok, token b ok; files mode 0600 in ~/ha-test, outside the repo; revoke after the phase) | 2026-10-04 |
 | WR03-LIVE-REPLAY | accepted-limit (no reason given; relayed to the executor by the orchestrator from the owner's chat answer) | 2026-10-04 |
+| UAT01-WORDING | observation (the v0.1.0 companion mode selects are recorded under Observations and UAT-01 can still pass; it fails only on `mqtt`-platform rows for migrated devices, on switch or button rows of `mqtt_actions` for them, or on any error; chosen by the owner in chat, relayed by the orchestrator) | 2026-10-06 |
 
 ## Bench state left behind
 

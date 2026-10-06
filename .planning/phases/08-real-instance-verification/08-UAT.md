@@ -47,8 +47,8 @@ release and not this checkout (D-03).
 | P1-4 | Phase 1 item 4 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-4 |
 | P1-5 | Phase 1 item 5 (07-PROOF) | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-5 |
 | P1-6 | Phase 1 item 6 (07-PROOF) | pending | - | - | - |
-| P2-1 | Phase 2 item 1 (07-PROOF) | pending | - | - | - |
-| P2-2 | Phase 2 item 2 (07-PROOF) | pending | - | - | - |
+| P2-1 | Phase 2 item 1 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p2-1 |
+| P2-2 | Phase 2 item 2 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p2-2 |
 | P3-1 | Phase 3 item 1 (07-PROOF) | pending | - | - | - |
 | P3-2 | Phase 3 item 2 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p3-2 |
 
@@ -131,11 +131,19 @@ result: pending
 
 ### 11. P2-1: select subentry flow
 expected: In the real frontend: add a select device, enter three options, Done after two, reconfigure with edit, add and remove, in English and in German.
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-06
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p2-1
+note: owner statement 2026-10-06, per item, verbatim: "Vollständig, ok" (chat; the owner first answered "Noch nicht geprüft" and "Nur teilweise gesehen" before confirming this item completely when asked per item). Scripted: the select subentry flow data path over the REST endpoints (flow-precheck.txt). Owner-judged: rendering and wording in English and German in their own browser on ha-a; browser MCP unavailable, so there are no screenshots. In this build "Done" is labelled "Save the device".
 
 ### 12. P2-2: breaker loop
 expected: A device whose action flips its own state topic trips the breaker (5 runs in 10 seconds) against a real Mosquitto and a real HA process; the Repairs card renders in English and German; release by reconfigure or reload works; a restart while paused stays paused.
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-06
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p2-2
+note: verdict PASS (verdict.txt: 6 live messages after the trip, one breaker warning, pause survives podman restart ha-a, hub reload releases). Owner statement 2026-10-06, per item, verbatim: "Vollständig, ok" (chat; same sequence as P2-1) for the Repairs card in English and German; no screenshots (browser MCP unavailable). The ha-b mirror of UAT Loop is a blocked_ issue, not an approval request, because mqtt.publish is denied for broker-received actions.
 
 ### 13. P3-1: approval request rendering
 expected: The approval request of a mirrored device in Settings > Repairs renders a device name, owner name and action YAML with backticks, underscores, pipes and a templated service name as plain text in the real frontend.
@@ -152,9 +160,9 @@ note: owner-signed 2026-10-06 ("approved P1-3 P1-4 P3-2", chat, verbatim). The o
 ## Summary
 
 total: 14
-passed: 7
+passed: 9
 issues: 1
-pending: 6
+pending: 4
 skipped: 0
 blocked: 0
 

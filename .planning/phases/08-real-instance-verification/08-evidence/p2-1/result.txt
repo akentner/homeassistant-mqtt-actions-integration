@@ -1,0 +1,9 @@
+check: P2-1 select subentry flow
+result: pass
+date: 2026-10-06
+build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+owner statement (verbatim, chat, answered to the orchestrator's questions): first "Noch nicht geprüft", then "Nur teilweise gesehen", then, when asked per item what they saw themselves: P2-1 = "Vollständig, ok"
+performed by: the owner judged the select flow in their own browser on ha-a (add dialog with 0/1/2/3 options, reconfigure with edit/remove/add, wording in English and German); browser MCP unavailable, so there are no screenshots
+screenshots: none
+scripted (not owner): the data path through the subentry flow REST API (flow-precheck.txt): menu entries by option count, edit, remove with confirm menu, add, Remove hidden again at 2 options, retained config document holds one ("One edited"), three, four.
+note: the owner first answered "not checked yet" and then "partially seen" before confirming this item completely when asked per item. In this build the "Done" entry is labelled "Save the device" (DE "Gerät speichern").

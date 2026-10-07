@@ -1,22 +1,25 @@
 ---
-status: testing
+status: partial
 phase: 08-real-instance-verification
 source:
   - .planning/phases/08-real-instance-verification/08-CONTEXT.md
   - .planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md
   - .planning/milestones/v1.0-phases/05-evaluate-native-switch-select-entities-instead-of-mqtt-disco/05-UAT.md
 started: 2026-10-04T18:55:00Z
-updated: 2026-10-04T20:15:00Z
+updated: 2026-10-07T22:05:00Z
 ---
 
 ## Current Test
 
-number: 2
-name: UAT-02 late legacy Discovery replay, two starts (MIG-05)
+[testing complete]
+
+number: none
+name: testing complete (plan 08-10, 2026-10-07): all 14 checks recorded, 13 pass, 1 issue (block 4, UAT-04, Gaps entry test: 4)
 expected: |
-  No `mqtt` platform entry and no `_2` entity exists on ha-a and ha-b after retained legacy Discovery was published while the
-  instance was stopped and the instance was started twice; entity ids, registry ids and device ids are unchanged.
-awaiting: plan 08-02 (scripted run on the pinned bench)
+  Nothing is left to test on the bench. `status: partial` because one block is `issue`; it stays so until the owner either
+  leaves the UAT-04 gap for follow-up work (the default) or records an override in the owner's own name (D-07), which plan
+  08-10 Task 2 asks; the verifier then refreshes the Phase 1 to 3 reports with this ledger as evidence (D-06).
+awaiting: owner decision on the UAT-04 gap and the three verifier runs (plan 08-10 Task 2); no test is awaited
 
 ## Build under test
 
@@ -183,6 +186,25 @@ pending: 0
 skipped: 0
 blocked: 0
 
+## Requirement verdicts
+
+For the orchestrator that closes the phase: a requirement is complete only when its block is `pass`. An `issue` block keeps its
+requirement open until the owner either leaves it as a gap for follow-up work (the default, D-08) or records an override in the
+owner's own name (`override_by:` in the block plus an Owner decisions entry, D-07); plan 08-10 Task 2 asks that question. The
+verdict column repeats the block's `result:` and is checked against it by `~/ha-test/bin/check-final.sh`.
+
+| Requirement | Block | Verdict | Evidence |
+|-------------|-------|---------|----------|
+| UAT-01 | 1 | pass | 08-evidence/uat-01 (2026-10-06, policy observation for the v0.1.0 companion selects) |
+| UAT-02 | 2 | pass | 08-evidence/uat-02 (2026-10-04, two startup rounds; the live variant is an accepted limit, WR03-LIVE-REPLAY) |
+| UAT-03 | 3 | pass | 08-evidence/uat-03 (2026-10-04, one run per approved instance, unknown payload ignored) |
+| UAT-04 | 4 | issue | 08-evidence/uat-04 (2026-10-04); Gaps entry test: 4, severity minor: clauses 1 and 3 hold, clause 2 fails for Lampe Test and Bar Select (enabled core-prefix duplicates after legacy twins) |
+
+ROADMAP success criterion 6 (the ten human items, no requirement id) is judged per archived phase report by the verifier, not
+here. Item-to-block mapping: Phase 1 items 1 to 6 are blocks 5 to 10, Phase 2 items 1 and 2 are blocks 11 and 12, Phase 3 items
+1 and 2 are blocks 13 and 14; all ten blocks are `pass` (block 5 with `override_by: Alexander Kentner` on the abbreviated path,
+PROD-HOST). Phase 4 has no human item and stays `passed`. Block 4 belongs to no archived report (Phase 5 UAT test 7).
+
 ## Gaps
 
 <!-- Replace the empty list with entries in the gap format of ~/.claude/gsd-core/templates/UAT.md when a check fails (D-08):
@@ -251,4 +273,50 @@ broker and hosts are untouched.
 - The "UAT Marker" device (plan 08-03) on ha-a and its approved mirror on ha-b, retained on the broker; to be removed at phase end.
 - Instance `ha-c` (plan 08-05): container created, now STOPPED (not removed), directory `~/ha-test/c`, port 8125, v0.1.0 component mounted read-only from `~/ha-test/v010`; its owner password in `~/ha-test/.ha-c-owner` and long-lived token `~/ha-test/.token-c` (both mode 0600; the owner revokes the token with the others); broker user `ha_three` (password in `~/ha-test/.mqtt-uat.env`) with an ACL block in `~/ha-test/mosquitto/acl` (copy before the edit: `~/ha-test/mosquitto/acl.bak-phase8-05`; diff: `08-evidence/uat-01/acl-diff.txt`). Its retained availability topic was cleared; remove the container, `~/ha-test/c` and the user at phase end.
 - ha-b's re-added hub (plan 08-08): new instance id `b4cf285b-428f-426b-9500-8e269634356e`, hostile instance name as the hub entry title, four orphan mirrors of the old owner id on ha-b (see Observations); `~/ha-test/.instance-ids.env` (new id, not a secret), `~/ha-test/_backup-pre-p12-b-20261006T195117Z` (ha-b before the removal, path in `~/ha-test/.current-backup-p12`), ACL line for the new id in the `ha_two` block (copy before the edit: `~/ha-test/mosquitto/acl.bak-phase8-08`; diff: `08-evidence/p1-2/acl-diff.txt`). The hostile P3-1 device is deleted; `P31_ID` stays in `~/ha-test/.fixtures-frontend.env` for the cleanup gate.
-- Helper scripts in `~/ha-test/bin/` (outside the repository; a scrubbed copy is added to the evidence by plan 08-10).
+- Helper scripts in `~/ha-test/bin/` (outside the repository; the scrubbed copy is `08-evidence/00-preflight/bench-scripts/`,
+  plan 08-10, with a README that names the one scrub and the files that were not copied).
+- Containers at the end of the phase (2026-10-07, plan 08-10): `ha-a` and `ha-b` running (the read-only bind mount of the main
+  checkout's `custom_components/mqtt_actions`, pinned build unchanged, stale anchor empty), `ha-c` stopped with exit code 0 (not
+  removed), `mosq` running since before the phase and never restarted (`~/ha-test/.mosq-started-before-phase8` holds its
+  StartedAt; persistence is off, a restart would drop every retained message). Nothing is torn down by Phase 8: a follow-up gap
+  plan re-uses the bench; the removal commands below are for the owner afterwards.
+- Backups (three, all under `~/ha-test`): `_backup-pre-phase8-20261004T184824Z` (a, b, mosquitto; pointer `.current-backup-phase8`;
+  manifest and restore steps in `08-evidence/00-preflight/backup-manifest.txt`), `_backup-pre-p12-b-20261006T195117Z` (b only,
+  ha-b before its hub was removed; pointer `.current-backup-p12`), and the older `_backup-pre-phase5-uat-20261003-181937` (a, b,
+  mosquitto; Phase 5 UAT, pointer `.current-backup`), which predates Phase 8 and is left alone. No `_snap-pre-live` directory
+  exists (none was taken). Remove them last, when nothing has to be restored any more.
+- ACL copies before each edit: `~/ha-test/mosquitto/acl.bak-phase8-04`, `acl.bak-phase8-05`, `acl.bak-phase8-08` (and `acl.bak-uat`
+  from Phase 5). The live `acl` ends with the blocks `ha_one`, `ha_two` (two availability write lines: the old and the new
+  instance id of ha-b), `bridge`, `uat_probe`, `uat_bridge`, `ha_three`.
+- Bench-only files with ids, no secrets: `~/ha-test/.instance-ids.env` (`INSTANCE_ID_B`), `.fixtures.env` (`MARKER_ID`),
+  `.fixtures-frontend.env` (`P14_ID`, `P32A_ID`, `P32B_ID`, `P21_ID`, `LOOP_ID`, `P31_ID`; the devices are deleted, the ids stay for
+  the cleanup gates). Secret-bearing files (mode 0600, never copied into the repository): `.mqtt-uat.env`, `.token-a`, `.token-b`,
+  `.token-c`, `.ha-c-owner`, `.frontend-baseline.txt`.
+- Devices and retained topics: the native devices Lampe Test, Bar Select and UAT Marker owned by ha-a with their mirrors on ha-b;
+  the four orphan mirrors of the old ha-b owner id on ha-b (Baz, dfgfdgd, dfsfasdf, Modus Schlaf), whose retained config topics are
+  still on the broker; the old id's retained availability reads `offline`; `homeassistant/#` and `mqtt_actions_export/#` hold
+  nothing retained (export off). The throwaway devices of plans 08-06 to 08-08 (UAT P1-4, UAT Loop, UAT P3-1, the P3-2 pair) are
+  deleted.
+- Run leftovers in `~/ha-test`: `_uat02-run.out`, `_uat02-live.out` (console output of plan 08-02), `uat1-snapshot-before.json`,
+  `d2.log`, `disc.log` (Phase 5), and `~/ha-test/v010` (the v0.1.0 checkout mounted read-only into ha-c).
+- Removal commands for the owner, after the follow-up gap plan: `~/ha-test/bin/bench-users.sh remove` (uat_probe, uat_bridge);
+  `mosquitto_passwd -D ~/ha-test/mosquitto/passwd ha_three`, delete the `user ha_three` block from the ACL, then
+  `podman kill --signal HUP mosq`; `podman rm ha-c` and `rm -r ~/ha-test/c ~/ha-test/v010`; revoke the three tokens in the
+  profile security pages of ha-a and ha-b (ha-c after a start, or drop it with the container) and `rm ~/ha-test/.token-a
+  ~/ha-test/.token-b ~/ha-test/.token-c ~/ha-test/.ha-c-owner`; delete the `logger:` blocks from both `configuration.yaml` and
+  restart ha-a and ha-b; remove the two `mqtt_actions_export/#` rows and the old-id availability line from the ACL and HUP mosq;
+  delete the UAT Marker on ha-a (owner delete, clears its retained topics everywhere) and the four orphans on ha-b (empty retained
+  publish on each `mqtt_actions/v1/devices/{id}/config` as uat_probe, then delete the device entries); the backups and the pointer
+  files last. The same list, without the ledger context, is `08-evidence/00-preflight/bench-state-final.txt`.
+
+## Owner follow-ups
+
+1. Decide the UAT-04 gap (Gaps entry test: 4; clause 2, enabled core-prefix duplicates of Lampe Test and Bar Select after legacy
+   twins): leave it as a gap for follow-up work (the default; a follow-up plan reproduces it in isolation and decides product gap
+   versus bench artifact) or accept it as an override in your own name (plan 08-10 Task 2 asks; the reply carries the name).
+2. Revoke the three long-lived tokens (ha-a and ha-b profile security pages; ha-c after a start, or drop it with the container)
+   when the follow-up work is done, then delete the token files (owner decision API-ACCESS).
+3. Tear down the bench state listed above when nothing has to be re-run any more (removal commands in the list above and in
+   `bench-state-final.txt`); the three backups and their pointer files go last.
+4. WR-03 live-republish duplicates (gone at the next start) stay an accepted known limit (owner decision WR03-LIVE-REPLAY): no
+   action; recorded under Observations.

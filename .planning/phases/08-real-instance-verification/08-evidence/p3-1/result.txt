@@ -1,0 +1,21 @@
+check: P3-1 approval request rendering
+result: pass
+date: 2026-10-07
+build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+owner statement (verbatim, chat, answered to the orchestrator): "approved P1-2 P3-1"
+performed by: the approval dialog in Settings > Repairs of ha-a (follower) was opened, scrolled and closed (never submitted) in German and in
+  English through the chrome-devtools browser MCP by the ORCHESTRATOR session of plan 08-08 on 2026-10-07 (not by the owner, not by the
+  executor); the owner judged the screenshots / the live view on localhost:8123. The hostile device was imported on ha-b (owner) by the
+  executor through the guard (import-shape.txt).
+screenshots (p3-1):
+  01-approval-request-de.png
+  02-approval-request-de-bottom.png
+  03-repairs-list-de.png
+  04-repairs-list-en.png
+  05-approval-request-en.png
+  06-approval-request-en-bottom.png
+hostile input: device name `UAT P3-1 `code` | _u_ <b>bold</b>` (33 printable characters), owner instance name `Haus `x` | _ab_ <b>fett</b>`
+  (ha-b's new hub), actions `{{ 'system_log' }}.write` with the message `UAT P3-1 `inert` | _text_`; device id cac986bf-c7f4-40e1-bd96-e36780f76652.
+never approved on ha-a; deleted on ha-b through the integration's own delete step in Task 3 (topics-after-delete.txt: retained config topic
+  empty, subentry gone, approval request gone from ha-a; the delete step's name placeholder is markdown-escaped plain text, count 1).
+profile language: verified `en` on ha-a and ha-b through the frontend (`hass.language`) after the captures (orchestrator).

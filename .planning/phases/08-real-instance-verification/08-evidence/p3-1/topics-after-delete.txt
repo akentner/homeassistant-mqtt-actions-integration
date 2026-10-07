@@ -1,0 +1,5 @@
+# retained topics under mqtt_actions/v1/devices/cac986bf-c7f4-40e1-bd96-e36780f76652/# read back after the delete (2026-10-07T21:21:03Z)
+device: UAT P3-1 `code` | _u_ <b>bold</b> uuid: cac986bf-c7f4-40e1-bd96-e36780f76652 (deleted through the integration's delete step of the subentry flow on ha-b)
+  retained topics: none (empty)
+  subentry on ha-b: gone
+  approval request on ha-a: gone

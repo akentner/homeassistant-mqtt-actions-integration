@@ -1,0 +1,30 @@
+check: P1-2 English and German strings
+result: pass
+date: 2026-10-07
+build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+owner statement (verbatim, chat, answered to the orchestrator): "approved P1-2 P3-1"
+performed by: the hub flow (English form opened and aborted, German form finished with the hostile instance name `Haus `x` | _ab_ <b>fett</b>`), the
+  Add switch device dialog (German and English) and the approval dialog on ha-a (the Repairs text, German and English) were driven through the
+  chrome-devtools browser MCP by the ORCHESTRATOR session of plan 08-08 on 2026-10-07 (not by the owner, not by the executor); the login was
+  already present in the owner's browser; the owner judged the screenshots / the live view on localhost:8124 and localhost:8123.
+screenshots (p1-2, hub flow and Add switch device dialog):
+  01-hub-form-en.png
+  02-hub-form-de.png
+  03-hub-form-de-hostile-name.png
+  04-hub-created-de.png
+  05-hub-entry-page-de.png
+  06-add-switch-device-de.png
+  07-hub-entry-page-en.png
+  08-add-switch-device-en.png
+screenshots (Repairs text in both languages, ../p3-1):
+  01-approval-request-de.png
+  02-approval-request-de-bottom.png
+  03-repairs-list-de.png
+  04-repairs-list-en.png
+  05-approval-request-en.png
+  06-approval-request-en-bottom.png
+scripted (executor, not owner-judged): backup of ha-b, hub removal through the config entries REST endpoint, after-add (new instance id
+  b4cf285b-428f-426b-9500-8e269634356e, ACL line, availability `1 online` and heartbeat read back by the probe, no native_cutover_waiting),
+  marker mirror re-approved on ha-b (new-instance-id.txt, acl-diff.txt, hub-before.txt).
+profile language: switched EN -> DE -> EN on ha-b and DE -> EN on ha-a through the profile page by the orchestrator; verified `en` on both
+  instances through the frontend (`hass.language`) after the captures.

@@ -42,14 +42,14 @@ release and not this checkout (D-03).
 | UAT-03 | UAT-03, ROADMAP criterion 3, 05-UAT test 6 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-03 |
 | UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | issue | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-04 |
 | P1-1 | Phase 1 item 1 (07-PROOF) | pending | - | - | - |
-| P1-2 | Phase 1 item 2 (07-PROOF) | pending | - | - | - |
+| P1-2 | Phase 1 item 2 (07-PROOF) | pass | 2026-10-07 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-2 |
 | P1-3 | Phase 1 item 3 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-3 |
 | P1-4 | Phase 1 item 4 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-4 |
 | P1-5 | Phase 1 item 5 (07-PROOF) | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-5 |
 | P1-6 | Phase 1 item 6 (07-PROOF) | pending | - | - | - |
 | P2-1 | Phase 2 item 1 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p2-1 |
 | P2-2 | Phase 2 item 2 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p2-2 |
-| P3-1 | Phase 3 item 1 (07-PROOF) | pending | - | - | - |
+| P3-1 | Phase 3 item 1 (07-PROOF) | pass | 2026-10-07 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p3-1 |
 | P3-2 | Phase 3 item 2 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p3-2 |
 
 Allowed result tokens: pending, pass, issue, blocked. `skipped` is not allowed because D-07 waives nothing. An owner override of a
@@ -99,7 +99,11 @@ result: pending
 
 ### 6. P1-2: English and German strings
 expected: The hub flow, the Add switch device dialog and the Repairs text render correctly in the real frontend in English and in German.
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-07
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p1-2
+note: owner-signed 2026-10-07 ("approved P1-2 P3-1", chat, verbatim). The browser MCP (chrome-devtools) was available to the orchestrator session of plan 08-08, so there are screenshots: the hub flow on ha-b was opened in English and aborted (`01`), opened in German and finished with the hostile instance name `Haus \`x\` | _ab_ <b>fett</b>` typed as text (`02`, `03`, `04`, `05`), the Add switch device dialog was captured in German and English and closed without creating a device (`06`, `08`), and the Repairs text is the approval dialog on ha-a in German and English (`p3-1/01..06`). The orchestrator drove the browser (not the owner, not the executor); the owner judged the screenshots / the live view. Scripted around it (executor): ha-b backed up first, hub removed through the config entries REST endpoint (devices kept), new instance id `b4cf285b-428f-426b-9500-8e269634356e` with its own ACL line, availability `1 online` and heartbeat read back by the probe, no `native_cutover_waiting`, marker mirror re-approved on ha-b. Profile language ends at English on both instances (verified through the frontend, `hass.language`).
 
 ### 7. P1-3: action editor and validation banners
 expected: The action editor works in the current build; an invalid YAML action is rejected with a banner, and a literal `device_id` submitted twice warns the first time and saves on the resubmit.
@@ -147,7 +151,11 @@ note: verdict PASS (verdict.txt: 6 live messages after the trip, one breaker war
 
 ### 13. P3-1: approval request rendering
 expected: The approval request of a mirrored device in Settings > Repairs renders a device name, owner name and action YAML with backticks, underscores, pipes and a templated service name as plain text in the real frontend.
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-07
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p3-1
+note: owner-signed 2026-10-07 ("approved P1-2 P3-1", chat, verbatim). Roles reversed against the research table (planner decision): ha-b owns the hostile device `UAT P3-1 \`code\` | _u_ <b>bold</b>` (33 printable characters, imported through the guard, `import-shape.txt`) under the hostile instance name `Haus \`x\` | _ab_ <b>fett</b>`, with `{{ 'system_log' }}.write` as a templated service name and a message holding backticks, underscores and a pipe; ha-a is the follower. The approval dialog on ha-a was opened, scrolled and closed (never submitted) in German and English through the chrome-devtools browser MCP by the orchestrator; the owner judged the screenshots / the live view (`01..06`). Never approved on ha-a. Deleted afterwards on ha-b through the integration's own delete step (name placeholder markdown-escaped plain text, count 1, abort `device_deleted`); `topics-after-delete.txt` shows the retained config topic empty, the subentry gone and the approval request gone from ha-a.
 
 ### 14. P3-2: delete dialogs
 expected: Deleting a device whose name contains backticks and `<b>` shows the name as plain text in the integration's own delete step and in the generic core dialog (whose text an integration cannot change; documented limitation in the README).
@@ -160,9 +168,9 @@ note: owner-signed 2026-10-06 ("approved P1-3 P1-4 P3-2", chat, verbatim). The o
 ## Summary
 
 total: 14
-passed: 9
+passed: 11
 issues: 1
-pending: 4
+pending: 2
 skipped: 0
 blocked: 0
 
@@ -203,6 +211,10 @@ next start after a core-prefix export, the release HACS reports).
 - Fresh-instance HTTP config (plan 08-05, bench only): HA 2026.9.4 stores the YAML `http:` block of a new instance as a pending config and reverts to the stable default (port 8123, held by ha-a) with a restart if nobody confirms it within 5 minutes; ha-c ended in recovery mode at 20:08 because of that. Fixed in the bench by promoting the pending config in `~/ha-test/c/.storage/http` (`ha-c-setup.sh --step 9`). Not an integration finding.
 - Core Repairs issues on ha-c (plan 08-05): besides the approval request, a fresh instance carries `homeassistant/country_not_configured` and `http/yaml_still_present_after_migration` (the second one is on ha-b as well); both are unrelated to the integration and were allowed explicitly in the check, listed in `uat-01/issues-c.txt`.
 
+- ha-b re-added (plan 08-08, D-03): ha-b now has a NEW hub with the new instance id `b4cf285b-428f-426b-9500-8e269634356e` and the hostile instance name `Haus \`x\` | _ab_ <b>fett</b>` (hub entry title). Its earlier fixtures, the four devices formerly owned by the old id `a09499e4-5674-48d5-b3d6-4860d5226fcb` (Baz, dfgfdgd, dfsfasdf, Modus Schlaf), were removed from the hub with the removal and now appear on ha-b as "Switch/Select device (mirror of Test HA Two)": retained orphans of the old owner id that the new hub does not recognise as its own (visible in `p1-2/04..07`). `~/ha-test/_backup-pre-p12-b-20261006T195117Z` holds ha-b's previous state (`cp -a` of `~/ha-test/b`, taken with ha-b stopped); restore it with BOTH containers stopped if an earlier scripted check has to be re-run on the old state. `~/ha-test/.instance-ids.env` carries the new id and `lib.sh` prefers it, so the later gates look for the new id; the `ha_two` ACL block keeps the old availability line next to the new one (`p1-2/acl-diff.txt`, copy before the edit `~/ha-test/mosquitto/acl.bak-phase8-08`). The old id's retained availability reads `offline`.
+- Profile language (plan 08-08): switched EN -> DE -> EN on ha-b and DE -> EN on ha-a through the profile page by the orchestrator; it ends at English on both instances, verified through the frontend (`hass.language == "en"` on localhost:8123 and localhost:8124 after the captures). Unlike plans 08-06 and 08-07, the chrome-devtools browser MCP WAS available to the orchestrator in this run, so P1-2 and P3-1 have real screenshots; the owner judged them.
+- Delete step placeholder (plan 08-08): the integration's `delete_device` menu step on ha-b rendered the hostile device name as a markdown-escaped plain-text placeholder (every backtick, pipe, underscore and angle bracket backslash-escaped; count 1), consistent with P3-2; the raw placeholder is in the Task 3 output quoted in `08-08-SUMMARY.md`.
+
 ## Owner decisions
 
 | Decision id | Option | Date |
@@ -226,4 +238,5 @@ broker and hosts are untouched.
   before the edit: `~/ha-test/mosquitto/acl.bak-phase8-04`; diff: `08-evidence/uat-04/acl-diff.txt`).
 - The "UAT Marker" device (plan 08-03) on ha-a and its approved mirror on ha-b, retained on the broker; to be removed at phase end.
 - Instance `ha-c` (plan 08-05): container created, now STOPPED (not removed), directory `~/ha-test/c`, port 8125, v0.1.0 component mounted read-only from `~/ha-test/v010`; its owner password in `~/ha-test/.ha-c-owner` and long-lived token `~/ha-test/.token-c` (both mode 0600; the owner revokes the token with the others); broker user `ha_three` (password in `~/ha-test/.mqtt-uat.env`) with an ACL block in `~/ha-test/mosquitto/acl` (copy before the edit: `~/ha-test/mosquitto/acl.bak-phase8-05`; diff: `08-evidence/uat-01/acl-diff.txt`). Its retained availability topic was cleared; remove the container, `~/ha-test/c` and the user at phase end.
+- ha-b's re-added hub (plan 08-08): new instance id `b4cf285b-428f-426b-9500-8e269634356e`, hostile instance name as the hub entry title, four orphan mirrors of the old owner id on ha-b (see Observations); `~/ha-test/.instance-ids.env` (new id, not a secret), `~/ha-test/_backup-pre-p12-b-20261006T195117Z` (ha-b before the removal, path in `~/ha-test/.current-backup-p12`), ACL line for the new id in the `ha_two` block (copy before the edit: `~/ha-test/mosquitto/acl.bak-phase8-08`; diff: `08-evidence/p1-2/acl-diff.txt`). The hostile P3-1 device is deleted; `P31_ID` stays in `~/ha-test/.fixtures-frontend.env` for the cleanup gate.
 - Helper scripts in `~/ha-test/bin/` (outside the repository; a scrubbed copy is added to the evidence by plan 08-10).

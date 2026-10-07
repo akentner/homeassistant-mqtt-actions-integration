@@ -41,12 +41,12 @@ release and not this checkout (D-03).
 | UAT-02 | UAT-02, ROADMAP criterion 2, 05-UAT test 5 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-02 |
 | UAT-03 | UAT-03, ROADMAP criterion 3, 05-UAT test 6 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-03 |
 | UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | issue | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-04 |
-| P1-1 | Phase 1 item 1 (07-PROOF) | pending | - | - | - |
+| P1-1 | Phase 1 item 1 (07-PROOF) | pass | 2026-10-07 | d0f660cb2422c7688d22a674cf54f955a8c26c7f | .planning/phases/08-real-instance-verification/08-evidence/p1-1 |
 | P1-2 | Phase 1 item 2 (07-PROOF) | pass | 2026-10-07 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-2 |
 | P1-3 | Phase 1 item 3 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-3 |
 | P1-4 | Phase 1 item 4 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-4 |
 | P1-5 | Phase 1 item 5 (07-PROOF) | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-5 |
-| P1-6 | Phase 1 item 6 (07-PROOF) | pending | - | - | - |
+| P1-6 | Phase 1 item 6 (07-PROOF) | pass | 2026-10-07 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-6 |
 | P2-1 | Phase 2 item 1 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p2-1 |
 | P2-2 | Phase 2 item 2 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p2-2 |
 | P3-1 | Phase 3 item 1 (07-PROOF) | pass | 2026-10-07 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p3-1 |
@@ -95,7 +95,12 @@ note: Clause 1 holds (export on, default prefix `mqtt_actions_export`, ACL rows 
 
 ### 5. P1-1: HACS client install on a production host
 expected: On a real host: custom repository added, integration downloaded, Home Assistant restarted, MQTT Actions added, a second add aborts, the icon is shown; then the integration and the repository are removed again (add and remove only, no device created).
-result: pending
+result: pass
+override_by: Alexander Kentner
+sha: d0f660cb2422c7688d22a674cf54f955a8c26c7f
+date: 2026-10-07
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p1-1
+note: owner-signed 2026-10-07 (chat, verbatim: the decision "P1-1, Pfad host-with-integration:", then "Wie vorgeschlagen" to the orchestrator's proposed line "production host 1, override Alexander Kentner, HACS v1.0.0, P1-1 approved, nicht gelaufen: erstes Hinzufügen und Entfernen"; relayed to the executor). Abbreviated path host-with-integration (PROD-HOST) on production host 1, which already runs MQTT Actions: the repository card in HACS with its installed version, Redownload/Update, restart, the icon on the integration page, a second Add integration > MQTT Actions aborts as already configured. Steps NOT run (hence the override in the owner's own name, D-07): the first add of the integration (impossible on a host that already runs the single-instance integration), the removal of the integration and the removal of the repository. HACS-reported version v1.0.0 = the newest non-prerelease release; `sha:` is the release tag SHA from `p1-1/release-identity.txt` (`git rev-parse v1.0.0`, `gh release view v1.0.0`: published 2026-10-03, not a prerelease; `git diff --stat v1.0.0 HEAD` over hacs.json, the manifest and the brand files is empty), not the bench SHA (see Build under test). No cleanup needed: nothing installed or removed, no temporary hub under the base topic `phase8_hacs_check` created, no residue on the production broker (T-08-26 did not arise). The owner performed every step; Claude did not connect to the production host or broker (D-01, D-02).
 
 ### 6. P1-2: English and German strings
 expected: The hub flow, the Add switch device dialog and the Repairs text render correctly in the real frontend in English and in German.
@@ -131,7 +136,11 @@ note: Counted marker lines of the "UAT Marker" device (startup flag off, read fr
 
 ### 10. P1-6: core version of hassio-n2plus
 expected: The core version of the second real host (hassio-n2plus, "Backup"), read in Settings > About, is 2026.9.0 or newer (informational, no code consequence).
-result: pending
+result: pass
+sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+date: 2026-10-07
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p1-6
+note: owner statement 2026-10-07 (chat, verbatim, answered to the orchestrator and relayed): "P1-6: 2026.9.4". The owner read the core version in Settings > About of hassio-n2plus (D-02); Claude did not connect to the host. 2026.9.4 is at or above the 2026.9.0 floor of hacs.json (`tests/test_toolchain.py` `test_home_assistant_floor` compares the tuple against (2026, 9, 0)), so the item passes; it is informational with no code consequence. `sha:` is the phase's pinned bench SHA like every block except P1-1, although the host's core version does not depend on this build.
 
 ### 11. P2-1: select subentry flow
 expected: In the real frontend: add a select device, enter three options, Done after two, reconfigure with edit, add and remove, in English and in German.
@@ -168,9 +177,9 @@ note: owner-signed 2026-10-06 ("approved P1-3 P1-4 P3-2", chat, verbatim). The o
 ## Summary
 
 total: 14
-passed: 11
+passed: 13
 issues: 1
-pending: 2
+pending: 0
 skipped: 0
 blocked: 0
 
@@ -215,6 +224,8 @@ next start after a core-prefix export, the release HACS reports).
 - Profile language (plan 08-08): switched EN -> DE -> EN on ha-b and DE -> EN on ha-a through the profile page by the orchestrator; it ends at English on both instances, verified through the frontend (`hass.language == "en"` on localhost:8123 and localhost:8124 after the captures). Unlike plans 08-06 and 08-07, the chrome-devtools browser MCP WAS available to the orchestrator in this run, so P1-2 and P3-1 have real screenshots; the owner judged them.
 - Delete step placeholder (plan 08-08): the integration's `delete_device` menu step on ha-b rendered the hostile device name as a markdown-escaped plain-text placeholder (every backtick, pipe, underscore and angle bracket backslash-escaped; count 1), consistent with P3-2; the raw placeholder is in the Task 3 output quoted in `08-08-SUMMARY.md`.
 
+- Release HACS reports (plan 08-09, P1-1, research assumption A9): the HACS client on production host 1 reported v1.0.0, the newest non-prerelease release (`gh release list` marks it Latest; the prerelease v1.0.1-rc1 of Phase 7 is deleted). Its tag SHA `d0f660cb2422c7688d22a674cf54f955a8c26c7f` differs from the bench SHA; hacs.json, the manifest and the brand files are identical between the tag and HEAD (`p1-1/release-identity.txt`). P1-1 ran on the abbreviated path (the host already runs the integration), so no temporary hub, no base topic `phase8_hacs_check` and no retained topic came into being on the production broker; P1-6 read 2026.9.4 on hassio-n2plus. Both answers were given by the owner to the orchestrator in chat and relayed to the executor; Claude touched neither production host nor the production broker.
+
 ## Owner decisions
 
 | Decision id | Option | Date |
@@ -222,6 +233,7 @@ next start after a core-prefix export, the release HACS reports).
 | API-ACCESS | owner-tokens (token a ok, token b ok; files mode 0600 in ~/ha-test, outside the repo; revoke after the phase) | 2026-10-04 |
 | WR03-LIVE-REPLAY | accepted-limit (no reason given; relayed to the executor by the orchestrator from the owner's chat answer) | 2026-10-04 |
 | UAT01-WORDING | observation (the v0.1.0 companion mode selects are recorded under Observations and UAT-01 can still pass; it fails only on `mqtt`-platform rows for migrated devices, on switch or button rows of `mqtt_actions` for them, or on any error; chosen by the owner in chat, relayed by the orchestrator) | 2026-10-06 |
+| PROD-HOST | host-with-integration (P1-1 on production host 1, which already runs MQTT Actions; abbreviated path: repository card, Redownload/Update, restart, icon, second add aborts; the first add and the removal of integration and repository are not run; override in the owner's own name: Alexander Kentner; the owner's replies in chat to the orchestrator were "P1-1, Pfad host-with-integration:" and, to the proposed line "production host 1, override Alexander Kentner, HACS v1.0.0, P1-1 approved, nicht gelaufen: erstes Hinzufügen und Entfernen", "Wie vorgeschlagen"; relayed to the executor) | 2026-10-07 |
 
 ## Bench state left behind
 

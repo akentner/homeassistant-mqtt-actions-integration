@@ -1,0 +1,25 @@
+check: P1-1 HACS client install on a production host
+result: pass (abbreviated path host-with-integration, owner override)
+override_by: Alexander Kentner (the owner's own name, given in chat for the PROD-HOST decision; Claude wrote no name on the owner's behalf, D-07)
+date: 2026-10-07
+host: production host 1 (by role only, T-08-27; the host already runs MQTT Actions)
+build identity: release v1.0.0, tag SHA d0f660cb2422c7688d22a674cf54f955a8c26c7f (release-identity.txt); HACS-reported version v1.0.0;
+  this is the release HACS installs, NOT the bench SHA b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 of the other checks (D-03)
+path taken: host-with-integration (abbreviated, plan 08-09 Task 1 option B): HACS shows the repository card with its installed
+  version; Redownload (or Update); restart; the icon on the integration page; Add integration > MQTT Actions once more aborts as
+  already configured (single_config_entry); nothing removed
+steps run by the owner (own HACS client and browser, no Claude involvement): repository card with the installed version v1.0.0,
+  Redownload/Update, restart of the host, icon shown on the integration page, second add aborts
+steps NOT run (listed per D-07, the reason for the override): the first add of the integration (the host already runs it, a
+  fresh add is impossible on a single-instance integration), the removal of the integration, the removal of the repository
+owner statements (verbatim, chat, answered to the ORCHESTRATOR of plan 08-09 on 2026-10-07, relayed to the executor):
+  Task 1 decision: "P1-1, Pfad host-with-integration:"
+  orchestrator's proposed recording line: "production host 1, override Alexander Kentner, HACS v1.0.0, P1-1 approved, nicht gelaufen: erstes Hinzufügen und Entfernen"
+  owner's confirmation of that line: "Wie vorgeschlagen" (= "as proposed")
+cleanup choice: not applicable on the abbreviated path. Nothing was installed or removed, no temporary hub with the base topic
+  `phase8_hacs_check` and the instance name `phase8-hacs-check` was set up, so no retained availability topic was created and
+  there is no residue on the production broker (T-08-26 did not arise); the owner was not given a clear command to run.
+performed by: the owner only. Claude did not connect to the production host or the production broker (D-01, D-02) and did not
+  use ha-ws or ha; Claude's part is the read-only release identity check in release-identity.txt (git and gh against the public
+  repository and the local tags).
+issues: none reported

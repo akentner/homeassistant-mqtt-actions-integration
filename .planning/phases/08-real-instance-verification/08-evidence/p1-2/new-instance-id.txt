@@ -1,0 +1,6 @@
+ha-b new instance id: b4cf285b-428f-426b-9500-8e269634356e
+recorded: 2026-10-07T21:04:04Z
+acl line: topic write mqtt_actions/v1/instances/b4cf285b-428f-426b-9500-8e269634356e/availability (ha_two block)
+probe availability (retained flag, payload): 1 online
+probe heartbeat within 60 s: heard
+native_cutover_waiting on ha-b after polling: none

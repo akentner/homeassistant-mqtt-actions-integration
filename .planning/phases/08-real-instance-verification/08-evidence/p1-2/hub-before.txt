@@ -1,0 +1,4 @@
+ha-b hub before removal (2026-10-06T19:54:35Z)
+entry id: 01M3WN01NFJ86GQXP2338D259N
+old instance id: a09499e4-5674-48d5-b3d6-4860d5226fcb
+backup: ~/ha-test/_backup-pre-p12-b-20261006T195117Z

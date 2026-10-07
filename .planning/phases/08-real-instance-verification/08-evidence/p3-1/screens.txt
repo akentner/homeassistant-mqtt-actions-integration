@@ -1,0 +1,4 @@
+P3-1 screenshots: none (browser-mcp unavailable, see ../p1-3/browser.txt). The owner looks live.
+
+Status at this commit: not yet captured. ha-b has no hub (removed in plan 08-08, task 1); the hostile device is imported after the owner has re-added
+the hub with the hostile instance name (see ../p1-2/screens.txt). Claude fills this file in the continuation.

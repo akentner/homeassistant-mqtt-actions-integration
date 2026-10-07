@@ -1,0 +1,13 @@
+recorded build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+checked_utc: 2026-10-07T22:02:00Z
+checked_head: c9f01c42a5fa8923a29c789fb4c90ecc4d755e19 (HEAD of the phase branch at the start of plan 08-10; the Task 1 worktree is based on it)
+anchor: diff --stat of the recorded sha against that head over custom_components, tests and .github
+anchor output: (empty)
+stale: no (no recorded check is stale; D-03, T-08-30)
+affected checks: none
+re-run path if a later change ever touches those paths: ~/ha-test/bin/run-all-scripted.sh (UAT-02, UAT-03, P1-5, UAT-04), then record by hand (check-recorded.sh ID)
+note: block 5 (P1-1) carries the release tag sha d0f660cb2422c7688d22a674cf54f955a8c26c7f on purpose (what HACS installs); the anchor applies to the bench sha above, see 08-UAT.md "Build under test"
+--- ~/ha-test/bin/check-stale-anchor.sh output (run from the Task 1 worktree, appended below) ---
+recorded build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+empty mount-source (c9f01c42a5fa8923a29c789fb4c90ecc4d755e19): git diff --stat b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 c9f01c42a5fa8923a29c789fb4c90ecc4d755e19 -- custom_components tests .github
+PASS stale anchor: custom_components, tests and .github unchanged since the recorded build sha

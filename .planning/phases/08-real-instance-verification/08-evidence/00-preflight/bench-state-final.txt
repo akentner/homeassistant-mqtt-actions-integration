@@ -1,0 +1,69 @@
+Bench state left behind at the end of Phase 8 (plan 08-10 Task 1, 2026-10-07T22:05Z). Everything is on the test bench in
+~/ha-test on the bench host; no production host and no production broker was touched (D-01, D-02). No secret value, no address.
+Nothing is torn down by Phase 8: a follow-up gap plan re-uses the bench. The removal commands are for the owner afterwards.
+
+containers (podman)
+- ha-a: running (Test HA One, port 8123, instance id 3851f34f-fa67-4f3c-bba0-122465013c3d); bind-mounts custom_components/mqtt_actions
+  of the main checkout read-only; pinned build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 (stale anchor empty, stale-anchor-final.txt)
+- ha-b: running (Test HA Two, port 8124); NEW hub since plan 08-08 with instance id b4cf285b-428f-426b-9500-8e269634356e and the
+  hostile instance name as its entry title; the old id a09499e4-5674-48d5-b3d6-4860d5226fcb is retired (retained availability offline)
+- ha-c: stopped, exit code 0 (plan 08-05; v0.1.0 straggler, port 8125, directory ~/ha-test/c, v0.1.0 component mounted read-only
+  from ~/ha-test/v010); not removed
+- mosq: running since before the phase, never restarted (~/ha-test/.mosq-started-before-phase8 holds its StartedAt; persistence
+  is off, a restart drops every retained message)
+
+broker users and ACL (~/ha-test/mosquitto/passwd, ~/ha-test/mosquitto/acl)
+- uat_probe (readwrite #) and uat_bridge (state topics only): bench users of plan 08-01, passwords in ~/ha-test/.mqtt-uat.env (0600)
+  removal: ~/ha-test/bin/bench-users.sh remove
+- ha_three: the user of ha-c (plan 08-05) with its own block (password in ~/ha-test/.mqtt-uat.env)
+  removal: mosquitto_passwd -D ~/ha-test/mosquitto/passwd ha_three; delete the "user ha_three" block; podman kill --signal HUP mosq
+- rows "topic readwrite mqtt_actions_export/#" in the ha_one and ha_two blocks (plan 08-04)
+- a second availability write line in the ha_two block for ha-b's new instance id (plan 08-08); the old-id line is still there
+- copies before each edit: acl.bak-phase8-04, acl.bak-phase8-05, acl.bak-phase8-08 (and acl.bak-uat from Phase 5)
+- live block order: ha_one, ha_two, bridge, uat_probe, uat_bridge, ha_three
+
+tokens and other secret-bearing files (mode 0600, outside the repository, never copied)
+- ~/ha-test/.token-a, ~/ha-test/.token-b (owner decision API-ACCESS, plan 08-01), ~/ha-test/.token-c (plan 08-05, by script)
+  the owner revokes them in the profile security pages of ha-a and ha-b (ha-c after a start, or drops it with the container)
+  when the follow-up work is done, then deletes the files
+- ~/ha-test/.mqtt-uat.env (broker passwords), ~/ha-test/.ha-c-owner (ha-c owner password), ~/ha-test/.frontend-baseline.txt
+
+backups (restore steps in backup-manifest.txt; restore with the affected containers stopped, never restart mosq)
+- ~/ha-test/_backup-pre-phase8-20261004T184824Z: a, b, mosquitto; pointer ~/ha-test/.current-backup-phase8 (plan 08-01)
+- ~/ha-test/_backup-pre-p12-b-20261006T195117Z: b only, ha-b before its hub was removed; pointer ~/ha-test/.current-backup-p12 (plan 08-08)
+- ~/ha-test/_backup-pre-phase5-uat-20261003-181937: a, b, mosquitto; Phase 5 UAT, pointer ~/ha-test/.current-backup; predates
+  Phase 8 and is left alone
+- no _snap-pre-live directory exists (none was taken)
+- remove them last, when nothing has to be restored any more
+
+configuration left in the instances
+- an INFO "logger:" block for custom_components.mqtt_actions in the configuration.yaml of ha-a and of ha-b (plan 08-01);
+  removal: delete the block, restart ha-a and ha-b
+- hub options of ha-a back at the defaults (discovery_export false, export_prefix mqtt_actions_export; plan 08-04)
+- profile language English on ha-a and ha-b (plan 08-08)
+
+devices and retained topics on the bench broker
+- native devices Lampe Test, Bar Select and UAT Marker (plan 08-03, inert system_log.write actions) owned by ha-a, mirrors on ha-b
+  (the marker mirror approved on ha-b); removal: owner delete on ha-a, which clears the retained topics everywhere
+- four orphan mirrors of the old ha-b owner id on ha-b (Baz, dfgfdgd, dfsfasdf, Modus Schlaf), retained config topics still on the
+  broker; removal: empty retained publish on each mqtt_actions/v1/devices/{id}/config as uat_probe, then delete the device entries
+- the old ha-b id's retained availability reads offline; homeassistant/# and mqtt_actions_export/# hold nothing retained (export off)
+- the throwaway devices of plans 08-06 to 08-08 (UAT P1-4, UAT Loop, UAT P3-1, the P3-2 pair) are deleted
+
+bench-only files with ids (no secrets)
+- ~/ha-test/.instance-ids.env (INSTANCE_ID_B), ~/ha-test/.fixtures.env (MARKER_ID),
+  ~/ha-test/.fixtures-frontend.env (P14_ID, P32A_ID, P32B_ID, P21_ID, LOOP_ID, P31_ID; the devices are deleted, the ids stay for
+  the cleanup gates)
+- run leftovers: ~/ha-test/_uat02-run.out, ~/ha-test/_uat02-live.out (plan 08-02), uat1-snapshot-before.json, d2.log, disc.log (Phase 5)
+
+helper scripts
+- ~/ha-test/bin/ (outside the repository); scrubbed copy in 08-evidence/00-preflight/bench-scripts/ (README.txt names the one scrub)
+
+removal order for the owner, after the follow-up gap plan
+1. bench-users.sh remove; ha_three user and block; HUP mosq
+2. podman rm ha-c; rm -r ~/ha-test/c ~/ha-test/v010
+3. revoke the three tokens; rm ~/ha-test/.token-a ~/ha-test/.token-b ~/ha-test/.token-c ~/ha-test/.ha-c-owner
+4. delete the logger blocks; restart ha-a and ha-b
+5. remove the two mqtt_actions_export/# rows and the old-id availability line from the ACL; HUP mosq
+6. delete the UAT Marker on ha-a and the four orphans on ha-b (see above)
+7. the three backups and their pointer files last

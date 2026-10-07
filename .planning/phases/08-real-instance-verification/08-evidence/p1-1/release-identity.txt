@@ -1,0 +1,20 @@
+check: P1-1 build identity (the release HACS installs, not the bench HEAD; D-03, "Build under test" in 08-UAT.md)
+recorded: 2026-10-07 by the executor of plan 08-09 from read-only git and gh commands against the public repository and the local tags
+HACS-reported version (owner, production host 1, repository card, 2026-10-07): v1.0.0
+release tag: v1.0.0
+git rev-parse v1.0.0: d0f660cb2422c7688d22a674cf54f955a8c26c7f
+gh release view v1.0.0 --json tagName,targetCommitish,publishedAt,isPrerelease,name:
+  {"isPrerelease":false,"name":"v1.0.0","publishedAt":"2026-10-03T20:22:01Z","tagName":"v1.0.0","targetCommitish":"main"}
+gh release list --limit 5:
+  v1.0.0	Latest	v1.0.0	2026-10-03T20:22:01Z
+  v0.1.0		v0.1.0	2026-10-03T08:19:22Z
+newest non-prerelease release (gh release list --exclude-pre-releases --exclude-drafts, isLatest): v1.0.0
+  (the prerelease v1.0.1-rc1 of Phase 7 was deleted and is not listed)
+git diff --stat v1.0.0 HEAD -- hacs.json custom_components/mqtt_actions/manifest.json custom_components/mqtt_actions/brand: (empty)
+HEAD at the time of the check: 78717e66447aac78e64725748a0ec31247af3e3f (worktree of plan 08-09, base of wave 9)
+bench SHA of the phase (00-preflight/build.txt): b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 (not what HACS installs)
+conclusion: the version HACS reported on production host 1 (v1.0.0) is the newest non-prerelease release; its tag points at
+  d0f660cb2422c7688d22a674cf54f955a8c26c7f, which is the sha: of block 5 in 08-UAT.md (not the bench SHA). hacs.json, the
+  manifest and the brand files are identical between v1.0.0 and HEAD, so the HACS-visible properties of the release and of
+  the build under test are the same; the code differences v1.0.0..HEAD are the Phase 6 changes to const.py, document.py,
+  manager.py, takeover.py and the README (08-RESEARCH.md, "Ten deferred items", P1-1 row).

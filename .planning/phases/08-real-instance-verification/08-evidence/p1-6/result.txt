@@ -1,0 +1,13 @@
+check: P1-6 core version of hassio-n2plus
+result: pass
+date: 2026-10-07
+host: hassio-n2plus ("Backup"), the second real host of this project, named by its documented role as in the plan and in
+  08-UAT.md block 10; no address, no credential (T-08-27)
+owner statement (verbatim, chat, answered to the ORCHESTRATOR of plan 08-09 on 2026-10-07, relayed to the executor): "P1-6: 2026.9.4"
+where read: Settings > About of hassio-n2plus, by the owner (D-02); Claude did not connect to the host
+expected: 2026.9.0 or newer (the hacs.json floor; tests/test_toolchain.py `test_home_assistant_floor` compares the tuple
+  against (2026, 9, 0))
+comparison: (2026, 9, 4) >= (2026, 9, 0), pass; informational item, no code consequence (07-PROOF Phase 1 item 6)
+build identity: the host's core version does not depend on this build; block 10 carries the phase's pinned bench SHA
+  b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 as every non-P1-1 block does (08-UAT.md "Build under test", D-03)
+issues: none reported

@@ -1,0 +1,22 @@
+P3-1 hostile device imported on ha-b (2026-10-07T21:06:46Z) through ha-test-guard: ws call mqtt_actions.import_devices
+document shape (the export shape of 08-evidence/uat-03/export-shape.json, import_devices takes the same document):
+  {data: {format: mqtt_actions_export, export_version: 1, devices: [{kind: switch, name, on_change_to_on, on_change_to_off,
+   run_mode: serial, run_on_startup: false, breaker_max_runs: 5, breaker_window: 10}]}}  (on_change_to_off holds the same action)
+device name (33 printable characters): UAT P3-1 `code` | _u_ <b>bold</b>
+owner (instance) name of ha-b (hub entry title): Haus `x` | _ab_ <b>fett</b>
+owner instance id: b4cf285b-428f-426b-9500-8e269634356e
+device id (P31_ID in ~/ha-test/.fixtures-frontend.env): cac986bf-c7f4-40e1-bd96-e36780f76652
+on_change_to_on and on_change_to_off:
+  [
+    {
+      "action": "{{ 'system_log' }}.write",
+      "data": {
+        "message": "UAT P3-1 `inert` | _text_",
+        "level": "info"
+      }
+    }
+  ]
+the action value is a template that renders to system_log.write (not a denied service); the message holds backticks,
+underscores and a pipe; nothing calls a real service beyond the system log. The request is never approved on ha-a.
+ha-a issue for cac986bf-c7f4-40e1-bd96-e36780f76652 after polling: mqtt_actions approval_cac986bf-c7f4-40e1-bd96-e36780f76652
+{"issue_id":"approval_cac986bf-c7f4-40e1-bd96-e36780f76652","is_fixable":true,"severity":"warning","translation_key":"approval_required","ignored":false}

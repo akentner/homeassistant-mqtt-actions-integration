@@ -1,0 +1,10 @@
+--- /home/akentner/ha-test/mosquitto/acl.bak-phase8-08	2026-10-06 20:02:49.945517466 +0200
++++ /home/akentner/ha-test/mosquitto/acl	2026-10-07 23:03:30.461667944 +0200
+@@ -21,6 +21,7 @@
+ topic readwrite mqtt_actions_export/#
+ topic read mqtt_actions/v1/instances/+/availability
+ topic write mqtt_actions/v1/instances/a09499e4-5674-48d5-b3d6-4860d5226fcb/availability
++topic write mqtt_actions/v1/instances/b4cf285b-428f-426b-9500-8e269634356e/availability
+ 
+ user bridge
+ topic readwrite mqtt_actions/v1/devices/+/state

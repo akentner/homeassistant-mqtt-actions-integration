@@ -1,7 +1,23 @@
-P1-2 screenshots: none (browser-mcp unavailable, see ../p1-3/browser.txt). The owner looks live; the hub flow is performed by the owner because it only
-appears when the integration is added.
+P1-2 screenshots (browser MCP chrome-devtools, taken by the orchestrator session of plan 08-08 on 2026-10-07; the login on ha-b was already
+present in the owner's browser, no credentials were read or typed; only http://localhost:8124 and http://localhost:8123 were opened,
+/profile/security was never opened; build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3):
 
-Claude, scripted, plan 08-08 (build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3):
+  01-hub-form-en.png                 ha-b, profile language English: Add integration > MQTT Actions, the hub form (title, description,
+                                     "Base topic" with helper text, "Instance name" with helper text, Submit). Closed WITHOUT submitting
+                                     (abort); the config entries of ha-b still held no mqtt_actions entry afterwards (jq count 0).
+  02-hub-form-de.png                 ha-b, profile language German: the same form ("Basis-Topic", "Instanzname", helper texts, OK).
+  03-hub-form-de-hostile-name.png    the German form with the hostile instance name typed as text:
+                                     Haus `x` | _ab_ <b>fett</b>   (27 printable characters, base topic left at mqtt_actions)
+  04-hub-created-de.png              after OK: the "Benennen und zuordnen" dialog of the created hub; the hub device is named with the
+                                     hostile name as plain text; the retained devices on the broker are listed as mirrors.
+  05-hub-entry-page-de.png           the MQTT Actions entry page of ha-b in German after "Fertigstellen": the hub entry title is the hostile
+                                     name as plain text, buttons "Schalter-Gerät hinzufügen" and "Auswahl-Gerät hinzufügen".
+  06-add-switch-device-de.png        "Schalter-Gerät hinzufügen" dialog in German (name, actions on/off, run on startup, run mode,
+                                     circuit breaker fields with helper texts). Closed without creating a device.
+  07-hub-entry-page-en.png           the same entry page with the profile language back to English.
+  08-add-switch-device-en.png        "Add switch device" dialog in English. Closed without creating a device.
+
+Earlier scripted steps of plan 08-08 (executor worktree session of 2026-10-06, commit 543d14a):
   - ha-b stopped, state copied to ~/ha-test/_backup-pre-p12-b-20261006T195117Z (cp -a, `diff -rq` against the source: identical), ha-b started again
   - gates before the destructive step: UAT-01..04 and P1-5 recorded, check-hac.sh stopped, check-preflight.sh --quick, check-marker.sh approved,
     check-frontend.sh cleanup all PASS (hub-before.txt)
@@ -9,14 +25,7 @@ Claude, scripted, plan 08-08 (build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3):
     the same call the frontend's Delete button makes; response {"require_restart": false}; the retained availability of the old instance id
     reads `offline` afterwards; the four devices owned by ha-b stay retained on the broker (orphans until the new hub is up)
 
-Owner click path 1 (ha-b, http://localhost:8124, login typed by the owner), expected state: ha-b has NO MQTT Actions hub:
-  1. profile language English: Settings > Devices & services > Add integration > MQTT Actions.
-     Look at the form (title, description, labels "Instance name" and "Base topic", helper texts). Close the dialog WITHOUT submitting.
-  2. profile language German: Add integration > MQTT Actions again. Look at the form (labels "Instanzname" and "Basis-Topic", helper texts).
-     Finish it: instance name `Haus `x` | _ab_ <b>fett</b>` (typed as text, 27 characters), base topic left at the default mqtt_actions.
-  Expected: both forms read correctly in their language; the hub is created; no error text appears for the hostile name (it is printable and
-  at most 64 characters).
-
-Owner click path 2 (after Claude restored broker access and imported the hostile device; second checkpoint):
-  - ha-b, Add switch device dialog (Settings > Devices & services > MQTT Actions > Add switch device), German and English; cancel without creating.
-  - ha-a, Settings > Repairs, the approval request of the hostile device, German and English (shared with p3-1/screens.txt).
+Observed while re-adding (not judged here): after the re-add the four devices formerly owned by ha-b (Baz, dfgfdgd, dfsfasdf, Modus Schlaf)
+are listed on ha-b as "Switch/Select device (mirror of Test HA Two)", i.e. as mirrors of the old owner id, because the new hub has a new
+instance id and does not recognise them as its own. The Repairs text of P1-2 (the approval dialog on ha-a in both languages) is captured in
+../p3-1/screens.txt.

@@ -1,4 +1,24 @@
-P3-1 screenshots: none (browser-mcp unavailable, see ../p1-3/browser.txt). The owner looks live.
+P3-1 screenshots (browser MCP chrome-devtools, taken by the orchestrator session of plan 08-08 on 2026-10-07 on ha-a, http://localhost:8123,
+Settings > Repairs; the login was already present in the owner's browser, no credentials were read or typed; /profile/security was never
+opened; build b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3). The request was opened and CLOSED with the X / Escape, never submitted; after the
+captures `repairs/list_issues` on ha-a still lists `mqtt_actions approval_cac986bf-c7f4-40e1-bd96-e36780f76652` with ignored=false.
 
-Status at this commit: not yet captured. ha-b has no hub (removed in plan 08-08, task 1); the hostile device is imported after the owner has re-added
-the hub with the hostile instance name (see ../p1-2/screens.txt). Claude fills this file in the continuation.
+  01-approval-request-de.png         profile language German: the approval dialog ("Aktionen eines Geräts einer anderen Instanz freigeben"),
+                                     top part: device name `UAT P3-1 `code` | _u_ <b>bold</b>` and owner name `Haus `x` | _ab_ <b>fett</b>`
+                                     as text, startup sentence, run mode, breaker limits, the YAML in one code block.
+  02-approval-request-de-bottom.png  the same dialog scrolled down: the templated service list ({{ 'system_log' }}.write), the two empty
+                                     lists ("—"), the hash sentence (dc45a8282487), the OK button.
+  03-repairs-list-de.png             the Repairs list in German with the one issue card.
+  04-repairs-list-en.png             the Repairs list in English ("A device from another instance wants to run actions here").
+  05-approval-request-en.png         profile language English: the dialog ("Approve the actions of a device from another instance"), top part.
+  06-approval-request-en-bottom.png  the English dialog scrolled down (templated list, empty lists, hash sentence, Submit button).
+
+These screenshots are also the "Repairs text in both languages" part of P1-2 (see ../p1-2/screens.txt).
+
+Hostile device (imported by the executor of plan 08-08 on ha-b through the guard, see import-shape.txt): name `UAT P3-1 `code` | _u_ <b>bold</b>`,
+owner instance name `Haus `x` | _ab_ <b>fett</b>` (ha-b's new hub), actions `{{ 'system_log' }}.write` with a message holding backticks,
+underscores and a pipe; device id in ~/ha-test/.fixtures-frontend.env (P31_ID). Not approved on ha-a; deleted in Task 3 after the owner's answer.
+
+Observed in the a11y tree (not judged here): the device name and the owner name are rendered as bold text (StaticText nodes), the
+backticks, underscores, pipe and the literal `<b>`/`</b>` are visible as characters; the YAML is one text block; the templated service
+name is listed under the templated heading in both languages.

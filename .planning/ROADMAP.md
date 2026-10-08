@@ -92,7 +92,7 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: 10/14 plans executed
+**Plans**: 10/15 plans executed
 
 Plans:
 **Wave 1**
@@ -131,13 +131,16 @@ Plans:
 - [ ] 08-11-PLAN.md — Isolated reproduction of UAT-04 clause 2 (fresh device and a real tombstone), classification, owner decision: guard, document or bench artifact
 
 **Wave 12** *(blocked on Wave 11 completion)*
-- [ ] 08-12-PLAN.md — Apply the decision: product guard test-first and/or README and troubleshooting text (conditional on the decision)
+- [ ] 08-12-PLAN.md — Record the owner's waiver of D-08 (D08-WAIVER), then apply the decision: product guard test-first and/or README and troubleshooting text (conditional on the decision)
 
 **Wave 13** *(blocked on Wave 12 completion)*
-- [ ] 08-13-PLAN.md — Re-run UAT-04 on the prescribed state with unchanged expectations, record block 4, update the REQUIREMENTS.md traceability
+- [ ] 08-13-PLAN.md — Prepare the bench (script patches, tombstone prune or build re-pin) and re-run UAT-04 (the scripted group on a guard build) with unchanged expectations; evidence only
 
 **Wave 14** *(blocked on Wave 13 completion)*
-- [ ] 08-14-PLAN.md — Final gate, refresh or re-run of the archived Phase 1 to 4 reports, Phase 8 re-verification
+- [ ] 08-14-PLAN.md — Record the re-run in the ledger (pruned-state qualifier where it applies), update the REQUIREMENTS.md traceability
+
+**Wave 15** *(blocked on Wave 14 completion)*
+- [ ] 08-15-PLAN.md — Final gate, refresh or re-run of the archived Phase 1 to 4 reports, Phase 8 re-verification
 
 ## Progress
 
@@ -148,7 +151,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 10/14 | In Progress|  |
+| 8. Real-Instance Verification | 10/15 | In Progress|  |
 
 ## Backlog
 

@@ -92,7 +92,7 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: 9/10 plans executed
+**Plans**: 10/10 plans executed
 
 Plans:
 **Wave 1**
@@ -123,7 +123,7 @@ Plans:
 - [x] 08-09-PLAN.md — Production items P1-1 (HACS client install) and P1-6 (core version), owner-run
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 08-10-PLAN.md — Final ledger, stale anchor, verifier refresh of the Phase 1 to 3 reports
+- [x] 08-10-PLAN.md — Final ledger, stale anchor, verifier refresh of the Phase 1 to 3 reports
 
 ## Progress
 
@@ -134,7 +134,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 9/10 | In Progress|  |
+| 8. Real-Instance Verification | 10/10 | In Progress|  |
 
 ## Backlog
 

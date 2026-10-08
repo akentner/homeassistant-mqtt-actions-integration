@@ -1,10 +1,11 @@
 ---
 phase: 01-walking-skeleton-installable-switch
-verified: 2026-10-04T13:46:34Z
-status: human_needed
+verified: 2026-10-08T19:09:50Z
+status: passed
 score: 8/8 must-haves verified
 covered_files:
   - .github/workflows/ci.yml
+  - .github/workflows/release.yml
   - .github/workflows/validate.yml
   - .planning/milestones/v1.0-phases/01-walking-skeleton-installable-switch/01-01-PLAN.md
   - .planning/milestones/v1.0-phases/01-walking-skeleton-installable-switch/01-01-SUMMARY.md
@@ -18,6 +19,8 @@ covered_files:
   - .planning/milestones/v1.0-phases/01-walking-skeleton-installable-switch/01-05-SUMMARY.md
   - .planning/milestones/v1.0-phases/01-walking-skeleton-installable-switch/01-06-PLAN.md
   - .planning/milestones/v1.0-phases/01-walking-skeleton-installable-switch/01-06-SUMMARY.md
+  - .planning/phases/08-real-instance-verification/08-UAT.md
+  - LICENSE
   - README.md
   - custom_components/mqtt_actions/__init__.py
   - custom_components/mqtt_actions/actions.py
@@ -36,6 +39,7 @@ covered_files:
   - custom_components/mqtt_actions/topics.py
   - custom_components/mqtt_actions/translations/de.json
   - custom_components/mqtt_actions/translations/en.json
+  - docs/adr/0001-native-entities-instead-of-mqtt-discovery.md
   - hacs.json
   - pyproject.toml
   - tests/__init__.py
@@ -47,73 +51,92 @@ covered_files:
   - tests/test_cutover.py
   - tests/test_device_ids.py
   - tests/test_discovery.py
+  - tests/test_hub_entities.py
   - tests/test_hub_removal.py
   - tests/test_manager.py
   - tests/test_multi_instance.py
+  - tests/test_multi_instance_ops.py
   - tests/test_native_cleanup.py
   - tests/test_native_entities.py
+  - tests/test_native_replay.py
+  - tests/test_native_start.py
   - tests/test_repo_structure.py
+  - tests/test_runner_modes.py
   - tests/test_state.py
   - tests/test_toolchain.py
   - tests/test_topics.py
   - tests/test_tracer.py
   - tests/test_translations.py
-covered_digest: "v2:sha256:5fe3bc97b752f641ea86e64c7f1636a542f5b374eb05afd9ae882457296acbb9"
+  - uv.lock
+covered_digest: "v3:sha256:8aebd4ceaabc404938ff679456ba29b42bc3204a81ba368e4ed18d47c203f5e1"
 behavior_unverified: 0
-overrides_applied: 1
+overrides_applied: 2
 overrides:
   - must_have: "The Switch appears in HA through MQTT Discovery (UUID unique_id, availability, device info)"
     reason: "superseded by Phase 5: native switch and select entities replace MQTT Discovery as the default (ADR 0001, docs/adr/0001-native-entities-instead-of-mqtt-discovery.md, D-03). The unique_id stays the device UUID (DeviceSwitch._attr_unique_id = device_id). Discovery remains as the compatibility path for an instance that has not cut over (is_native False) and as an optional, disabled-by-default export. Proof of the new default: tests/test_cutover.py::test_a_legacy_install_without_peers_cuts_over_after_the_settle_time, tests/test_native_entities.py::test_native_switch_is_registered_under_the_subentry, tests/test_native_entities.py::test_native_device_publishes_no_legacy_discovery_and_shares_one_device_with_the_mode_select. Proof the compatibility path is intact: tests/test_native_entities.py::test_an_instance_without_the_native_flag_keeps_the_legacy_path, tests/test_discovery.py::test_discovery_creates_switch_entity, tests/test_tracer.py::test_switch_end_to_end."
     accepted_by: "D-03 (owner decision, Phase 7 context, 2026-10-04)"
     accepted_at: "2026-10-04T00:00:00Z"
+  - must_have: "HACS client install on a real host. Add the repository as a custom repository in HACS (category Integration), download, restart, add MQTT Actions, accept defaults, try adding it a second time (removal of the integration and of the repository afterwards)"
+    reason: "Abbreviated path host-with-integration (owner decision PROD-HOST, 2026-10-07) on production host 1, which already runs MQTT Actions. Run by the owner: repository card with installed version v1.0.0, Redownload/Update, restart, icon on the integration page, second Add integration > MQTT Actions aborts as already configured. NOT run: the first add of the integration (impossible on a host that already runs the single-instance integration), removal of the integration, removal of the repository. Build installed is release v1.0.0 (tag SHA d0f660cb2422c7688d22a674cf54f955a8c26c7f), not the bench SHA b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3; hacs.json, manifest and brand files are identical between the tag and HEAD."
+    accepted_by: "Alexander Kentner"
+    accepted_at: "2026-10-07T00:00:00Z"
 gaps: []
 deferred: []
 human_verification:
   - test: "HACS client install on a real host. Add the repository as a custom repository in HACS (category Integration), download, restart, add MQTT Actions, accept defaults, try adding it a second time."
     expected: "HACS accepts and installs it, the flow shows base topic (default mqtt_actions) and instance name, a second add aborts with 'already set up', the icon is shown."
-    why_human: "No automated test drives the HACS client or the frontend. Automated: repository shape (tests/test_repo_structure.py::test_manifest_has_hacs_required_keys, ::test_hacs_json_keys_allowed_and_floor, ::test_brand_icon_is_valid_png), HACS validation (9 checks green on the release run of v1.0.1-rc1, 07-PROOF.md) and the flow (tests/test_config_flow.py::test_hub_flow_creates_entry_with_instance_id, ::test_hub_flow_aborts_without_mqtt, ::test_hub_flow_single_instance). Phase 8 (UAT-01..04) names none of it. The owner recorded a pass for this on real hosts on 2026-09-29 (01-UAT.md test 1), on the build before Phase 5 and 6."
+    why_human: "No automated test drives the HACS client or the frontend."
+    resolution: "Override in the owner's name, ledger block 5 (P1-1) of .planning/phases/08-real-instance-verification/08-UAT.md, result: pass with override_by: Alexander Kentner, evidence .planning/phases/08-real-instance-verification/08-evidence/p1-1, recorded sha d0f660cb2422c7688d22a674cf54f955a8c26c7f (release tag v1.0.0, not the bench SHA), date 2026-10-07. Abbreviated path host-with-integration (PROD-HOST) on production host 1: repository card, Redownload/Update, restart, icon, second add aborts. NOT run: first add of the integration, removal of the integration, removal of the repository. Owner ran every step; Claude never touched the host."
+    accepted_by: "Alexander Kentner"
+    accepted_at: "2026-10-07T00:00:00Z"
   - test: "English and German strings in the real frontend (switch profile language, open the hub flow, the Add switch device dialog, the Repairs text)."
     expected: "All labels, descriptions, error banners and the Repairs issue are translated, no raw translation keys."
-    why_human: "Key and placeholder parity is automated (tests/test_translations.py::test_en_and_de_have_identical_keys, ::test_placeholders_match_between_languages, ::test_required_keys_present; 240 flattened keys each, empty symmetric difference), real rendering and wording quality is not. Phase 8 does not name it. Owner pass on the older build: 01-UAT.md test 2."
+    why_human: "Key and placeholder parity is automated (240 flattened keys each, empty symmetric difference); real rendering and wording quality is not."
+    resolution: "Resolved by ledger block 6 (P1-2) of 08-UAT.md, result: pass, evidence .planning/phases/08-real-instance-verification/08-evidence/p1-2 (screenshots 01..08 plus ../p3-1/01..06), sha b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3, date 2026-10-07. Owner-signed (\"approved P1-2 P3-1\"). The orchestrator session drove the browser (not the owner); the owner judged the screenshots and the live view. The Repairs text shown is the approval dialog on ha-a in German and English; the failing-action Repairs dialog is item 4. Scripted around it: hub removal and re-add of ha-b."
   - test: "Action editor and validation banners in the current build: add a switch device, enter an invalid action in YAML mode, then a service action with a literal device_id and submit twice."
     expected: "The action selector renders, an invalid action shows a form-level error and saves nothing, the device_id action warns on the first submit and saves on the identical second submit."
-    why_human: "Flow level is automated (tests/test_config_flow.py::test_switch_flow_schema_serializes_action_selector, ::test_switch_flow_rejects_invalid_actions, ::test_switch_flow_device_id_warns_then_saves_on_resubmit, ::test_switch_flow_entity_targets_do_not_warn, ::test_switch_reconfigure_applies_validation_and_warning, tests/test_device_ids.py), the frontend rendering of the ActionSelector and the base-error banner is not. Phase 8 does not name it. Owner pass on the older build: 01-UAT.md test 3."
+    why_human: "Flow level is automated; the frontend rendering of the ActionSelector and the base-error banner is not."
+    resolution: "Resolved by ledger block 7 (P1-3) of 08-UAT.md, result: pass, evidence .planning/phases/08-real-instance-verification/08-evidence/p1-3, sha b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3, date 2026-10-06. Owner-signed (\"approved P1-3 P1-4 P3-2\"); the owner performed the click path in their own browser on ha-a. No screenshots (browser MCP unavailable); the pass rests on the owner statement. Claude's REST pre-check of the flow data path (invalid_actions on the invalid action, device_id_warning on the first submit) aborted the flows and saved nothing, so the save on the identical second submit in the real frontend is covered by the owner statement and by tests/test_config_flow.py::test_switch_flow_device_id_warns_then_saves_on_resubmit only."
   - test: "Repairs dialog of a failing action: call a non-existent service in an action, trigger it, open Settings > Repairs."
     expected: "One Repairs issue shows device, trigger, time and error text, and it clears after the next successful run."
-    why_human: "Issue creation, update in place, dismissal, truncation and clearing are automated (tests/test_manager.py::test_issue_created_when_action_fails, ::test_issue_updated_in_place_on_repeated_failure, ::test_issue_cleared_after_next_success, ::test_issue_dismissed_stays_dismissed_while_failing, ::test_issue_error_text_is_truncated, ::test_issue_for_invalid_stored_actions_at_setup; tests/test_runner_modes.py::test_dropped_run_does_not_clear_failure_issue). Rendering in the real frontend is not. The owner's 2026-09-29 check was API-level only (01-UAT.md test 5: 'not visually'). Phase 8 does not name it."
+    why_human: "Issue creation, update, dismissal, truncation and clearing are automated; rendering in the real frontend is not."
+    resolution: "Resolved by ledger block 8 (P1-4) of 08-UAT.md, result: pass, evidence .planning/phases/08-real-instance-verification/08-evidence/p1-4, sha b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3, date 2026-10-06. Owner-signed (\"approved P1-3 P1-4 P3-2\"). Fixture UAT P1-4 (action uat_missing.nothing) created the Repairs issue action_failed_{uuid} (trigger onChangeToOn, error \"Action uat_missing.nothing not found\"), listed through the API before the owner looked at it live in their own browser; no screenshots. The clearing after the next successful run was not part of the owner's check; it rests on tests/test_manager.py::test_issue_cleared_after_next_success."
   - test: "Retained-versus-live chain on the current build with a real HA core MQTT client and a real retaining broker: toggle the entity in the UI, restart HA fully, reconnect the broker."
     expected: "One action run per real change, none for repeated identical values, none after a full HA restart or broker reconnect until a changed value is published, nothing removed on unload."
-    why_human: "The decision logic and the broker semantics are automated: tests/state tests (tests/test_state.py), tests/test_manager.py::test_retain_replay_sets_baseline_without_actions, ::test_retain_replay_after_reconnect_runs_nothing, ::test_startup_flag_runs_retained_state_once, ::test_startup_flag_not_reapplied_on_replay, ::test_baseline_persisted_across_reload, ::test_reload_keeps_single_subscription, ::test_unload_publishes_offline_and_never_clears_discovery, tests/test_native_entities.py::test_the_echo_runs_the_actions_once, and against a real Mosquitto tests/broker/test_retain_semantics.py::test_replay_on_subscribe_has_retain_true, ::test_live_forward_has_retain_false, ::test_resubscribe_replays_last_value_with_retain_true. No automated test joins the HA core client with a real retaining broker, and Phase 8 (UAT-02 restarts for duplicates, UAT-03 one command on two instances) does not check that a restart or reconnect runs no actions. The owner's 2026-09-29 EMQX run covered edges, repeated values and a reload, and explicitly left UI toggle, full restart and broker reconnect open (01-UAT.md test 4)."
+    why_human: "No automated test joins the HA core client with a real retaining broker."
+    resolution: "Resolved by ledger block 9 (P1-5) of 08-UAT.md, result: pass, evidence .planning/phases/08-real-instance-verification/08-evidence/p1-5 (result.txt, counts.txt, verdict.txt, logs), sha b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3, date 2026-10-04. Fully scripted, no owner judgment: counted marker lines per instance, startup flag off. Toggle (service call) +1 on ha-a and ha-b; podman restart of both: 0 and 0 while the retained state was replayed; positive control +1 and +1. Limits carried: the toggle was the service call the frontend toggle makes, not a click; the 'broker reconnect' step was a reload of the core mqtt config entry on each instance (require_restart false), the Mosquitto container was not restarted (StartedAt unchanged), so a real broker disconnect was not exercised; 'nothing removed on unload' was not checked in this run (covered by tests/test_manager.py::test_unload_publishes_offline_and_never_clears_discovery)."
   - test: "Core version of the second real host (hassio-n2plus, called Backup): read it in Settings > About."
     expected: "Core 2026.9.0 or newer, or the floor is reassessed."
-    why_human: "Not a code truth. The floor itself is tested (tests/test_toolchain.py::test_home_assistant_floor, ::test_python_floor, tests/test_repo_structure.py::test_hacs_json_keys_allowed_and_floor). The host that carries it was never read: Nextgen is 2026.9.4 (read), Backup is only inferred (01-UAT.md test 9), lxc-haos-104 was dropped by the owner. Phase 8 does not name it. Informational, no code consequence."
+    why_human: "Not a code truth; the floor itself is tested (tests/test_toolchain.py::test_home_assistant_floor)."
+    resolution: "Resolved by ledger block 10 (P1-6) of 08-UAT.md, result: pass, evidence .planning/phases/08-real-instance-verification/08-evidence/p1-6, recorded sha b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 (the pinned bench SHA; the host's core version does not depend on the build), date 2026-10-07. Owner statement in chat: 2026.9.4, read in Settings > About of hassio-n2plus; 2026.9.4 is at or above the 2026.9.0 floor of hacs.json. Informational, no code consequence; Claude did not connect to the host."
 ---
 
 # Phase 1: Walking Skeleton - Installable Switch Verification Report
 
 **Phase Goal:** As a Home Assistant user, I want to create a Switch device whose MQTT state changes run my configured actions, so that I need no YAML automation. (Mode: mvp)
-**Verified:** 2026-10-04T13:46:34Z
-**Status:** human_needed
-**Re-verification:** Yes. Regenerated for plan 07-05 (QLT-01) against the final code at frozen sha `81db888c5e49389ea7dc27626100f6e090535e61` (HEAD `ad98080` differs from it only by the Phase 7 ledger `07-PROOF.md`; code, tests, workflows and manifest are byte-identical). The previous report (2026-09-29, `status: human_needed` in its body, `passed` in its frontmatter, against local head `950d30c`) is replaced; history stays in Git.
+**Verified:** 2026-10-08T19:09:50Z
+**Status:** passed
+**Re-verification:** Yes. Regenerated against the current code, with the real-instance evidence of Phase 8 (`08-UAT.md`, blocks 5 to 10) resolving the six human items that the 2026-10-04 report left open. The previous report (2026-10-04T13:46:34Z, `human_needed`) is replaced; history stays in Git.
+
+**Build judged:** the `custom_components/` tree, `tests/`, `.github/`, `pyproject.toml`, `hacs.json` and `README.md` at HEAD `fab7c80` are byte-identical to the recorded Phase 8 build `b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3` (`git diff --stat b7f52b3 HEAD` over those paths is empty) and to the Phase 7 frozen sha `81db888c5e49389ea7dc27626100f6e090535e61`. The automated-tier proof of `07-PROOF.md` therefore applies to the code judged here. The one exception is the P1-1 install, which ran the release `v1.0.0` (see item 1).
 
 The story format is valid (`As a ..., I want to ..., so that ... .`), so MVP-mode verification applies.
 
 ## What changed since the previous report
 
-Phases 2 to 6 changed the code Phase 1 rests on. Every Phase 1 truth was re-judged on the current code, not carried over.
-
-- Phase 5 (ADR 0001, D-03): native switch and select entities replace MQTT Discovery as the default. Discovery is now the compatibility path of an instance that has not cut over, plus an optional export. One Phase 1 truth is recorded as superseded (below).
-- Phase 4 (D-11): hub removal keeps the devices on the broker by default and deletes them only on the hub option. This is not a Phase 1 success criterion (DSC-02 is about explicit device delete), so it is not an override, but it changes the previous human item 6 (see Human Verification).
-- Phase 7: the CI is split into four tiers on a pinned runner, `release.yml` exists, the flaky delete test was fixed.
+- Code and tests did not change. Only the human-verification side changed: Phase 8 ran the six items on real instances (or a real host) and recorded them in `08-UAT.md`. All six blocks read `result: pass`; block 5 carries `override_by: Alexander Kentner`.
+- Every truth was re-judged on the current code (targeted test runs below), not carried over.
+- The Phase 7 supersession of SC4a (Discovery as the default replaced by native entities, D-03) is kept as recorded, not re-litigated.
+- Block 4 of the ledger (UAT-04, `result: issue`, Discovery export on the core prefix) belongs to Phase 5 (05-UAT test 7) and to no Phase 1 truth. The owner left it as a gap (UAT04-DISPOSITION, 2026-10-08); it does not touch this report.
 
 ## User Flow Coverage (MVP mode)
 
-| Story step | Expected | Evidence in codebase | Status |
+| Story step | Expected | Evidence in codebase and on real instances | Status |
 | --- | --- | --- | --- |
-| Install and set up | Installs via HACS, hub added once, MQTT required | `hacs.json`, `manifest.json` (`dependencies: [mqtt]`, `single_config_entry`, `requirements: []`), `config_flow.py:93` aborts `mqtt_required`, `config_flow.py:114` uuid4 instance id; `test_hub_flow_*` | VERIFIED (HACS client itself: human) |
-| Create a Switch device with actions | Name + onChangeToOn/Off via ActionSelector, invalid rejected, device_id warned | `config_flow.py:210-220` (`async_validate_actions`, `invalid_actions`, `device_id_warning`), `config_flow.py:361-362` `selector.ActionSelector()`; `test_switch_flow_*` | VERIFIED (frontend rendering: human) |
-| MQTT state change runs actions locally | Entity (native by default), UI toggle or external publish triggers actions on real edges only | `manager._on_message` -> `StateTracker.handle` -> `_run_trigger`; `switch.py::DeviceSwitch`; `test_switch_end_to_end`, `test_edge_*`, `test_the_echo_runs_the_actions_once` | VERIFIED |
-| So that no YAML automation is needed | Whole path works without YAML, failures visible | Config Flow only (`CONFIG_SCHEMA = cv.config_entry_only_config_schema`), `runner.py` log plus Repairs issue, `test_issue_*` | VERIFIED |
+| Install and set up | Installs via HACS, hub added once, MQTT required | `hacs.json`, `manifest.json` (`dependencies: [mqtt]`, `single_config_entry`, `requirements: []`), `config_flow.py:93` aborts `mqtt_required`, `config_flow.py:114` uuid4 instance id; `test_hub_flow_*`; real host: HACS repository card, update, restart, icon, second add aborts (block 5, abbreviated path) | VERIFIED |
+| Create a Switch device with actions | Name + onChangeToOn/Off via ActionSelector, invalid rejected, device_id warned | `config_flow.py:210-220` (`invalid_actions`, `device_id_warning`), `config_flow.py:361-362` `selector.ActionSelector()`; `test_switch_flow_*`; real frontend click path by the owner (block 7) | VERIFIED |
+| MQTT state change runs actions locally | Entity (native by default), UI toggle or external publish triggers actions on real edges only | `manager._on_message` -> `StateTracker.handle` -> `_run_trigger`; `switch.py::DeviceSwitch`; `test_switch_end_to_end`, `test_edge_*`, `test_the_echo_runs_the_actions_once`; real HA core plus real Mosquitto: toggle +1 on both instances, restart and mqtt reload 0 (block 9) | VERIFIED |
+| So that no YAML automation is needed | Whole path works without YAML, failures visible | Config Flow only (`cv.config_entry_only_config_schema`), `runner.py` log plus Repairs issue, `test_issue_*`; real Repairs issue `action_failed_{uuid}` listed and judged by the owner (block 8) | VERIFIED |
 
 ## Goal Achievement
 
@@ -123,16 +146,16 @@ SC4 is split into its Discovery clause (superseded) and its behavior clause so t
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| SC1 | HACS install, one-time Config Flow requiring MQTT with persistent instance ID, UI strings in EN and DE | VERIFIED | `manifest.json`: domain `mqtt_actions` = folder, `dependencies:["mqtt"]`, `single_config_entry:true`, `requirements:[]`; `hacs.json` floor 2026.9.0; `brand/icon.png` 256x256 RGBA (+ `icon@2x.png` 512x512); hub flow aborts `mqtt_required`, stores `str(uuid.uuid4())` as `CONF_INSTANCE_ID`. Passing: `test_hub_flow_creates_entry_with_instance_id`, `test_hub_flow_aborts_without_mqtt`, `test_hub_flow_single_instance`, `test_hub_flow_rejects_invalid_base_topic`, `tests/test_translations.py` (en/de 240 keys each, no diff, placeholders equal). Real HACS client and rendering: human items 1 and 2. |
-| SC2 | Every push runs hassfest, HACS validation, Ruff and pytest in CI, and the pipeline passes | VERIFIED | `ci.yml` (Ruff, Unit, Broker with Mosquitto, Multi-instance tiers) and `validate.yml` (hassfest, HACS) trigger on `push` with only `tags-ignore: v*.*.*` (tags run once through `release.yml`), plus `pull_request`, dispatch and call; SHA-pinned actions, `permissions: {}`. Guards: `tests/test_repo_structure.py::test_push_trigger_has_no_branch_filter`, `::test_all_action_refs_are_pinned_by_sha`, `::test_workflows_have_empty_permissions`, `::test_ci_has_one_job_per_tier`, `::test_tiers_partition_the_suite`, `::test_hacs_action_has_category_and_no_ignore`. Green runs (07-PROOF.md, ubuntu-24.04 image 20260927.320.1): three consecutive CI dispatch runs 37205596675, 37205721595, 37205851615 (each 1308 unit + 17 broker + 165 multi-instance), Validate run 37205956233 (hassfest, HACS `All (9) checks passed`), release run 37206309249 (8 of 8 jobs success). Three local full-suite runs: 1490 passed each, Ruff clean. Cited, not re-run. |
-| SC3 | Create a Switch with name and action lists via the action selector; invalid actions rejected on input; actions targeting `device_id`s show a warning | VERIFIED | `config_flow.py:210-220` validates through `async_validate_actions` (cv.SCRIPT_SCHEMA plus deep validation, `actions.py:21-29`) and returns `base: invalid_actions`; `find_device_ids` plus a fingerprint gives `device_id_warning` on the first submit and saves on the identical resubmit. Passing: `test_switch_flow_creates_subentry`, `test_switch_flow_schema_serializes_action_selector`, `test_switch_flow_rejects_invalid_actions`, `test_switch_flow_truncates_long_validation_errors`, `test_switch_flow_device_id_warns_then_saves_on_resubmit`, `test_switch_flow_entity_targets_do_not_warn`, `test_switch_reconfigure_applies_validation_and_warning`, `tests/test_device_ids.py`. |
-| SC4a | The Switch appears in HA through MQTT Discovery (UUID `unique_id`, availability, device info) | PASSED (override): superseded by Phase 5 | Phase 5 replaced Discovery as the default with native entities owned by this integration (ADR 0001 D-03). The UUID `unique_id` survives (`switch.py`: `_attr_unique_id = device_id`), the entity sits under its subentry on the integration page. New default proven by `tests/test_cutover.py::test_a_legacy_install_without_peers_cuts_over_after_the_settle_time` (a fresh instance without legacy peers goes native by itself), `tests/test_native_entities.py::test_native_switch_is_registered_under_the_subentry`, `::test_native_device_publishes_no_legacy_discovery_and_shares_one_device_with_the_mode_select`. The old clause is still true on the compatibility path (`manager.is_native` False before the cutover; `discovery.py::build_discovery` unchanged: UUID `unique_id`, availability list, device block, retained QoS 1): `tests/test_native_entities.py::test_an_instance_without_the_native_flag_keeps_the_legacy_path`, `tests/test_discovery.py::test_build_discovery_switch_payload_unchanged`, `::test_discovery_creates_switch_entity`, `::test_discovery_availability_toggles_entity`, `tests/test_tracer.py::test_switch_end_to_end` (all pass). Override recorded in frontmatter (D-03). |
-| SC4b | Toggling the entity in the UI or publishing to its retained state topic runs the matching actions locally on each real change; a failing action is visible in the log and as a Repairs issue instead of being swallowed | VERIFIED | Toggle publishes retained at QoS 1 and the broker echo is the single trigger source: `DeviceSwitch.async_turn_on/off` -> `manager.async_send_state`; legacy path `tests/test_discovery.py::test_discovery_toggle_publishes_retained_on_and_off`, native path `tests/test_native_entities.py::test_turn_on_publishes_the_exact_value_retained_at_qos_1`, `::test_the_echo_runs_the_actions_once`. Edges: `tests/test_manager.py::test_edge_live_on_runs_on_actions_once`, `::test_edge_off_runs_off_actions`, `::test_edge_duplicate_live_value_is_ignored`, `::test_edge_payload_case_insensitive`, `::test_live_message_without_baseline_acts`, `::test_actions_run_serially_in_order`. Failure: `runner._async_run` logs the exception and creates/updates one `ir.async_create_issue` (`runner.py:239-263`), cleared only by a completed latest run; `test_issue_created_when_action_fails`, `test_issue_updated_in_place_on_repeated_failure`, `test_issue_cleared_after_next_success`, `test_issue_and_log_do_not_leak_action_data`. |
-| SC5 | After restart, reload or reconnect: clean start even without MQTT, retained state only sets the baseline (unless run-on-startup), only real changes trigger, the entity stays until the user explicitly deletes the device | VERIFIED | `__init__.py`: `ConfigEntryNotReady` when `async_wait_ready()` is False, failed start releases subscriptions; `state.decide`: retained is baseline only, `startup_pending and run_on_startup` is the opt-in; Store-backed baseline; `Manager.async_stop` publishes offline only and never clears discovery or state; clears happen only in `_async_remove_device` and hub removal with the delete option. Passing behavioral tests: `test_setup_retry_without_mqtt`, `test_retain_replay_sets_baseline_without_actions`, `test_retain_replay_after_reconnect_runs_nothing`, `test_startup_flag_runs_retained_state_once`, `test_startup_flag_not_reapplied_on_replay`, `test_startup_flag_applies_again_after_reload`, `test_new_device_ignores_startup_flag`, `test_baseline_persisted_across_reload`, `test_reload_keeps_single_subscription`, `test_reconnect_republishes_availability_and_discovery`, `test_unload_publishes_offline_and_never_clears_discovery`, `test_unload_then_setup_republishes_without_clearing`, `test_delete_clears_discovery_then_unsubscribes_then_config_tombstone_then_state`, `test_delete_device_own_subscription_never_sees_state_clear`, `test_failed_start_releases_subscriptions_and_retries_cleanly`, `test_malformed_store_last_acted_is_dropped_and_setup_succeeds` (all in `tests/test_manager.py`); native path `tests/test_native_cleanup.py::test_deleting_a_native_device_clears_everything_and_removes_its_entities`, `tests/test_native_replay.py`, `tests/test_native_start.py::test_a_second_start_runs_no_pass`; real Mosquitto `tests/broker/test_retain_semantics.py::test_replay_on_subscribe_has_retain_true`, `::test_live_forward_has_retain_false`. |
-| P1 | Only `mqtt_gateway.py` imports the mqtt component, callbacks are `@callback`, the raw broker payload never reaches Script variables | VERIFIED | `tests/test_tracer.py::test_only_gateway_imports_mqtt_component` (AST) passes against the current 27-module package; `mqtt_gateway.py` `_forward` functions are `@callback`; `switch.py` imports only the switch platform. |
-| P2 | Zero runtime dependencies, toolchain pinned | VERIFIED | `manifest.json` `requirements: []`; `tests/test_toolchain.py` (4 tests) passes; `uv run --locked` is used by CI and by every run above. |
+| SC1 | HACS install, one-time Config Flow requiring MQTT with persistent instance ID, UI strings in EN and DE | VERIFIED | `manifest.json`: domain `mqtt_actions` = folder, `dependencies:["mqtt"]`, `single_config_entry:true`, `requirements:[]`; `hacs.json` floor 2026.9.0; `brand/icon.png`; hub flow aborts `mqtt_required` (`config_flow.py:93`), stores `str(uuid.uuid4())` as `CONF_INSTANCE_ID` (`:114`). Passing: `test_hub_flow_creates_entry_with_instance_id`, `test_hub_flow_aborts_without_mqtt`, `test_hub_flow_single_instance`, `tests/test_translations.py` (en and de 240 flattened keys each, re-computed now: empty symmetric difference). Real instances: block 6 (EN and DE rendering, owner judged), block 5 (HACS card, icon, second add aborts; limits in item 1). |
+| SC2 | Every push runs hassfest, HACS validation, Ruff and pytest in CI, and the pipeline passes | VERIFIED | `ci.yml` (Ruff, Unit, Broker with Mosquitto, Multi-instance tiers) and `validate.yml` (hassfest, HACS) trigger on `push` (only `tags-ignore: v*.*.*`, tags run once through `release.yml`), `pull_request`, dispatch, call; SHA-pinned actions, `permissions: {}` (read from the files now). Guards in `tests/test_repo_structure.py` pass. Green runs cited from `07-PROOF.md`, not re-run: three consecutive CI dispatch runs 37205596675, 37205721595, 37205851615 (each 1308 unit + 17 broker + 165 multi-instance), Validate run 37205956233 (hassfest, HACS `All (9) checks passed`), release run 37206309249 (8 of 8 jobs success), three local full runs 1490 passed each. |
+| SC3 | Create a Switch with name and action lists via the action selector; invalid actions rejected on input; actions targeting `device_id`s show a warning | VERIFIED | `config_flow.py:210-220` validates through `async_validate_actions` and returns `base: invalid_actions`; `find_device_ids` plus a fingerprint gives `device_id_warning` on the first submit and saves on the identical resubmit. Passing now: `test_switch_flow_creates_subentry`, `test_switch_flow_schema_serializes_action_selector`, `test_switch_flow_rejects_invalid_actions`, `test_switch_flow_device_id_warns_then_saves_on_resubmit`, `test_switch_flow_entity_targets_do_not_warn`, `tests/test_device_ids.py`. Real frontend: block 7 (owner click path; no screenshots). |
+| SC4a | The Switch appears in HA through MQTT Discovery (UUID `unique_id`, availability, device info) | PASSED (override): superseded by Phase 5 | Phase 5 replaced Discovery as the default with native entities (ADR 0001 D-03, `docs/adr/0001-native-entities-instead-of-mqtt-discovery.md`). The UUID `unique_id` survives (`switch.py:33` `_attr_unique_id = device_id`). New default: `tests/test_cutover.py::test_a_legacy_install_without_peers_cuts_over_after_the_settle_time`, `tests/test_native_entities.py::test_native_switch_is_registered_under_the_subentry`, `::test_native_device_publishes_no_legacy_discovery_and_shares_one_device_with_the_mode_select`. Compatibility path still true: `tests/test_native_entities.py::test_an_instance_without_the_native_flag_keeps_the_legacy_path`, `tests/test_discovery.py::test_discovery_creates_switch_entity`, `tests/test_tracer.py::test_switch_end_to_end` (all pass). Override recorded in frontmatter (D-03). |
+| SC4b | Toggling the entity in the UI or publishing to its retained state topic runs the matching actions locally on each real change; a failing action is visible in the log and as a Repairs issue | VERIFIED | Toggle publishes retained at QoS 1 and the broker echo is the single trigger source (`DeviceSwitch.async_turn_on/off` -> `manager.async_send_state`): `tests/test_discovery.py::test_discovery_toggle_publishes_retained_on_and_off`, `tests/test_native_entities.py::test_turn_on_publishes_the_exact_value_retained_at_qos_1`, `::test_the_echo_runs_the_actions_once`; edges `tests/test_manager.py::test_edge_*`, `::test_actions_run_serially_in_order`. Failure: `runner._async_run` logs and creates/updates one Repairs issue; `test_issue_created_when_action_fails`, `test_issue_updated_in_place_on_repeated_failure`, `test_issue_cleared_after_next_success`. Real instances: toggle +1 on both (block 9), real Repairs issue created and judged (block 8). |
+| SC5 | After restart, reload or reconnect: clean start even without MQTT, retained state only sets the baseline (unless run-on-startup), only real changes trigger, the entity stays until the user explicitly deletes the device | VERIFIED | `__init__.py:37-39` raises `ConfigEntryNotReady` when `async_wait_ready()` is False; `state.decide`: retained is baseline only, run-on-startup is the opt-in; Store-backed baseline; unload publishes offline only, clears happen only in the delete paths. Behavioral tests (all pass in the 453-test run): `test_setup_retry_without_mqtt`, `test_retain_replay_sets_baseline_without_actions`, `test_retain_replay_after_reconnect_runs_nothing`, `test_startup_flag_runs_retained_state_once`, `test_baseline_persisted_across_reload`, `test_reload_keeps_single_subscription`, `test_unload_publishes_offline_and_never_clears_discovery`, `test_failed_start_releases_subscriptions_and_retries_cleanly`, `tests/test_native_start.py::test_a_second_start_runs_no_pass`, real Mosquitto `tests/broker/test_retain_semantics.py`. Real core client plus broker (block 9, scripted): full restart of both instances gave 0 runs while the retained state replayed, a reload of the core mqtt entry gave 0, the positive control gave +1. A real broker restart was not part of that run. |
+| P1 | Only `mqtt_gateway.py` imports the mqtt component, callbacks are `@callback`, the raw broker payload never reaches Script variables | VERIFIED | `tests/test_tracer.py::test_only_gateway_imports_mqtt_component` (AST) passes against the current 28-module package; the only `homeassistant.components import mqtt` in the package is `mqtt_gateway.py:6` (grep). |
+| P2 | Zero runtime dependencies, toolchain pinned | VERIFIED | `manifest.json` `requirements: []`; `tests/test_toolchain.py` passes; CI uses `uv sync --locked`. |
 
-**Score:** 8/8 truths verified (7 VERIFIED plus 1 PASSED (override), 0 present-but-behavior-unverified). Every behavior-dependent truth (retain/baseline, cleanup on unload, delete ordering, single subscription after reload, failed-start teardown) has a named test that passes on the final code.
+**Score:** 8/8 truths verified (7 VERIFIED plus 1 PASSED (override)), 0 present-but-behavior-unverified. Every behavior-dependent truth has a named passing test, and the retain/baseline chain additionally has real-instance evidence.
 
 ### Deferred Items
 
@@ -142,23 +165,22 @@ None.
 
 | Artifact | Expected | Status | Details |
 | --- | --- | --- | --- |
-| `custom_components/mqtt_actions/{__init__,manager,runner,state,switch,entities,discovery,mqtt_gateway,config_flow,actions,topics,model,const}.py` | Working integration | VERIFIED | Substantive and wired (`__init__` -> `Manager`, `MqttGateway`, platforms; `manager` -> gateway, discovery publisher, runner, tracker; `switch.py` reads the running manager; `config_flow` -> `actions`, `topics`). Phase 1 modules are grown by later phases, not replaced. |
-| `translations/en.json`, `de.json` | EN/DE strings | VERIFIED | 240 flattened keys each, empty symmetric difference. |
-| `manifest.json`, `hacs.json`, `brand/icon.png`, `LICENSE` | HACS metadata | VERIFIED | Present, `test_manifest_has_hacs_required_keys`, `test_domain_matches_folder_name`, `test_brand_icon_is_valid_png`, `test_license_is_mit_with_holder` pass. |
-| `.github/workflows/ci.yml`, `validate.yml` (and `release.yml`, `dependabot.yml`) | CI | VERIFIED | SHA-pinned, empty permissions, four CI tiers. |
-| `README.md` | Install, contract, limitations, trust model | VERIFIED | `test_readme_documents_install_limits_and_trust` passes. |
-| `tests/` | Coverage of the above | VERIFIED | Targeted run below plus the ledger's three full runs (1490 passed). |
+| `custom_components/mqtt_actions/{__init__,manager,runner,state,switch,entities,discovery,mqtt_gateway,config_flow,actions,topics,model,const}.py` | Working integration | VERIFIED | Substantive and wired (`__init__` -> `Manager`, `MqttGateway`, platforms; `manager` -> gateway, runner, tracker; `switch.py` reads the running manager; `config_flow` -> `actions`, `topics`). |
+| `translations/en.json`, `de.json` | EN/DE strings | VERIFIED | 240 flattened keys each, empty symmetric difference (computed this run). |
+| `manifest.json`, `hacs.json`, `brand/icon.png`, `LICENSE` | HACS metadata | VERIFIED | Present; `tests/test_repo_structure.py` passes; the real HACS client accepted the release (block 5). |
+| `.github/workflows/ci.yml`, `validate.yml` (and `release.yml`) | CI | VERIFIED | SHA-pinned, empty permissions, four CI tiers. |
+| `README.md`, `tests/` | Docs and coverage | VERIFIED | Targeted runs below. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | --- | --- | --- | --- | --- |
-| subentry create/update | `Manager.async_reconcile` | `entry.add_update_listener(_async_entry_updated)` | WIRED | `__init__.py`, registered before `async_start`. |
-| `manager._on_message` | `StateTracker.handle` / `runner` | `_run_trigger` on `decision.act` | WIRED | `manager.py:2285-2305`. |
+| subentry create/update | `Manager.async_reconcile` | `entry.add_update_listener` | WIRED | `__init__.py`, registered before `async_start`. |
+| `manager._on_message` | `StateTracker.handle` / `runner` | `_run_trigger` on `decision.act` | WIRED | tested by `test_edge_*`. |
 | `DeviceSwitch.async_turn_on/off` | state topic | `manager.async_send_state` | WIRED | `switch.py`. |
-| platforms | running manager | `async_forward_entry_setups` after `async_start` | WIRED | `__init__.py:45-55`. |
-| remove path | clear before unsubscribe | `_async_remove_device` | WIRED | Order tested. |
-| connection status | republish | `async_subscribe_connection_status` -> `_on_connection_status` | WIRED | `test_reconnect_republishes_availability_and_discovery`. |
+| platforms | running manager | `async_forward_entry_setups` after `async_start` | WIRED | `__init__.py`. |
+| remove path | clear before unsubscribe | `_async_remove_device` | WIRED | order tested. |
+| connection status | republish | `async_subscribe_connection_status` | WIRED | `test_reconnect_republishes_availability_and_discovery`. |
 | `config_flow` | `actions.async_validate_actions`, `find_device_ids` | direct | WIRED | |
 
 ### Data-Flow Trace (Level 4)
@@ -166,20 +188,20 @@ None.
 | Artifact | Data | Source | Real data | Status |
 | --- | --- | --- | --- | --- |
 | `runner._async_run` | Script sequence | subentry action list -> `async_validate_actions` -> `Script` | Yes | FLOWING |
-| `DeviceSwitch.is_on` | `device.value` | accepted StateValue of the state topic (`_record_value`) | Yes | FLOWING |
+| `DeviceSwitch.is_on` | `device.value` | accepted StateValue of the state topic | Yes | FLOWING |
 | manager baseline | `last_acted` | Store load plus live and retained messages | Yes | FLOWING |
-| Repairs issue | error text | exception string, capped | Yes | FLOWING |
+| Repairs issue | error text | exception string, capped | Yes (real issue observed, block 8) | FLOWING |
 
 ### Behavioral Spot-Checks
 
-Run at HEAD `ad98080` (code identical to the frozen sha). The full suite was not re-run: the ledger holds three local full runs (1490 passed each) and three CI dispatch runs on the same code.
+Run at HEAD `fab7c80` (code identical to the recorded build). The full suite was not re-run: `07-PROOF.md` holds three local full runs (1490 passed) and three CI runs on the same code.
 
 | Behavior | Command | Result | Status |
 | --- | --- | --- | --- |
-| Phase 1 core tiers incl. real Mosquitto | `uv run --locked pytest -q -p no:cacheprovider tests/test_state.py tests/test_topics.py tests/test_config_flow.py tests/test_translations.py tests/test_repo_structure.py tests/test_device_ids.py tests/test_discovery.py tests/test_manager.py tests/test_toolchain.py tests/test_tracer.py tests/test_native_entities.py tests/test_native_replay.py tests/test_native_start.py tests/test_native_cleanup.py tests/test_cutover.py tests/broker` | 453 passed in 51.04s, no skips | PASS |
-| Multi-instance, hub removal, roster | `uv run --locked pytest -q -p no:cacheprovider tests/test_multi_instance.py tests/test_hub_removal.py tests/test_multi_instance_ops.py tests/test_hub_entities.py` | 93 passed in 8.81s | PASS |
-| en/de key parity | flatten both files, symmetric difference | 240 / 240 keys, empty difference | PASS |
-| Debt markers in code, tests, workflows | `grep -n -E "TBD\|FIXME\|XXX" -r custom_components tests .github` | no output | PASS |
+| Phase 1 core tiers incl. real Mosquitto | `uv run --locked pytest -q -p no:cacheprovider tests/test_state.py tests/test_topics.py tests/test_config_flow.py tests/test_translations.py tests/test_repo_structure.py tests/test_device_ids.py tests/test_discovery.py tests/test_manager.py tests/test_toolchain.py tests/test_tracer.py tests/test_native_entities.py tests/test_native_replay.py tests/test_native_start.py tests/test_native_cleanup.py tests/test_cutover.py tests/broker` | 453 passed in 49.61s | PASS |
+| Multi-instance, hub removal, roster | `uv run --locked pytest -q -p no:cacheprovider tests/test_multi_instance.py tests/test_hub_removal.py tests/test_multi_instance_ops.py tests/test_hub_entities.py` | 93 passed in 8.71s | PASS |
+| en/de key parity | flatten both files, symmetric difference | 240 / 240, empty | PASS |
+| Debt markers | `grep -rnE "TBD\|FIXME\|XXX" custom_components tests .github` | no output | PASS |
 
 ### Probe Execution
 
@@ -191,20 +213,20 @@ All 15 IDs of Phase 1 are claimed by a PLAN `requirements:` field (01-01 FND-02;
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
-| FND-01 | SATISFIED (real HACS client: human item 1) | `hacs.json`, manifest, icon; HACS 9/9 on the ledger runs |
+| FND-01 | SATISFIED | `hacs.json`, manifest, icon; HACS 9/9 on the ledger runs; real HACS client on a production host (block 5, abbreviated path, override under the owner's name) |
 | FND-02 | SATISFIED | SC2 evidence |
 | FND-03 | SATISFIED | hub flow tests |
-| FND-04 | SATISFIED (rendering: human item 2) | `tests/test_translations.py` |
+| FND-04 | SATISFIED | `tests/test_translations.py`; real frontend EN and DE (block 6) |
 | FND-05 | SATISFIED | `test_setup_retry_without_mqtt`, `test_reconnect_republishes_availability_and_discovery` |
 | DEV-01, DEV-02 | SATISFIED | `test_switch_flow_creates_subentry`, `test_switch_flow_schema_serializes_action_selector` |
-| DEV-05 | SATISFIED | `test_switch_flow_rejects_invalid_actions`, `test_switch_flow_device_id_warns_then_saves_on_resubmit` |
-| DEV-08 | SATISFIED (Repairs rendering: human item 4) | `test_issue_*` |
+| DEV-05 | SATISFIED | `test_switch_flow_rejects_invalid_actions`, `test_switch_flow_device_id_warns_then_saves_on_resubmit`; block 7 |
+| DEV-08 | SATISFIED | `test_issue_*`; real Repairs dialog (block 8) |
 | STA-01 | SATISFIED | `test_discovery_toggle_publishes_retained_on_and_off`, `test_turn_on_publishes_the_exact_value_retained_at_qos_1` |
-| STA-02 | SATISFIED | `test_edge_*`, `test_the_echo_runs_the_actions_once` |
-| STA-04 | SATISFIED | retain and startup tests, `tests/broker/test_retain_semantics.py` |
+| STA-02 | SATISFIED | `test_edge_*`, `test_the_echo_runs_the_actions_once`; block 9 |
+| STA-04 | SATISFIED | retain and startup tests, `tests/broker/test_retain_semantics.py`; block 9 |
 | STA-05 | SATISFIED | `test_baseline_persisted_across_reload`, `test_edge_duplicate_live_value_is_ignored` |
 | DSC-01 | SATISFIED on the compatibility path, superseded as default by Phase 5 (override above) | discovery tests, native tests |
-| DSC-02 | SATISFIED | `test_unload_publishes_offline_and_never_clears_discovery`, `test_delete_clears_discovery_then_unsubscribes_then_config_tombstone_then_state`, `test_deleting_a_native_device_clears_everything_and_removes_its_entities` |
+| DSC-02 | SATISFIED | `test_unload_publishes_offline_and_never_clears_discovery`, `test_delete_clears_discovery_then_unsubscribes_then_config_tombstone_then_state`, `tests/test_native_cleanup.py::test_deleting_a_native_device_clears_everything_and_removes_its_entities` |
 
 ### Anti-Patterns Found
 
@@ -212,39 +234,30 @@ All 15 IDs of Phase 1 are claimed by a PLAN `requirements:` field (01-01 FND-02;
 | --- | --- | --- | --- | --- |
 | code, tests, workflows | - | TBD/FIXME/XXX | none | grep clean |
 
-The open review findings of the previous report (WR-03, WR-05, WR-06, WR-07, IN-01..06) were not re-litigated. None of them falsified a success criterion then and none is a Phase 1 truth now; later phases touched the same code (hub removal in Phase 4, breaker and run modes in Phase 2).
+The open review findings of the earlier reports (WR-03, WR-05, WR-06, WR-07, IN-01..06) were not re-litigated; none falsifies a Phase 1 success criterion. WR-03 (live-republished legacy Discovery creates `_2` entities until the next start) is recorded by the owner as an accepted known limit (WR03-LIVE-REPLAY, `08-UAT.md`).
 
 ### Human Verification Required
 
-#### Covered by the automated tiers (D-04), no human step left
+None open. The six items of the previous report are resolved by the Phase 8 ledger (`.planning/phases/08-real-instance-verification/08-UAT.md`, blocks 5 to 10), each carrying a `resolution:` in the frontmatter. What each block did and did not cover, so that no pass is read wider than it was:
 
-| Previous human item | Automated coverage on the final code |
-| --- | --- |
-| Failing action visibility (logic) | `tests/test_manager.py::test_issue_*` (see SC4b). The rendering half stays human (item 4 below). |
-| Delete a device on a real broker | `tests/test_manager.py::test_delete_clears_discovery_then_unsubscribes_then_config_tombstone_then_state`, `::test_delete_device_stops_actions_and_cleans_state`, `::test_delete_device_keeps_id_for_orphan_cleanup_when_mqtt_fails`, `::test_orphan_discovery_is_cleared_at_start`, `tests/test_native_cleanup.py::test_deleting_a_native_device_clears_everything_and_removes_its_entities`, `tests/test_multi_instance.py::test_delete_removes_the_device_everywhere`, `::test_owner_delete_removes_the_mirror_everywhere`; the broker semantics of the retained clear against a real Mosquitto: `tests/broker/test_retain_semantics.py::test_retained_clear_is_a_live_empty_message`. Owner-recorded real EMQX pass on the older build: 01-UAT.md test 6. |
-| Remove the hub on a real broker | `tests/test_hub_removal.py::test_remove_with_delete_clears_everywhere`, `::test_remove_with_default_keeps_everything_retained`, `::test_keep_leaves_the_offline_availability`, `::test_both_modes_remove_store_and_every_issue_prefix`, `::test_delete_mode_survives_unavailable_mqtt`, `tests/test_manager.py::test_remove_entry_clears_all_owned_topics`, `tests/test_multi_instance.py::test_hub_removal_delete_clears_everywhere_for_followers`, `::test_hub_removal_keep_leaves_orphans_that_followers_keep`, `tests/test_native_cleanup.py::test_hub_removal_clears_the_export_topics_too`. Note: since Phase 4 (D-11) the default of hub removal keeps the broker topics (so the previous expectation "nothing remains on the broker" holds with the hub's delete option, not by default). This is a deliberate later decision, not a Phase 1 success criterion, and it is not an override. |
-| Lifecycle fixes WR-01/02/04 | `tests/test_manager.py::test_reload_keeps_single_subscription`, `::test_failed_start_releases_subscriptions_and_retries_cleanly`, `::test_setup_retry_without_mqtt`, `::test_malformed_store_last_acted_is_dropped_and_setup_succeeds`, `::test_reconcile_after_stop_does_not_revive_manager`, `::test_delete_device_own_subscription_never_sees_state_clear` (50 of 50 under CPU stress, 07-PROOF.md). The fixes were pushed and merged (01-UAT.md test 7 and 8). |
-| Push and confirm CI and Validate | `07-PROOF.md`: three CI runs, Validate, release run, all success on ubuntu-24.04. |
-| Real retained-versus-live chain | Mostly covered, residual listed as item 5 below. |
-
-#### Still human (no automated test, not named by Phase 8, so not turned into passed)
-
-See the `human_verification` list in the frontmatter (6 items):
-
-1. HACS client install, flow and icon on a real host.
-2. EN and DE rendering in the real frontend.
-3. Action editor and validation banners in the current build.
-4. Repairs dialog rendering for a failing action.
-5. HA core client with a real retaining broker: UI toggle, full HA restart, broker reconnect run no extra actions.
-6. Core version of the second real host (Backup).
-
-The owner recorded a pass for items 1 to 4 and part of 5 and 6 on real hosts on 2026-09-29 (`01-UAT.md`, status complete), on the build before Phases 5 and 6. That is real evidence, but of an older build, and Phase 8 (UAT-01..04) does not repeat it. It is the owner's call whether to accept these as an override under the owner's name or to run them again. Phase 8's four checks (v0.1.0 peer next to a native instance, no `_2` duplicates after two restarts, one command executed once on two real instances, the discovery export) cover real instances for the native path and touch item 5 only partially.
+| # | Item | Ledger block | Recorded sha, date | Resolution | How it was judged and what it does not cover |
+| --- | --- | --- | --- | --- | --- |
+| 1 | HACS client install | 5 (P1-1) | `d0f660cb2422c7688d22a674cf54f955a8c26c7f` (release v1.0.0), 2026-10-07 | Override, `accepted_by: Alexander Kentner` (block carries `override_by`) | Owner only, on production host 1 that already runs the integration (PROD-HOST): repository card, update, restart, icon, second add aborts. Not run: first add, removal of the integration, removal of the repository. Installed build is v1.0.0, not the bench SHA; `hacs.json`, manifest and brand files are identical between the tag and HEAD, the Phase 6 code differences are not covered by this item. |
+| 2 | EN and DE strings in the real frontend | 6 (P1-2) | `b7f52b34...`, 2026-10-07 | Resolved | Orchestrator drove the browser, owner judged the screenshots and live view. The Repairs text covered here is the approval dialog; the failing-action dialog is item 4. |
+| 3 | Action editor and validation banners | 7 (P1-3) | `b7f52b34...`, 2026-10-06 | Resolved | Owner statement after the click path in their own browser, no screenshots. Claude's REST pre-check saved nothing, so the save on the identical resubmit in the frontend rests on the owner statement and the automated test. |
+| 4 | Repairs dialog of a failing action | 8 (P1-4) | `b7f52b34...`, 2026-10-06 | Resolved | Owner looked live in their own browser after the issue was listed through the API; no screenshots. Clearing after the next success was not part of the owner check (automated test only). |
+| 5 | Retained-versus-live chain, real core plus real broker | 9 (P1-5) | `b7f52b34...`, 2026-10-04 | Resolved | Scripted, no owner judgment. Toggle was the service call, not a click; the reconnect step reloaded the core mqtt entry and did not restart Mosquitto; unload behavior not checked in that run (automated test). |
+| 6 | Core version of hassio-n2plus | 10 (P1-6) | `b7f52b34...`, 2026-10-07 | Resolved | Owner statement 2026.9.4 read in Settings > About; informational. |
 
 ### Gaps Summary
 
-No gaps. Every roadmap success criterion is backed by code and by named passing tests on the final code, with one intended supersession (SC4a, Discovery as the default mechanism, replaced by native entities in Phase 5 and recorded as an override under D-03). The status is `human_needed` solely because six real-client checks (HACS client, frontend rendering, Repairs dialog, real HA-core-plus-broker restart and reconnect, one host version) have no automated test and are not named by Phase 8; they are returned to the owner instead of being passed by assumption.
+No gaps. Every roadmap success criterion is backed by current code and named passing tests, with one intended supersession (SC4a, recorded as an override under D-03). The six real-client checks that kept the previous report at `human_needed` are recorded as `pass` in the Phase 8 ledger on real instances or a real host; five are plain resolutions and one (HACS install, abbreviated path) is an override in the owner's own name with its limitations listed above. The unrelated ledger block 4 (UAT-04, Phase 5 Discovery export) stays an open gap of Phase 5 and does not affect this phase.
 
 ---
 
-_Verified: 2026-10-04T13:46:34Z_
+_Verified: 2026-10-08T19:09:50Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Digest refresh (2026-10-08)
+
+`covered_digest` was refreshed from `verification.fingerprint` over this report's own `covered_files` after `08-UAT.md` gained its `## Verification refresh` section (a ledger edit made after the verifier ran, plan 08-10 Task 3). No other content of this report changed; the digest was copied from the tool output, not written by hand. Previous digest: `v3:sha256:8d275bc2b3c00e0feac1a9304d08163852d9499e15df90485b2dff58a948e824`.

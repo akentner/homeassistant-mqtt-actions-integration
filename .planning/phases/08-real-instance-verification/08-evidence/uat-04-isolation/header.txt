@@ -1,0 +1,28 @@
+# HEADER BEGIN (the expectations are coded here BEFORE the first run, D-08; the run writes the sha256 of this block)
+# Product contract P1 (the documented promise, README "MQTT Discovery export"): with the export on the core prefix
+#   `homeassistant`, every instance holds, per exported device id, exactly ONE row with platform `mqtt`, unique id equal to
+#   the device id and disabled_by `integration`; the native row (platform `mqtt_actions`, unique id equal to the device id)
+#   stays enabled (disabled_by null). The native row is required on ha-a (the owner); on ha-b the mirror is never approved in
+#   this plan, so a native row there is recorded without a judgement.
+# Tracer rule (clean arm, ONE fresh device id that never had an mqtt-platform entity, read on the live registries of ha-a AND
+#   ha-b before any restart):
+#   CLEAN-ARM-DISABLED  on ha-a and on ha-b: exactly one mqtt row for the id and its disabled_by is `integration`
+#   CLEAN-ARM-ENABLED   any other observation (zero or several rows, or a disabled_by other than `integration`)
+# Context lines (recorded, never part of a rule): the mqtt rows of Lampe Test, Bar Select and UAT Marker on both instances.
+# Full experiment (task 2). Two fresh device ids, exported in ONE window on the core prefix, both live registries read before
+#   any restart: ISO-CLEAN (never had an mqtt-platform entity) and ISO-TWIN (a real deleted-entity tombstone left by a legacy
+#   Discovery replay at start: retained legacy payload, instances started, replay catch removes the enabled legacy twin).
+# Tombstone proof, read from the flushed (gracefully stopped) core.entity_registry files BEFORE the export, per instance:
+#   T1 zero live rows with platform mqtt   T2 a deleted switch entity (platform mqtt, unique id ISO-TWIN) with disabled_by null
+#   T3 no deleted mqtt-platform entity with unique id ISO-CLEAN (or ISO-CLEAN_*)
+# Per arm and instance N = number of live mqtt rows with unique id equal to the arm's id, D = their disabled_by.
+# Classification (first match wins; N != 1 in any of the four arm-instance cells is INCONCLUSIVE before any other rule):
+#   CLEAN-FAILS      T3 holds on ha-a and ha-b, and ISO-CLEAN has D = null on at least one instance
+#   TOMBSTONE-ONLY   T1, T2 and T3 hold on both instances, ISO-CLEAN has D = integration on both, ISO-TWIN has D = null on both
+#   NOT-REPRODUCED   T1, T2 and T3 hold on both instances, and all four cells have D = integration
+#   INCONCLUSIVE     every other combination (a failed proof, N != 1, a cell with another D, ha-a and ha-b disagreeing in an arm)
+# P1 lines in result.txt: a FAIL line is the reproduction, not an abort. Hypothesis context lines (recorded, not rules): with
+#   null tombstones Lampe Test and Bar Select are expected enabled (D = null), UAT Marker (tombstone integration) disabled.
+# Fixture mirrors on ha-b are NOT approved: mirrors create their native entities on ha-b without an approval, and the replay
+#   catch there finds the native twin without one.
+# HEADER END

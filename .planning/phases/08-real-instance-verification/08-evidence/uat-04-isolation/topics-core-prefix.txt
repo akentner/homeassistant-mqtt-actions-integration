@@ -1,0 +1,7 @@
+topics on homeassistant/device/+/config (retained): homeassistant/device/020b9715-2939-44bb-aafb-2340305e18d5/config homeassistant/device/11111111-aaaa-4aaa-8aaa-000000000001/config homeassistant/device/81d53f84-469e-4937-a3bb-09b24f11e4e4/config homeassistant/device/6f62cac5-49c9-49bc-88d5-1b804b775ac4/config homeassistant/device/b6bd2c0e-6d81-49ea-8025-4bd087bd718a/config 
+homeassistant/device/6f62cac5-49c9-49bc-88d5-1b804b775ac4/config 1 {"device":{"identifiers":["mqtt_actions_6f62cac5-49c9-49bc-88d5-1b804b775ac4"],"name":"UAT Iso Clean"},"origin":{"name":"MQTT Actions
+retain flag: 1
+components (key, platform, enabled_by_default): [{"key":"switch","platform":"switch","enabled_by_default":false}]
+homeassistant/device/020b9715-2939-44bb-aafb-2340305e18d5/config 1 {"device":{"identifiers":["mqtt_actions_020b9715-2939-44bb-aafb-2340305e18d5"],"name":"UAT Iso Twin"},"origin":{"name":"MQTT Actions"
+retain flag: 1
+components (key, platform, enabled_by_default): [{"key":"switch","platform":"switch","enabled_by_default":false}]

@@ -3,3 +3,7 @@ build: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
 backup of both core.entity_registry files (outside the repo, mode 0700): /home/akentner/ha-test/_backup-pre-gap-uat04-20261008T210459Z
 StartedAt after the gate start: ha-a 2026-10-08 23:05:07.994646948 +0200 CEST, ha-b 2026-10-08 23:05:08.044721464 +0200 CEST
 tracer finished 2026-10-08T21:11:08Z: CLEAN-ARM-DISABLED
+plan 08-11 task 2 (main run), 2026-10-08T21:17:46Z
+build: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+backup of both core.entity_registry files (outside the repo, mode 0700): /home/akentner/ha-test/_backup-pre-gap-uat04-20261008T211551Z
+StartedAt after the gate start: ha-a 2026-10-08 23:15:59.679791732 +0200 CEST, ha-b 2026-10-08 23:15:59.728433874 +0200 CEST

@@ -1,0 +1,5 @@
+TOMBSTONE-ONLY
+ISO-CLEAN ha-a: mqtt rows 1, disabled_by integration, tombstone before the export: none
+ISO-CLEAN ha-b: mqtt rows 1, disabled_by integration, tombstone before the export: none
+ISO-TWIN ha-a: mqtt rows 1, disabled_by null, tombstone before the export: present (disabled_by null,null,null)
+ISO-TWIN ha-b: mqtt rows 1, disabled_by null, tombstone before the export: present (disabled_by null,null,null)

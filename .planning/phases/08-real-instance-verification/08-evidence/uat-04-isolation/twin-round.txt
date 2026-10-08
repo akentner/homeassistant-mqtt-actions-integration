@@ -1,0 +1,16 @@
+twin round 2026-10-08T21:17:50Z: the field path of UAT-02 for ISO-TWIN 020b9715-2939-44bb-aafb-2340305e18d5 only
+legacy payload built with custom_components.mqtt_actions.discovery.build_discovery from the retained config document,
+instance_id=3851f34f-fa67-4f3c-bba0-122465013c3d (ha-a), base topic mqtt_actions, sw_version 0.1.0
+unique-id check (A7): the built legacy unique ids equal the native registry rows of ISO-TWIN on ha-a and ha-b: yes (3 ids)
+legacy payload published retained QoS 1 on homeassistant/device/020b9715-2939-44bb-aafb-2340305e18d5/config while both instances were stopped, read back equal
+ha-a INFO catch line count in the log of this start: 0
+ha-b INFO catch line count in the log of this start: 1
+  ha-b log: 2026-10-08 23:18:13.779 INFO (MainThread) [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+proof T1 ha-a PASS: zero live rows with platform mqtt (flushed registry file)
+proof T2 ha-a PASS: deleted switch entity with unique id ISO-TWIN, disabled_by null
+proof T3 ha-a PASS: no deleted mqtt-platform entity for ISO-CLEAN
+proof T1 ha-b PASS: zero live rows with platform mqtt (flushed registry file)
+proof T2 ha-b PASS: deleted switch entity with unique id ISO-TWIN, disabled_by null
+proof T3 ha-b PASS: no deleted mqtt-platform entity for ISO-CLEAN
+legacy topic cleared while both instances were stopped, read back empty
+both instances started again, check-preflight.sh --quick PASS

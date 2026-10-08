@@ -4,3 +4,13 @@
 [tracer] check-uat02.sh clean PASS
 [tracer] check-uat04.sh clean PASS
 [tracer] check-preflight.sh --quick PASS
+== main run 2026-10-08T21:15:51Z
+[main] cleanup restart done, StartedAt ha-a 2026-10-08 23:22:44.2206844 +0200 CEST, ha-b 2026-10-08 23:22:51.885250648 +0200 CEST
+[main] retained config topic of 6f62cac5-49c9-49bc-88d5-1b804b775ac4 empty PASS
+[main] mirror of 6f62cac5-49c9-49bc-88d5-1b804b775ac4 gone from ha-b PASS
+[main] retained config topic of 020b9715-2939-44bb-aafb-2340305e18d5 empty PASS
+[main] mirror of 020b9715-2939-44bb-aafb-2340305e18d5 gone from ha-b PASS
+[main] check-uat02.sh clean PASS
+[main] check-uat04.sh clean PASS
+[main] check-preflight.sh --quick PASS
+[main] check-stale-anchor.sh PASS

@@ -2,3 +2,8 @@ tracer fixture: UAT Iso Clean, switch, owner ha-a, actions system_log.write leve
 ISO_CLEAN_ID=e51269d3-f6e2-4cad-998d-37579c3f7c8f
 mirror on ha-b: present, never approved
 occurrences of the id in the two backup registry files: 0
+== main run fixtures: UAT Iso Clean and UAT Iso Twin, switches, owner ha-a, actions system_log.write level warning
+ISO_CLEAN_ID=6f62cac5-49c9-49bc-88d5-1b804b775ac4
+ISO_TWIN_ID=020b9715-2939-44bb-aafb-2340305e18d5
+mirrors on ha-b: present, never approved
+occurrences of the two ids in the two backup registry files: 0

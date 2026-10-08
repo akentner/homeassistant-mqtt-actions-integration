@@ -1,0 +1,20 @@
+INFO header-sha256 :: da30841ec8c1c9532ea50ee8824c0792e8d29877fc5ec6d962a36925723f8288
+INFO ISO_CLEAN_ID :: 6f62cac5-49c9-49bc-88d5-1b804b775ac4
+INFO ISO_TWIN_ID :: 020b9715-2939-44bb-aafb-2340305e18d5
+PASS P1 ISO-CLEAN ha-a :: one mqtt row, disabled_by integration
+PASS P1 ISO-CLEAN ha-b :: one mqtt row, disabled_by integration
+FAIL P1 ISO-TWIN ha-a :: mqtt rows 1, disabled_by null
+FAIL P1 ISO-TWIN ha-b :: mqtt rows 1, disabled_by null
+INFO hypothesis ha-a Lampe Test :: mqtt rows 1, disabled_by null (prediction: Lampe Test and Bar Select null, UAT Marker integration)
+INFO hypothesis ha-a Bar Select :: mqtt rows 1, disabled_by null (prediction: Lampe Test and Bar Select null, UAT Marker integration)
+INFO hypothesis ha-a UAT Marker :: mqtt rows 1, disabled_by integration (prediction: Lampe Test and Bar Select null, UAT Marker integration)
+INFO hypothesis ha-b Lampe Test :: mqtt rows 1, disabled_by null (prediction: Lampe Test and Bar Select null, UAT Marker integration)
+INFO hypothesis ha-b Bar Select :: mqtt rows 1, disabled_by null (prediction: Lampe Test and Bar Select null, UAT Marker integration)
+INFO hypothesis ha-b UAT Marker :: mqtt rows 1, disabled_by integration (prediction: Lampe Test and Bar Select null, UAT Marker integration)
+INFO proof T1 ha-a PASS: zero live rows with platform mqtt (flushed registry file)
+INFO proof T2 ha-a PASS: deleted switch entity with unique id ISO-TWIN, disabled_by null
+INFO proof T3 ha-a PASS: no deleted mqtt-platform entity for ISO-CLEAN
+INFO proof T1 ha-b PASS: zero live rows with platform mqtt (flushed registry file)
+INFO proof T2 ha-b PASS: deleted switch entity with unique id ISO-TWIN, disabled_by null
+INFO proof T3 ha-b PASS: no deleted mqtt-platform entity for ISO-CLEAN
+INFO classification :: TOMBSTONE-ONLY

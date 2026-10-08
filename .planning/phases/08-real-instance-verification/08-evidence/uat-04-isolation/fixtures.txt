@@ -1,0 +1,4 @@
+tracer fixture: UAT Iso Clean, switch, owner ha-a, actions system_log.write level warning (messages 'UAT04-ISO clean on' / 'UAT04-ISO clean off')
+ISO_CLEAN_ID=e51269d3-f6e2-4cad-998d-37579c3f7c8f
+mirror on ha-b: present, never approved
+occurrences of the id in the two backup registry files: 0

@@ -1,0 +1,12 @@
+# HEADER BEGIN (the expectations are coded here BEFORE the first run, D-08; the run writes the sha256 of this block)
+# Product contract P1 (the documented promise, README "MQTT Discovery export"): with the export on the core prefix
+#   `homeassistant`, every instance holds, per exported device id, exactly ONE row with platform `mqtt`, unique id equal to
+#   the device id and disabled_by `integration`; the native row (platform `mqtt_actions`, unique id equal to the device id)
+#   stays enabled (disabled_by null). The native row is required on ha-a (the owner); on ha-b the mirror is never approved in
+#   this plan, so a native row there is recorded without a judgement.
+# Tracer rule (clean arm, ONE fresh device id that never had an mqtt-platform entity, read on the live registries of ha-a AND
+#   ha-b before any restart):
+#   CLEAN-ARM-DISABLED  on ha-a and on ha-b: exactly one mqtt row for the id and its disabled_by is `integration`
+#   CLEAN-ARM-ENABLED   any other observation (zero or several rows, or a disabled_by other than `integration`)
+# Context lines (recorded, never part of a rule): the mqtt rows of Lampe Test, Bar Select and UAT Marker on both instances.
+# HEADER END

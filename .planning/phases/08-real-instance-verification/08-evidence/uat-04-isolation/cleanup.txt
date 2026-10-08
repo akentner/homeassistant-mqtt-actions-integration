@@ -1,0 +1,6 @@
+[tracer] cleanup restart done, StartedAt ha-a 2026-10-08 23:07:55.325966832 +0200 CEST, ha-b 2026-10-08 23:08:02.653559688 +0200 CEST
+[tracer] retained config topic of e51269d3-f6e2-4cad-998d-37579c3f7c8f empty PASS
+[tracer] mirror of e51269d3-f6e2-4cad-998d-37579c3f7c8f gone from ha-b PASS
+[tracer] check-uat02.sh clean PASS
+[tracer] check-uat04.sh clean PASS
+[tracer] check-preflight.sh --quick PASS

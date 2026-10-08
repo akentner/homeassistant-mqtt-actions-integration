@@ -1,0 +1,13 @@
+header-sha256: 0cb7372efda1a28680642ca9d09194d95762e492d5a65e12ee9f2233a6a6ce9a
+ISO_CLEAN_ID: e51269d3-f6e2-4cad-998d-37579c3f7c8f
+ha-a: mqtt rows with unique id ISO_CLEAN_ID: 1, disabled_by: integration
+ha-a: native rows with unique id ISO_CLEAN_ID (information): ["null"]
+ha-b: mqtt rows with unique id ISO_CLEAN_ID: 1, disabled_by: integration
+ha-b: native rows with unique id ISO_CLEAN_ID (information): ["null"]
+context ha-a Lampe Test: mqtt rows 1, disabled_by: null
+context ha-a Bar Select: mqtt rows 1, disabled_by: null
+context ha-a UAT Marker: mqtt rows 1, disabled_by: integration
+context ha-b Lampe Test: mqtt rows 1, disabled_by: null
+context ha-b Bar Select: mqtt rows 1, disabled_by: null
+context ha-b UAT Marker: mqtt rows 1, disabled_by: integration
+CLEAN-ARM-DISABLED

@@ -407,7 +407,12 @@ do_clean() {
     local mid
     mid=$(sed -n 's/^MARKER_ID=//p' "$HT/.fixtures.env" 2>/dev/null | head -n1)
     native=$(jq -S --arg m "${mid:-__none__}" '[.[] | select((.unique_id | startswith($m)) | not)]' <<<"$native")
-    [ "$native" = "$(jq -S '.native_rows' "$base")" ] || chk_fail "ha-$l: mqtt_actions rows differ from the baseline"
+    # Hub-owned rows (unique id <hub entry id>_resync / _instance_mode / _roster) are bench state that moved with the hub:
+    # plan 08-08 re-added the hub of ha-b under a new config entry id and instance id, so the baseline's hub rows are stale
+    # by construction (bench defect, Rule 3, plan 08-11). Both sides are compared without them; E1 to E3 stay unchanged.
+    local hubf='[.[] | select((.unique_id | test("_(resync|instance_mode|roster)$")) | not)]'
+    native=$(jq -S "$hubf" <<<"$native")
+    [ "$native" = "$(jq -S ".native_rows | $hubf" "$base")" ] || chk_fail "ha-$l: mqtt_actions rows (without hub rows) differ from the baseline"
     [ "$(jq '[.[] | select(.platform == "mqtt")] | length' <<<"$all")" -eq 0 ] || chk_fail "ha-$l: a row with platform mqtt exists"
     [ "$(jq '[.[] | select(.entity_id | test("_2$"))] | length' <<<"$all")" -eq 0 ] || chk_fail "ha-$l: an entity id ending in _2 exists"
     [ "$(mqtt_devices "$l" | jq length)" -eq 0 ] || chk_fail "ha-$l: a legacy mqtt device exists"

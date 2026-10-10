@@ -5,16 +5,16 @@ milestone_name: Hardening
 current_phase: 08
 current_phase_name: Real-Instance Verification
 status: executing
-stopped_at: Completed 08-11-PLAN.md
-last_updated: "2026-10-10T10:45:43.411Z"
-last_activity: 2026-10-08
+stopped_at: Completed 08-12-PLAN.md
+last_updated: "2026-10-10T23:54:58.990Z"
+last_activity: 2026-10-10
 last_activity_desc: Phase 08 execution started
-state_head: f1d665b454a62a8f32181a778aab21a2d5939a5c
+state_head: 72684c9c785ecc85b844c52a0be169959938ecb1
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 22
-  completed_plans: 18
+  completed_plans: 19
   percent: 33
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-10-04)
 ## Current Position
 
 Phase: 08 (Real-Instance Verification) — EXECUTING
-Plan: 12 of 15 (08-11 complete; next 08-12, guard and documentation)
+Plan: 13 of 15 (08-12 complete; next 08-13, re-pin and scripted re-run)
 Status: Ready to execute
-Last activity: 2026-10-10 — Plan 08-11 complete (UAT-04 gap classified TOMBSTONE-ONLY, owner chose guard-and-document)
+Last activity: 2026-10-11 — Plan 08-12 complete (D08-WAIVER recorded, export-duplicate guard test-first, README and troubleshooting)
 
 Progress: [███░░░░░░░] 33%
 
@@ -103,6 +103,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 06 P01 | 8 min | 2 tasks | 6 files |
 | Phase 06 P02 | 13 min | 3 tasks | 7 files |
 | Phase 08 P11 | 2 sessions | 3 tasks | 24 files |
+| Phase 08 P12 | 1 session | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -205,6 +206,8 @@ Recent decisions affecting current work:
 - [Phase 06]: 06-02: the replay catch is registry-only and its quiet period is an async_call_later timer (5.0 s), not a sleep — A sleeping task hangs the freezer fixture; the timer follows the cutover pattern and publishes nothing (T-06-07, T-06-09)
 - [Phase 06]: 06-02: the emptied replayed MQTT device is removed only when nothing at all remains on it — Removing a device removes the entries on it, so a check on MQTT entries alone could delete moved native entities
 - [Phase 08]: UAT04-GAP-DISPOSITION: guard-and-document, full-rerun, not-affected confirmed by owner; classification TOMBSTONE-ONLY
+- [Phase 08]: D08-WAIVER: a product fix may land in Phase 8 for the UAT-04 clause 2 gap closure only (relayed 2026-10-08, confirmed by the owner in chat 2026-10-11); the failure rule of D-08 stands
+- [Phase 08]: 08-12: the export-duplicate guard disables, it does not remove, and uses public registry API only — armed while the export is on the core prefix, disarmed on export off, prefix change and stop
 
 ### Pending Todos
 

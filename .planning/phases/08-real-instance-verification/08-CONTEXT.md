@@ -42,6 +42,9 @@ accepted skip.
 ### Failures
 - **D-08:** A failed check is recorded as a gap and the remaining checks continue. Fixes go into a follow-up gap plan or phase,
   not into Phase 8 (consistent with "no code changes planned").
+  - *Amendment 2026-10-08 (decision D08-WAIVER, relayed by the orchestrator from the owner's answer, confirmed directly by the owner in chat on 2026-10-11):* for the gap closure of
+    UAT-04 clause 2 (plans 08-11 to 08-15) only, a product fix may land in Phase 8. The rest of D-08 stands, including the rule
+    that a failed check is recorded as a gap and the remaining checks continue.
 
 ### Claude's Discretion
 - Grouping and order of checks per instance setup, helper scripts for the automated steps, and the evidence file naming.

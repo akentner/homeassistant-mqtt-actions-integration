@@ -92,7 +92,7 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: 10/15 plans executed
+**Plans**: 11/15 plans executed
 
 Plans:
 **Wave 1**
@@ -128,7 +128,7 @@ Plans:
 **Gap closure: UAT-04 clause 2** *(`/gsd-execute-phase 8 --gaps-only`; sequential, the plans share the bench)*
 
 **Wave 11** *(blocked on Wave 10 completion)*
-- [ ] 08-11-PLAN.md — Isolated reproduction of UAT-04 clause 2 (fresh device and a real tombstone), classification, owner decision: guard, document or bench artifact
+- [x] 08-11-PLAN.md — Isolated reproduction of UAT-04 clause 2 (fresh device and a real tombstone), classification, owner decision: guard, document or bench artifact
 
 **Wave 12** *(blocked on Wave 11 completion)*
 - [ ] 08-12-PLAN.md — Record the owner's waiver of D-08 (D08-WAIVER), then apply the decision: product guard test-first and/or README and troubleshooting text (conditional on the decision)
@@ -151,7 +151,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 10/15 | In Progress|  |
+| 8. Real-Instance Verification | 11/15 | In Progress|  |
 
 ## Backlog
 

@@ -5,16 +5,16 @@ milestone_name: Hardening
 current_phase: 08
 current_phase_name: Real-Instance Verification
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-10-08T19:29:13.025Z"
-last_activity: 2026-10-04
+stopped_at: Completed 08-11-PLAN.md
+last_updated: "2026-10-10T10:45:43.411Z"
+last_activity: 2026-10-08
 last_activity_desc: Phase 08 execution started
-state_head: 412a105ecf6ad5b8c0878200a2271ef36e8a13a7
+state_head: f1d665b454a62a8f32181a778aab21a2d5939a5c
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 22
+  completed_plans: 18
   percent: 33
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-10-04)
 ## Current Position
 
 Phase: 08 (Real-Instance Verification) — EXECUTING
-Plan: 9 of 10
+Plan: 12 of 15 (08-11 complete; next 08-12, guard and documentation)
 Status: Ready to execute
-Last activity: 2026-10-04 — Phase 08 execution started
+Last activity: 2026-10-10 — Plan 08-11 complete (UAT-04 gap classified TOMBSTONE-ONLY, owner chose guard-and-document)
 
 Progress: [███░░░░░░░] 33%
 
@@ -102,6 +102,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 5 P09 | 35min | 2 tasks | 8 files |
 | Phase 06 P01 | 8 min | 2 tasks | 6 files |
 | Phase 06 P02 | 13 min | 3 tasks | 7 files |
+| Phase 08 P11 | 2 sessions | 3 tasks | 24 files |
 
 ## Accumulated Context
 
@@ -203,6 +204,7 @@ Recent decisions affecting current work:
 - [Phase 06]: The native flag is sticky: the id leaves the set only at tombstone, prune or adoption and is pruned at start to the restored mirrors (D-03, T-06-01)
 - [Phase 06]: 06-02: the replay catch is registry-only and its quiet period is an async_call_later timer (5.0 s), not a sleep — A sleeping task hangs the freezer fixture; the timer follows the cutover pattern and publishes nothing (T-06-07, T-06-09)
 - [Phase 06]: 06-02: the emptied replayed MQTT device is removed only when nothing at all remains on it — Removing a device removes the entries on it, so a check on MQTT entries alone could delete moved native entities
+- [Phase 08]: UAT04-GAP-DISPOSITION: guard-and-document, full-rerun, not-affected confirmed by owner; classification TOMBSTONE-ONLY
 
 ### Pending Todos
 
@@ -235,9 +237,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-04T14:02:22.478Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-real-instance-verification/08-CONTEXT.md
+Last session: 2026-10-10T10:45:40.732Z
+Stopped at: Completed 08-11-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

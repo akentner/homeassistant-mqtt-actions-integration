@@ -43,6 +43,8 @@ REPLAY_QUIET_SECONDS = 5.0
 # The domain of core MQTT is a literal: only `mqtt_gateway.py` may import the MQTT integration
 MQTT_DOMAIN = "mqtt"
 LEGACY_DOMAINS = frozenset({"switch", "select", "button"})
+# The export publishes one component per device, a switch or a select, and never a test button
+EXPORT_DOMAINS = frozenset({"switch", "select"})
 LEGACY_TEST_PREFIX = "_test_"
 
 
@@ -218,6 +220,29 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
             device_registry.async_remove_device(device.id)
     LOGGER.info("Removed %d duplicate entities that a replayed legacy discovery created", removed)
     return removed
+
+
+def disable_export_duplicates(hass: HomeAssistant, device_id: str, *, mqtt_entry_id: str) -> int:
+    """
+    Disable the enabled core MQTT entries an export on the core prefix created for a device id; return the count.
+
+    The export asks for a disabled duplicate, but when core MQTT creates the entry again, the registry restores the
+    state of an earlier deleted entry with the same platform and unique id, and that state may be enabled. A candidate
+    is the switch or select entry of the core MQTT device of the id whose unique id is exactly the id; the native
+    entity and every entry of another unique id are never touched. Registry logic only: nothing is published. The
+    replay catch may remove the disabled entry at a later start; removing it leaves a record with the disabled state
+    `integration`, so every later restore is disabled as well.
+    """
+    if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
+        return 0
+    entity_registry = er.async_get(hass)
+    disabled = 0
+    for entry in _legacy_entries(hass, device, device_id, mqtt_entry_id):
+        if entry.unique_id != device_id or entry.domain not in EXPORT_DOMAINS or entry.disabled_by is not None:
+            continue
+        entity_registry.async_update_entity(entry.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+        disabled += 1
+    return disabled
 
 
 def has_moved_entities(hass: HomeAssistant, entry: ConfigEntry, device_id: str) -> bool:

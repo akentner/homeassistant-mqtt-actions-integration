@@ -113,7 +113,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable, Mapping
 
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import CALLBACK_TYPE, HomeAssistant
+    from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant
 
     from .document import ActionAnalysis, ParsedDocument
     from .trust import ApprovalView
@@ -545,6 +545,8 @@ class Manager:
         self._cancel_cutover: CALLBACK_TYPE | None = None
         # The timer of the catch for duplicates a replayed legacy discovery creates; None while none is armed (D-05)
         self._cancel_replay_catch: CALLBACK_TYPE | None = None
+        # The registry listener that disables an enabled export duplicate; None unless the export is on the core prefix
+        self._cancel_export_guard: CALLBACK_TYPE | None = None
         # Set once the settle time has passed; only then does a roster change start a cutover check
         self._cutover_ready = False
         # The blocking peers the hint issue shows now, so an unchanged set does not rebuild the issue on every heartbeat
@@ -802,6 +804,8 @@ class Manager:
             await self._async_reconcile_locked(startup=True)
             # Before the platform forward and before any document: the entities move first, then the retained clear
             await self._async_native_takeover()
+            # The export may be on the core prefix already: arm before it is published, so its duplicate is caught
+            self._sync_export_guard()
             await self._async_publish_owned()
             # The pass decided which devices are native, so only now is it known whether discovery is still needed
             self._check_discovery_enabled()
@@ -879,6 +883,63 @@ class Manager:
             if self._remove_replay_twins(self._native_device_ids()):
                 # The removal is on disk like the move before it (WR-01)
                 await takeover.async_flush_registries(self._hass)
+
+    def _export_guard_ids(self) -> set[str]:
+        """Return the ids of the devices the export covers: owned, native and not transferred away."""
+        return {
+            device_id
+            for device_id in self.devices
+            if self.is_native(device_id) and device_id not in self.sync.transferred_away
+        }
+
+    @callback
+    def _disarm_export_guard(self) -> None:
+        """Stop the guard for an enabled export duplicate; a no-op while it is not armed."""
+        if self._cancel_export_guard is not None:
+            self._cancel_export_guard()
+            self._cancel_export_guard = None
+
+    @callback
+    def _sync_export_guard(self) -> None:
+        """
+        Arm the guard while the export is on and its prefix is the one core MQTT listens to, otherwise disarm it (D-03).
+
+        Core MQTT restores the state of a deleted registry entry with the same platform and unique id, so the duplicate
+        that an export on its own prefix creates can come back enabled. The guard disables it, once for the rows that
+        exist now and then for every row core creates while it is armed. Registry logic only: nothing is published.
+        """
+        self._disarm_export_guard()
+        enabled, prefix = self._export_signature()
+        if not self._running or not enabled or prefix != self.gateway.discovery_prefix():
+            return
+        self._cancel_export_guard = self._hass.bus.async_listen(
+            er.EVENT_ENTITY_REGISTRY_UPDATED, self._on_export_registry_updated
+        )
+        self._disable_export_duplicates(self._export_guard_ids())
+
+    @callback
+    def _on_export_registry_updated(self, event: Event[er.EventEntityRegistryUpdatedData]) -> None:
+        """Look at every new core MQTT row of an exported device id; everything else returns at once (T-08-36)."""
+        if event.data["action"] != "create":
+            return
+        entry = er.async_get(self._hass).async_get(event.data["entity_id"])
+        if entry is None or entry.platform != takeover.MQTT_DOMAIN or entry.unique_id not in self._export_guard_ids():
+            return
+        # Core is still creating the entity: the change waits for the next loop iteration, it does not nest in the event
+        self._hass.loop.call_soon(self._disable_export_duplicates, {entry.unique_id})
+
+    @callback
+    def _disable_export_duplicates(self, device_ids: Iterable[str]) -> None:
+        """Disable the enabled export duplicates of these devices; a failure never keeps the manager from running."""
+        if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None or self._cancel_export_guard is None:
+            return
+        for device_id in device_ids:
+            try:
+                takeover.disable_export_duplicates(self._hass, device_id, mqtt_entry_id=mqtt_entry_id)
+            except Exception as err:  # noqa: BLE001
+                # No registry or broker content in the log: this guard must never keep the manager from running
+                LOGGER.warning("The check for an enabled export duplicate of a device raised an unexpected error")
+                LOGGER.debug("The check for an enabled export duplicate failed with %s", type(err).__name__)
 
     @callback
     def on_roster_changed(self) -> None:
@@ -1108,6 +1169,7 @@ class Manager:
                     partial(self._publisher.async_clear_export, device.device_id, old_prefix),
                     f"clear the discovery export of device {device.name}",
                 )
+        self._sync_export_guard()
         if current[0]:
             for device in exported:
                 await self.async_publish_discovery(device)
@@ -1149,6 +1211,7 @@ class Manager:
             if self._cancel_replay_catch is not None:
                 self._cancel_replay_catch()
                 self._cancel_replay_catch = None
+            self._disarm_export_guard()
             self.sync.async_stop()
             self.presence.async_stop()
             self.retrigger.async_stop()

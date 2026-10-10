@@ -9,6 +9,7 @@ import probatio
 import pytest
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 
@@ -411,3 +412,189 @@ def test_the_option_strings_exist_in_both_languages() -> None:
             assert step["data"][key]
             assert step["data_description"][key]
         assert translations["options"]["error"]["invalid_export_prefix"]
+
+
+# --- the guard for an enabled duplicate on the core prefix (UAT-04 clause 2) -----------------------------------------
+
+CORE_EXPORT = {CONF_DISCOVERY_EXPORT: True, CONF_EXPORT_PREFIX: CORE_PREFIX}
+
+
+def _mqtt_row(hass: HomeAssistant, domain: str, unique_id: str, *, device: bool = False) -> str:
+    """Create an enabled registry row of core MQTT, optionally on the MQTT device the export payload names."""
+    mqtt_entry = hass.config_entries.async_entries("mqtt")[0]
+    device_id = None
+    if device:
+        mqtt_device = dr.async_get(hass).async_get_or_create(
+            config_entry_id=mqtt_entry.entry_id, identifiers={("mqtt", f"mqtt_actions_{unique_id}")}
+        )
+        device_id = mqtt_device.id
+    row = er.async_get(hass).async_get_or_create(
+        domain, "mqtt", unique_id, config_entry=mqtt_entry, device_id=device_id
+    )
+    assert row.disabled_by is None
+    return row.entity_id
+
+
+def _leave_tombstone(hass: HomeAssistant, domain: str, unique_id: str) -> None:
+    """
+    Remove an enabled mqtt row of the device id, which leaves the deleted-entity record that core restores from.
+
+    An existing duplicate is enabled first: the user, or an earlier replay, had it enabled, which is what the bench
+    sequence needs.
+    """
+    registry = er.async_get(hass)
+    if (existing := registry.async_get_entity_id(domain, "mqtt", unique_id)) is None:
+        existing = _mqtt_row(hass, domain, unique_id)
+    registry.async_update_entity(existing, disabled_by=None)
+    registry.async_remove(existing)
+    assert registry.async_get_entity_id(domain, "mqtt", unique_id) is None
+
+
+@pytest.mark.parametrize("kind", ["switch", "select"])
+async def test_a_restored_enabled_state_is_disabled_by_the_guard(
+    kind: str,
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+) -> None:
+    """The bench sequence: an enabled mqtt row was removed, then the export on the core prefix recreates it."""
+    _seed_native(hass_storage)
+    subentry = (
+        make_switch_subentry("Lamp")
+        if kind == "switch"
+        else make_select_subentry("Mode", [("a", "A", []), ("b", "B", [])])
+    )
+    device_id = _device_id(subentry)
+    entry = await _setup(hass, make_hub_entry([subentry]))
+    _leave_tombstone(hass, kind, device_id)
+
+    # The mocked client hands what is published to core MQTT, as a broker would
+    hass.config_entries.async_update_entry(entry, options=CORE_EXPORT)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    registry = er.async_get(hass)
+    duplicate = registry.async_get_entity_id(kind, "mqtt", device_id)
+    native = registry.async_get_entity_id(kind, DOMAIN, device_id)
+    assert duplicate is not None
+    assert native is not None
+    assert registry.async_get(duplicate).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert registry.async_get(native).disabled_by is None
+    enabled = [
+        entity.entity_id
+        for entity in registry.entities.values()
+        if entity.unique_id == device_id and entity.disabled_by is None
+    ]
+    assert enabled == [native]
+
+
+async def test_an_enabled_row_that_exists_when_the_export_is_switched_on_is_disabled(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """The sweep: no registry event follows, so the guard finds the row when it is armed."""
+    _seed_native(hass_storage)
+    subentry = make_switch_subentry("Lamp")
+    device_id = _device_id(subentry)
+    entry = await _setup(hass, make_hub_entry([subentry]))
+    row = _mqtt_row(hass, "switch", device_id, device=True)
+
+    hass.config_entries.async_update_entry(entry, options=CORE_EXPORT)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+@pytest.mark.parametrize("options", [{}, EXPORT_ON])
+async def test_the_guard_is_inert_while_the_export_is_off_or_on_another_prefix(
+    options: dict[str, Any],
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """Without the export on the core prefix an mqtt row of the device id keeps what core gave it."""
+    _seed_native(hass_storage)
+    subentry = make_switch_subentry("Lamp")
+    device_id = _device_id(subentry)
+    await _setup(hass, make_hub_entry([subentry], options=options))
+
+    row = _mqtt_row(hass, "switch", device_id, device=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert er.async_get(hass).async_get(row).disabled_by is None
+
+
+async def test_switching_the_export_off_removes_the_guard(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """After the export ended, a row created later keeps what core gave it."""
+    _seed_native(hass_storage)
+    subentry = make_switch_subentry("Lamp")
+    device_id = _device_id(subentry)
+    entry = await _setup(hass, make_hub_entry([subentry], options=CORE_EXPORT))
+
+    hass.config_entries.async_update_entry(entry, options={})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _leave_tombstone(hass, "switch", device_id)
+    row = _mqtt_row(hass, "switch", device_id, device=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert er.async_get(hass).async_get(row).disabled_by is None
+
+
+async def test_the_guard_never_touches_a_row_that_is_no_exported_device(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """A foreign unique id, even on a device that looks like ours, is left alone (T-08-35)."""
+    _seed_native(hass_storage)
+    subentry = make_switch_subentry("Lamp")
+    await _setup(hass, make_hub_entry([subentry], options=CORE_EXPORT))
+
+    foreign = _mqtt_row(hass, "switch", "someone-elses-switch", device=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert er.async_get(hass).async_get(foreign).disabled_by is None
+
+
+async def test_the_guard_publishes_nothing_and_stops_with_the_manager(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """The guard is registry-only, and an unloaded entry leaves no listener behind."""
+    _seed_native(hass_storage)
+    subentry = make_switch_subentry("Lamp")
+    device_id = _device_id(subentry)
+    entry = await _setup(hass, make_hub_entry([subentry], options=CORE_EXPORT))
+    _leave_tombstone(hass, "switch", device_id)
+    published = list(mqtt_mock.async_publish.call_args_list)
+
+    row = _mqtt_row(hass, "switch", device_id, device=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert list(mqtt_mock.async_publish.call_args_list) == published
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _leave_tombstone(hass, "switch", device_id)
+    again = _mqtt_row(hass, "switch", device_id, device=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert er.async_get(hass).async_get(again).disabled_by is None

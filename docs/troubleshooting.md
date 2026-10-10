@@ -99,6 +99,18 @@ update to 1.0.0 or newer again. The instance takes the discovery entities over o
 unavailable entities in the entity registry by hand if they stay. There is no automatic rollback, and an automation or
 dashboard that you changed to the `_2` ids has to be changed back.
 
+### An enabled duplicate after the export prefix was set to the core prefix
+
+You set the **Discovery export prefix** to the prefix that Home Assistant listens to, for example `homeassistant`, and
+a device now shows a second switch or select with the suffix `_2` that is **enabled**, next to the native entity. The
+export asks for a disabled duplicate, but Home Assistant keeps a record of deleted entities and restores the settings of
+the old one, including the enabled state, when an entity with the same platform and unique ID is created again. This
+happens when an enabled MQTT entity with the device ID as unique ID was deleted earlier, for example a duplicate that a
+replay of old Discovery messages created and the integration removed again. MQTT Actions disables such a duplicate
+itself while the export is on and uses that prefix. **What to do:** if you still see an enabled duplicate, disable it in
+**Settings**, **Devices & services**, **Entities**, or set the export prefix back to the default
+`mqtt_actions_export`, which Home Assistant does not listen to.
+
 ### Entities are missing on an older instance
 
 An instance on 0.1.x that comes online after the others switched keeps running its actions, but it shows no entities

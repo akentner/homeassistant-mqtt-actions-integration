@@ -95,6 +95,14 @@ If you enter a prefix that Home Assistant listens to, for example `homeassistant
 entity of each device. These duplicates are disabled by default, so they do not run anything, but they clutter the
 entity list. Use the default prefix unless a consumer needs another one.
 
+Home Assistant keeps a record of deleted entities and restores their settings, including the disabled state, when an
+entity with the same platform and unique ID is created again. A duplicate of a device can therefore come back enabled,
+when an earlier enabled MQTT entity with the same unique ID (the device ID) was deleted, for example a duplicate that a
+replay of old Discovery messages created and the integration removed again. While the export is on and its prefix is the
+one Home Assistant listens to, MQTT Actions disables such a duplicate itself as soon as Home Assistant creates it. If you
+still find an enabled duplicate, disable it in **Settings**, **Devices & services**, **Entities**, or switch the export
+back to the default prefix.
+
 ## Select devices
 
 A select device has a name and a list of options. Each option has:

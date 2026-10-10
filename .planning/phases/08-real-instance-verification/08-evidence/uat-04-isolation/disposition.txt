@@ -1,0 +1,6 @@
+guard-and-document
+modifier: full-rerun
+not-affected-confirmed: yes
+2026-10-10
+TOMBSTONE-ONLY
+owner words (German, verbatim, relayed by the orchestrator): "guard-and-document, confirm-not-affected. Ja, ich meinte 999.1, das sollten wir dann auf eine folgende Phase umlabeln"

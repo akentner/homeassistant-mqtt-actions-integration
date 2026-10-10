@@ -4,6 +4,8 @@
 #   check-uat04-iso.sh verify --tracer assert the tracer evidence is complete and the bench is back at its baseline
 #   check-uat04-iso.sh run             both arms in one window, classification (task 2)
 #   check-uat04-iso.sh verify          assert the full evidence, a valid classification and the baseline (task 2)
+#   check-uat04-iso.sh disposition     print the validated owner option id of disposition.txt (task 3; exit 2 when invalid)
+#   check-uat04-iso.sh applies TARGET  yes|no for guard, document, prune, repin, full-rerun, scoped (task 3; exit 2 when invalid)
 # Run from inside the checkout that holds the evidence. Exit: 0 valid result, 1 failed verify, 2 ABORT (bench problem, never a result).
 #
 # HEADER BEGIN (the expectations are coded here BEFORE the first run, D-08; the run writes the sha256 of this block)
@@ -590,6 +592,90 @@ do_verify() {
   chk_finish "check-uat04-iso verify ($token)" "$EV"
 }
 
+# ---- owner disposition (task 3): fail closed, a missing or invalid file never reads as a decision ------------------------------
+DISP_ID=""
+DISP_MOD=""
+DISP_WHY=""
+# disp_load : validates $EV/disposition.txt, sets DISP_ID and DISP_MOD, returns 1 with DISP_WHY set when invalid
+disp_load() {
+  local f="$EV/disposition.txt" l2 l3
+  DISP_ID=""
+  DISP_MOD=""
+  [ -s "$f" ] || {
+    DISP_WHY="disposition.txt is missing or empty"
+    return 1
+  }
+  DISP_ID=$(sed -n '1p' "$f")
+  l2=$(sed -n '2p' "$f")
+  l3=$(sed -n '3p' "$f")
+  case "$DISP_ID" in
+    guard | guard-and-document | document | bench-artifact) ;;
+    *)
+      DISP_WHY="line 1 is not one of guard, guard-and-document, document, bench-artifact"
+      return 1
+      ;;
+  esac
+  case "$l2" in
+    "modifier: full-rerun") DISP_MOD=full-rerun ;;
+    "modifier: scoped") DISP_MOD=scoped ;;
+    "modifier: none") DISP_MOD=none ;;
+    *)
+      DISP_WHY="line 2 is not a valid modifier line"
+      return 1
+      ;;
+  esac
+  case "$DISP_ID" in
+    guard | guard-and-document)
+      [ "$l3" = "not-affected-confirmed: yes" ] || {
+        DISP_WHY="a guard option lacks 'not-affected-confirmed: yes' on line 3"
+        return 1
+      }
+      [ "$DISP_MOD" = full-rerun ] || [ "$DISP_MOD" = scoped ] || {
+        DISP_WHY="a guard option needs the modifier full-rerun or scoped"
+        return 1
+      }
+      ;;
+    *)
+      [ "$DISP_MOD" = none ] || {
+        DISP_WHY="$DISP_ID carries a modifier other than none"
+        return 1
+      }
+      [ "$l3" = "not-affected-confirmed: not-applicable" ] || {
+        DISP_WHY="$DISP_ID needs 'not-affected-confirmed: not-applicable' on line 3"
+        return 1
+      }
+      ;;
+  esac
+  return 0
+}
+do_disposition() {
+  if ! disp_load; then
+    sed -n '1p' "$EV/disposition.txt" 2>/dev/null
+    echo "INVALID disposition: $DISP_WHY" >&2
+    exit 2
+  fi
+  echo "$DISP_ID"
+}
+do_applies() {
+  local target=$1 guard=no
+  if ! disp_load; then
+    echo "INVALID disposition: $DISP_WHY" >&2
+    exit 2
+  fi
+  case "$DISP_ID" in guard | guard-and-document) guard=yes ;; esac
+  case "$target" in
+    guard | repin) echo "$guard" ;;
+    document) case "$DISP_ID" in document | guard-and-document) echo yes ;; *) echo no ;; esac ;;
+    prune) case "$DISP_ID" in document | bench-artifact) echo yes ;; *) echo no ;; esac ;;
+    full-rerun) [ "$guard" = yes ] && [ "$DISP_MOD" = full-rerun ] && echo yes || echo no ;;
+    scoped) [ "$guard" = yes ] && [ "$DISP_MOD" = scoped ] && echo yes || echo no ;;
+    *)
+      echo "INVALID target '$target': use guard, document, prune, repin, full-rerun or scoped" >&2
+      exit 2
+      ;;
+  esac
+}
+
 case "$MODE" in
   tracer) do_tracer ;;
   run) do_run ;;
@@ -609,8 +695,10 @@ case "$MODE" in
         ;;
     esac
     ;;
+  disposition) do_disposition ;;
+  applies) do_applies "$ARG" ;;
   *)
-    echo "usage: check-uat04-iso.sh tracer | run | verify [--tracer]" >&2
+    echo "usage: check-uat04-iso.sh tracer | run | verify [--tracer] | disposition | applies TARGET" >&2
     exit 2
     ;;
 esac

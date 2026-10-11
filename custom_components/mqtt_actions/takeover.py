@@ -205,7 +205,9 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
 
     A candidate is a legacy entry of the core MQTT device of the id that has a native twin under this config entry.
     It goes only when the twin carries the identity: an older or customized legacy entry is left to the takeover pass,
-    and an entry without a twin is no duplicate. The twin is never removed. A disabled entry is never removed either:
+    and an entry without a twin is no duplicate. A customized entry stays whatever the twin holds: with both entries
+    customized no rule knows which one automations use, and removing it would leave the user's choices only in a
+    deleted record that no UI reaches (WR-03). The twin is never removed. A disabled entry is never removed either:
     core MQTT aborts the add of a row it discovers disabled and publishes an empty retained discovery as soon as that
     row leaves the registry, which would wipe the topic of another instance's export (CR-01). That is the usual state
     of a duplicate after a restart and of every row an export creates, and a disabled row restores as disabled, so it
@@ -224,7 +226,7 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
         if twin_id is None:
             continue
         twin = entity_registry.entities[twin_id]
-        if twin.config_entry_id != entry_id or _carries_the_identity(legacy, twin):
+        if twin.config_entry_id != entry_id or _is_customized(legacy) or _carries_the_identity(legacy, twin):
             continue
         if legacy.disabled_by is not None:
             # Core may hold a hook for an aborted add of this row, and removing it would clear the topic (CR-01)
@@ -254,15 +256,17 @@ def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mq
     When core MQTT creates the entry again, the registry restores the state of an earlier deleted entry with the
     same platform and unique id, and that state may be enabled. A candidate is the switch or select entry of the
     core MQTT device of the id whose unique id is exactly the id, whose disabled state is None and that has a native
-    twin under this config entry, unless it holds the user's choices (`_is_customized`) and the twin does not: an
-    entry without a twin is a live entity, and a customized one is the entity the user knows. This is the
-    customization half of the identity test of `remove_replay_twins` and deliberately not its age half: a row that
-    core restores from a deleted record keeps its old creation time, and that row is the duplicate this guard exists
-    for. The twin, a test button, a disabled entry and every other unique id are never touched, and nothing is
-    removed or enabled. Registry logic only: nothing is published. The disabled entry stays in the registry: neither
-    the replay catch nor the takeover removes a disabled entry, because core MQTT clears the retained topic, another
-    instance's export included, when a row it discovered while disabled leaves the registry (CR-01). The entry keeps
-    the disabled state `integration` across restarts, and a later export finds it disabled.
+    twin under this config entry, unless it holds the user's choices (`_is_customized`), whatever the twin holds, or
+    the twin is turned off: an entry without a twin is a live entity, a customized one is the entity the user knows,
+    and with both customized no rule knows which one automations use. A twin that is disabled, or that the user hid,
+    is the entity the user rejected, and disabling the legacy entry as well would leave no enabled entity for the id
+    (WR-03). This is the customization half of the identity test of `remove_replay_twins` and deliberately not its
+    age half: a row that core restores from a deleted record keeps its old creation time, and that row is the
+    duplicate this guard exists for. The twin, a test button, a disabled entry and every other unique id are never
+    touched, and nothing is removed or enabled. Registry logic only: nothing is published. The disabled entry stays
+    in the registry: neither the replay catch nor the takeover removes a disabled entry, because core MQTT clears the
+    retained topic, another instance's export included, when a row it discovered while disabled leaves the registry
+    (CR-01). The entry keeps the disabled state `integration` across restarts, and a later export finds it disabled.
     """
     if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
         return 0
@@ -275,8 +279,9 @@ def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mq
         if twin_id is None:
             continue
         twin = entity_registry.entities[twin_id]
-        if twin.config_entry_id != entry_id or (_is_customized(entry) and not _is_customized(twin)):
-            # The entry that holds the user's choices is the one automations and dashboards use (WR-02)
+        if twin.config_entry_id != entry_id or _is_customized(entry) or _is_turned_off(twin):
+            # The entry that holds the user's choices is the one automations and dashboards use (WR-02), and the one
+            # left next to a twin the user turned off is the one they kept (WR-03)
             continue
         entity_registry.async_update_entity(entry.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
         disabled += 1
@@ -324,10 +329,11 @@ def _is_customized(entry: er.RegistryEntry) -> bool:
     """
     Return whether the user changed anything on the entry that is worth keeping (WR-02).
 
-    Name, icon, area, tags, voice aliases, a device class override, options the user set, a hidden state, which a
-    wrapper helper such as Switch-as-X sets on the entity it points at, and a disabled state the user chose. A new
-    entry carries the computed name as its only alias. A renamed entity id is not detectable: core's automatic entity
-    id also differs for a row restored from a deleted record, which is the duplicate the guard exists for.
+    Name, icon, area, tags, voice aliases, a device class override, options the user set, and the hidden state a
+    wrapper helper such as Switch-as-X sets on the entity it points at. A new entry carries the computed name as its
+    only alias. A state the user turned off is no customization but a rejection of that entry (WR-03). A renamed
+    entity id is not detectable: core's automatic entity id also differs for a row restored from a deleted record,
+    which is the duplicate the guard exists for.
     """
     return bool(
         entry.name
@@ -338,9 +344,13 @@ def _is_customized(entry: er.RegistryEntry) -> bool:
         or list(entry.aliases) != [er.COMPUTED_NAME]
         or entry.device_class
         or _has_user_options(entry)
-        or entry.hidden_by is not None
-        or entry.disabled_by is er.RegistryEntryDisabler.USER
+        or entry.hidden_by is er.RegistryEntryHider.INTEGRATION
     )
+
+
+def _is_turned_off(entry: er.RegistryEntry) -> bool:
+    """Return whether the entry is disabled, for whatever reason, or hidden by the user (WR-03)."""
+    return entry.disabled_by is not None or entry.hidden_by is er.RegistryEntryHider.USER
 
 
 def _has_user_options(entry: er.RegistryEntry) -> bool:

@@ -21,6 +21,7 @@ from homeassistant.const import Platform
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import entity_sources
 from pytest_homeassistant_custom_component.common import (
     MockPlatform,
     async_fire_mqtt_message,
@@ -908,6 +909,40 @@ async def test_remove_replay_twins_removes_the_loaded_duplicates_and_the_emptied
         device_registry.async_get_device_by_identifier(("mqtt", f"{DOMAIN}_{legacy.device_id}"), _mqtt_entry_id(hass))
         is None
     )
+
+
+async def test_remove_replay_twins_disables_a_loaded_row_first_so_nothing_is_cleared_and_no_enabled_tombstone_stays(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """
+    WR-01: a loaded, enabled duplicate leaves the registry without an empty retained discovery and as a disabled record.
+
+    Core MQTT clears the retained topic of a loaded entity that is removed from the registry, which would wipe the
+    export of another instance, and the record of an enabled row restores as enabled the next time core creates it.
+    """
+    legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    loaded = entity_sources(hass)
+    assert all(entity_id in loaded for entity_id in replayed)
+    assert all(entity_registry.async_get(entity_id).disabled_by is None for entity_id in replayed)
+    mqtt_mock.async_publish.reset_mock()
+
+    assert _remove_replay_twins_of(hass, legacy) == 3
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    # Core MQTT clears with a None payload, which `_discovery_clears` (empty string) does not see
+    cleared = [
+        call for call in mqtt_mock.async_publish.call_args_list if call.args[0] == legacy.topic and not call.args[1]
+    ]
+    assert cleared == []
+    assert legacy_entity_ids(hass, legacy.device_id) == []
+    records = [
+        record
+        for (domain, platform, unique_id), record in entity_registry.deleted_entities.items()
+        if platform == "mqtt" and unique_id.startswith(legacy.device_id)
+    ]
+    assert len(records) == 3
+    assert all(record.disabled_by is er.RegistryEntryDisabler.INTEGRATION for record in records)
 
 
 async def test_remove_replay_twins_leaves_an_entry_without_a_native_twin_and_keeps_the_device(

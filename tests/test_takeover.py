@@ -1129,6 +1129,107 @@ async def test_disable_duplicates_disables_a_legacy_entry_when_the_native_twin_c
     assert entity_registry.async_get(twin.entity_id).disabled_by is None
 
 
+type Customize = Callable[[er.EntityRegistry, str], er.RegistryEntry]
+
+# The user's changes that `_is_customized` must see beyond name, icon, area and tags; each returns the updated entry
+CUSTOMIZATIONS = [
+    pytest.param(
+        lambda registry, entity_id: registry.async_update_entity(entity_id, aliases=[er.COMPUTED_NAME, "Kitchen"]),
+        id="aliases",
+    ),
+    pytest.param(
+        lambda registry, entity_id: registry.async_update_entity(entity_id, device_class="outlet"),
+        id="device_class",
+    ),
+    pytest.param(
+        lambda registry, entity_id: registry.async_update_entity_options(
+            entity_id, "cloud.google_assistant", {"disable_2fa": True}
+        ),
+        id="options",
+    ),
+    pytest.param(
+        # A wrapper helper such as Switch-as-X hides the switch it wraps and points at its entity id
+        lambda registry, entity_id: registry.async_update_entity(
+            entity_id, hidden_by=er.RegistryEntryHider.INTEGRATION
+        ),
+        id="hidden_by_integration",
+    ),
+    pytest.param(
+        lambda registry, entity_id: registry.async_update_entity(
+            entity_id, new_entity_id="switch.kitchen_lamp_renamed_by_user"
+        ),
+        id="entity_id_rename",
+        marks=pytest.mark.xfail(
+            strict=True,
+            reason=(
+                "Not detectable: core's automatic entity id (async_regenerate_entity_id) also differs for a row "
+                "restored from a deleted record, the duplicate the guard exists for"
+            ),
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize("customize", CUSTOMIZATIONS)
+async def test_disable_duplicates_leaves_an_entry_enabled_that_holds_any_user_customization(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    customize: Customize,
+) -> None:
+    """WR-02: aliases, a device class, user options and a wrapper's hold are the user's choices as much as a name."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    _natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    entity_registry = er.async_get(hass)
+    switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
+    customized = customize(entity_registry, switch.entity_id)
+
+    assert _disable_duplicates_of(hass, legacy) == 0
+
+    assert entity_registry.async_get(customized.entity_id).disabled_by is None
+
+
+@pytest.mark.parametrize("customize", CUSTOMIZATIONS)
+async def test_remove_replay_twins_leaves_a_newer_entry_that_holds_any_user_customization(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    customize: Customize,
+) -> None:
+    """WR-02: a replayed entry the user customized is no duplicate to delete, however much newer than its twin."""
+    legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    switch_id = next(entity_id for entity_id in replayed if entity_id.startswith("switch."))
+    customized = customize(entity_registry, switch_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _remove_replay_twins_of(hass, legacy) == 2
+
+    assert entity_registry.async_get(customized.entity_id) is not None
+
+
+async def test_disable_duplicates_still_disables_an_entry_whose_only_option_is_the_exposure_core_stores_itself(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """
+    WR-02: core writes `should_expose` on its own the first time an assistant asks, so that key is no user choice.
+
+    The stored value cannot tell a user's choice from core's default either: conversation exposes a new switch by
+    default. Counting it would protect every duplicate an assistant ever looked at.
+    """
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    _natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    entity_registry = er.async_get(hass)
+    switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
+    entity_registry.async_update_entity_options(switch.entity_id, "conversation", {"should_expose": True})
+
+    assert _disable_duplicates_of(hass, legacy) == 1
+
+    assert entity_registry.async_get(switch.entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
 async def test_remove_replay_twins_never_touches_a_foreign_mqtt_entity(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
 ) -> None:

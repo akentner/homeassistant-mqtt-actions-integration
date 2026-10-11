@@ -92,7 +92,7 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: 13/15 plans executed
+**Plans**: 13/18 plans executed
 
 Plans:
 **Wave 1**
@@ -136,10 +136,21 @@ Plans:
 **Wave 13** *(blocked on Wave 12 completion)*
 - [x] 08-13-PLAN.md — Prepare the bench (script patches, tombstone prune or build re-pin) and re-run UAT-04 (the scripted group on a guard build) with unchanged expectations; evidence only
 
+**Gap closure follow-up: receiver-side guard** *(added 2026-10-11 after the 08-13 re-run failed on ha-b; owner decision to fix it in the product; 08-14 and 08-15 moved behind it, the 08-13 FAIL stays as history)*
+
 **Wave 14** *(blocked on Wave 13 completion)*
-- [ ] 08-14-PLAN.md — Record the re-run in the ledger (pruned-state qualifier where it applies), update the REQUIREMENTS.md traceability
+- [ ] 08-16-PLAN.md — Owner decision and record: extend the D-08 waiver to the receiver-side guard (UAT04-RECEIVER-GUARD), re-confirm the not-affected list; the failed 08-13 re-run recorded as history
 
 **Wave 15** *(blocked on Wave 14 completion)*
+- [ ] 08-17-PLAN.md — Receiver-side duplicate guard, test-first (tracer, then expansion), README and troubleshooting text
+
+**Wave 16** *(blocked on Wave 15 completion)*
+- [ ] 08-18-PLAN.md — Re-pin the bench to the new build, clear the 08-13 leftovers, re-run the scripted group (UAT-02, UAT-03, P1-5, UAT-04) into the `-rerun2` evidence folders with the failing tombstone state restored before UAT-04
+
+**Wave 17** *(blocked on Wave 16 completion)*
+- [ ] 08-14-PLAN.md — Record the final re-run in the ledger (the 08-13 FAIL stays as history; pruned-state qualifier where it applies), update the REQUIREMENTS.md traceability
+
+**Wave 18** *(blocked on Wave 17 completion)*
 - [ ] 08-15-PLAN.md — Final gate, refresh or re-run of the archived Phase 1 to 4 reports, Phase 8 re-verification
 
 ## Progress
@@ -151,7 +162,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 13/15 | In Progress|  |
+| 8. Real-Instance Verification | 13/18 | In Progress|  |
 
 ## Backlog
 

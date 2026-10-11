@@ -47,6 +47,9 @@ LEGACY_DOMAINS = frozenset({"switch", "select", "button"})
 # The export publishes one component per device, a switch or a select, and never a test button
 EXPORT_DOMAINS = frozenset({"switch", "select"})
 LEGACY_TEST_PREFIX = "_test_"
+# Core stores an assistant's exposure default on an entry the first time the assistant asks, and the stored value
+# cannot tell that default from a user's choice: it is no customization
+CORE_OPTION_KEYS = frozenset({"should_expose"})
 
 
 class TakeoverStatus(StrEnum):
@@ -251,7 +254,7 @@ def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mq
     When core MQTT creates the entry again, the registry restores the state of an earlier deleted entry with the
     same platform and unique id, and that state may be enabled. A candidate is the switch or select entry of the
     core MQTT device of the id whose unique id is exactly the id, whose disabled state is None and that has a native
-    twin under this config entry, unless it holds the user's choices (name, area, labels) and the twin does not: an
+    twin under this config entry, unless it holds the user's choices (`_is_customized`) and the twin does not: an
     entry without a twin is a live entity, and a customized one is the entity the user knows. This is the
     customization half of the identity test of `remove_replay_twins` and deliberately not its age half: a row that
     core restores from a deleted record keeps its old creation time, and that row is the duplicate this guard exists
@@ -318,16 +321,31 @@ async def async_flush_registries(hass: HomeAssistant) -> bool:
 
 
 def _is_customized(entry: er.RegistryEntry) -> bool:
-    """Return whether the user changed anything on the entry that is worth keeping: name, icon, area, tags, state."""
+    """
+    Return whether the user changed anything on the entry that is worth keeping (WR-02).
+
+    Name, icon, area, tags, voice aliases, a device class override, options the user set, a hidden state, which a
+    wrapper helper such as Switch-as-X sets on the entity it points at, and a disabled state the user chose. A new
+    entry carries the computed name as its only alias. A renamed entity id is not detectable: core's automatic entity
+    id also differs for a row restored from a deleted record, which is the duplicate the guard exists for.
+    """
     return bool(
         entry.name
         or entry.icon
         or entry.area_id
         or entry.labels
         or entry.categories
+        or list(entry.aliases) != [er.COMPUTED_NAME]
+        or entry.device_class
+        or _has_user_options(entry)
+        or entry.hidden_by is not None
         or entry.disabled_by is er.RegistryEntryDisabler.USER
-        or entry.hidden_by is er.RegistryEntryHider.USER
     )
+
+
+def _has_user_options(entry: er.RegistryEntry) -> bool:
+    """Return whether an option is set that core does not store by itself; the exposure default is stored on a query."""
+    return any(key not in CORE_OPTION_KEYS for options in entry.options.values() for key in options)
 
 
 def _carries_the_identity(candidate: er.RegistryEntry, other: er.RegistryEntry) -> bool:

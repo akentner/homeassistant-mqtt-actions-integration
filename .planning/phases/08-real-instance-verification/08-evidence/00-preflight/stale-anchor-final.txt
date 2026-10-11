@@ -1,13 +1,20 @@
-recorded build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
-checked_utc: 2026-10-07T22:02:00Z
-checked_head: c9f01c42a5fa8923a29c789fb4c90ecc4d755e19 (HEAD of the phase branch at the start of plan 08-10; the Task 1 worktree is based on it)
+recorded build sha: b8232252540a55969145ca0034d8fd86b4be3b7c
+previous sha (re-pin of plan 08-13, guard on the exporting instance only): caf2fe5dc003ea834104f4016d1996be4132e0c8
+first sha (pin of plan 08-01): b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+repin_reason: receiver-side guard of plan 08-17 (D-03), re-pinned by plan 08-18 (build.txt, earlier records build-b7f52b34.txt and build-caf2fe5d.txt)
+checked_utc: 2026-10-11T13:40:36Z
+checked_head: 7b2bedc5d57c6c8a17ac2e6f5c8480fff25d986a (HEAD of the phase branch at the start of plan 08-15)
 anchor: diff --stat of the recorded sha against that head over custom_components, tests and .github
 anchor output: (empty)
-stale: no (no recorded check is stale; D-03, T-08-30)
+stale: no (no recorded check is stale on the recorded build; D-03, T-08-30)
 affected checks: none
+guard build: the product and tests changed since the first sha b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 in four files (git diff --stat first sha..HEAD over custom_components tests .github):
+  custom_components/mqtt_actions/manager.py, custom_components/mqtt_actions/takeover.py, tests/test_discovery_export.py, tests/test_export_guard_receiver.py
+  checks re-run on the recorded build (plan 08-18, evidence folders with the suffix -rerun2): UAT-02, UAT-03, P1-5, UAT-04
+  checks recorded as not affected (owner confirmations UAT04-GAP-DISPOSITION and UAT04-RECEIVER-GUARD, ledger Observations): UAT-01, P2-2, P1-1 to P1-4, P1-6, P2-1, P3-1, P3-2
 re-run path if a later change ever touches those paths: ~/ha-test/bin/run-all-scripted.sh (UAT-02, UAT-03, P1-5, UAT-04), then record by hand (check-recorded.sh ID)
 note: block 5 (P1-1) carries the release tag sha d0f660cb2422c7688d22a674cf54f955a8c26c7f on purpose (what HACS installs); the anchor applies to the bench sha above, see 08-UAT.md "Build under test"
---- ~/ha-test/bin/check-stale-anchor.sh output (run from the Task 1 worktree, appended below) ---
-recorded build sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
-empty mount-source (c9f01c42a5fa8923a29c789fb4c90ecc4d755e19): git diff --stat b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 c9f01c42a5fa8923a29c789fb4c90ecc4d755e19 -- custom_components tests .github
+--- ~/ha-test/bin/check-stale-anchor.sh output ---
+recorded build sha: b8232252540a55969145ca0034d8fd86b4be3b7c
+empty mount-source (7b2bedc5d57c6c8a17ac2e6f5c8480fff25d986a): git diff --stat b8232252540a55969145ca0034d8fd86b4be3b7c 7b2bedc5d57c6c8a17ac2e6f5c8480fff25d986a -- custom_components tests .github
 PASS stale anchor: custom_components, tests and .github unchanged since the recorded build sha

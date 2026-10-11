@@ -314,18 +314,35 @@ broker and hosts are untouched.
 - Instance `ha-c` (plan 08-05): container created, now STOPPED (not removed), directory `~/ha-test/c`, port 8125, v0.1.0 component mounted read-only from `~/ha-test/v010`; its owner password in `~/ha-test/.ha-c-owner` and long-lived token `~/ha-test/.token-c` (both mode 0600; the owner revokes the token with the others); broker user `ha_three` (password in `~/ha-test/.mqtt-uat.env`) with an ACL block in `~/ha-test/mosquitto/acl` (copy before the edit: `~/ha-test/mosquitto/acl.bak-phase8-05`; diff: `08-evidence/uat-01/acl-diff.txt`). Its retained availability topic was cleared; remove the container, `~/ha-test/c` and the user at phase end.
 - ha-b's re-added hub (plan 08-08): new instance id `b4cf285b-428f-426b-9500-8e269634356e`, hostile instance name as the hub entry title, four orphan mirrors of the old owner id on ha-b (see Observations); `~/ha-test/.instance-ids.env` (new id, not a secret), `~/ha-test/_backup-pre-p12-b-20261006T195117Z` (ha-b before the removal, path in `~/ha-test/.current-backup-p12`), ACL line for the new id in the `ha_two` block (copy before the edit: `~/ha-test/mosquitto/acl.bak-phase8-08`; diff: `08-evidence/p1-2/acl-diff.txt`). The hostile P3-1 device is deleted; `P31_ID` stays in `~/ha-test/.fixtures-frontend.env` for the cleanup gate.
 - Gap closure 08-11 (UAT-04 isolation): two backups of both `core.entity_registry` files, mode 0700, taken with both instances stopped before each run: `~/ha-test/_backup-pre-gap-uat04-20261008T210459Z` (tracer) and `~/ha-test/_backup-pre-gap-uat04-20261008T211551Z` (main run; pointer `~/ha-test/.current-backup-gap08`); `~/ha-test/.fixtures-gap.env` (ids only: `TRACER_ISO_CLEAN_ID`, `ISO_CLEAN_ID`, `ISO_TWIN_ID`). The fixtures are deleted and the bench is back at its baseline (export off, no mqtt-platform row, nothing retained on `homeassistant/#` or `mqtt_actions_export/#`). The retired fixture unique ids carry deleted-entity tombstones on BOTH instances: platform mqtt for `e51269d3-f6e2-4cad-998d-37579c3f7c8f`, `6f62cac5-49c9-49bc-88d5-1b804b775ac4` (both `disabled_by` integration) and `020b9715-2939-44bb-aafb-2340305e18d5` (null, the real twin tombstone) and for `e8a6edf6-45ba-43c8-b171-88ca668c31f2` (integration, an aborted attempt); `51c0db03-84d3-434a-b2d5-1ec4f110ff41` (an aborted attempt) left only `mqtt_actions` tombstones. Harmless: the unique ids are retired and never reused.
+- Gap closure 08-13 and 08-18 (UAT-04 re-runs): `~/ha-test/_backup-pre-gap-rerun2-20261011T125246Z` (`a` and `b` with `core.device_registry`
+  and `core.entity_registry`, mode 0700, taken with both instances stopped before the re-pin; pointer `~/ha-test/.current-backup-gap08-rerun2`)
+  with the subfolder `reseed-20261011T131823Z` (the backup `reseed-tombstones.sh` took before it flipped `disabled_by` back to null on the four
+  existing records of the Lampe Test switch and the Bar Select select). The marker was created again twice: `~/ha-test/.fixtures.env` holds the
+  current `MARKER_ID` (ids only), `.fixtures.env.pre-08-13` and `.fixtures.env.pre-08-18` hold the earlier ones; the old markers leave harmless
+  `mqtt_actions` and mqtt-platform tombstones. The host reboot found by plan 08-13 re-anchored `~/ha-test/.mosq-started-before-phase8`, the old
+  value is kept as `.mosq-started-before-phase8.pre-reboot`. The platform-mqtt tombstones that the retired fixtures and the re-runs left in both
+  entity registries are harmless; the records of Lampe Test and Bar Select are on purpose in the regression state (`disabled_by` null, see
+  `uat-04-rerun2/prepare.txt`). A core-prefix export leaves disabled mqtt rows until the next restart; the last run ended with one restart of both
+  instances, so none is left (export off, nothing retained under `mqtt_actions_export/` or `homeassistant/device/`). No `.current-backup-gap08-prune`
+  and no prune backup exist (the disposition is guard-and-document). `check-uat03.sh` can leave a background `mosquitto_sub` running after the
+  check (none runs now; the script was not changed).
 - Helper scripts in `~/ha-test/bin/` (outside the repository; the scrubbed copy is `08-evidence/00-preflight/bench-scripts/`,
-  plan 08-10, with a README that names the one scrub and the files that were not copied).
-- Containers at the end of the phase (2026-10-07, plan 08-10): `ha-a` and `ha-b` running (the read-only bind mount of the main
-  checkout's `custom_components/mqtt_actions`, pinned build unchanged, stale anchor empty), `ha-c` stopped with exit code 0 (not
-  removed), `mosq` running since before the phase and never restarted (`~/ha-test/.mosq-started-before-phase8` holds its
-  StartedAt; persistence is off, a restart would drop every retained message). Nothing is torn down by Phase 8: a follow-up gap
-  plan re-uses the bench; the removal commands below are for the owner afterwards.
+  plan 08-10, with a README that names the one scrub, the patches and additions of plans 08-11, 08-13 and 08-18 and the amended gate of plan
+  08-15, and the files that were not copied). Added or patched by the gap closure: `check-uat04-iso.sh`, `repin.sh`, `repin-rerun2.sh`,
+  `reseed-tombstones.sh`, the evidence suffix patch of `check-uat02.sh`, `check-uat03.sh`, `check-p15.sh`, `check-uat04.sh`, `setup-marker.sh`
+  and `run-all-scripted.sh`, and `check-final.sh`; no `prune-mqtt-tombstones.sh` exists.
+- Containers at the end of the phase (reconciled 2026-10-11, plan 08-15): `ha-a` and `ha-b` running (the read-only bind mount of the
+  main checkout's `custom_components/mqtt_actions`, pinned to the receiver-guard build `b8232252540a55969145ca0034d8fd86b4be3b7c`,
+  stale anchor empty; the earlier pins are kept in `08-evidence/00-preflight/build-caf2fe5d.txt` and `build-b7f52b34.txt`), `ha-c` stopped
+  with exit code 0 (not removed), `mosq` running since the host reboot found by plan 08-13 (`~/ha-test/.mosq-started-before-phase8` holds
+  the re-anchored StartedAt, the earlier value is kept in `.mosq-started-before-phase8.pre-reboot`; persistence is off, a restart would
+  drop every retained message). Nothing is torn down by Phase 8; the removal commands below are for the owner afterwards.
 - Backups (three, all under `~/ha-test`): `_backup-pre-phase8-20261004T184824Z` (a, b, mosquitto; pointer `.current-backup-phase8`;
   manifest and restore steps in `08-evidence/00-preflight/backup-manifest.txt`), `_backup-pre-p12-b-20261006T195117Z` (b only,
   ha-b before its hub was removed; pointer `.current-backup-p12`), and the older `_backup-pre-phase5-uat-20261003-181937` (a, b,
   mosquitto; Phase 5 UAT, pointer `.current-backup`), which predates Phase 8 and is left alone. No `_snap-pre-live` directory
-  exists (none was taken). Remove them last, when nothing has to be restored any more.
+  exists (none was taken). Remove them last, when nothing has to be restored any more. Gap closure backups: see the bullets below
+  (`_backup-pre-gap-uat04-*` twice, `_backup-pre-gap-rerun2-*`); no `_backup-pre-gap-prune-*` exists.
 - ACL copies before each edit: `~/ha-test/mosquitto/acl.bak-phase8-04`, `acl.bak-phase8-05`, `acl.bak-phase8-08` (and `acl.bak-uat`
   from Phase 5). The live `acl` ends with the blocks `ha_one`, `ha_two` (two availability write lines: the old and the new
   instance id of ha-b), `bridge`, `uat_probe`, `uat_bridge`, `ha_three`.
@@ -347,8 +364,12 @@ broker and hosts are untouched.
   ~/ha-test/.token-b ~/ha-test/.token-c ~/ha-test/.ha-c-owner`; delete the `logger:` blocks from both `configuration.yaml` and
   restart ha-a and ha-b; remove the two `mqtt_actions_export/#` rows and the old-id availability line from the ACL and HUP mosq;
   delete the UAT Marker on ha-a (owner delete, clears its retained topics everywhere) and the four orphans on ha-b (empty retained
-  publish on each `mqtt_actions/v1/devices/{id}/config` as uat_probe, then delete the device entries); the backups and the pointer
-  files last. The same list, without the ledger context, is `08-evidence/00-preflight/bench-state-final.txt`.
+  publish on each `mqtt_actions/v1/devices/{id}/config` as uat_probe, then delete the device entries; the current UAT Marker is the
+  id in `~/ha-test/.fixtures.env`); `rm ~/ha-test/.fixtures.env.pre-08-13 ~/ha-test/.fixtures.env.pre-08-18 ~/ha-test/.fixtures-gap.env
+  ~/ha-test/.mosq-started-before-phase8.pre-reboot`; the backups and the pointer files last (`rm -r ~/ha-test/_backup-pre-gap-uat04-20261008T210459Z
+  ~/ha-test/_backup-pre-gap-uat04-20261008T211551Z ~/ha-test/_backup-pre-gap-rerun2-20261011T125246Z`, `rm ~/ha-test/.current-backup-gap08
+  ~/ha-test/.current-backup-gap08-rerun2`, then the three older backups and their pointers). The same list, without the ledger context, is
+  `08-evidence/00-preflight/bench-state-final.txt`.
 
 ## Owner follow-ups
 

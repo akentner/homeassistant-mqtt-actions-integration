@@ -5,13 +5,18 @@
 #   check-final.sh                 full: every assertion, including the per-phase report status of Phases 1 to 4
 #   check-final.sh --pre           before the verifier runs (Task 2): the status of Phases 1 to 3 is printed but not asserted
 #                                  (they still read human_needed then); Phase 4 passed is asserted
-#   check-final.sh --commit-shape  after Task 3: the last commit holds at most the three reports and the ledger, no file under
-#                                  .planning/phases/ belongs to Phases 1 to 5, and the working tree is clean
+#   check-final.sh --commit-shape  after the report commit (plan 08-15 Task 3): the last commit holds at most seven files (the four
+#                                  archived reports, 08-VERIFICATION.md, ROADMAP.md, 08-VALIDATION.md; never the ledger), no file under
+#                                  .planning/phases/ belongs to Phases 1 to 5, and the working tree is clean apart from the owner's own
+#                                  unrelated ` M .planning/config.json` modification
 # Status expectation (full mode): a phase reads `passed` when every one of its items (ledger blocks of the item-to-report mapping
 # below) is `pass` or carries an `override_by:` line; it reads something other than `passed` (human_needed or gaps_found) when an
 # item is an unresolved issue (T-08-28). Phase 4 has no human item and must read `passed`.
-# Gaps rule: every `issue` block has a Gaps entry with its block number, and every Gaps entry points at an `issue` block; the one
-# allowed exception is a follow-up entry that says so with `status: follow-up`.
+# Gaps rule: every `issue` block has a Gaps entry with its block number, and every Gaps entry points at an `issue` block; the allowed
+# exceptions are a follow-up entry that says so with `status: follow-up` and (plan 08-15) a `status: resolved` entry whose block is
+# `pass` and that carries a `resolution:` line (a resolved entry on a block that is not pass, or without a resolution line, fails).
+# Phase 8 report (full mode, plan 08-15): `verification status` of the Phase 8 directory reads `passed` exactly when no ledger block is
+# an issue and every Gaps entry is resolved, and something else otherwise.
 # Run from inside the checkout that holds the ledger. Prints one line per assertion (ok or FAIL) and a final PASS or FAIL.
 # Exit 0 PASS, 1 FAIL, 2 usage or bench problem (ABORT).
 set -uo pipefail
@@ -51,6 +56,9 @@ EV="$PHASE_DIR_REL/08-evidence"
   echo "ABORT $UAT does not exist"
   exit 2
 }
+# the first pin of the phase (build.txt first_sha after a re-pin, the sha itself before one)
+FIRST_SHA=$(sed -n 's/^first_sha: //p' "$EV/00-preflight/build.txt" 2>/dev/null | head -n1)
+[ -n "$FIRST_SHA" ] || FIRST_SHA=$(sed -n 's/^sha: //p' "$EV/00-preflight/build.txt" 2>/dev/null | head -n1)
 
 fails=0
 ok() { echo "ok   $1"; }
@@ -85,13 +93,16 @@ verdict_row() {
     /^## / { on = 0 }
     on && $2 ~ ("^[[:space:]]*" id "[[:space:]]*$") { gsub(/^[ \t]+|[ \t]+$/, "", $4); print $4; exit }' "$UAT"
 }
-# gap_entries: one "test status" pair per Gaps entry (an entry starts at "- truth:")
+# gap_entries: one "test status resolution" triple per Gaps entry (an entry starts at "- truth:"); status is "-" when the entry has
+# none, resolution is "res" when the entry carries a non-empty `resolution:` line and "nores" otherwise
 gap_entries() {
   section Gaps | awk '
-    /^- / { if (t != "") print t, s; t = ""; s = "" }
+    function flush() { if (t != "") print t, (s == "" ? "-" : s), (r ? "res" : "nores") }
+    /^- / { flush(); t = ""; s = ""; r = 0 }
     /^[[:space:]]*test:/ { sub(/^[[:space:]]*test:[[:space:]]*/, ""); t = $0 }
     /^[[:space:]]*status:/ { sub(/^[[:space:]]*status:[[:space:]]*/, ""); s = $0 }
-    END { if (t != "") print t, s }'
+    /^[[:space:]]*resolution:[[:space:]]*[^[:space:]]/ { r = 1 }
+    END { flush() }'
 }
 
 # ======================================================================================================================
@@ -100,23 +111,26 @@ if [ "$mode" = "--commit-shape" ]; then
     "$ARCHIVE/${PDIR[1]}/01-VERIFICATION.md"
     "$ARCHIVE/${PDIR[2]}/02-VERIFICATION.md"
     "$ARCHIVE/${PDIR[3]}/03-VERIFICATION.md"
-    "$UAT"
+    "$ARCHIVE/${PDIR[4]}/04-VERIFICATION.md"
+    "$PHASE_DIR_REL/08-VERIFICATION.md"
+    "$PHASE_DIR_REL/08-VALIDATION.md"
+    ".planning/ROADMAP.md"
   )
   files=$(git show --first-parent --name-only --format= HEAD 2>&1)
   rc=$?
   assert "$rc" "last commit readable ($(git rev-parse --short HEAD 2>/dev/null))"
   if [ "$rc" -eq 0 ]; then
     n=$(grep -c . <<<"$files")
-    if [ "$n" -le 4 ] && [ "$n" -ge 1 ]; then
-      ok "last commit holds $n file(s), at most four"
+    if [ "$n" -le 7 ] && [ "$n" -ge 1 ]; then
+      ok "last commit holds $n file(s), at most seven"
     else
-      bad "last commit holds $n file(s), expected 1 to 4"
+      bad "last commit holds $n file(s), expected 1 to 7"
     fi
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       hit=0
       for a in "${allowed[@]}"; do [ "$f" = "$a" ] && hit=1; done
-      assert $((1 - hit)) "last commit file is a report or the ledger: $f"
+      assert $((1 - hit)) "last commit file is a report, ROADMAP.md or the validation map: $f"
     done <<<"$files"
   fi
   tracked=$(git ls-files -- .planning/phases 2>&1)
@@ -131,7 +145,9 @@ if [ "$mode" = "--commit-shape" ]; then
   st=$(git status --porcelain 2>&1)
   rc=$?
   assert "$rc" "working tree status readable"
-  [ "$rc" -eq 0 ] && assert "$([ -z "$st" ] && echo 0 || echo 1)" "working tree clean${st:+: $(tr '\n' ' ' <<<"$st")}"
+  # the owner's own unrelated ` M .planning/config.json` modification is tolerated (never staged or committed by a plan)
+  [ "$rc" -eq 0 ] && st=$(grep -v '^ M \.planning/config\.json$' <<<"$st" || true)
+  [ "$rc" -eq 0 ] && assert "$([ -z "$st" ] && echo 0 || echo 1)" "working tree clean (apart from .planning/config.json)${st:+: $(tr '\n' ' ' <<<"$st")}"
   finish
 fi
 
@@ -170,10 +186,16 @@ for id in "${IDS[@]}"; do
   gap_entries | awk -v n="$n" '$1 == n { f = 1 } END { exit !f }'
   assert $? "issue block $n ($id) has a Gaps entry with test: $n"
 done
-while read -r t s; do
+while read -r t s r; do
   [ -n "$t" ] || continue
   if [ "$s" = "follow-up" ]; then
     ok "Gaps entry test: $t is a follow-up entry (allowed exception)"
+    continue
+  fi
+  if [ "$s" = "resolved" ]; then
+    rc=0
+    { [[ "$t" =~ ^[0-9]+$ ]] && [ "$(field "$(block_n "$t")" result)" = pass ] && [ "$r" = res ]; } || rc=1
+    assert "$rc" "Gaps entry test: $t is resolved, its block is pass and it carries a resolution line"
     continue
   fi
   rc=0
@@ -185,10 +207,23 @@ done < <(gap_entries)
 section "Requirement verdicts" | grep -q .
 assert $? "section Requirement verdicts exists"
 for r in "${REQS[@]}"; do
-  v=$(verdict_row "$r")
+  vcell=$(verdict_row "$r")
+  v=${vcell%% *} # the first token is compared, so `pass (only on a pruned registry state)` equals a pass block
   res=$(field "$(block_id "$r")" result)
-  case "$v" in pass | issue) ;; *) v="(missing: '$v')" ;; esac
+  case "$v" in pass | issue) ;; *) v="(missing: '$vcell')" ;; esac
   assert "$([ "$v" = "$res" ] && echo 0 || echo 1)" "verdict $r is '$v' and equals its block ('$res')"
+  if [ "$r" = UAT-04 ] && [ "$res" = pass ]; then
+    disp=$("$here/check-uat04-iso.sh" disposition 2>/dev/null | head -n1)
+    case "$disp" in
+      document | bench-artifact)
+        rc=0
+        grep -qF '(only on a pruned registry state)' <<<"$vcell" || rc=1
+        assert "$rc" "UAT-04 verdict carries '(only on a pruned registry state)' (disposition $disp)"
+        ;;
+      guard | guard-and-document) ok "UAT-04 pass is on the failing state, no pruned-state qualifier needed (disposition $disp)" ;;
+      *) bad "UAT-04 disposition unreadable ('$disp')" ;;
+    esac
+  fi
 done
 for s in "Bench state left behind" "Owner follow-ups"; do
   rc=0
@@ -242,7 +277,9 @@ for p in 1 2 3 4; do
       open="$open $n"
     fi
   done
-  if [ "$p" -ne 4 ] && [ "$mode" = "--pre" ]; then
+  # Phase 4 is asserted in --pre only while the product, tests and workflow are unchanged since the first pin; when they changed
+  # (a guard disposition, plan 08-15 path A) the verifier judges Phase 4 again, so it is printed, not asserted, before that run
+  if [ "$mode" = "--pre" ] && { [ "$p" -ne 4 ] || ! git diff --quiet "$FIRST_SHA" HEAD -- custom_components tests .github; }; then
     echo "info Phase $p report reads '$st' (expected '$expect' once the verifier has run; not asserted in --pre)"
     continue
   fi
@@ -252,5 +289,25 @@ for p in 1 2 3 4; do
     assert "$([ "$st" != passed ] && echo 0 || echo 1)" "Phase $p report reads '$st' (expected not passed: unresolved issue in block(s)$open)"
   fi
 done
+
+# 7. Phase 8's own report (plan 08-15): passed exactly when no ledger block is an issue and every Gaps entry is resolved
+open_gaps=0
+while read -r t st2 r; do
+  [ -n "$t" ] || continue
+  [ "$st2" = resolved ] || open_gaps=$((open_gaps + 1))
+done < <(gap_entries)
+expect8=passed
+{ [ "$issues" -gt 0 ] || [ "$open_gaps" -gt 0 ]; } && expect8="not passed"
+st8=$(node "$GSD_TOOLS" query verification status "$PHASE_DIR_REL" --pick status 2>&1)
+rc=$?
+if [ "$rc" -ne 0 ] || [ -z "$st8" ]; then
+  bad "Phase 8: verification status could not be read (rc=$rc): ${st8%%$'\n'*}"
+elif [ "$mode" = "--pre" ]; then
+  echo "info Phase 8 report reads '$st8' (expected '$expect8' once the verifier has run; not asserted in --pre)"
+elif [ "$expect8" = passed ]; then
+  assert "$([ "$st8" = passed ] && echo 0 || echo 1)" "Phase 8 report reads '$st8' (expected passed: $issues issue block(s), $open_gaps unresolved Gaps entr(ies))"
+else
+  assert "$([ "$st8" != passed ] && echo 0 || echo 1)" "Phase 8 report reads '$st8' (expected not passed: $issues issue block(s), $open_gaps unresolved Gaps entr(ies))"
+fi
 
 finish

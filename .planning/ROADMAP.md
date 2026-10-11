@@ -92,7 +92,7 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: 14/18 plans executed
+**Plans**: 15/18 plans executed
 
 Plans:
 **Wave 1**
@@ -142,7 +142,7 @@ Plans:
 - [x] 08-16-PLAN.md — Owner decision and record: extend the D-08 waiver to the receiver-side guard (UAT04-RECEIVER-GUARD), re-confirm the not-affected list; the failed 08-13 re-run recorded as history
 
 **Wave 15** *(blocked on Wave 14 completion)*
-- [ ] 08-17-PLAN.md — Receiver-side duplicate guard, test-first (tracer, then expansion), README and troubleshooting text
+- [x] 08-17-PLAN.md — Receiver-side duplicate guard, test-first (tracer, then expansion), README and troubleshooting text
 
 **Wave 16** *(blocked on Wave 15 completion)*
 - [ ] 08-18-PLAN.md — Re-pin the bench to the new build, clear the 08-13 leftovers, re-run the scripted group (UAT-02, UAT-03, P1-5, UAT-04) into the `-rerun2` evidence folders with the failing tombstone state restored before UAT-04
@@ -162,7 +162,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 14/18 | In Progress|  |
+| 8. Real-Instance Verification | 15/18 | In Progress|  |
 
 ## Backlog
 

@@ -12,11 +12,15 @@ A state change on one MQTT-backed device reliably triggers the configured action
 
 v1.0.1 Hardening closed 2026-10-11 with an accepted verification gap (owner decision ACCEPTED-GAP-V101). The code fixes and the real-instance UAT are done; v1.0.1 is not released or tagged. The last public release stays v1.0.0. A v1.0.1 release needs a bench re-run of UAT-02 and UAT-04 on the final build first.
 
-## Next Milestone Goals (v1.1, to be defined with `/gsd-new-milestone`)
+## Current Milestone: v1.1 Local Actions on Mirrors
 
-- Per-instance local actions on mirrored devices (backlog 999.1, MIR-01, relates to MAP-01)
-- Info findings of the two Phase 8 reviews (IN-01 to IN-04 and IN-01 to IN-03, incl. a Repairs hint for two customized rows)
-- Full re-verification at the end of v1.1: Phases 1 to 8 reports current, UAT-02 and UAT-04 re-run on the final build, then a release
+**Goal:** Follower instances can give mirrored devices their own local actions. Before that, v1.0.1 is released properly; after it, the open review findings are closed, and the milestone ends with a full re-verification and a v1.1.0 release.
+
+**Target features (in this order):**
+- v1.0.1 release: bench re-run of UAT-02 and UAT-04 on the current (v1.0.1) build, then tag v1.0.1 (closes ACCEPTED-GAP-V101 for that release)
+- Info findings of the two Phase 8 reviews: review 1 IN-01 to IN-04 (docs sentence on re-disable, shared test helpers, guard-test spy, loud test on private registry API plus extraction of the takeover/replay/guard orchestration out of `manager.py`); review 2 IN-01 to IN-03 (partial count on a mid-loop exception, no-clear guarantee independent of HA internals, Repairs hint for customized duplicates incl. the WR-03 cases)
+- MIR-01 per-instance local actions on mirrored devices (backlog 999.1, relates to MAP-01): per trigger, a follower chooses "in addition to" or "instead of" the owner's actions; local actions need no approval, run even when the owner's actions are unapproved or blocked, and never enter the central config
+- Full re-verification at the end: reports of Phases 1 to 4, 7 and the new phases current, UAT-02 and UAT-04 re-run on the final build, then release v1.1.0
 
 ## Requirements
 
@@ -42,9 +46,10 @@ v1.0.1 Hardening closed 2026-10-11 with an accepted verification gap (owner deci
 
 ### Active
 
-- [ ] Current verification of Phases 1 to 8 on the final build (QLT-01 carried over, accepted gap of v1.0.1) — v1.1
-- [ ] Per-instance local actions on mirrored devices (backlog 999.1, relates to MAP-01) — v1.1
-- [ ] Info findings of the Phase 8 reviews — v1.1
+- [ ] Release v1.0.1 after a bench re-run of UAT-02 and UAT-04 on the v1.0.1 build — v1.1
+- [ ] Info findings of the Phase 8 reviews (IN-01 to IN-04, IN-01 to IN-03, incl. Repairs hint and manager extraction) — v1.1
+- [ ] Per-instance local actions on mirrored devices, additive or replacing per trigger, no approval needed (MIR-01, backlog 999.1, relates to MAP-01) — v1.1
+- [ ] Current verification of all phases on the final build (QLT-01 carried over) and release v1.1.0 — v1.1
 - [ ] Authenticate or ACL-protect the cutover gate (WR-03) — with the EMQX migration
 
 ### Out of Scope
@@ -105,4 +110,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-11 after v1.0.1 milestone*
+*Last updated: 2026-10-11 after starting milestone v1.1*

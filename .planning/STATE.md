@@ -1,21 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: v1.0.1
-milestone_name: Hardening
-status: Awaiting next milestone
-stopped_at: Milestone v1.0.1 closed (accepted gap), ready for /gsd-new-milestone
-last_updated: "2026-10-11T16:04:31.709Z"
+milestone: v1.1
+milestone_name: Local Actions on Mirrors
+status: planning
+last_updated: "2026-10-11T16:16:54.258Z"
 last_activity: 2026-10-11
-last_activity_desc: Milestone v1.0.1 completed and archived
-state_head: 2150db6eb9ddf72accc6273f6cb0a9b6bd9e4e06
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 25
-  completed_plans: 25
-  percent: 67
-current_phase: 7
-current_phase_name: Verification, Stable Tests and Pinned CI
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -29,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 
 ## Current Position
 
-Phase: Milestone v1.0.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-10-11 — Milestone v1.0.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-10-11 — Milestone v1.1 started
 
 ## Performance Metrics
 

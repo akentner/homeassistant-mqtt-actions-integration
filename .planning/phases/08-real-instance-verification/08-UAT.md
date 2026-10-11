@@ -371,6 +371,22 @@ broker and hosts are untouched.
   ~/ha-test/.current-backup-gap08-rerun2`, then the three older backups and their pointers). The same list, without the ledger context, is
   `08-evidence/00-preflight/bench-state-final.txt`.
 
+## Known limitations at milestone close
+
+Owner decision 2026-10-11 (ACCEPTED-GAP-V101): milestone v1.0.1 closes with the gap below accepted as tech debt; the full
+re-verification moves to the end of milestone v1.1. Owner words (German, verbatim): "Ja, Lücke ins Ledger und Milestone abschließen".
+
+- **Fixes evidenced by unit tests only.** The receiver-guard fixes from the second code review (CR-01, WR-01, WR-02, WR-03;
+  commits `612b0b7` to `31d6e5a`, reports `08-REVIEW.md` and `08-REVIEW-FIX.md`) are covered by unit tests (1535 passed, 2 xfailed)
+  and were not re-run on real instances.
+- **Not re-run on the final build:** UAT-02 and UAT-04 on the bench; the archived Phase 1 to 4 verification reports and the Phase 7
+  report read stale or human_needed after the changes to `takeover.py`, `manager.py` and `tests/`.
+- **Release:** do not tag a v1.0.1 release before a bench re-run of UAT-02 and UAT-04 on the final build.
+- **Accepted behavior change (CR-01):** disabled MQTT duplicates now stay in the registry instead of being removed.
+- **Accepted detection limits:** an entity-id rename (D2) and assistant exposure `should_expose` (D3) are not recognized as
+  customization (strict xfail tests). A Repairs hint for two customized rows is deferred (IN-03).
+- **To milestone v1.1:** the info findings IN-01 to IN-04 of the first review and IN-01 to IN-03 of the second review, plus backlog 999.1.
+
 ## Owner follow-ups
 
 1. DECIDED: the UAT-04 gap (Gaps entry test: 4; clause 2, enabled core-prefix duplicates of Lampe Test and Bar Select after legacy

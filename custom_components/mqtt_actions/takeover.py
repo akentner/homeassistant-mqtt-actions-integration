@@ -150,12 +150,15 @@ async def async_take_over(  # noqa: PLR0913
         if (twin_id := entity_registry.async_get_entity_id(legacy.domain, DOMAIN, legacy.unique_id)) is not None:
             # Core does not guard a duplicate key: a platform move would leave two entries (T-5-09). One of the two
             # goes, and the one that carries the identity the user knows stays (WR-04). The legacy entry is not loaded
-            # and a loaded twin is never removed, so a removal publishes nothing.
+            # and a loaded twin is never removed, so a removal publishes nothing. A disabled legacy entry stays where
+            # it is: core MQTT clears the retained topic when a row it discovered while disabled leaves the registry,
+            # and for a mirror that topic holds the other instance's export (CR-01)
             twin = entity_registry.entities[twin_id]
             if twin_id not in loaded and _carries_the_identity(legacy, twin):
                 entity_registry.async_remove(twin_id)
             else:
-                entity_registry.async_remove(legacy.entity_id)
+                if legacy.disabled_by is None:
+                    entity_registry.async_remove(legacy.entity_id)
                 continue
         entity_registry.async_update_entity_platform(
             legacy.entity_id,
@@ -194,11 +197,15 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
 
     A candidate is a legacy entry of the core MQTT device of the id that has a native twin under this config entry.
     It goes only when the twin carries the identity: an older or customized legacy entry is left to the takeover pass,
-    and an entry without a twin is no duplicate. The twin is never removed. An enabled entry is disabled before it is
-    removed: core MQTT publishes an empty retained discovery for a loaded entity that leaves the registry, which would
-    wipe the topic of another instance's export, and the deleted record of an enabled entry would restore as enabled
-    (WR-01). Registry logic only: nothing is published here. The emptied MQTT device goes too, unless an entry remains
-    on it, whether this integration created it or not.
+    and an entry without a twin is no duplicate. The twin is never removed. A disabled entry is never removed either:
+    core MQTT aborts the add of a row it discovers disabled and publishes an empty retained discovery as soon as that
+    row leaves the registry, which would wipe the topic of another instance's export (CR-01). That is the usual state
+    of a duplicate after a restart and of every row an export creates, and a disabled row restores as disabled, so it
+    stays. An enabled entry is disabled before it is removed: core MQTT clears the topic of a loaded entity that leaves
+    the registry as well, and the deleted record of an enabled entry would restore as enabled (WR-01). Disabling and
+    removing run in one synchronous step, so core cannot discover the row in between. Registry logic only: nothing is
+    published here, and core publishes nothing for a row removed this way. The emptied MQTT device goes too, unless an
+    entry remains on it, whether this integration created it or not.
     """
     if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
         return 0
@@ -211,10 +218,12 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
         twin = entity_registry.entities[twin_id]
         if twin.config_entry_id != entry_id or _carries_the_identity(legacy, twin):
             continue
-        if legacy.disabled_by is None:
-            # Disabled first, so core unloads the entity and clears nothing on removal, and the deleted record carries
-            # the disabled state that a later restore of the same row inherits (WR-01)
-            entity_registry.async_update_entity(legacy.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+        if legacy.disabled_by is not None:
+            # Core may hold a hook for an aborted add of this row, and removing it would clear the topic (CR-01)
+            continue
+        # Disabled first, so core unloads the entity and clears nothing on removal, and the deleted record carries the
+        # disabled state that a later restore of the same row inherits (WR-01)
+        entity_registry.async_update_entity(legacy.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
         entity_registry.async_remove(legacy.entity_id)
         removed += 1
     if not removed:
@@ -242,9 +251,10 @@ def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mq
     customization half of the identity test of `remove_replay_twins` and deliberately not its age half: a row that
     core restores from a deleted record keeps its old creation time, and that row is the duplicate this guard exists
     for. The twin, a test button, a disabled entry and every other unique id are never touched, and nothing is
-    removed or enabled. Registry logic only: nothing is published. The replay catch may remove the disabled entry at
-    a later start; removing it leaves a record with the disabled state `integration`, so every later restore is
-    disabled as well.
+    removed or enabled. Registry logic only: nothing is published. The disabled entry stays in the registry: neither
+    the replay catch nor the takeover removes a disabled entry, because core MQTT clears the retained topic, another
+    instance's export included, when a row it discovered while disabled leaves the registry (CR-01). The entry keeps
+    the disabled state `integration` across restarts, and a later export finds it disabled.
     """
     if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
         return 0

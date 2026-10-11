@@ -903,9 +903,10 @@ class Manager:
         Core MQTT restores the state of a deleted registry entry with the same platform and unique id, so a discovery
         export on the prefix core listens to can create a duplicate that comes back enabled. Any instance on the broker
         may publish that export and a receiver cannot know who does, so the guard does not read this instance's export
-        option or prefix. It disables the rows that exist now and then every row core creates while it is armed. The
-        replay catch may remove a disabled row at a later start; the removal leaves a record with the disabled state
-        `integration`, so every later restore is disabled as well. Registry logic only: nothing is published.
+        option or prefix. It disables the rows that exist now and then every row core creates while it is armed. A
+        disabled row stays in the registry: the replay catch never removes it, because core MQTT clears the retained
+        topic, another instance's export included, when a row it discovered while disabled leaves the registry (CR-01).
+        The row keeps its disabled state across restarts. Registry logic only: nothing is published.
         """
         self._disarm_duplicate_guard()
         if not self._running:

@@ -92,7 +92,7 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: 17/18 plans executed
+**Plans**: 18/18 plans executed
 
 Plans:
 **Wave 1**
@@ -151,7 +151,7 @@ Plans:
 - [x] 08-14-PLAN.md — Record the final re-run in the ledger (the 08-13 FAIL stays as history; pruned-state qualifier where it applies), update the REQUIREMENTS.md traceability
 
 **Wave 18** *(blocked on Wave 17 completion)*
-- [ ] 08-15-PLAN.md — Final gate, refresh or re-run of the archived Phase 1 to 4 reports, Phase 8 re-verification
+- [x] 08-15-PLAN.md — Final gate, refresh or re-run of the archived Phase 1 to 4 reports, Phase 8 re-verification
 
 ## Progress
 
@@ -162,7 +162,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 17/18 | In Progress|  |
+| 8. Real-Instance Verification | 18/18 | In Progress|  |
 
 ## Backlog
 

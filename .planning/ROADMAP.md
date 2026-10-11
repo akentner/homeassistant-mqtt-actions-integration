@@ -28,7 +28,7 @@ Full details: [milestones/v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md)
 
 - [x] **Phase 6: Native Entity Residual Fixes** - A native mirror survives a restart near the size limit, and a boot-time retained Discovery replay creates no duplicate during the takeover (completed 2026-10-04)
 - [ ] **Phase 7: Verification, Stable Tests and Pinned CI** - Phases 1 to 4 re-verified, the flaky test fixed, and CI and release on a pinned runner
-- [ ] **Phase 8: Real-Instance Verification** - The four skipped Phase 5 UAT checks run and recorded on real instances
+- [x] **Phase 8: Real-Instance Verification** - The four skipped Phase 5 UAT checks run and recorded on real instances (completed 2026-10-11)
 
 ## Phase Details
 
@@ -92,7 +92,7 @@ Plans:
   5. Each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work.
   6. The ten human-verification items of Phases 1 to 3 deferred from Phase 7 (owner decision 2026-10-04; listed in `.planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md`, section "Open human-verification items") each have a recorded pass or fail result on the final build, so the archived Phase 1 to 3 reports can be refreshed to `passed` (or the owner accepts them as overrides under their own name).
 
-**Plans**: 18/18 plans executed
+**Plans**: 18/18 plans complete
 
 Plans:
 **Wave 1**
@@ -162,7 +162,7 @@ Phases execute in numeric order: 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 6. Native Entity Residual Fixes | 2/2 | Complete    | 2026-10-04 |
 | 7. Verification, Stable Tests and Pinned CI | 5/5 | In Progress|  |
-| 8. Real-Instance Verification | 18/18 | In Progress|  |
+| 8. Real-Instance Verification | 18/18 | Complete    | 2026-10-11 |
 
 ## Backlog
 

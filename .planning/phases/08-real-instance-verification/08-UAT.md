@@ -1,12 +1,12 @@
 ---
-status: partial
+status: complete
 phase: 08-real-instance-verification
 source:
   - .planning/phases/08-real-instance-verification/08-CONTEXT.md
   - .planning/phases/07-verification-stable-tests-and-pinned-ci/07-PROOF.md
   - .planning/milestones/v1.0-phases/05-evaluate-native-switch-select-entities-instead-of-mqtt-disco/05-UAT.md
 started: 2026-10-04T18:55:00Z
-updated: 2026-10-07T22:05:00Z
+updated: 2026-10-11T13:45:00Z
 ---
 
 ## Current Test
@@ -14,24 +14,28 @@ updated: 2026-10-07T22:05:00Z
 [testing complete]
 
 number: none
-name: testing complete (plan 08-10, 2026-10-07): all 14 checks recorded, 13 pass, 1 issue (block 4, UAT-04, Gaps entry test: 4)
+name: testing complete (plan 08-14, 2026-10-11): all 14 checks recorded and pass; the UAT-04 gap (Gaps entry test: 4) is resolved by the receiver-guard re-run
 expected: |
-  Nothing is left to test on the bench. `status: partial` because one block is `issue`; it stays so until the owner either
-  leaves the UAT-04 gap for follow-up work (the default) or records an override in the owner's own name (D-07), which plan
-  08-10 Task 2 asks; the verifier then refreshes the Phase 1 to 3 reports with this ledger as evidence (D-06).
-awaiting: owner decision on the UAT-04 gap and the three verifier runs (plan 08-10 Task 2); no test is awaited
+  Nothing is left to test on the bench. `status: complete` because no block is `issue`: blocks 2, 3, 4 and 9 were re-run on the
+  receiver-guard build (plan 08-18, evidence suffix `-rerun2`) and pass; the other ten blocks stay on their recorded evidence
+  (owner confirmations UAT04-GAP-DISPOSITION and UAT04-RECEIVER-GUARD). The verifier runs of plan 08-15 follow.
+awaiting: the verifier runs of plan 08-15; no test is awaited
 
 ## Build under test
 
 The containers bind-mount `custom_components/mqtt_actions` of the main checkout read-only. The pinned identity is recorded in
 `08-evidence/00-preflight/build.txt`; a later `check-preflight.sh --quick` re-asserts it before every wave (D-03).
 
-- sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+- sha: b8232252540a55969145ca0034d8fd86b4be3b7c
+- previous sha: caf2fe5dc003ea834104f4016d1996be4132e0c8 (the re-pin of plan 08-13, the guard of plan 08-12)
+- previous sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 (the first pin, blocks 1, 5 to 8 and 10 to 14 stay recorded on it)
 - branch: gsd/phase-08-real-instance-verification
-- commit time: 2026-10-04T17:21:42+02:00
+- commit time: 2026-10-11T14:24:01+02:00
 - image: ghcr.io/home-assistant/home-assistant:2026.9 (HA 2026.9.4)
 - ha-a (Test HA One, port 8123): instance id 3851f34f-fa67-4f3c-bba0-122465013c3d
-- ha-b (Test HA Two, port 8124): instance id a09499e4-5674-48d5-b3d6-4860d5226fcb
+- ha-b (Test HA Two, port 8124): instance id b4cf285b-428f-426b-9500-8e269634356e (the hub was re-added in plan 08-08; the first record named a09499e4-5674-48d5-b3d6-4860d5226fcb)
+
+The blocks that were not re-run on the receiver-guard build (UAT-01, P1-1 to P1-4, P1-6, P2-1, P2-2, P3-1, P3-2) keep their recorded sha (the first pin); see the Observations entry on the checks that were not re-run. Blocks 2, 3, 4 and 9 carry the new sha.
 
 Phase 1 item P1-1 (HACS client install) records the release tag it really installed instead, because HACS downloads the newest
 release and not this checkout (D-03).
@@ -41,14 +45,14 @@ release and not this checkout (D-03).
 | Check | Requirement or source | Result | Date | Build SHA | Evidence |
 |-------|-----------------------|--------|------|-----------|----------|
 | UAT-01 | UAT-01, ROADMAP criterion 1, 05-UAT test 4 | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-01 |
-| UAT-02 | UAT-02, ROADMAP criterion 2, 05-UAT test 5 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-02 |
-| UAT-03 | UAT-03, ROADMAP criterion 3, 05-UAT test 6 | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-03 |
-| UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | issue | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/uat-04 |
+| UAT-02 | UAT-02, ROADMAP criterion 2, 05-UAT test 5 | pass | 2026-10-11 | b8232252540a55969145ca0034d8fd86b4be3b7c | .planning/phases/08-real-instance-verification/08-evidence/uat-02-rerun2 |
+| UAT-03 | UAT-03, ROADMAP criterion 3, 05-UAT test 6 | pass | 2026-10-11 | b8232252540a55969145ca0034d8fd86b4be3b7c | .planning/phases/08-real-instance-verification/08-evidence/uat-03-rerun2 |
+| UAT-04 | UAT-04, ROADMAP criterion 4, 05-UAT test 7 | pass | 2026-10-11 | b8232252540a55969145ca0034d8fd86b4be3b7c | .planning/phases/08-real-instance-verification/08-evidence/uat-04-rerun2 |
 | P1-1 | Phase 1 item 1 (07-PROOF) | pass | 2026-10-07 | d0f660cb2422c7688d22a674cf54f955a8c26c7f | .planning/phases/08-real-instance-verification/08-evidence/p1-1 |
 | P1-2 | Phase 1 item 2 (07-PROOF) | pass | 2026-10-07 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-2 |
 | P1-3 | Phase 1 item 3 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-3 |
 | P1-4 | Phase 1 item 4 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-4 |
-| P1-5 | Phase 1 item 5 (07-PROOF) | pass | 2026-10-04 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-5 |
+| P1-5 | Phase 1 item 5 (07-PROOF) | pass | 2026-10-11 | b8232252540a55969145ca0034d8fd86b4be3b7c | .planning/phases/08-real-instance-verification/08-evidence/p1-5-rerun2 |
 | P1-6 | Phase 1 item 6 (07-PROOF) | pass | 2026-10-07 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p1-6 |
 | P2-1 | Phase 2 item 1 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p2-1 |
 | P2-2 | Phase 2 item 2 (07-PROOF) | pass | 2026-10-06 | b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 | .planning/phases/08-real-instance-verification/08-evidence/p2-2 |
@@ -73,28 +77,26 @@ note: Policy `observation` (UAT01-WORDING, coded in `check-uat01.sh` before the 
 ### 2. UAT-02: late legacy Discovery replay, two starts (MIG-05)
 expected: After retained legacy Discovery is re-published (while the instance is stopped) and the instance is started twice, no `_2` duplicate entities exist and the entity ids, registry ids and device ids are unchanged, which proves MIG-05 outside the test harness.
 result: pass
-sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
-date: 2026-10-04
-evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-02
-note: Two startup rounds with retained legacy Discovery published while ha-a and ha-b were stopped; after each graceful stop both registries held no `mqtt` row, no `_2` id, no legacy `mqtt` device and the 30 `mqtt_actions` rows (entity id, registry id, unique id, device id) identical to the baseline (E1 to E4). The replay really created the twins (six `_2` tombstones per instance in `deleted_entities`) and they were removed. Live variant (observation only): published while running, six `_2` entities appeared on both instances within 20 s, stayed through a graceful stop, and were gone after the next start.
+sha: b8232252540a55969145ca0034d8fd86b4be3b7c
+date: 2026-10-11
+evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-02-rerun2
+note: Re-run on the receiver-guard build (plans 08-17 and 08-18; final re-run, `-rerun2` folder) with the unchanged expectations E1 to E4 (`verdict.txt`: E1 to E4 hold in round 1 and round 2 on ha-a and ha-b). Superseded and kept untouched as history: the first record in `uat-02` (build b7f52b34, 2026-10-04) and the re-run of plan 08-13 in `uat-02-rerun` (build caf2fe5d, PASS). First record, still true of the check itself: two startup rounds with retained legacy Discovery published while ha-a and ha-b were stopped; after each graceful stop both registries held no `mqtt` row, no `_2` id, no legacy `mqtt` device and the `mqtt_actions` rows (entity id, registry id, unique id, device id) identical to the baseline; the replay really created the twins and they were removed. On this build the guard disables a replayed row before the catch removes it, so the null tombstones of Lampe Test and Bar Select turned into `disabled_by` integration; plan 08-18 flipped them back before UAT-04 (see block 4). Live variant (observation only, first record): published while running, six `_2` entities appeared on both instances within 20 s, stayed through a graceful stop, and were gone after the next start.
 
 ### 3. UAT-03: command across two real instances
 expected: A command issued on one of two real instances runs the actions exactly once on every approved instance, and an unknown payload is ignored and leaves the state unchanged.
 result: pass
-sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
-date: 2026-10-04
-evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-03
-note: Marker device "UAT Marker" (owner ha-a, inert system_log.write actions) counted per instance in one process lifetime, each step followed by a wait. A (unapproved control, command on ha-a): ha-a +1, ha-b 0. Approval of the mirror on ha-b through the Repairs fix flow API. B (command on ha-a): +1 on ha-a and +1 on ha-b after 60 s. C (command on the ha-b mirror): +1 on ha-a and +1 on ha-b after 60 s. D (`banana`, QoS 1, not retained, published by uat_bridge): marker deltas 0 on both, `Ignoring unknown payload` +1 on each instance, entity state on both unchanged (on), retained broker value read back unchanged (ON). A subscriber's capture shows retain=0 for every live message, so the not-retained proof is the unchanged retained read-back.
+sha: b8232252540a55969145ca0034d8fd86b4be3b7c
+date: 2026-10-11
+evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-03-rerun2
+note: Re-run on the receiver-guard build (plan 08-18, final re-run, `-rerun2` folder, fresh marker `87c29b56-8abe-4531-b03c-c402a2f10cb8`) with the unchanged steps A to D (`verdict.txt`: A, B, C and D hold on both instances). Superseded and kept untouched as history: `uat-03` (first run, build b7f52b34, 2026-10-04) and `uat-03-rerun` (plan 08-13, build caf2fe5d, PASS). Steps as in the first record: marker device "UAT Marker" (owner ha-a, inert system_log.write actions) counted per instance in one process lifetime, each step followed by a wait. A (unapproved control, command on ha-a): ha-a +1, ha-b 0. Approval of the mirror on ha-b through the Repairs fix flow API. B (command on ha-a): +1 on ha-a and +1 on ha-b after 60 s. C (command on the ha-b mirror): +1 on ha-a and +1 on ha-b after 60 s. D (`banana`, QoS 1, not retained, published by uat_bridge): marker deltas 0 on both, `Ignoring unknown payload` +1 on each instance, entity state on both unchanged (on), retained broker value read back unchanged (ON). A subscriber's capture shows retain=0 for every live message, so the not-retained proof is the unchanged retained read-back.
 
 ### 4. UAT-04: Discovery export and core prefix
 expected: The Discovery export has `enabled_by_default` false and no buttons, the core MQTT prefix yields only disabled duplicates, and switching the export off clears its topics.
-result: issue
-sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
-date: 2026-10-04
-evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-04
-reported: 2026-10-04, scripted run of plan 08-04 (`check-uat04.sh run`, expectations coded before the run)
-severity: minor
-note: Clause 1 holds (export on, default prefix `mqtt_actions_export`, ACL rows added first, read back by a second client): a retained payload exists for each of the three owned native devices (Lampe Test, Bar Select, UAT Marker), every component is `switch` or `select` with `enabled_by_default` false, no button, no `test_` key, no `/test` topic, and nothing is retained on `homeassistant/device`. Clause 3 holds (export off): `mqtt_actions_export/#` and `homeassistant/device/#` read back empty. Clause 2 FAILS for two of three devices on BOTH instances (export prefix `homeassistant`, no restart): the UAT Marker (control) got exactly one `mqtt` row, unique id = device id, `disabled_by` integration, as expected, but Lampe Test and Bar Select got an ENABLED `mqtt` row (`switch.lampe_test_2`, `select.bar_select_2`, `disabled_by` null) on ha-a and on ha-b; the native rows stayed present and enabled. The published payload is correct (enabled_by_default false, X3 passes); the enabled state is the likely effect of core MQTT restoring `disabled_by` from the deleted-entity tombstones that the UAT-02 legacy replay left for the same (domain, platform, unique id) on these two devices (HA 2026.9.4 `entity_registry.py` lines 1498-1508; `uat-04/tombstone-cause.txt`). The marker never had a tombstone. This is an inference from the control and the core source, not an isolated reproduction.
+result: pass
+sha: b8232252540a55969145ca0034d8fd86b4be3b7c
+date: 2026-10-11
+evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-04-rerun2
+note: Final re-run of plan 08-18 on the receiver-guard build (plan 08-17), expectations X1 to X10 unchanged (the check scripts are byte-identical to the scrubbed copies of plan 08-13, shown by `cmp` in plan 08-18 Task 1; the suffix patch of 08-13 is `uat-04-rerun/script-patches.diff`). Disposition `guard-and-document`, modifier `full-rerun` (decisions UAT04-GAP-DISPOSITION, D08-WAIVER and UAT04-RECEIVER-GUARD; isolation classification TOMBSTONE-ONLY). The run started from the regression state: tombstones with `disabled_by` null for the Lampe Test switch and the Bar Select select on both instances (the failing state of the first run), live mqtt rows 0 on both, restored by plan 08-18 before the run by flipping `disabled_by` back on four existing registry records and proven in the line "regression state before UAT-04: ha-a null tombstones switch=1 select=1; ha-b null tombstones switch=1 select=1; live mqtt rows a=0 b=0" of `uat-04-rerun2/prepare.txt`. The options flow was applied on ha-a only, so ha-a exported and ha-b only received the export. Result: clause 1 holds (default prefix, X1 to X6), clause 2 holds on BOTH instances (core prefix, no restart: one mqtt row per exported device with `disabled_by` integration, no enabled mqtt row, native rows present and enabled; X7 to X9), clause 3 holds (export off, X10). The cases that failed in the 08-13 re-run (ha-b: Lampe Test and Bar Select with `disabled_by` null) now pass. Guard log (plan 08-18 observation): the INFO line "Disabled 1 duplicate entities that core MQTT created for native devices" appears twice on ha-a and twice on ha-b when the export arrived on the core prefix (one pass for the switch, one for the select; `guard-log-a.txt`, `guard-log-b.txt`); the marker needed none (it had no tombstone, core created its row disabled). After one graceful restart both instances hold 0 live mqtt rows (`post-restart.txt`). History, never edited and superseded by this run: the first run in `uat-04` and `uat-04-isolation` (build b7f52b34, issue: clause 2 failed for Lampe Test and Bar Select on both instances) and the re-run of plan 08-13 in `uat-04-rerun` (build caf2fe5d, FAIL on ha-b because receivers of the export were not covered by the guard).
 
 ### 5. P1-1: HACS client install on a production host
 expected: On a real host: custom repository added, integration downloaded, Home Assistant restarted, MQTT Actions added, a second add aborts, the icon is shown; then the integration and the repository are removed again (add and remove only, no device created).
@@ -132,10 +134,10 @@ note: owner-signed 2026-10-06 ("approved P1-3 P1-4 P3-2", chat, verbatim). Fixtu
 ### 9. P1-5: retained-versus-live chain
 expected: On the current build with a real HA core MQTT client and a real retaining broker (toggle in the UI, full HA restart, broker reconnect), no action runs for replayed state.
 result: pass
-sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
-date: 2026-10-04
-evidence: .planning/phases/08-real-instance-verification/08-evidence/p1-5
-note: Counted marker lines of the "UAT Marker" device (startup flag off, read from the retained config document) per instance. 1 toggle (the service call the frontend toggle makes, `switch.turn_on` on ha-a, state off before): +1 on ha-a and +1 on ha-b. 2 full restart (`podman restart ha-a ha-b`, new process lifetime, 90 s margin): 0 lines on both while the retained state was replayed. 3 broker reconnect (reload of the core `mqtt` config entry on each instance through `POST /api/config/config_entries/entry/{id}/reload`, response `require_restart: false`; 60 s): still 0 on both. 4 positive control (`switch.turn_off` on ha-a): +1 on both. `mosq` was not restarted (StartedAt unchanged). The toggle was the service call, not a click in the rendered frontend; rendering is not what P1-5 judges.
+sha: b8232252540a55969145ca0034d8fd86b4be3b7c
+date: 2026-10-11
+evidence: .planning/phases/08-real-instance-verification/08-evidence/p1-5-rerun2
+note: Re-run on the receiver-guard build (plan 08-18, final re-run, `-rerun2` folder) with the unchanged steps (`verdict.txt`: toggle +1, restart 0, mqtt entry reload 0, positive control +1, on both instances). Superseded and kept untouched as history: `p1-5` (first run, build b7f52b34, 2026-10-04) and `p1-5-rerun` (plan 08-13, build caf2fe5d, PASS). Steps as in the first record: counted marker lines of the "UAT Marker" device (startup flag off, read from the retained config document) per instance. 1 toggle (the service call the frontend toggle makes, `switch.turn_on` on ha-a, state off before): +1 on ha-a and +1 on ha-b. 2 full restart (`podman restart ha-a ha-b`, new process lifetime, 90 s margin): 0 lines on both while the retained state was replayed. 3 broker reconnect (reload of the core `mqtt` config entry on each instance through `POST /api/config/config_entries/entry/{id}/reload`, response `require_restart: false`; 60 s): still 0 on both. 4 positive control (`switch.turn_off` on ha-a): +1 on both. `mosq` was not restarted (StartedAt unchanged). The toggle was the service call, not a click in the rendered frontend; rendering is not what P1-5 judges.
 
 ### 10. P1-6: core version of hassio-n2plus
 expected: The core version of the second real host (hassio-n2plus, "Backup"), read in Settings > About, is 2026.9.0 or newer (informational, no code consequence).
@@ -180,8 +182,8 @@ note: owner-signed 2026-10-06 ("approved P1-3 P1-4 P3-2", chat, verbatim). The o
 ## Summary
 
 total: 14
-passed: 13
-issues: 1
+passed: 14
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
@@ -196,9 +198,9 @@ verdict column repeats the block's `result:` and is checked against it by `~/ha-
 | Requirement | Block | Verdict | Evidence |
 |-------------|-------|---------|----------|
 | UAT-01 | 1 | pass | 08-evidence/uat-01 (2026-10-06, policy observation for the v0.1.0 companion selects) |
-| UAT-02 | 2 | pass | 08-evidence/uat-02 (2026-10-04, two startup rounds; the live variant is an accepted limit, WR03-LIVE-REPLAY) |
-| UAT-03 | 3 | pass | 08-evidence/uat-03 (2026-10-04, one run per approved instance, unknown payload ignored) |
-| UAT-04 | 4 | issue | 08-evidence/uat-04 (2026-10-04); Gaps entry test: 4, severity minor: clauses 1 and 3 hold, clause 2 fails for Lampe Test and Bar Select (enabled core-prefix duplicates after legacy twins) |
+| UAT-02 | 2 | pass | 08-evidence/uat-02-rerun2 (2026-10-11, receiver-guard build, two startup rounds; the live variant is an accepted limit, WR03-LIVE-REPLAY; first record in uat-02 and 08-13 re-run in uat-02-rerun superseded) |
+| UAT-03 | 3 | pass | 08-evidence/uat-03-rerun2 (2026-10-11, receiver-guard build, one run per approved instance, unknown payload ignored; uat-03 and uat-03-rerun superseded) |
+| UAT-04 | 4 | pass | 08-evidence/uat-04-rerun2 (2026-10-11, receiver-guard build, from the restored null-tombstone state on both instances; Gaps entry test: 4 resolved; uat-04 FAIL and uat-04-rerun FAIL kept as history) |
 
 ROADMAP success criterion 6 (the ten human items, no requirement id) is judged per archived phase report by the verifier, not
 here. Item-to-block mapping: Phase 1 items 1 to 6 are blocks 5 to 10, Phase 2 items 1 and 2 are blocks 11 and 12, Phase 3 items
@@ -218,16 +220,17 @@ folder, recorded sha and date. Before Phase 8 every report read `human_needed`.
 | 3 (trust and ownership) | human_needed | passed | 5/5 | 2 (blocks 13 and 14) | 0 |
 
 Each report also keeps the recorded Phase 5 supersession override (D-03) of the truths that Phase 5 replaced on purpose; that override sits in the score,
-not in the human-item column. Phase 4 was already `passed` (Phase 7) and still reads `passed`. Block 4 (UAT-04, `issue`) is a Phase 5 item; it stays an
-open gap (owner decision UAT04-DISPOSITION) and is not a truth of Phases 1 to 3.
+not in the human-item column. Phase 4 was already `passed` (Phase 7) and still reads `passed`. Block 4 (UAT-04) is a Phase 5 item and is not a truth of Phases 1 to 3. At that refresh it was an `issue` and an open gap (owner decision UAT04-DISPOSITION);
+plans 08-12 to 08-18 closed it (block 4 `pass` on the receiver-guard build, 2026-10-11).
 
 ## Gaps
 
 <!-- Replace the empty list with entries in the gap format of ~/.claude/gsd-core/templates/UAT.md when a check fails (D-08):
      one entry per failed block, with `test:` set to the block number. -->
 - truth: "With the export on the core MQTT prefix, every exported device yields only a disabled duplicate on every instance that listens (no enabled mqtt entity)"
-  status: failed
-  reason: "Scripted result (plan 08-04, UAT-04 clause 2): after `export_prefix` was set to `homeassistant` (no restart), ha-a and ha-b each held an ENABLED mqtt row for Lampe Test (`switch.lampe_test_2`) and Bar Select (`select.bar_select_2`); only the UAT Marker duplicate was `disabled_by: integration`. The export payload itself has `enabled_by_default` false on every component. The enabled rows follow core's restore of `disabled_by` from tombstones of earlier legacy entities (UAT-02 replay twins) with the same unique id. Needs an owner decision: product gap (for example a documented warning or a guard when legacy twins existed) or bench artifact of running UAT-02 before UAT-04 on the same instances. Re-run of plan 08-13 on build caf2fe5dc003ea834104f4016d1996be4132e0c8 (the guard of plan 08-12): ha-a passes, ha-b fails X7 for Lampe Test and Bar Select (one mqtt row each, `disabled_by` null) and X8 (`select.bar_select_2` and `switch.lampe_test_2` enabled), because the guard arms only on the exporting instance and receivers of the export are not covered; follow-up plans 08-16 to 08-18 (owner decision UAT04-RECEIVER-GUARD), the gap stays open until plan 08-14 records the re-run of plan 08-18."
+  status: resolved
+  resolution: "Resolved 2026-10-11 by the guard and its receiver-side extension (plans 08-12 and 08-17, owner decisions UAT04-GAP-DISPOSITION and UAT04-RECEIVER-GUARD, disposition guard-and-document) and proven by the final re-run of plan 08-18 on build b8232252540a55969145ca0034d8fd86b4be3b7c (evidence 08-evidence/uat-04-rerun2, PASS on the regression state of null tombstones on both instances for the Lampe Test switch and the Bar Select select, ha-b receiving only); no pruned-state qualifier applies, the pass is on the failing state."
+  reason: "Scripted result (plan 08-04, UAT-04 clause 2): after `export_prefix` was set to `homeassistant` (no restart), ha-a and ha-b each held an ENABLED mqtt row for Lampe Test (`switch.lampe_test_2`) and Bar Select (`select.bar_select_2`); only the UAT Marker duplicate was `disabled_by: integration`. The export payload itself has `enabled_by_default` false on every component. The enabled rows follow core's restore of `disabled_by` from tombstones of earlier legacy entities (UAT-02 replay twins) with the same unique id. Needs an owner decision: product gap (for example a documented warning or a guard when legacy twins existed) or bench artifact of running UAT-02 before UAT-04 on the same instances. Re-run of plan 08-13 on build caf2fe5dc003ea834104f4016d1996be4132e0c8 (the guard of plan 08-12): ha-a passes, ha-b fails X7 for Lampe Test and Bar Select (one mqtt row each, `disabled_by` null) and X8 (`select.bar_select_2` and `switch.lampe_test_2` enabled), because the guard arms only on the exporting instance and receivers of the export are not covered; follow-up plans 08-16 to 08-18 (owner decision UAT04-RECEIVER-GUARD), plan 08-18 re-ran everything on the receiver-guard build and UAT-04 passes (`uat-04-rerun2/verdict.txt`), recorded by plan 08-14."
   severity: minor
   test: 4
   root_cause: "Observed, not inferred (plan 08-11, classification TOMBSTONE-ONLY): in one export window on the core prefix `homeassistant`, read on the live registries of ha-a and ha-b before any restart, the fresh device ISO-CLEAN (no mqtt-platform tombstone, proven from the flushed registry files) got exactly one mqtt row with `disabled_by` integration on both instances, while the fresh device ISO-TWIN (a real tombstone with `disabled_by` null left by the legacy-Discovery replay catch) got exactly one mqtt row with `disabled_by` null, so enabled, on both instances. HA core restores `disabled_by` from the deleted entity with the same domain, platform and unique id; a clean id is not affected. Evidence: `08-evidence/uat-04-isolation/classification.txt`, `result.txt`, `twin-round.txt`"
@@ -237,7 +240,9 @@ open gap (owner decision UAT04-DISPOSITION) and is not a truth of Phases 1 to 3.
     - path: ".planning/phases/08-real-instance-verification/08-evidence/uat-04-isolation/classification.txt"
       issue: "TOMBSTONE-ONLY: ISO-CLEAN disabled on both instances, ISO-TWIN enabled on both instances"
     - path: ".planning/phases/08-real-instance-verification/08-evidence/uat-04-rerun/verdict.txt"
-      issue: "08-13 re-run on the guard build: FAIL on ha-b (X7 for Lampe Test and Bar Select, X8 two enabled rows), the guard does not cover receivers of the export"
+      issue: "08-13 re-run on the guard build: FAIL on ha-b (X7 for Lampe Test and Bar Select, X8 two enabled rows), the guard does not cover receivers of the export (history, superseded)"
+    - path: ".planning/phases/08-real-instance-verification/08-evidence/uat-04-rerun2/verdict.txt"
+      issue: "final re-run on the receiver-guard build: PASS on both instances from the restored null-tombstone state (resolves the gap)"
   missing: []
   debug_session: ".planning/phases/08-real-instance-verification/08-evidence/uat-04-isolation/classification.txt"
 
@@ -275,6 +280,9 @@ next start after a core-prefix export, the release HACS reports).
 - Bench-script facts (plan 08-11, Rule 3): the mirror of a fixture on ha-b is detected through a registry row of platform `mqtt_actions` on ha-b, not through a config subentry (mirrors are entities, not subentries); the planner's clarification that the native row is judged on ha-a only (ha-b's mirror is never approved) is coded in the header of `check-uat04-iso.sh`.
 
 - UAT-04 re-run on the guard build (plan 08-13): UAT-02, UAT-03 and P1-5 re-run PASS and UAT-04 re-run FAIL on build `caf2fe5dc003ea834104f4016d1996be4132e0c8` (the guard of plan 08-12), after a host reboot found at plan start (mosq started again and its StartedAt anchor re-anchored, the old value kept as `.mosq-started-before-phase8.pre-reboot`). Evidence in `08-evidence/uat-02-rerun`, `uat-03-rerun`, `p1-5-rerun` and `uat-04-rerun` (verdict `uat-04-rerun/verdict.txt`: ha-b X7 for Lampe Test and Bar Select, X8 two enabled rows), untouched. These runs are history: the result recorded for blocks 2, 3, 4 and 9 will be the re-run of plan 08-18 on the receiver-guard build (owner decision UAT04-RECEIVER-GUARD, plans 08-16 to 08-18; plan 08-14 records it) and the 08-13 FAIL stays in the record.
+  Final result (plan 08-14, from plan 08-18): the first run (build b7f52b34, `uat-04`) failed clause 2 on both instances; the re-run of plan 08-13 (build caf2fe5d, guard on the exporting instance only) passed on ha-a and failed on ha-b; the final re-run on the receiver-guard build `b8232252540a55969145ca0034d8fd86b4be3b7c` (`uat-02-rerun2`, `uat-03-rerun2`, `p1-5-rerun2`, `uat-04-rerun2`) passes in all four checks with the original expectations. On this build the UAT-02 replay turns the null tombstones of Lampe Test and Bar Select into `disabled_by` integration (the guard disables a replayed row before the catch removes it); plan 08-18 therefore restored the failing state before UAT-04 by flipping `disabled_by` back to null on exactly those four existing records (both entity registries backed up, validated, nothing fabricated; `uat-04-rerun2/prepare.txt` holds the projections before and after and the exact state line), and UAT-04 passed from that state. Guard log: two INFO lines on ha-a and two on ha-b at the moment the core-prefix export arrived (one for the switch, one for the select); after one restart both hold 0 live mqtt rows. A bench defect found by plan 08-18: `check-uat03.sh` starts a background `mosquitto_sub` that outlives the check and can write into an earlier evidence folder; it was stopped by hand and the single affected file restored, and the script was not changed.
+
+- Checks not re-run on the receiver-guard build (plan 08-14, D-03; owner confirmations UAT04-GAP-DISPOSITION and UAT04-RECEIVER-GUARD in Owner decisions): UAT-01, P2-2 and the owner-judged frontend items P1-1 to P1-4, P1-6, P2-1, P3-1 and P3-2 stay on their recorded evidence at the first pin `b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3`. Reason: the guard is armed on every native instance but triggers only on a core MQTT row of a native id, which none of these checks creates (UAT-01 shows no `mqtt` row on any instance, the frontend items run with the export off and publish no Discovery), and no translation, service, option or Repairs issue changed; the product diff against both earlier pins names only `manager.py` and `takeover.py` (`uat-04-rerun2/prepare.txt`). Not scoped: the modifier is `full-rerun`, so UAT-03 and P1-5 WERE re-run (blocks 3 and 9). Superseded and untouched: the first runs (`uat-04` FAIL, `uat-02`, `uat-03`, `p1-5`) and the re-run of plan 08-13 on build `caf2fe5dc003ea834104f4016d1996be4132e0c8` (`uat-04-rerun` FAIL on ha-b because receivers of the export were not covered, `uat-02-rerun`, `uat-03-rerun` and `p1-5-rerun` PASS).
 
 ## Owner decisions
 
@@ -344,10 +352,11 @@ broker and hosts are untouched.
 
 ## Owner follow-ups
 
-1. Decide the UAT-04 gap (Gaps entry test: 4; clause 2, enabled core-prefix duplicates of Lampe Test and Bar Select after legacy
+1. DECIDED: the UAT-04 gap (Gaps entry test: 4; clause 2, enabled core-prefix duplicates of Lampe Test and Bar Select after legacy
    twins). DECISION TAKEN (2026-10-10, plan 08-11, owner decision UAT04-GAP-DISPOSITION): guard-and-document with the full scripted
    re-run, UAT-01, P2-2 and the frontend items confirmed as not affected; the guard and the documentation are plans 08-12 to 08-15.
-   The Gaps entry stays open until UAT-04 is re-run and recorded (plan 08-14).
+   Plan 08-16 extended the decision to the receiver (UAT04-RECEIVER-GUARD, extend-and-confirm). Decided and closed (plan 08-14,
+   2026-10-11): UAT-04 was re-run on the receiver-guard build (plan 08-18) and passes; the Gaps entry is resolved.
 2. Revoke the three long-lived tokens (ha-a and ha-b profile security pages; ha-c after a start, or drop it with the container)
    when the follow-up work is done, then delete the token files (owner decision API-ACCESS).
 3. Tear down the bench state listed above when nothing has to be re-run any more (removal commands in the list above and in

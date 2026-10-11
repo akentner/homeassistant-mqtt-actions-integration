@@ -233,15 +233,18 @@ def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mq
     """
     Disable the enabled core MQTT duplicates of a native device; return the count.
 
-    An export on the prefix core MQTT listens to asks for a disabled duplicate, whichever instance published it. When
-    core MQTT creates the entry again, the registry restores the state of an earlier deleted entry with the same
-    platform and unique id, and that state may be enabled. A candidate is the switch or select entry of the core MQTT
-    device of the id whose unique id is exactly the id, whose disabled state is None and that has a native twin under
-    this config entry (the definition of a duplicate that `remove_replay_twins` uses): an entry without a twin is a
-    live entity. The twin, a test button, a disabled entry and every other unique id are never touched, and nothing is
-    removed or enabled. Registry logic only: nothing is published. The replay catch may remove the disabled entry at a
-    later start; removing it leaves a record with the disabled state `integration`, so every later restore is disabled
-    as well.
+    An export on the prefix core MQTT listens to asks for a disabled duplicate, whichever instance published it.
+    When core MQTT creates the entry again, the registry restores the state of an earlier deleted entry with the
+    same platform and unique id, and that state may be enabled. A candidate is the switch or select entry of the
+    core MQTT device of the id whose unique id is exactly the id, whose disabled state is None and that has a native
+    twin under this config entry, unless it holds the user's choices (name, area, labels) and the twin does not: an
+    entry without a twin is a live entity, and a customized one is the entity the user knows. This is the
+    customization half of the identity test of `remove_replay_twins` and deliberately not its age half: a row that
+    core restores from a deleted record keeps its old creation time, and that row is the duplicate this guard exists
+    for. The twin, a test button, a disabled entry and every other unique id are never touched, and nothing is
+    removed or enabled. Registry logic only: nothing is published. The replay catch may remove the disabled entry at
+    a later start; removing it leaves a record with the disabled state `integration`, so every later restore is
+    disabled as well.
     """
     if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
         return 0
@@ -251,7 +254,11 @@ def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mq
         if entry.unique_id != device_id or entry.domain not in EXPORT_DOMAINS or entry.disabled_by is not None:
             continue
         twin_id = entity_registry.async_get_entity_id(entry.domain, DOMAIN, entry.unique_id)
-        if twin_id is None or entity_registry.entities[twin_id].config_entry_id != entry_id:
+        if twin_id is None:
+            continue
+        twin = entity_registry.entities[twin_id]
+        if twin.config_entry_id != entry_id or (_is_customized(entry) and not _is_customized(twin)):
+            # The entry that holds the user's choices is the one automations and dashboards use (WR-02)
             continue
         entity_registry.async_update_entity(entry.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
         disabled += 1

@@ -81,7 +81,7 @@ Plans:
 
 ### Phase 8: Real-Instance Verification
 
-**Goal**: The Phase 5 UAT debt is closed: the four checks the owner skipped in v1.0 are run by hand on real instances against the v1.0.1 build, and each result is recorded with its evidence. This is a manual verification phase (ha-one and ha-two, or the production instances); no code changes are planned, and a failed check becomes a gap, not an accepted skip. The exception is the gap closure of UAT-04 clause 2, which may include a product fix by owner decision D08-WAIVER of 2026-10-08; every other check stays manual verification without code changes.
+**Goal**: The Phase 5 UAT debt is closed: the four checks the owner skipped in v1.0 are run by hand on real instances against the v1.0.1 build, and each result is recorded with its evidence. This is a manual verification phase (ha-one and ha-two, or the production instances); no code changes are planned, and a failed check becomes a gap, not an accepted skip. The exception is the gap closure of UAT-04 clause 2, which may include a product fix by owner decisions D08-WAIVER of 2026-10-08 and UAT04-RECEIVER-GUARD of 2026-10-11 (the receiver-side extension of the guard, plans 08-16 to 08-18); every other check stays manual verification without code changes.
 **Depends on**: Phase 7 (the checks run against the fixed, verified build; transitively Phase 6 for UAT-02)
 **Requirements**: UAT-01, UAT-02, UAT-03, UAT-04
 **Success Criteria** (what must be TRUE):

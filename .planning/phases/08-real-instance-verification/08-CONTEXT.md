@@ -45,6 +45,10 @@ accepted skip.
   - *Amendment 2026-10-08 (decision D08-WAIVER, relayed by the orchestrator from the owner's answer, confirmed directly by the owner in chat on 2026-10-11):* for the gap closure of
     UAT-04 clause 2 (plans 08-11 to 08-15) only, a product fix may land in Phase 8. The rest of D-08 stands, including the rule
     that a failed check is recorded as a gap and the remaining checks continue.
+  - *Amendment 2026-10-11 (decision UAT04-RECEIVER-GUARD, relayed by the orchestrator from the owner's answer `extend-and-confirm`):* the gap closure of
+    UAT-04 clause 2 continues with plans 08-16 to 08-18 (the receiver-side extension of the guard); the exception of the earlier
+    amendment covers them. Plans 08-14 and 08-15 record the outcome, and the first failing re-run (plan 08-13) stays as history.
+    The rest of D-08 stands, including the rule that a failed check is recorded as a gap and the remaining checks continue.
 
 ### Claude's Discretion
 - Grouping and order of checks per instance setup, helper scripts for the automated steps, and the evidence file naming.

@@ -1,0 +1,121 @@
+== re-pin (repin-rerun2.sh) 2026-10-11T12:52:36Z
+previous sha: caf2fe5dc003ea834104f4016d1996be4132e0c8
+first sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+new sha: b8232252540a55969145ca0034d8fd86b4be3b7c (gsd/phase-08-real-instance-verification), commit_time 2026-10-11T14:24:01+02:00
+mount: byte-identical to the custom_components tree of the new sha (mount_clean)
+git diff --stat caf2fe5dc003ea834104f4016d1996be4132e0c8 b8232252540a55969145ca0034d8fd86b4be3b7c -- custom_components:
+   custom_components/mqtt_actions/manager.py  | 95 ++++++++++++++++++------------
+   custom_components/mqtt_actions/takeover.py | 27 +++++----
+   2 files changed, 73 insertions(+), 49 deletions(-)
+git diff --stat b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 b8232252540a55969145ca0034d8fd86b4be3b7c -- custom_components:
+   custom_components/mqtt_actions/manager.py  | 82 +++++++++++++++++++++++++++++-
+   custom_components/mqtt_actions/takeover.py | 34 ++++++++++++-
+   2 files changed, 114 insertions(+), 2 deletions(-)
+product diff against both earlier pins names only manager.py and takeover.py: yes
+ha-a and ha-b stopped; registry files are flushed (read below)
+== state before the re-pin 2026-10-11T12:52:46Z
+-- ha-a live rows with platform mqtt (entity_id, unique_id, disabled_by), 3 in total
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+  {"entity_id":"switch.uat_marker_2","unique_id":"33239fb1-67a9-481f-9f69-afdab7b31417","disabled_by":"integration"}
+-- ha-a deleted entities with platform mqtt (entity_id, unique_id, disabled_by), 11 in total
+  {"entity_id":"button.bar_select_test_a_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b","disabled_by":null}
+  {"entity_id":"button.bar_select_test_b_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_off_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_on_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_off_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_on_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"6f62cac5-49c9-49bc-88d5-1b804b775ac4","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e51269d3-f6e2-4cad-998d-37579c3f7c8f","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e8a6edf6-45ba-43c8-b171-88ca668c31f2","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_twin_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5","disabled_by":null}
+  {"entity_id":"switch.uat_marker_2","unique_id":"81d53f84-469e-4937-a3bb-09b24f11e4e4","disabled_by":"integration"}
+-- ha-a devices with an identifier (mqtt, mqtt_actions_*): 4
+-- ha-b live rows with platform mqtt (entity_id, unique_id, disabled_by), 1 in total
+  {"entity_id":"switch.uat_marker_2","unique_id":"33239fb1-67a9-481f-9f69-afdab7b31417","disabled_by":"integration"}
+-- ha-b deleted entities with platform mqtt (entity_id, unique_id, disabled_by), 13 in total
+  {"entity_id":"button.bar_select_test_a_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b","disabled_by":null}
+  {"entity_id":"button.bar_select_test_b_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_off_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_on_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_off_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_on_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":null}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":null}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"6f62cac5-49c9-49bc-88d5-1b804b775ac4","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e51269d3-f6e2-4cad-998d-37579c3f7c8f","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e8a6edf6-45ba-43c8-b171-88ca668c31f2","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_twin_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5","disabled_by":null}
+  {"entity_id":"switch.uat_marker_2","unique_id":"81d53f84-469e-4937-a3bb-09b24f11e4e4","disabled_by":"integration"}
+-- ha-b devices with an identifier (mqtt, mqtt_actions_*): 1
+backup of core.entity_registry and core.device_registry of ha-a and ha-b: /home/akentner/ha-test/_backup-pre-gap-rerun2-20261011T125246Z (pointer ~/ha-test/.current-backup-gap08-rerun2)
+kept the previous record as 00-preflight/build-caf2fe5d.txt (the first record stays as build-b7f52b34.txt)
+both answer; waiting 90s for the replay catch and the start-up work (this start is the cleanup restart)
+new build.txt:
+  sha: b8232252540a55969145ca0034d8fd86b4be3b7c
+  branch: gsd/phase-08-real-instance-verification
+  commit_time: 2026-10-11T14:24:01+02:00
+  mount_source: /home/akentner/Projects/homeassistant-mqtt-actions-integration/custom_components/mqtt_actions (read-only bind mount on ha-a and ha-b)
+  mount_content: byte-identical to the custom_components tree of sha (blob-by-blob, no extra files)
+  ha_version: 2026.9.4 (a), 2026.9.4 (b)
+  image: ghcr.io/home-assistant/home-assistant:2026.9
+  started_at_a: 2026-10-11 14:52:46.870260597 +0200 CEST
+  started_at_b: 2026-10-11 14:52:46.910211005 +0200 CEST
+  instance_id_a: 3851f34f-fa67-4f3c-bba0-122465013c3d
+  instance_id_b: b4cf285b-428f-426b-9500-8e269634356e
+  previous_sha: caf2fe5dc003ea834104f4016d1996be4132e0c8
+  first_sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+  repin_reason: receiver-side guard of plan 08-17 (D-03)
+new mount-hashes.txt:
+  ha-a manager.py host=8fec1c497c89519e container=8fec1c497c89519e match
+  ha-a takeover.py host=2955e0603fb4da8e container=2955e0603fb4da8e match
+  ha-a const.py host=ff5ec83c3a720c28 container=ff5ec83c3a720c28 match
+  ha-a document.py host=3fa07dec17fcce94 container=3fa07dec17fcce94 match
+  ha-b manager.py host=8fec1c497c89519e container=8fec1c497c89519e match
+  ha-b takeover.py host=2955e0603fb4da8e container=2955e0603fb4da8e match
+  ha-b const.py host=ff5ec83c3a720c28 container=ff5ec83c3a720c28 match
+  ha-b document.py host=3fa07dec17fcce94 container=3fa07dec17fcce94 match
+PASS preflight (quick) /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/08-real-instance-verification/08-evidence/00-preflight
+== state after the re-pin and the settle time (running files, read-only) 2026-10-11T12:55:20Z
+-- ha-a live rows with platform mqtt (entity_id, unique_id, disabled_by), 0 in total
+-- ha-a deleted entities with platform mqtt (entity_id, unique_id, disabled_by), 14 in total
+  {"entity_id":"button.bar_select_test_a_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b","disabled_by":null}
+  {"entity_id":"button.bar_select_test_b_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_off_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_on_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_off_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_on_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"6f62cac5-49c9-49bc-88d5-1b804b775ac4","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e51269d3-f6e2-4cad-998d-37579c3f7c8f","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e8a6edf6-45ba-43c8-b171-88ca668c31f2","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_twin_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5","disabled_by":null}
+  {"entity_id":"switch.uat_marker_2","unique_id":"33239fb1-67a9-481f-9f69-afdab7b31417","disabled_by":"integration"}
+  {"entity_id":"switch.uat_marker_2","unique_id":"81d53f84-469e-4937-a3bb-09b24f11e4e4","disabled_by":"integration"}
+-- ha-a devices with an identifier (mqtt, mqtt_actions_*): 1
+-- ha-b live rows with platform mqtt (entity_id, unique_id, disabled_by), 0 in total
+-- ha-b deleted entities with platform mqtt (entity_id, unique_id, disabled_by), 14 in total
+  {"entity_id":"button.bar_select_test_a_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b","disabled_by":null}
+  {"entity_id":"button.bar_select_test_b_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_off_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_on_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_off_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_on_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":null}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":null}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"6f62cac5-49c9-49bc-88d5-1b804b775ac4","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e51269d3-f6e2-4cad-998d-37579c3f7c8f","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e8a6edf6-45ba-43c8-b171-88ca668c31f2","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_twin_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5","disabled_by":null}
+  {"entity_id":"switch.uat_marker_2","unique_id":"33239fb1-67a9-481f-9f69-afdab7b31417","disabled_by":"integration"}
+  {"entity_id":"switch.uat_marker_2","unique_id":"81d53f84-469e-4937-a3bb-09b24f11e4e4","disabled_by":"integration"}
+-- ha-b devices with an identifier (mqtt, mqtt_actions_*): 0
+== projection (--check, read-only) 2026-10-11T12:56:13Z
+-- ha-a deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+-- ha-b deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":null}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":null}
+would flip to disabled_by null: ha-a switch.lampe_test_2 (disabled_by integration);ha-a select.bar_select_2 (disabled_by integration);

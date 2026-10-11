@@ -25,3 +25,7 @@ plan 08-13 (2026-10-11), re-run support for the UAT-04 gap closure; the diff aga
 - run-all-scripted.sh: the evidence path it prints and the verdict it reads carry the same suffix
 - repin.sh (new): re-pin of the build after the product guard of plan 08-12 (old build.txt kept as build-b7f52b34.txt, previous_sha recorded)
 - every expectation block (X1 to X10, E1 to E4, the UAT-03 and P1-5 steps) is byte-identical to the copies above
+
+plan 08-18 (2026-10-11), re-pin to the receiver-side guard build of plan 08-17 and the final scripted re-run (evidence folders with the suffix -rerun2):
+- repin-rerun2.sh (new): re-pin to the receiver-guard build (build.txt keeps previous_sha caf2fe5d and gains first_sha b7f52b34, the earlier records stay as build-caf2fe5d.txt and build-b7f52b34.txt); the start that loads the new code is also the cleanup restart of the replay catch; the check scripts are unchanged (byte-identical to the copies above)
+- reseed-tombstones.sh (new): restores the failing tombstone state of UAT-04 (disabled_by null on the existing deleted-entity records of the Lampe Test switch and the Bar Select select) between P1-5 and UAT-04, with a backup, a validation and a restore on mismatch; --check is read-only; a missing record is an ABORT; the check scripts are unchanged

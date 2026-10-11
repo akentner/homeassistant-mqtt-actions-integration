@@ -152,12 +152,17 @@ async def async_take_over(  # noqa: PLR0913
             # goes, and the one that carries the identity the user knows stays (WR-04). The legacy entry is not loaded
             # and a loaded twin is never removed, so a removal publishes nothing. A disabled legacy entry stays where
             # it is: core MQTT clears the retained topic when a row it discovered while disabled leaves the registry,
-            # and for a mirror that topic holds the other instance's export (CR-01)
+            # and for a mirror that topic holds the other instance's export (CR-01). An enabled one is disabled first,
+            # so its deleted record restores as disabled (WR-01). The twin's record is left enabled: only this
+            # integration's native platform creates that unique id again, and its entity is meant to be enabled.
             twin = entity_registry.entities[twin_id]
             if twin_id not in loaded and _carries_the_identity(legacy, twin):
                 entity_registry.async_remove(twin_id)
             else:
                 if legacy.disabled_by is None:
+                    entity_registry.async_update_entity(
+                        legacy.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+                    )
                     entity_registry.async_remove(legacy.entity_id)
                 continue
         entity_registry.async_update_entity_platform(

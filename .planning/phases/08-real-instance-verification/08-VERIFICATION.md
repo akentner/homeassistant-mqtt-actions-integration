@@ -1,6 +1,6 @@
 ---
 phase: 08-real-instance-verification
-verified: 2026-10-11T13:50:00Z
+verified: 2026-10-11T13:52:00Z
 status: passed
 score: 6/6 must-haves verified
 covered_files:
@@ -33,6 +33,7 @@ covered_files:
   - .planning/phases/08-real-instance-verification/08-14-PLAN.md
   - .planning/phases/08-real-instance-verification/08-14-SUMMARY.md
   - .planning/phases/08-real-instance-verification/08-15-PLAN.md
+  - .planning/phases/08-real-instance-verification/08-15-SUMMARY.md
   - .planning/phases/08-real-instance-verification/08-16-PLAN.md
   - .planning/phases/08-real-instance-verification/08-16-SUMMARY.md
   - .planning/phases/08-real-instance-verification/08-17-PLAN.md
@@ -65,7 +66,7 @@ covered_files:
   - .planning/phases/08-real-instance-verification/08-evidence/uat-04/result.txt
   - .planning/phases/08-real-instance-verification/08-evidence/uat-04/tombstone-cause.txt
   - .planning/phases/08-real-instance-verification/08-evidence/uat-04/verdict.txt
-covered_digest: "v3:sha256:cd231a4f08704dca148c28ad1dbc7c6b4360fe81667b8d8907289bb02dbecaa2"
+covered_digest: "v3:sha256:7cc16feff1ab4b435d0f4170dbfce1c2be475a91b3b367cfea03bef1ec3eed06"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -80,9 +81,9 @@ re_verification:
 # Phase 8: Real-Instance Verification Verification Report
 
 **Phase Goal:** The Phase 5 UAT debt is closed: the four checks the owner skipped in v1.0 are run by hand on real instances against the v1.0.1 build, and each result is recorded with its evidence. This is a manual verification phase (ha-one and ha-two, or the production instances); no code changes are planned, and a failed check becomes a gap, not an accepted skip. The exception is the gap closure of UAT-04 clause 2, which may include a product fix by owner decisions D08-WAIVER of 2026-10-08 and UAT04-RECEIVER-GUARD of 2026-10-11 (the receiver-side extension of the guard, plans 08-16 to 08-18); every other check stays manual verification without code changes.
-**Verified:** 2026-10-11T13:50:00Z
+**Verified:** 2026-10-11T13:52:00Z
 **Status:** passed
-**Re-verification:** Yes, after gap closure (previous report 2026-10-08: `gaps_found`, 5/6)
+**Re-verification:** Yes, after gap closure (previous report 2026-10-08: `gaps_found`, 5/6); refreshed 2026-10-11T13:52:00Z because `08-15-SUMMARY.md` joined the covered files, no verdict changed (HEAD 797a708 differs from 36d8f95 only in STATE.md and 08-15-SUMMARY.md)
 
 ## Goal Achievement
 
@@ -106,7 +107,7 @@ All four UAT checks have a recorded result with evidence, and all four are `pass
 | 3 | SC3 / UAT-03: a command on one of two real instances runs the actions exactly once on every approved instance; an unknown payload is ignored and leaves the state unchanged | VERIFIED | Re-run on the final build with a fresh marker: `uat-03-rerun2/verdict.txt` PASS, steps A (unapproved control +1 / 0), B, C (+1 and +1 each) and D (`banana`: delta 0, "Ignoring unknown payload" +1 each, state and retained value unchanged) hold on both instances. First run and 08-13 re-run are history |
 | 4 | SC4 / UAT-04: the Discovery export has `enabled_by_default` false and no buttons, the core MQTT prefix yields only disabled duplicates, and switching the export off clears its topics | VERIFIED | `uat-04-rerun2/verdict.txt` PASS and `result.txt`: clause 1 (X1 to X6) holds on the default prefix; clause 2 holds on BOTH instances with the core prefix and no restart (X7: exactly one `mqtt` row per exported device with `disabled_by` integration for Lampe Test, Bar Select and the marker; X8: no enabled `mqtt` row on ha-a or ha-b; X9: native rows present and enabled); clause 3 holds (X10: nothing retained under `mqtt_actions_export/` or `homeassistant/device/` after off). The verifier re-read `registry-core-prefix-a.json` and `-b.json`: all three `mqtt` rows per instance read `disabled_by` integration. **The pass was observed on the original tombstoned state with the receiver-guard build** (the failing state of the first run: `disabled_by` null tombstones for the Lampe Test switch and the Bar Select select on both instances, see below), not on a pruned registry state, so no pruned-state qualifier applies (disposition `guard-and-document`, no prune). The options flow was applied on ha-a only, so ha-b only received the export, which is the case that failed in the 08-13 re-run. Guard log: two INFO lines "Disabled 1 duplicate entities that core MQTT created for native devices" on each instance (`guard-log-a.txt`, `guard-log-b.txt`). After one graceful restart both instances hold 0 live `mqtt` rows (`post-restart.txt`). Behavior-dependent, so also checked by tests: `tests/test_export_guard_receiver.py` (14 passed) and `tests/test_discovery_export.py` (28 passed), run by the verifier |
 | 5 | SC5: each of the four checks has a recorded pass or fail result with evidence, and any failure is raised as a gap for follow-up work | VERIFIED | `08-UAT.md` blocks 1 to 4 carry `result: pass`, a 40-hex sha, a date and an existing evidence folder; the earlier failure was raised as a Gaps entry (`test: 4`) and followed up (plans 08-11 to 08-18). The entry now has `status: resolved` plus a `resolution:` line naming the evidence (`uat-04-rerun2`), the build and the date; no `skipped` token is used. The failed runs stay in the record (`uat-04`, `uat-04-isolation`, `uat-04-rerun`) |
-| 6 | SC6: the ten human items of Phases 1 to 3 each have a recorded pass or fail result on the final build, so the archived reports can be refreshed to `passed` (or accepted as owner overrides) | VERIFIED (with evidence-strength limits, see below) | Blocks 5 to 14 are all `result: pass` (block 5 with `override_by: Alexander Kentner` on the abbreviated PROD-HOST path). P1-5 (block 9) was re-run on the final build (`p1-5-rerun2/verdict.txt` PASS: toggle +1, restart 0, mqtt entry reload 0, positive control +1 on both instances). The other nine stay on their recorded evidence at the first pin or the release tag; the owner confirmed them as not affected by the guard in his own name (UAT04-GAP-DISPOSITION 2026-10-10, UAT04-RECEIVER-GUARD 2026-10-11, `uat-04-receiver-guard/decision.txt`: `not-affected-confirmed: yes`, `checks-to-widen: none`). At the time of this run the archived Phase 1 to 4 reports read `stale` (their covered files changed in plans 08-11 to 08-18); they are regenerated by their own verifier runs in the same step of plan 08-15 Task 2 and gated by Task 3, and are not part of this report's digest |
+| 6 | SC6: the ten human items of Phases 1 to 3 each have a recorded pass or fail result on the final build, so the archived reports can be refreshed to `passed` (or accepted as owner overrides) | VERIFIED (with evidence-strength limits, see below) | Blocks 5 to 14 are all `result: pass` (block 5 with `override_by: Alexander Kentner` on the abbreviated PROD-HOST path). P1-5 (block 9) was re-run on the final build (`p1-5-rerun2/verdict.txt` PASS: toggle +1, restart 0, mqtt entry reload 0, positive control +1 on both instances). The other nine stay on their recorded evidence at the first pin or the release tag; the owner confirmed them as not affected by the guard in his own name (UAT04-GAP-DISPOSITION 2026-10-10, UAT04-RECEIVER-GUARD 2026-10-11, `uat-04-receiver-guard/decision.txt`: `not-affected-confirmed: yes`, `checks-to-widen: none`). The archived Phase 1 to 4 reports were regenerated by their own verifier runs in plan 08-15 Task 2; the verifier re-read `verification status` of all four on this re-run and each reads `passed`. They are not part of this report's digest |
 
 **Score:** 6/6 truths verified. Behavior-unverified truths: 0 (the guard behavior has both real-instance runs and 42 passing unit tests; the owner-judged items are listed under Evidence strength because the phase's deliverable is the recorded owner judgement).
 
@@ -160,7 +161,7 @@ Stated so the pass marks are not read stronger than the evidence (unchanged from
 | `08-evidence/uat-04/`, `uat-04-isolation/`, `uat-04-rerun/`, `uat-04-receiver-guard/` | first failing run, isolation, failed 08-13 re-run, owner decision | VERIFIED | present, tracked, kept as history |
 | Guard implementation and tests | receiver-side guard, TDD | VERIFIED | `manager.py` and `takeover.py` as described; two test files, 14 and 28 tests passed when run by the verifier |
 | Bench script copy and evidence tree | secret-free | VERIFIED | `check-final.sh --pre` runs `check-evidence-clean.sh` over the script copy and the whole tree: PASS |
-| Archived Phase 1 to 4 reports | current | NOT PART OF THIS DIGEST | read `stale` now, regenerated by the verifier runs of plan 08-15 Task 2 and gated by Task 3 |
+| Archived Phase 1 to 4 reports | current | NOT PART OF THIS DIGEST | regenerated by the verifier runs of plan 08-15 Task 2; `verification status` of Phases 1 to 4 reads `passed` (re-read on this run) |
 
 ### Key Link Verification
 
@@ -179,7 +180,7 @@ Stated so the pass marks are not read stronger than the evidence (unchanged from
 | Receiver-side guard | `uv run pytest tests/test_export_guard_receiver.py -q` | 14 passed | PASS |
 | Export and guard on the exporting instance | `uv run pytest tests/test_discovery_export.py -q` | 28 passed | PASS |
 | Stale anchor | `git diff --stat b8232252 HEAD -- custom_components tests .github pyproject.toml uv.lock` | empty | PASS |
-| Ledger and anchor gate | `~/ha-test/bin/check-final.sh --pre` | PASS (archived reports shown as `stale`, not asserted before the verifiers) | PASS |
+| Ledger and anchor gate | `~/ha-test/bin/check-final.sh --pre` | PASS (re-run on this re-verification; Phase 1 to 4 reports read `passed`, Phase 8 `stale` until this report is regenerated) | PASS |
 | UAT-04 pass is real | read `uat-04-rerun2/verdict.txt`, `result.txt`, `registry-core-prefix-{a,b}.json` | X7 and X8 PASS on both instances; three `mqtt` rows per instance all `disabled_by` integration | CONFIRMED PASS |
 | Earlier failures remain history | read `uat-04/verdict.txt`, `uat-04-rerun/verdict.txt` | both FAIL, untouched | CONFIRMED |
 
@@ -207,7 +208,7 @@ None.
 4. Five items (P1-3, P1-4, P2-1, P2-2, P3-2) pass on chat statements without screenshots.
 5. The catch asymmetry (ha-b logs "Removed 3 duplicate entities", ha-a does not, same clean outcome) is still unexplained; it is an observation, not a gap.
 6. A bench defect found by plan 08-18: `check-uat03.sh` leaves a background `mosquitto_sub` that can write into an earlier evidence folder; one file was restored from git and the script was not changed.
-7. Bench state is deliberately left in place (tokens, ACL rows, ha-c container, UAT Marker, orphan mirrors, backups); the removal list is in `08-UAT.md` and `bench-state-final.txt`. The ROADMAP plan list still shows 08-15 unticked until Task 3 and the Phase 8 checkbox stays with the orchestrator's tooling.
+7. Bench state is deliberately left in place (tokens, ACL rows, ha-c container, UAT Marker, orphan mirrors, backups); the removal list is in `08-UAT.md` and `bench-state-final.txt`. The ROADMAP plan list now ticks 08-15 (18 of 18); the Phase 8 checkbox stays with the orchestrator's tooling.
 
 ### Gaps Summary
 
@@ -215,5 +216,5 @@ No gaps. The UAT-04 gap of the previous report is closed: block 4 is `pass`, the
 
 ---
 
-_Verified: 2026-10-11T13:50:00Z_
+_Verified: 2026-10-11T13:52:00Z_
 _Verifier: Claude (gsd-verifier)_

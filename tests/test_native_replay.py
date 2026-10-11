@@ -68,6 +68,24 @@ def _assert_clean(hass: HomeAssistant, device_id: str, replayed: list[str]) -> N
     assert _mqtt_device_of(hass, device_id) is None
 
 
+def _assert_no_working_duplicate(hass: HomeAssistant, device_id: str, replayed: list[str]) -> None:
+    """
+    Assert that no replayed entry works: each one is gone or stays disabled by the integration, without a state.
+
+    The duplicate guard disables the replayed switch before the quiet period ends, and the catch never removes a
+    disabled entry, because core MQTT clears the retained topic when a row it discovered while disabled leaves the
+    registry (CR-01). Such an entry stays disabled, and so does the MQTT device it sits on.
+    """
+    entity_registry = er.async_get(hass)
+    left = legacy_entity_ids(hass, device_id)
+    assert set(left) <= set(replayed)
+    assert all(
+        entity_registry.async_get(entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION for entity_id in left
+    )
+    for entity_id in replayed:
+        assert hass.states.get(entity_id) is None
+
+
 @pytest.mark.parametrize("replay_at", ["before_the_clear", "after_the_clear"])
 async def test_a_replay_during_the_pass_leaves_no_duplicate(
     hass: HomeAssistant,
@@ -104,7 +122,7 @@ async def test_a_replay_during_the_pass_leaves_no_duplicate(
     assert len(replayed[0]) == 3
     assert set(legacy_entity_ids(hass, legacy.device_id)) == set(replayed[0])  # the catch waits for the quiet period
     await _quiet_period_passes(hass)
-    _assert_clean(hass, legacy.device_id, replayed[0])
+    _assert_no_working_duplicate(hass, legacy.device_id, replayed[0])
     _assert_moved_and_native(hass, legacy, before)
 
 
@@ -175,7 +193,7 @@ async def test_a_replay_before_a_restart_of_a_finished_native_owner_is_cleaned_a
         assert len(replayed) == 3
         await _restart(hass, legacy.entry)
         await _quiet_period_passes(hass)
-        _assert_clean(hass, legacy.device_id, replayed)
+        _assert_no_working_duplicate(hass, legacy.device_id, replayed)
         _assert_moved_and_native(hass, legacy, before)
 
 

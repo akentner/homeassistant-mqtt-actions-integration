@@ -439,10 +439,15 @@ async def test_on_a_fresh_install_core_disables_the_row_and_the_guard_does_nothi
     assert calls == []
 
 
-async def test_the_export_off_cycle_leaves_disabled_rows_until_the_restart_and_a_disabled_tombstone(
+async def test_the_export_off_cycle_leaves_the_disabled_row_in_place_across_the_restart(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """G6: cleared export keeps the disabled row, the restart removes it, and the next export arrives disabled."""
+    """
+    G6, CR-01: cleared export keeps the disabled row, so does the restart, and the next export finds it disabled.
+
+    The replay catch never removes a disabled row: it cannot tell whether a retained export still sits on the topic,
+    and core MQTT clears that topic when a row it discovered while disabled leaves the registry.
+    """
     spec = make_spec(name="Foreign lamp")
     entry = await _native_mirror(hass, make_hub_entry, spec)
     registry = er.async_get(hass)
@@ -457,18 +462,43 @@ async def test_the_export_off_cycle_leaves_disabled_rows_until_the_restart_and_a
     await hass.async_block_till_done(wait_background_tasks=True)
     assert [row.entity_id for row in _mqtt_rows(hass, spec.device_id)] == [duplicate.entity_id]
 
-    # The next start removes it, and the removal leaves a record whose disabled state is integration
+    # The next start leaves the disabled row as it is
     await _restart(hass, entry)
     await _quiet_period_passes(hass)
-    assert _mqtt_rows(hass, spec.device_id) == []
-    assert (
-        registry.deleted_entities[("switch", "mqtt", spec.device_id)].disabled_by
-        is er.RegistryEntryDisabler.INTEGRATION
-    )
+    assert [row.entity_id for row in _mqtt_rows(hass, spec.device_id)] == [duplicate.entity_id]
+    assert registry.async_get(duplicate.entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
 
-    # The export comes back: core restores the row from that record, disabled, and the guard has nothing to do
+    # The export comes back: core finds the disabled row, and the guard has nothing to do
     calls = _count_disables(monkeypatch)
     back = _core_creates_the_row(hass, "switch", spec.device_id)
     await hass.async_block_till_done(wait_background_tasks=True)
+    assert back.entity_id == duplicate.entity_id
     assert back.disabled_by is er.RegistryEntryDisabler.INTEGRATION
     assert calls == []
+
+
+async def test_a_row_a_foreign_export_created_disabled_survives_the_restart_and_its_export_is_never_cleared(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """
+    CR-01: the export creates its row disabled, so core MQTT aborts the add and holds a hook for the row's removal.
+
+    That hook publishes an empty retained payload on the core-prefix topic, the other instance's export, as soon as
+    the row leaves the registry. The restart and the replay catch after its quiet period must leave the row alone.
+    """
+    spec = make_spec(name="Foreign lamp")
+    entry = await _native_mirror(hass, make_hub_entry, spec)
+    assert ("switch", "mqtt", spec.device_id) not in er.async_get(hass).deleted_entities
+    await _receive_foreign_export(hass, spec)
+    (row,) = _mqtt_rows(hass, spec.device_id)
+    assert row.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    topic, _payload = _foreign_export(spec)
+    published = len(mqtt_mock.async_publish.call_args_list)
+
+    await _restart(hass, entry)
+    await _quiet_period_passes(hass)
+
+    clears = [call for call in mqtt_mock.async_publish.call_args_list[published:] if call.args[0] == topic]
+    assert [call.args[1:4] for call in clears if not call.args[1]] == []
+    assert [entity.entity_id for entity in _mqtt_rows(hass, spec.device_id)] == [row.entity_id]
+    assert er.async_get(hass).async_get(row.entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION

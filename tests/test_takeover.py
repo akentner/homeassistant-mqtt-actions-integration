@@ -155,6 +155,11 @@ def _discovery_clears(mqtt_mock: Any, topic: str) -> list[Any]:
     return [call for call in mqtt_mock.async_publish.call_args_list if call.args[0] == topic and call.args[1] == ""]
 
 
+def _falsy_publishes(mqtt_mock: Any, topic: str) -> list[Any]:
+    """Return every clear on the topic: core MQTT clears with None, which `_discovery_clears` does not see."""
+    return [call for call in mqtt_mock.async_publish.call_args_list if call.args[0] == topic and not call.args[1]]
+
+
 class _NativeSwitch(SwitchEntity):
     """The native switch of the later plans, reduced to its identity: unique id and device identifier."""
 
@@ -705,6 +710,48 @@ async def test_a_customized_native_twin_is_kept_over_an_untouched_legacy_entry(
     assert device_registry.async_get(native_device.id) is not None
 
 
+async def _rediscover_disabled(hass: HomeAssistant, legacy: LegacyDevice, entity_ids: list[str]) -> None:
+    """
+    Disable rows and let core MQTT discover them again, the state an export or a restart leaves them in.
+
+    Core aborts the add of a disabled row and keeps a registry hook that clears the retained topic once the row is
+    removed from the registry.
+    """
+    entity_registry = er.async_get(hass)
+    for entity_id in entity_ids:
+        entity_registry.async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _deliver(hass, legacy.topic, legacy.payload)
+    assert not set(entity_ids) & set(entity_sources(hass))
+
+
+async def test_take_over_leaves_a_disabled_legacy_duplicate_in_place_so_core_clears_nothing(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """
+    CR-01: a legacy row that core MQTT discovered while it was disabled is never removed, even when its twin wins.
+
+    Removing it would make core clear the retained topic, which for a mirror is the topic of the other instance's
+    export. The disabled row already restores as disabled, so it stays where it is.
+    """
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    switch_id = entity_registry.async_get_entity_id("switch", "mqtt", legacy.device_id)
+    assert switch_id is not None
+    await _rediscover_disabled(hass, legacy, [switch_id])
+    natives, _before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    entity_registry.async_update_entity(natives[("switch", legacy.device_id)].entity_id, name="My own name")
+    mqtt_mock.async_publish.reset_mock()
+
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+    left = entity_registry.async_get(switch_id)
+    assert left is not None
+    assert (left.platform, left.disabled_by) == ("mqtt", er.RegistryEntryDisabler.INTEGRATION)
+
+
 async def test_a_select_device_moves_its_select_and_option_buttons(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_select_subentry: Callable
 ) -> None:
@@ -944,6 +991,31 @@ async def test_remove_replay_twins_disables_a_loaded_row_first_so_nothing_is_cle
     ]
     assert len(records) == 3
     assert all(record.disabled_by is er.RegistryEntryDisabler.INTEGRATION for record in records)
+
+
+async def test_remove_replay_twins_leaves_rows_core_discovered_while_they_were_disabled_so_nothing_is_cleared(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """
+    CR-01: core MQTT clears the retained topic when a row it discovered while disabled leaves the registry.
+
+    That is the usual state of a duplicate after a restart or of a row an export created, so the catch leaves every
+    disabled row in place: it already restores as disabled, and the topic may hold another instance's export.
+    """
+    legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    await _rediscover_disabled(hass, legacy, replayed)
+    mqtt_mock.async_publish.reset_mock()
+
+    assert _remove_replay_twins_of(hass, legacy) == 0
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+    entity_registry = er.async_get(hass)
+    assert sorted(legacy_entity_ids(hass, legacy.device_id)) == sorted(replayed)
+    assert all(
+        entity_registry.async_get(entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        for entity_id in replayed
+    )
 
 
 async def test_remove_replay_twins_leaves_an_entry_without_a_native_twin_and_keeps_the_device(

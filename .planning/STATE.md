@@ -5,16 +5,16 @@ milestone_name: Hardening
 current_phase: 08
 current_phase_name: Real-Instance Verification
 status: executing
-stopped_at: Completed 08-12-PLAN.md
-last_updated: "2026-10-10T23:54:58.990Z"
-last_activity: 2026-10-10
-last_activity_desc: Phase 08 execution started
-state_head: 72684c9c785ecc85b844c52a0be169959938ecb1
+stopped_at: Completed 08-13-PLAN.md
+last_updated: "2026-10-11T10:58:11.486Z"
+last_activity: 2026-10-11
+last_activity_desc: Plan 08-13 complete (UAT-04 re-run FAIL on ha-b)
+state_head: ebaaf6911c7962f059885eb74b84230d59ecfe31
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
   percent: 33
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-10-04)
 ## Current Position
 
 Phase: 08 (Real-Instance Verification) — EXECUTING
-Plan: 13 of 15 (08-12 complete; next 08-13, re-pin and scripted re-run)
+Plan: 14 of 15 (08-13 complete; next 08-14, record the re-run in the ledger)
 Status: Ready to execute
-Last activity: 2026-10-11 — Plan 08-12 complete (D08-WAIVER recorded, export-duplicate guard test-first, README and troubleshooting)
+Last activity: 2026-10-11 — Plan 08-13 complete (guard build re-pinned; UAT-02, UAT-03, P1-5 re-run PASS; UAT-04 re-run FAIL on ha-b)
 
 Progress: [███░░░░░░░] 33%
 
@@ -104,6 +104,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 06 P02 | 13 min | 3 tasks | 7 files |
 | Phase 08 P11 | 2 sessions | 3 tasks | 24 files |
 | Phase 08 P12 | 1 session | 3 tasks | 8 files |
+| Phase 08 P13 | 31 min | 2 tasks | 55 files |
 
 ## Accumulated Context
 
@@ -208,6 +209,8 @@ Recent decisions affecting current work:
 - [Phase 08]: UAT04-GAP-DISPOSITION: guard-and-document, full-rerun, not-affected confirmed by owner; classification TOMBSTONE-ONLY
 - [Phase 08]: D08-WAIVER: a product fix may land in Phase 8 for the UAT-04 clause 2 gap closure only (relayed 2026-10-08, confirmed by the owner in chat 2026-10-11); the failure rule of D-08 stands
 - [Phase 08]: 08-12: the export-duplicate guard disables, it does not remove, and uses public registry API only — armed while the export is on the core prefix, disarmed on export off, prefix change and stop
+- [Phase 08]: 08-13: UAT-04 re-run on the guard build FAILS on ha-b (X7 Lampe Test and Bar Select, X8); UAT-02, UAT-03 and P1-5 PASS; the guard only arms on the exporting instance, receivers of the export are not covered — Recorded as observed (D-08 failure rule); evidence in uat-04-rerun/, 08-14 records it in the ledger
+- [Phase 08]: 08-13: host reboot found at plan start; mosq started again and its preflight StartedAt anchor re-anchored (old value kept as .mosq-started-before-phase8.pre-reboot) — Bench recovery, not a result; disclosed in uat-04-rerun/prepare.txt
 
 ### Pending Todos
 
@@ -240,8 +243,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-10T10:45:40.732Z
-Stopped at: Completed 08-11-PLAN.md
+Last session: 2026-10-11T10:58:11.410Z
+Stopped at: Completed 08-13-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

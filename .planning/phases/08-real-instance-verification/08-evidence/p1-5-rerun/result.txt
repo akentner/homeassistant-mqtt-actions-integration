@@ -1,0 +1,11 @@
+PASS precondition run_on_startup :: false in the retained config document
+PASS 1 toggle ha-a :: observed 1 (expected 1)
+PASS 1 toggle ha-b :: observed 1 (expected 1)
+PASS 2 restart ha-a (new lifetime) :: observed 0 (expected 0)
+PASS 2 restart ha-b (new lifetime) :: observed 0 (expected 0)
+PASS 3 reconnect ha-a :: observed 0 (expected 0)
+PASS 3 reconnect ha-b :: observed 0 (expected 0)
+PASS 4 positive control ha-a :: observed 1 (expected 1)
+PASS 4 positive control ha-b :: observed 1 (expected 1)
+PASS mosq not restarted :: StartedAt 2026-10-11 12:31:00.946469776 +0200 CEST unchanged
+mosq StartedAt: 2026-10-11 12:31:00.946469776 +0200 CEST (unchanged when the line above says PASS)

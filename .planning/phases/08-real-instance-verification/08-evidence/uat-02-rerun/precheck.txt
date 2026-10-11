@@ -1,0 +1,3 @@
+date: 2026-10-11T10:35:12Z
+pinned sha: caf2fe5dc003ea834104f4016d1996be4132e0c8; HEAD: db021d16f4958c6be846fae79dac9a48dd1ac7b2; custom_components tree identical: 1cb50538851e579ef17895a84dce17dd9016a58b; mount byte-identical; hashes equal
+StartedAt before the run: ha-a 2026-10-11 12:31:43.914421407 +0200 CEST, ha-b 2026-10-11 12:31:43.956202409 +0200 CEST

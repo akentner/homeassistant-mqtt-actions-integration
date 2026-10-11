@@ -1,0 +1,12 @@
+== default prefix (prefix mqtt_actions_export)
+topics read back: 3
+device 11111111-aaaa-4aaa-8aaa-000000000001: name=Lampe Test components=[{"key":"switch","platform":"switch","enabled_by_default":false}]
+device b6bd2c0e-6d81-49ea-8025-4bd087bd718a: name=Bar Select components=[{"key":"select","platform":"select","enabled_by_default":false}]
+device 33239fb1-67a9-481f-9f69-afdab7b31417: name=UAT Marker components=[{"key":"switch","platform":"switch","enabled_by_default":false}]
+extra topics (not one of the three devices): 
+== core prefix (prefix homeassistant)
+topics read back: 3
+device 11111111-aaaa-4aaa-8aaa-000000000001: name=Lampe Test components=[{"key":"switch","platform":"switch","enabled_by_default":false}]
+device b6bd2c0e-6d81-49ea-8025-4bd087bd718a: name=Bar Select components=[{"key":"select","platform":"select","enabled_by_default":false}]
+device 33239fb1-67a9-481f-9f69-afdab7b31417: name=UAT Marker components=[{"key":"switch","platform":"switch","enabled_by_default":false}]
+extra topics (not one of the three devices): 

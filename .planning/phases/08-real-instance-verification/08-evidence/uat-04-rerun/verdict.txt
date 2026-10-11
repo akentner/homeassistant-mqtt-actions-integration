@@ -1,0 +1,2 @@
+FAIL
+FAIL X7 ha-b 11111111-aaaa-4aaa-8aaa-000000000001 :: mqtt rows with this unique id: 1, disabled_by: '';FAIL X7 ha-b b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: mqtt rows with this unique id: 1, disabled_by: '';FAIL X8 ha-b :: 2 enabled mqtt row(s): ["select.bar_select_2","switch.lampe_test_2"];

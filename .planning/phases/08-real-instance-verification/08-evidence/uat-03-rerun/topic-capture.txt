@@ -1,0 +1,6 @@
+2026-10-11T12:41:09+0200 mqtt_actions/v1/devices/33239fb1-67a9-481f-9f69-afdab7b31417/state retain=0 payload=ON
+2026-10-11T12:42:15+0200 mqtt_actions/v1/devices/33239fb1-67a9-481f-9f69-afdab7b31417/state retain=0 payload=OFF
+2026-10-11T12:43:15+0200 mqtt_actions/v1/devices/33239fb1-67a9-481f-9f69-afdab7b31417/state retain=0 payload=ON
+2026-10-11T12:44:17+0200 mqtt_actions/v1/devices/33239fb1-67a9-481f-9f69-afdab7b31417/state retain=0 payload=banana
+2026-10-11T12:46:42+0200 mqtt_actions/v1/devices/33239fb1-67a9-481f-9f69-afdab7b31417/state retain=0 payload=OFF
+2026-10-11T12:50:29+0200 mqtt_actions/v1/devices/33239fb1-67a9-481f-9f69-afdab7b31417/state retain=0 payload=ON

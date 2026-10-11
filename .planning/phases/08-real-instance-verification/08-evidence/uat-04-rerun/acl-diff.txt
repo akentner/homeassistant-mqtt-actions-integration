@@ -1,0 +1,36 @@
+--- /home/akentner/ha-test/mosquitto/acl.bak-phase8-04	2026-10-04 20:48:48.228715220 +0200
++++ /home/akentner/ha-test/mosquitto/acl	2026-10-07 23:03:30.461667944 +0200
+@@ -6,6 +6,7 @@
+ topic readwrite mqtt_actions/v1/devices/+/state
+ topic readwrite mqtt_actions/v1/devices/+/test
+ topic readwrite homeassistant/#
++topic readwrite mqtt_actions_export/#
+ topic read mqtt_actions/v1/instances/+/availability
+ topic write mqtt_actions/v1/instances/3851f34f-fa67-4f3c-bba0-122465013c3d/availability
+ 
+@@ -17,8 +18,10 @@
+ topic readwrite mqtt_actions/v1/devices/+/state
+ topic readwrite mqtt_actions/v1/devices/+/test
+ topic readwrite homeassistant/#
++topic readwrite mqtt_actions_export/#
+ topic read mqtt_actions/v1/instances/+/availability
+ topic write mqtt_actions/v1/instances/a09499e4-5674-48d5-b3d6-4860d5226fcb/availability
++topic write mqtt_actions/v1/instances/b4cf285b-428f-426b-9500-8e269634356e/availability
+ 
+ user bridge
+ topic readwrite mqtt_actions/v1/devices/+/state
+@@ -28,3 +31,14 @@
+ 
+ user uat_bridge
+ topic readwrite mqtt_actions/v1/devices/+/state
++
++user ha_three
++topic readwrite mqtt_actions/v1/devices/+/retrigger
++topic readwrite mqtt_actions/v1/instances/+/acks
++topic readwrite mqtt_actions/v1/instances/+/heartbeat
++topic readwrite mqtt_actions/v1/devices/+/config
++topic readwrite mqtt_actions/v1/devices/+/state
++topic readwrite mqtt_actions/v1/devices/+/test
++topic readwrite homeassistant/#
++topic read mqtt_actions/v1/instances/+/availability
++topic write mqtt_actions/v1/instances/f292c620-c6e8-4563-ae3c-38f64d4b344e/availability

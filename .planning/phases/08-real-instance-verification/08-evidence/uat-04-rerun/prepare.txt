@@ -80,3 +80,20 @@ new mount-hashes.txt:
   ha-b const.py host=ff5ec83c3a720c28 container=ff5ec83c3a720c28 match
   ha-b document.py host=3fa07dec17fcce94 container=3fa07dec17fcce94 match
 PASS preflight (quick) /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/08-real-instance-verification/08-evidence/00-preflight
+
+== marker fixture reset before the full re-run (2026-10-11T10:33Z, steps of plan 08-13 Task 2)
+reason: UAT-03 needs the approval of the mirror on ha-b pending (check-marker.sh pending), and the first UAT-03 run had approved it
+before: UAT Marker 81d53f84-469e-4937-a3bb-09b24f11e4e4 (subentry on ha-a), mirror approved on ha-b, check-marker.sh pending FAIL (no pending approval issue)
+step 1: subentry of the marker deleted on ha-a through config_entries/subentries/delete; both UAT Marker entities gone within 3 s, no retained topic left under
+  mqtt_actions/v1/devices/81d53f84-469e-4937-a3bb-09b24f11e4e4/
+step 2: MARKER_ID line removed from ~/ha-test/.fixtures.env (copy kept as .fixtures.env.pre-08-13, outside the repo)
+step 3: the same inert marker imported again with setup-marker.sh (content read back from export_devices of the old marker: Switch UAT Marker,
+  system_log.write level warning, messages UAT03-MARKER on and UAT03-MARKER off, run_on_startup false); new uuid 33239fb1-67a9-481f-9f69-afdab7b31417
+  (setup-marker.sh ran with PHASE8_EV_SUFFIX=-rerun, so its fixture.txt is in uat-03-rerun/ and uat-03/fixture.txt is untouched)
+after: check-marker.sh pending PASS
+the old marker's mqtt tombstone (switch.uat_marker_2, 81d53f84..., disabled_by integration) stays in both registries; the new marker has none
+
+== bench state after the full re-run (check-uat04.sh clean PASS, check-preflight.sh --quick PASS)
+leftover rows after the export was switched off (observation of check-uat04.sh, as in the first run): mqtt rows live ha-a 3, ha-b 1;
+  check-uat02.sh clean therefore FAILs now (mqtt rows, _2 entity ids and a legacy device left by the UAT-04 run), and was not part of this plan's verification.
+  Nothing was repeated and nothing was cleaned to change the recorded outcome.

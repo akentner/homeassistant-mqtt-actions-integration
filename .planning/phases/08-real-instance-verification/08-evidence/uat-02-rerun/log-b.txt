@@ -1,0 +1,18 @@
+== round 1 (instance started 2026-10-11 12:35:29.65825657 +0200 CEST) ==
+2026-10-11 12:35:41.532 INFO (MainThread) [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+2026-10-11 12:35:41.534 INFO (MainThread) [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+2026-10-11 12:35:41.552 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-11 12:35:41.554 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-11 12:35:41.556 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-11 12:35:41.564 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'
+2026-10-11 12:35:41.567 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'
+2026-10-11 12:35:41.570 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'
+== round 2 (instance started 2026-10-11 12:37:16.809394591 +0200 CEST) ==
+2026-10-11 12:37:28.367 INFO (MainThread) [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+2026-10-11 12:37:28.367 INFO (MainThread) [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+2026-10-11 12:37:28.376 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-11 12:37:28.376 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-11 12:37:28.376 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-11 12:37:28.378 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'
+2026-10-11 12:37:28.378 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'
+2026-10-11 12:37:28.378 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'

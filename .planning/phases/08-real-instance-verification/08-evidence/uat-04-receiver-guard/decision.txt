@@ -1,0 +1,6 @@
+extend-and-confirm
+2026-10-11
+waiver-scope: UAT-04 clause 2, plans 08-16 to 08-18, outcome recorded by plans 08-14 and 08-15; the failure rule of D-08 stands
+not-affected-confirmed: yes
+checks-to-widen: none
+The owner's words, as relayed by the orchestrator: the selected option id was "extend-and-confirm". The owner chose it in answer to the orchestrator's question "Plan 08-16 (Wave 14) braucht deine Entscheidung UAT04-RECEIVER-GUARD ...". The owner gave no further free text.

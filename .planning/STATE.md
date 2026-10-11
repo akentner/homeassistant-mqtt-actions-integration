@@ -5,16 +5,16 @@ milestone_name: Hardening
 current_phase: 08
 current_phase_name: Real-Instance Verification
 status: executing
-stopped_at: Completed 08-13-PLAN.md
-last_updated: "2026-10-11T10:58:11.486Z"
+stopped_at: Completed 08-16-PLAN.md
+last_updated: "2026-10-11T12:12:24.682Z"
 last_activity: 2026-10-11
-last_activity_desc: Plan 08-13 complete (UAT-04 re-run FAIL on ha-b)
-state_head: ebaaf6911c7962f059885eb74b84230d59ecfe31
+last_activity_desc: Plan 08-16 complete (owner decision UAT04-RECEIVER-GUARD extend-and-confirm)
+state_head: fab6fede4ccb81fe4ba664997771ba631de0dca6
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 22
-  completed_plans: 20
+  total_plans: 25
+  completed_plans: 21
   percent: 33
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-10-04)
 ## Current Position
 
 Phase: 08 (Real-Instance Verification) — EXECUTING
-Plan: 14 of 15 (08-13 complete; next 08-14, record the re-run in the ledger)
+Plan: 17 of 18 (08-16 complete; next 08-17, receiver-side guard test-first; then 08-18, 08-14, 08-15)
 Status: Ready to execute
-Last activity: 2026-10-11 — Plan 08-13 complete (guard build re-pinned; UAT-02, UAT-03, P1-5 re-run PASS; UAT-04 re-run FAIL on ha-b)
+Last activity: 2026-10-11 — Plan 08-16 complete (owner chose extend-and-confirm; D-08 waiver extended to plans 08-16 to 08-18; 08-13 FAIL recorded as history)
 
 Progress: [███░░░░░░░] 33%
 
@@ -105,6 +105,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 08 P11 | 2 sessions | 3 tasks | 24 files |
 | Phase 08 P12 | 1 session | 3 tasks | 8 files |
 | Phase 08 P13 | 31 min | 2 tasks | 55 files |
+| Phase 08 P16 | 10m | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -211,6 +212,7 @@ Recent decisions affecting current work:
 - [Phase 08]: 08-12: the export-duplicate guard disables, it does not remove, and uses public registry API only — armed while the export is on the core prefix, disarmed on export off, prefix change and stop
 - [Phase 08]: 08-13: UAT-04 re-run on the guard build FAILS on ha-b (X7 Lampe Test and Bar Select, X8); UAT-02, UAT-03 and P1-5 PASS; the guard only arms on the exporting instance, receivers of the export are not covered — Recorded as observed (D-08 failure rule); evidence in uat-04-rerun/, 08-14 records it in the ledger
 - [Phase 08]: 08-13: host reboot found at plan start; mosq started again and its preflight StartedAt anchor re-anchored (old value kept as .mosq-started-before-phase8.pre-reboot) — Bench recovery, not a result; disclosed in uat-04-rerun/prepare.txt
+- [Phase 08]: UAT04-RECEIVER-GUARD extend-and-confirm (2026-10-11): D08-WAIVER extends to plans 08-16 to 08-18 for UAT-04 clause 2; guard armed on every native instance; UAT-01, P2-2 and owner-judged frontend items confirmed not affected; D-08 failure rule stands
 
 ### Pending Todos
 
@@ -243,8 +245,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-11T10:58:11.410Z
-Stopped at: Completed 08-13-PLAN.md
+Last session: 2026-10-11T12:12:24.610Z
+Stopped at: Completed 08-16-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

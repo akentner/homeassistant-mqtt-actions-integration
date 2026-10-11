@@ -490,21 +490,27 @@ async def test_a_restored_enabled_state_is_disabled_by_the_guard(
     assert enabled == [native]
 
 
-async def test_an_enabled_row_that_exists_when_the_export_is_switched_on_is_disabled(
+async def test_an_enabled_row_that_exists_when_the_instance_starts_is_disabled(
     hass: HomeAssistant,
     mqtt_mock: Any,
     hass_storage: dict[str, Any],
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
 ) -> None:
-    """The sweep: no registry event follows, so the guard finds the row when it is armed."""
+    """The sweep: no registry event follows, so the guard finds the row when it is armed at the start (R-3)."""
     _seed_native(hass_storage)
     subentry = make_switch_subentry("Lamp")
     device_id = _device_id(subentry)
     entry = await _setup(hass, make_hub_entry([subentry]))
+    assert entry.options == {}
+    assert er.async_get(hass).async_get_entity_id("switch", DOMAIN, device_id) is not None
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
     row = _mqtt_row(hass, "switch", device_id, device=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert er.async_get(hass).async_get(row).disabled_by is None
 
-    hass.config_entries.async_update_entry(entry, options=CORE_EXPORT)
+    assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION

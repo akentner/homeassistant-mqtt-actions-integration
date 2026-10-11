@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.041" timestamp="2026-10-11T14:20:32.369884+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_export_guard_receiver" name="test_a_row_without_a_native_twin_is_no_duplicate_and_stays_enabled" time="0.897"><failure message="AssertionError: assert &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; is None&#10; +  where &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; = RegistryEntry(entity_id='switch.mqtt', unique_id='d74ad64a-34dd-4cc0-80a1-866e39a4a0db', platform='mqtt', previous_uni...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}).disabled_by&#10; +    where RegistryEntry(entity_id='switch.mqtt', unique_id='d74ad64a-34dd-4cc0-80a1-866e39a4a0db', platform='mqtt', previous_uni...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}) = async_get('switch.mqtt')&#10; +      where async_get = &lt;homeassistant.helpers.entity_registry.EntityRegistry object at 0x7f917711ef90&gt;.async_get">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140262696870848'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9176ff2b90&gt;
+
+    async def test_a_row_without_a_native_twin_is_no_duplicate_and_stays_enabled(
+        hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+    ) -&gt; None:
+        """E1, T-08-48: a row is a duplicate only next to a native entity of the same domain and unique id."""
+        spec = make_spec(name="Foreign lamp")
+        entry = await _native_mirror(hass, make_hub_entry, spec)
+        registry = er.async_get(hass)
+        assert _manager(entry).is_native(spec.device_id)
+        native = _entity_id(hass, "switch", spec.device_id)
+        assert native is not None
+        registry.async_remove(native)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert _entity_id(hass, "switch", spec.device_id) is None
+    
+        row = _mqtt_row(hass, "switch", spec.device_id, device=True)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+&gt;       assert registry.async_get(row).disabled_by is None
+E       AssertionError: assert &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; is None
+E        +  where &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; = RegistryEntry(entity_id='switch.mqtt', unique_id='d74ad64a-34dd-4cc0-80a1-866e39a4a0db', platform='mqtt', previous_uni...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}).disabled_by
+E        +    where RegistryEntry(entity_id='switch.mqtt', unique_id='d74ad64a-34dd-4cc0-80a1-866e39a4a0db', platform='mqtt', previous_uni...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}) = async_get('switch.mqtt')
+E        +      where async_get = &lt;homeassistant.helpers.entity_registry.EntityRegistry object at 0x7f917711ef90&gt;.async_get
+
+tests/test_export_guard_receiver.py:172: AssertionError</failure></testcase></testsuite></testsuites>

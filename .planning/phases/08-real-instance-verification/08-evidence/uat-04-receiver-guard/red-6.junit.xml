@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.991" timestamp="2026-10-11T14:20:38.086993+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_export_guard_receiver" name="test_a_pass_that_disables_something_logs_one_line_with_a_count_and_nothing_else" time="0.884"><failure message="assert 0 == 1&#10; +  where 0 = len([])">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140562651538368'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fd759c56a30&gt;
+
+    async def test_a_pass_that_disables_something_logs_one_line_with_a_count_and_nothing_else(
+        hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+    ) -&gt; None:
+        """E3, R-5, T-08-52: the line holds a count only, no id, name, payload or entity id; a pass of nothing is silent."""
+        spec = make_spec(name="Foreign lamp")
+        entry = await _native_mirror(hass, make_hub_entry, spec)
+        lines = _Lines()
+        logger = logging.getLogger(OWN_LOGGER)
+        previous_level = logger.level
+        logger.setLevel(logging.INFO)
+        logger.addHandler(lines)
+        try:
+            row = _mqtt_row(hass, "switch", spec.device_id, device=True)
+            await hass.async_block_till_done(wait_background_tasks=True)
+    
+            assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+            found = lines.duplicate_lines()
+&gt;           assert len(found) == 1
+E           assert 0 == 1
+E            +  where 0 = len([])
+
+tests/test_export_guard_receiver.py:235: AssertionError</failure></testcase></testsuite></testsuites>

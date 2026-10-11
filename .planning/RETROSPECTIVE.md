@@ -45,6 +45,43 @@
 
 ---
 
+## Milestone: v1.0.1 — Hardening
+
+**Closed:** 2026-10-11 (accepted gap ACCEPTED-GAP-V101, not released)
+**Phases:** 3 | **Plans:** 25
+
+### What Was Built
+- Native flag of a mirror as a sticky id set in the Store (MIG-04) and a registry-only replay catch (MIG-05).
+- All CI, Validate and Release jobs pinned to `ubuntu-24.04`; the flake class fixed at its cause (unscoped `caplog`).
+- The four skipped Phase 5 UAT checks plus ten deferred Phase 1 to 3 human checks run on a real three-instance bench.
+- A duplicate guard on every native instance that disables, never removes, core-prefix duplicates and keeps user-customized rows.
+
+### What Worked
+- The real bench found a product defect no automated tier could: UAT-04 failed twice on the receiver before the guard covered it.
+- TDD held through the late fixes: every review finding got a failing-test commit first, and the fixer ran the new tests against the old code.
+- A second, deep code review on the fix commits found a Critical (CR-01) that the first review had rated as a warning.
+
+### What Was Inefficient
+- Phase 8 grew from 10 to 18 plans through two gap-closure rounds; a "verification only" phase ended up carrying product fixes under a waiver (D-08).
+- The late review fixes made every verification report stale again, so the milestone closed with an accepted gap instead of a clean re-run.
+- Phase 7's QLT-01 depended on human checks that the Phase 8 success criteria did not name until later.
+
+### Patterns Established
+- Disable, do not remove, registry rows that core MQTT may own: a removal can make core clear a foreign retained topic.
+- Verify HA-internal assumptions against the installed core source before fixing; report deviations instead of implementing them (D1 to D3).
+- Owner decisions get an ID and a verbatim quote in the ledger (UAT04-GAP-DISPOSITION, D08-WAIVER, ACCEPTED-GAP-V101).
+
+### Key Lessons
+- Keep product fixes out of verification phases, or plan a re-verification step after them from the start.
+- Run the deep cross-file review before the bench re-run, not after it, so the bench evidence covers the final code.
+
+### Cost Observations
+- Model mix: not tracked
+- Sessions: not tracked
+- Notable: 177 commits in 9 days; tests grew from 1458 to 1535.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -52,13 +89,16 @@
 | Milestone | Sessions | Phases | Key Change |
 |-----------|----------|--------|------------|
 | v1.0 | n/a | 5 | TDD with per-plan threat models, human gate before one-way migration |
+| v1.0.1 | n/a | 3 | Real three-instance bench, owner decisions with IDs, second deep review on fix commits |
 
 ### Cumulative Quality
 
 | Milestone | Tests | Coverage | Zero-Dep Additions |
 |-----------|-------|----------|-------------------|
 | v1.0 | 1458 passed (1 known flake) | not measured | 0 runtime dependencies |
+| v1.0.1 | 1535 passed, 2 strict xfail, flake fixed | not measured | 0 runtime dependencies |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. (Single milestone so far, lessons to be cross-checked after v1.1.)
+1. Real-instance checks find what the test tiers miss (v1.0 Phase 5 UAT debt, v1.0.1 UAT-04 receiver gap); plan bench time, do not defer it.
+2. Verification goes stale when code changes after it; order fixes before the final verification (v1.0 stale Phases 1 to 4, v1.0.1 accepted gap).

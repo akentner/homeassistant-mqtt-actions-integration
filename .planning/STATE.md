@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v1.0.1
 milestone_name: Hardening
 current_phase: 08
-current_phase_name: Real-Instance Verification
+current_phase_name: real-instance-verification
 status: executing
-stopped_at: Completed 08-17-PLAN.md
-last_updated: "2026-10-11T12:23:55.910Z"
+stopped_at: Completed 08-18-PLAN.md
+last_updated: "2026-10-11T13:28:29.920Z"
 last_activity: 2026-10-11
 last_activity_desc: Phase 08 execution started
-state_head: d7354c827fc7687ae381437b2a14ff6c78af4f07
+state_head: 93af3450bc12a7c2a3e427521e8e7aed3fe99ea5
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 25
-  completed_plans: 22
+  completed_plans: 23
   percent: 33
 ---
 
@@ -25,11 +25,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-04)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 08 — Real-Instance Verification
+**Current focus:** Phase 08 — real-instance-verification
 
 ## Current Position
 
-Phase: 08 (Real-Instance Verification) — EXECUTING
+Phase: 08 (real-instance-verification) — EXECUTING
 Plan: 2 of 18
 Status: Ready to execute
 Last activity: 2026-10-11 — Phase 08 execution started
@@ -107,6 +107,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 08 P13 | 31 min | 2 tasks | 55 files |
 | Phase 08 P16 | 10m | 2 tasks | 4 files |
 | Phase 08 P17 | 15min | 3 tasks | 7 files |
+| Phase 08 P18 | 37 min | 2 tasks | 57 files |
 
 ## Accumulated Context
 
@@ -215,6 +216,7 @@ Recent decisions affecting current work:
 - [Phase 08]: 08-13: host reboot found at plan start; mosq started again and its preflight StartedAt anchor re-anchored (old value kept as .mosq-started-before-phase8.pre-reboot) — Bench recovery, not a result; disclosed in uat-04-rerun/prepare.txt
 - [Phase 08]: UAT04-RECEIVER-GUARD extend-and-confirm (2026-10-11): D08-WAIVER extends to plans 08-16 to 08-18 for UAT-04 clause 2; guard armed on every native instance; UAT-01, P2-2 and owner-judged frontend items confirmed not affected; D-08 failure rule stands
 - [Phase 08]: 08-17: duplicate guard armed on every native instance, independent of the export option; candidate needs a native twin, disable-only
+- [Phase 08]: UAT-04 passes on the receiver-guard build from the restored failing tombstone state; UAT-02, UAT-03 and P1-5 pass as well; outcome recorded by plan 08-14
 
 ### Pending Todos
 
@@ -247,8 +249,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-11T12:23:55.838Z
-Stopped at: Completed 08-17-PLAN.md
+Last session: 2026-10-11T13:28:29.840Z
+Stopped at: Completed 08-18-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

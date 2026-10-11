@@ -1210,6 +1210,80 @@ async def test_remove_replay_twins_leaves_a_newer_entry_that_holds_any_user_cust
     assert entity_registry.async_get(customized.entity_id) is not None
 
 
+@pytest.mark.parametrize(
+    "rejected",
+    [{"disabled_by": er.RegistryEntryDisabler.USER}, {"hidden_by": er.RegistryEntryHider.USER}],
+    ids=["twin_disabled_by_user", "twin_hidden_by_user"],
+)
+@pytest.mark.parametrize("legacy_name", [None, "Kitchen"], ids=["untouched_legacy", "named_legacy"])
+async def test_disable_duplicates_keeps_the_legacy_entry_when_the_user_turned_the_native_twin_off(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    rejected: dict[str, Any],
+    legacy_name: str | None,
+) -> None:
+    """
+    WR-03: a twin the user disabled or hid is the entity they rejected, not the identity they keep.
+
+    Disabling the legacy entry as well would leave no enabled, visible entity for the unique id, and the guard would
+    disable it again at every start.
+    """
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    entity_registry = er.async_get(hass)
+    switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
+    entity_registry.async_update_entity(switch.entity_id, name=legacy_name)
+    twin = entity_registry.async_update_entity(natives[("switch", legacy.device_id)].entity_id, **rejected)
+
+    assert _disable_duplicates_of(hass, legacy) == 0
+
+    assert entity_registry.async_get(switch.entity_id).disabled_by is None
+    assert entity_registry.async_get(twin.entity_id) == twin
+
+
+async def test_disable_duplicates_disables_a_legacy_entry_the_user_hid(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """WR-03: a legacy entry the user hid is the one they rejected; the hidden state is no customization to protect."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    _natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    entity_registry = er.async_get(hass)
+    switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
+    entity_registry.async_update_entity(switch.entity_id, hidden_by=er.RegistryEntryHider.USER)
+
+    assert _disable_duplicates_of(hass, legacy) == 1
+
+    assert entity_registry.async_get(switch.entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+async def test_with_both_entries_customized_neither_the_guard_nor_the_catch_touches_the_legacy_entry(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """
+    WR-03: when both entries hold the user's choices, no automatic rule knows which one automations use.
+
+    The newer legacy entry is neither removed by the catch, which would leave its name and labels only in a deleted
+    record no UI reaches, nor disabled by the guard.
+    """
+    legacy, moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    switch_id = next(entity_id for entity_id in replayed if entity_id.startswith("switch."))
+    twin_id = next(entity_id for entity_id in moved if entity_id.startswith("switch."))
+    entity_registry.async_update_entity(switch_id, name="Kitchen", labels={"kitchen"})
+    entity_registry.async_update_entity(twin_id, name="Lamp")
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _remove_replay_twins_of(hass, legacy) == 2
+    assert _disable_duplicates_of(hass, legacy) == 0
+
+    kept = entity_registry.async_get(switch_id)
+    assert kept is not None
+    assert (kept.name, kept.labels, kept.disabled_by) == ("Kitchen", {"kitchen"}, None)
+    assert entity_registry.async_get(twin_id).name == "Lamp"
+
+
 async def test_disable_duplicates_still_disables_an_entry_whose_only_option_is_the_exposure_core_stores_itself(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
 ) -> None:

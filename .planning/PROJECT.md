@@ -8,15 +8,15 @@ A Home Assistant custom integration (HACS-ready) that turns MQTT state changes i
 
 A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
 
-## Current Milestone: v1.0.1 Hardening
+## Current State
 
-**Goal:** Close the known residuals of v1.0: two small native-entity fixes, clean verification, stable tests and CI, and the Phase 5 UAT debt on real instances.
+v1.0.1 Hardening closed 2026-10-11 with an accepted verification gap (owner decision ACCEPTED-GAP-V101). The code fixes and the real-instance UAT are done; v1.0.1 is not released or tagged. The last public release stays v1.0.0. A v1.0.1 release needs a bench re-run of UAT-02 and UAT-04 on the final build first.
 
-**Target features:**
-- A native mirror stays native after a restart, even near the document size limit (IN-02)
-- The takeover survives a boot-time retained Discovery replay without a duplicate (IN-03)
-- Phases 1 to 4 re-verified, flaky test stabilized, CI and release on a pinned runner version
-- Manual verification on real instances: straggler v0.1.0, late replay race, commands across two instances, Discovery export on/off
+## Next Milestone Goals (v1.1, to be defined with `/gsd-new-milestone`)
+
+- Per-instance local actions on mirrored devices (backlog 999.1, MIR-01, relates to MAP-01)
+- Info findings of the two Phase 8 reviews (IN-01 to IN-04 and IN-01 to IN-03, incl. a Repairs hint for two customized rows)
+- Full re-verification at the end of v1.1: Phases 1 to 8 reports current, UAT-02 and UAT-04 re-run on the final build, then a release
 
 ## Requirements
 
@@ -34,14 +34,17 @@ A state change on one MQTT-backed device reliably triggers the configured action
 - ✓ Deleting a device removes it from the central config and its entities everywhere, after an explicit all-instances warning — v1.0
 - ✓ Re-trigger service runs the actions on all approving instances — v1.0
 - ✓ HACS-compatible structure with releases and CI (hassfest, HACS validation, three test tiers) — v1.0 (v0.1.0, v1.0.0)
+- ✓ A native mirror stays native after a restart, even near `MAX_DOCUMENT_BYTES` (IN-02, MIG-04) — v1.0.1
+- ✓ The takeover survives a boot-time retained Discovery replay without a duplicate entity (IN-03, MIG-05) — v1.0.1
+- ✓ CI and release on a pinned runner, flaky test fixed at its cause (QLT-02, QLT-03) — v1.0.1 (per Phase 7 verification; not ticked, see accepted gap)
+- ✓ Phase 5 UAT debt closed on real instances (UAT-01 to UAT-04) — v1.0.1
+- ✓ Core-prefix duplicates are disabled, never removed, on every native instance; user-customized rows are kept — v1.0.1 (unit tests only for the final review fixes)
 
 ### Active
 
-- [ ] A native mirror stays native after a restart, even near `MAX_DOCUMENT_BYTES` (IN-02) — v1.0.1
-- [ ] The takeover survives a boot-time retained Discovery replay without a duplicate entity (IN-03) — v1.0.1
-- [ ] Phases 1 to 4 re-verified, flaky test stabilized, CI and release on a pinned runner version — v1.0.1
-- [ ] Phase 5 UAT debt closed on real instances (tests 4 to 7) — v1.0.1
-- [ ] Per-instance local actions on mirrored devices (backlog 999.1, relates to MAP-01) — later milestone
+- [ ] Current verification of Phases 1 to 8 on the final build (QLT-01 carried over, accepted gap of v1.0.1) — v1.1
+- [ ] Per-instance local actions on mirrored devices (backlog 999.1, relates to MAP-01) — v1.1
+- [ ] Info findings of the Phase 8 reviews — v1.1
 - [ ] Authenticate or ACL-protect the cutover gate (WR-03) — with the EMQX migration
 
 ### Out of Scope
@@ -57,6 +60,8 @@ A state change on one MQTT-backed device reliably triggers the configured action
 - Actions and configuration travel through the broker, so trust in the broker and its ACLs is a security concern (remote-provided action sequences execute locally).
 
 Shipped v1.0 (2026-10-03) with about 9,200 lines of Python and three test tiers (unit, real Mosquitto, multi-instance). Released as v0.1.0 and v1.0.0 on GitHub. Known limits are listed in the README (Limitations).
+
+Closed v1.0.1 (2026-10-11, not released): about 9,500 lines of Python, 1535 tests passing (2 strict xfail), CI pinned to `ubuntu-24.04`. Real-instance bench ha-a, ha-b, ha-c with its own broker users; tokens and bench state are owner follow-ups. Tech debt: verification reports of Phases 1 to 8 read stale or human_needed after the late review fixes; disabled MQTT duplicates stay in the registry (CR-01); entity-id rename and assistant exposure are not detected as customization.
 
 ## Constraints
 
@@ -77,6 +82,10 @@ Shipped v1.0 (2026-10-03) with about 9,200 lines of Python and three test tiers 
 | Remote actions need per-instance approval of the exact hash | Broker content must never execute without a local opt-in | ✓ Good (v1.0), Phase 5 audit 19/19 threats closed |
 | Native entities instead of MQTT Discovery | Every device and entity of every instance appears on the integration page, and the native path needs no healing | ✓ Good (ADR 0001, v1.0), one-way upgrade documented |
 | Broker is cooperative and unauthenticated | Owner decision, EMQX migration planned; per-instance ACL is the real control | ⚠️ Revisit with the EMQX migration |
+| Native flag of a mirror is a sticky set of ids in the Store (v1.0.1, D-01 to D-03) | The payload marker did not fit near the size limit | ✓ Good |
+| Replay catch and duplicate guard are registry-only and disable rather than remove (v1.0.1, 06-02, 08-12, 08-17) | Removing a row lets core clear a retained topic; disabling keeps identities and user data | ✓ Good, CR-01 leaves disabled rows behind (accepted) |
+| D-08 waiver: product fixes allowed inside the verification phase for UAT-04 clause 2 (v1.0.1) | The gap was a real product defect found on the bench | — Pending: one-off, keep fixes out of verification phases |
+| Close v1.0.1 with an accepted verification gap (ACCEPTED-GAP-V101) | Late review fixes made the reports stale; a full re-run costs a bench cycle | ⚠️ Revisit: re-verify and re-run UAT-02/UAT-04 before any release |
 
 ## Evolution
 
@@ -96,4 +105,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-04 after starting milestone v1.0.1*
+*Last updated: 2026-10-11 after v1.0.1 milestone*

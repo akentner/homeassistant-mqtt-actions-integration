@@ -2,39 +2,37 @@
 gsd_state_version: "1.0"
 milestone: v1.0.1
 milestone_name: Hardening
-current_phase: 7
-current_phase_name: Verification, Stable Tests and Pinned CI
-status: planning
-stopped_at: Phase 8 complete, ready to plan Phase 7
-last_updated: "2026-10-11T13:52:00.479Z"
+status: Awaiting next milestone
+stopped_at: Milestone v1.0.1 closed (accepted gap), ready for /gsd-new-milestone
+last_updated: "2026-10-11T16:04:31.709Z"
 last_activity: 2026-10-11
-last_activity_desc: Phase 8 complete, transitioned to Phase 7
-state_head: a83d193ab9bfa3fba2ee45715903b4c76d97bd55
+last_activity_desc: Milestone v1.0.1 completed and archived
+state_head: 2150db6eb9ddf72accc6273f6cb0a9b6bd9e4e06
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 25
   completed_plans: 25
   percent: 67
+current_phase: 7
+current_phase_name: Verification, Stable Tests and Pinned CI
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-04)
+See: .planning/PROJECT.md (updated 2026-10-11)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 08 — Real-Instance Verification
+**Current focus:** Planning next milestone (v1.1); v1.0.1 closed with accepted gap ACCEPTED-GAP-V101, not released
 
 ## Current Position
 
-Phase: 7 — Verification, Stable Tests and Pinned CI
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-10-11 — Phase 8 complete, transitioned to Phase 7
-
-Progress: [███████░░░] 67%
+Phase: Milestone v1.0.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-11 — Milestone v1.0.1 completed and archived
 
 ## Performance Metrics
 
@@ -228,13 +226,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 1]: Confirm haos-op3050-1, lxc-haos-104 and hassio-n2plus can all run HA 2026.9.0 (Python 3.14) before fixing the `hacs.json` floor
-- [Phase 1]: Spike needed: `ActionSelector` rendering and field-level validation inside a subentry flow (LOW confidence); verify local brand icon path against current HACS docs
-- [Phase 2]: Spike needed: generated Select `value_template`/`command_template` with escaping, tested against a real HA MQTT discovery run
-- [Phase 3]: Needs deeper research before planning (`/gsd-plan-phase --research-phase 3`): prune strategy (grace window vs owner manifest), `FakeBroker` design, Repairs approval flow, discovered-entity registry cleanup, subentry deletion hooks, subentries as device store fit
-- [Phase 3]: Open decision: owner availability (heartbeat + graceful-shutdown publish vs. no tie to owner liveness); AVL-01 is deferred to v2
-- [Phase 7]: QLT-03 says the release workflow must pass on the pinned runner; it is tag-triggered, so proving it needs a prerelease tag push on the public repo (decide the method at plan time)
-- [Phase 8]: UAT-01 to UAT-04 need real instances (ha-one, ha-two or production) and a v0.1.0 instance for UAT-01; the owner must provide the mixed fleet, it cannot be automated
+- [v1.0.1 close]: No v1.0.1 release before a bench re-run of UAT-02 and UAT-04 on the final build (ACCEPTED-GAP-V101)
+- [v1.0.1 close]: Verification reports of Phases 1 to 8 read stale or human_needed; full re-verification planned for the end of v1.1
+- [Owner follow-up]: Revoke the three bench tokens and tear down the bench state when nothing has to be re-run (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
+- [Open decision]: owner availability (AVL-01) stays deferred to v2
 
 ### Quick Tasks Completed
 
@@ -249,14 +244,14 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
-| *(none)* | | | | |
+| verification_gaps | 07/07-VERIFICATION.md | human_needed | 2026-10-11 | v1.0.1 |
 
 ## Session Continuity
 
 Last session: 2026-10-11T13:49:45.734Z
-Stopped at: Phase 8 complete, ready to plan Phase 7
+Stopped at: Milestone v1.0.1 closed (accepted gap), ready for /gsd-new-milestone
 Resume file: None
 
 ## Operator Next Steps
 
-- Plan the first phase with /gsd-plan-phase 6 (or /gsd-discuss-phase 6 first)
+- Start the next milestone with /gsd-new-milestone

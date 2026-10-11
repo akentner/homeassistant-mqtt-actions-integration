@@ -32,6 +32,10 @@ human_verification:
   - test: "Run the ten deferred Phase 1 to 3 human checks (Phase 1: HACS install, EN/DE strings, action editor banners, Repairs dialog of a failing action, retained-versus-live chain on real HA + broker, core version of hassio-n2plus; Phase 2: select subentry flow in the real frontend, breaker loop on real Mosquitto + real HA; Phase 3: approval-request Markdown rendering, device-delete dialogs with hostile names), then re-run the verifier or /gsd-verify-work for Phases 1 to 3."
     expected: "Each check passes and is recorded with evidence; archived Phases 1 to 3 then read `passed` under `verification status`, or the owner accepts individual items as overrides under the owner's name."
     why_human: "These checks need a real HA frontend, a real HACS client, or a real HA core with a real retaining broker. No automated tier performs them. Owner decision 2026-10-04 deferred them to Phase 8, but Phase 8's ROADMAP success criteria (UAT-01 to UAT-04) do not name them yet."
+audit_acknowledged:
+  milestone: v1.0.1
+  at: 2026-10-11
+  status: human_needed
 ---
 
 # Phase 7: Verification, Stable Tests and Pinned CI Verification Report

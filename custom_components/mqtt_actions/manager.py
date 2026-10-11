@@ -917,27 +917,47 @@ class Manager:
 
     @callback
     def _on_export_registry_updated(self, event: Event[er.EventEntityRegistryUpdatedData]) -> None:
-        """Look at every new core MQTT row of a native device id; everything else returns at once (T-08-36)."""
+        """
+        Look at every new row of a native device id that can make or complete a duplicate; all else returns at once.
+
+        Two creations matter: the core MQTT row (core just created the duplicate) and the switch or select of this
+        integration (the native twin just appeared, which closes the gap when the duplicate came first). An update
+        never triggers a pass, so a row a user enables afterwards stays as it is until the next start (T-08-36).
+        """
         if event.data["action"] != "create":
             return
         entry = er.async_get(self._hass).async_get(event.data["entity_id"])
-        if entry is None or entry.platform != takeover.MQTT_DOMAIN or entry.unique_id not in self._export_guard_ids():
+        if entry is None:
+            return
+        is_core_row = entry.platform == takeover.MQTT_DOMAIN
+        is_native_twin = (
+            entry.platform == DOMAIN
+            and entry.config_entry_id == self._entry.entry_id
+            and entry.domain in takeover.EXPORT_DOMAINS
+        )
+        if not (is_core_row or is_native_twin) or entry.unique_id not in self._export_guard_ids():
             return
         # Core is still creating the entity: the change waits for the next loop iteration, it does not nest in the event
         self._hass.loop.call_soon(self._disable_export_duplicates, {entry.unique_id})
 
     @callback
     def _disable_export_duplicates(self, device_ids: Iterable[str]) -> None:
-        """Disable the enabled export duplicates of these devices; a failure never keeps the manager from running."""
+        """Disable the enabled duplicates of these devices; a failure never keeps the manager from running."""
         if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None or self._cancel_export_guard is None:
             return
+        disabled = 0
         for device_id in device_ids:
             try:
-                takeover.disable_export_duplicates(self._hass, device_id, mqtt_entry_id=mqtt_entry_id)
+                disabled += takeover.disable_export_duplicates(
+                    self._hass, self._entry.entry_id, device_id, mqtt_entry_id=mqtt_entry_id
+                )
             except Exception as err:  # noqa: BLE001
                 # No registry or broker content in the log: this guard must never keep the manager from running
-                LOGGER.warning("The check for an enabled export duplicate of a device raised an unexpected error")
-                LOGGER.debug("The check for an enabled export duplicate failed with %s", type(err).__name__)
+                LOGGER.warning("The check for an enabled duplicate of a device raised an unexpected error")
+                LOGGER.debug("The check for an enabled duplicate failed with %s", type(err).__name__)
+        if disabled:
+            # A count only: the ids, names and payloads come from the broker
+            LOGGER.info("Disabled %d duplicate entities that core MQTT created for native devices", disabled)
 
     @callback
     def on_roster_changed(self) -> None:

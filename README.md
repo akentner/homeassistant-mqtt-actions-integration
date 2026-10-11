@@ -98,10 +98,12 @@ entity list. Use the default prefix unless a consumer needs another one.
 Home Assistant keeps a record of deleted entities and restores their settings, including the disabled state, when an
 entity with the same platform and unique ID is created again. A duplicate of a device can therefore come back enabled,
 when an earlier enabled MQTT entity with the same unique ID (the device ID) was deleted, for example a duplicate that a
-replay of old Discovery messages created and the integration removed again. While the export is on and its prefix is the
-one Home Assistant listens to, MQTT Actions disables such a duplicate itself as soon as Home Assistant creates it. If you
-still find an enabled duplicate, disable it in **Settings**, **Devices & services**, **Entities**, or switch the export
-back to the default prefix.
+replay of old Discovery messages created and the integration removed again. MQTT Actions disables such a duplicate
+itself as soon as Home Assistant creates it, on every instance that holds the device natively: on the instance that
+exports it and on every instance that only follows it, whichever instance publishes the export and whether or not that
+instance has the export switched on itself. When the export is switched off again, the disabled duplicates stay in the
+entity list until Home Assistant is restarted, and the next start removes them. If you still find an enabled duplicate,
+disable it in **Settings**, **Devices & services**, **Entities**, or switch the export back to the default prefix.
 
 ## Select devices
 

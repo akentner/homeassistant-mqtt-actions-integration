@@ -101,15 +101,19 @@ dashboard that you changed to the `_2` ids has to be changed back.
 
 ### An enabled duplicate after the export prefix was set to the core prefix
 
-You set the **Discovery export prefix** to the prefix that Home Assistant listens to, for example `homeassistant`, and
-a device now shows a second switch or select with the suffix `_2` that is **enabled**, next to the native entity. The
-export asks for a disabled duplicate, but Home Assistant keeps a record of deleted entities and restores the settings of
-the old one, including the enabled state, when an entity with the same platform and unique ID is created again. This
-happens when an enabled MQTT entity with the device ID as unique ID was deleted earlier, for example a duplicate that a
-replay of old Discovery messages created and the integration removed again. MQTT Actions disables such a duplicate
-itself while the export is on and uses that prefix. **What to do:** if you still see an enabled duplicate, disable it in
-**Settings**, **Devices & services**, **Entities**, or set the export prefix back to the default
-`mqtt_actions_export`, which Home Assistant does not listen to.
+A device shows a second switch or select with the suffix `_2` that is **enabled**, next to the native entity. This can
+happen on any instance that listens to that prefix, not only on the one where you set the **Discovery export prefix** to
+the prefix that Home Assistant listens to, for example `homeassistant`: every instance receives the export through the
+broker. The export asks for a disabled duplicate, but Home Assistant keeps a record of deleted entities and restores the
+settings of the old one, including the enabled state, when an entity with the same platform and unique ID is created
+again. This happens when an enabled MQTT entity with the device ID as unique ID was deleted earlier, for example a
+duplicate that a replay of old Discovery messages created and the integration removed again. MQTT Actions disables such
+a duplicate itself right after Home Assistant creates it, on every instance that holds the device natively, whichever
+instance publishes the export. An enabled duplicate that you still see therefore points to a row you enabled yourself or
+to a device that the instance does not hold natively. When the export is switched off again, the disabled duplicates
+stay in the entity list until Home Assistant is restarted, and the next start removes them. **What to do:** if you still
+see an enabled duplicate, disable it in **Settings**, **Devices & services**, **Entities**, or set the export prefix back
+to the default `mqtt_actions_export`, which Home Assistant does not listen to.
 
 ### Entities are missing on an older instance
 

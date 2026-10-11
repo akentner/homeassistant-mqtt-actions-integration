@@ -710,6 +710,36 @@ async def test_a_customized_native_twin_is_kept_over_an_untouched_legacy_entry(
     assert device_registry.async_get(native_device.id) is not None
 
 
+async def test_take_over_disables_a_legacy_duplicate_before_it_removes_it_so_no_enabled_tombstone_stays(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """
+    WR-01: a legacy entry that loses to its twin leaves the registry as a disabled record and without a clear.
+
+    The registry restores the state of a deleted record with the same platform and unique id, so an enabled record
+    would bring the row back enabled the next time a replay or another instance's export names the unique id.
+    """
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    entity_registry = er.async_get(hass)
+    natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    assert all(entry.disabled_by is None for entry in before.values())
+    for twin in natives.values():
+        entity_registry.async_update_entity(twin.entity_id, name="My own name")
+    mqtt_mock.async_publish.reset_mock()
+
+    assert await _take_over_now(hass, legacy) is TakeoverStatus.DONE
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert legacy_entity_ids(hass, legacy.device_id) == []
+    records = {
+        record.entity_id: record.disabled_by
+        for (_domain, platform, unique_id), record in entity_registry.deleted_entities.items()
+        if platform == "mqtt" and unique_id.startswith(legacy.device_id)
+    }
+    assert records == dict.fromkeys(before, er.RegistryEntryDisabler.INTEGRATION)
+    assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+
+
 async def _rediscover_disabled(hass: HomeAssistant, legacy: LegacyDevice, entity_ids: list[str]) -> None:
     """
     Disable rows and let core MQTT discover them again, the state an export or a restart leaves them in.

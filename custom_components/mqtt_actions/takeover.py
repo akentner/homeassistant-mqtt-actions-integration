@@ -223,7 +223,7 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
     return removed
 
 
-def disable_export_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str) -> int:
+def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str) -> int:
     """
     Disable the enabled core MQTT duplicates of a native device; return the count.
 

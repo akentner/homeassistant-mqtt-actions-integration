@@ -546,7 +546,7 @@ class Manager:
         # The timer of the catch for duplicates a replayed legacy discovery creates; None while none is armed (D-05)
         self._cancel_replay_catch: CALLBACK_TYPE | None = None
         # The registry listener that disables an enabled duplicate of a native device; None while the manager is stopped
-        self._cancel_export_guard: CALLBACK_TYPE | None = None
+        self._cancel_duplicate_guard: CALLBACK_TYPE | None = None
         # Set once the settle time has passed; only then does a roster change start a cutover check
         self._cutover_ready = False
         # The blocking peers the hint issue shows now, so an unchanged set does not rebuild the issue on every heartbeat
@@ -805,7 +805,7 @@ class Manager:
             # Before the platform forward and before any document: the entities move first, then the retained clear
             await self._async_native_takeover()
             # Any instance may export on the core prefix: arm before the owned devices are published
-            self._sync_export_guard()
+            self._arm_duplicate_guard()
             await self._async_publish_owned()
             # The pass decided which devices are native, so only now is it known whether discovery is still needed
             self._check_discovery_enabled()
@@ -884,19 +884,19 @@ class Manager:
                 # The removal is on disk like the move before it (WR-01)
                 await takeover.async_flush_registries(self._hass)
 
-    def _export_guard_ids(self) -> set[str]:
+    def _duplicate_guard_ids(self) -> set[str]:
         """Return the ids of the native devices this instance holds: owned or mirrored, not transferred away (R-1)."""
         return {device_id for device_id in self._native_device_ids() if device_id not in self.sync.transferred_away}
 
     @callback
-    def _disarm_export_guard(self) -> None:
-        """Stop the guard for an enabled export duplicate; a no-op while it is not armed."""
-        if self._cancel_export_guard is not None:
-            self._cancel_export_guard()
-            self._cancel_export_guard = None
+    def _disarm_duplicate_guard(self) -> None:
+        """Stop the guard for an enabled duplicate of a native device; a no-op while it is not armed."""
+        if self._cancel_duplicate_guard is not None:
+            self._cancel_duplicate_guard()
+            self._cancel_duplicate_guard = None
 
     @callback
-    def _sync_export_guard(self) -> None:
+    def _arm_duplicate_guard(self) -> None:
         """
         Arm the guard for duplicates of native devices whenever the manager runs, whatever the export option says.
 
@@ -907,16 +907,16 @@ class Manager:
         replay catch may remove a disabled row at a later start; the removal leaves a record with the disabled state
         `integration`, so every later restore is disabled as well. Registry logic only: nothing is published.
         """
-        self._disarm_export_guard()
+        self._disarm_duplicate_guard()
         if not self._running:
             return
-        self._cancel_export_guard = self._hass.bus.async_listen(
-            er.EVENT_ENTITY_REGISTRY_UPDATED, self._on_export_registry_updated
+        self._cancel_duplicate_guard = self._hass.bus.async_listen(
+            er.EVENT_ENTITY_REGISTRY_UPDATED, self._on_duplicate_registry_updated
         )
-        self._disable_export_duplicates(self._export_guard_ids())
+        self._disable_duplicates(self._duplicate_guard_ids())
 
     @callback
-    def _on_export_registry_updated(self, event: Event[er.EventEntityRegistryUpdatedData]) -> None:
+    def _on_duplicate_registry_updated(self, event: Event[er.EventEntityRegistryUpdatedData]) -> None:
         """
         Look at every new row of a native device id that can make or complete a duplicate; all else returns at once.
 
@@ -935,20 +935,20 @@ class Manager:
             and entry.config_entry_id == self._entry.entry_id
             and entry.domain in takeover.EXPORT_DOMAINS
         )
-        if not (is_core_row or is_native_twin) or entry.unique_id not in self._export_guard_ids():
+        if not (is_core_row or is_native_twin) or entry.unique_id not in self._duplicate_guard_ids():
             return
         # Core is still creating the entity: the change waits for the next loop iteration, it does not nest in the event
-        self._hass.loop.call_soon(self._disable_export_duplicates, {entry.unique_id})
+        self._hass.loop.call_soon(self._disable_duplicates, {entry.unique_id})
 
     @callback
-    def _disable_export_duplicates(self, device_ids: Iterable[str]) -> None:
+    def _disable_duplicates(self, device_ids: Iterable[str]) -> None:
         """Disable the enabled duplicates of these devices; a failure never keeps the manager from running."""
-        if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None or self._cancel_export_guard is None:
+        if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None or self._cancel_duplicate_guard is None:
             return
         disabled = 0
         for device_id in device_ids:
             try:
-                disabled += takeover.disable_export_duplicates(
+                disabled += takeover.disable_duplicates(
                     self._hass, self._entry.entry_id, device_id, mqtt_entry_id=mqtt_entry_id
                 )
             except Exception as err:  # noqa: BLE001
@@ -1228,7 +1228,7 @@ class Manager:
             if self._cancel_replay_catch is not None:
                 self._cancel_replay_catch()
                 self._cancel_replay_catch = None
-            self._disarm_export_guard()
+            self._disarm_duplicate_guard()
             self.sync.async_stop()
             self.presence.async_stop()
             self.retrigger.async_stop()

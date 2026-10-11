@@ -194,9 +194,11 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
 
     A candidate is a legacy entry of the core MQTT device of the id that has a native twin under this config entry.
     It goes only when the twin carries the identity: an older or customized legacy entry is left to the takeover pass,
-    and an entry without a twin is no duplicate. The twin is never removed. Registry logic only: nothing is published
-    here, although core MQTT itself publishes an empty retained discovery for a loaded entity that goes. The emptied
-    MQTT device goes too, unless an entry remains on it, whether this integration created it or not.
+    and an entry without a twin is no duplicate. The twin is never removed. An enabled entry is disabled before it is
+    removed: core MQTT publishes an empty retained discovery for a loaded entity that leaves the registry, which would
+    wipe the topic of another instance's export, and the deleted record of an enabled entry would restore as enabled
+    (WR-01). Registry logic only: nothing is published here. The emptied MQTT device goes too, unless an entry remains
+    on it, whether this integration created it or not.
     """
     if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
         return 0
@@ -209,6 +211,10 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
         twin = entity_registry.entities[twin_id]
         if twin.config_entry_id != entry_id or _carries_the_identity(legacy, twin):
             continue
+        if legacy.disabled_by is None:
+            # Disabled first, so core unloads the entity and clears nothing on removal, and the deleted record carries
+            # the disabled state that a later restore of the same row inherits (WR-01)
+            entity_registry.async_update_entity(legacy.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
         entity_registry.async_remove(legacy.entity_id)
         removed += 1
     if not removed:

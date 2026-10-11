@@ -44,7 +44,7 @@ Order is fixed by the owner: release v1.0.1 first, then the review findings, the
 
 ### Verification
 
-- [ ] **QLT-01**: Every phase (1 to 4, 7 and 9 to 12) has a current verification; `init.manager` reports none as stale (carried over from v1.0.1)
+- [ ] **QLT-01**: Every phase (1 to 12) has a current verification on the final build; `init.manager` reports none of Phases 9 to 12 as stale and `verification status` reads current for the archived Phases 1 to 8 (carried over from v1.0.1, extended to Phases 5, 6 and 8 on 2026-10-11)
 - [ ] **QLT-04**: UAT-02 and UAT-04 pass on the bench on the final v1.1.0 build
 - [ ] **QLT-05**: MIR-01 bench check on real instances: ha-b adds local actions to a device owned by ha-a ("in addition to", "instead of", owner device without actions), and nothing local appears on the broker
 
@@ -77,12 +77,40 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| REL-01 | Phase 9 | Pending |
+| FIX-01 | Phase 10 | Pending |
+| FIX-02 | Phase 10 | Pending |
+| FIX-03 | Phase 10 | Pending |
+| FIX-04 | Phase 10 | Pending |
+| FIX-05 | Phase 10 | Pending |
+| FIX-06 | Phase 10 | Pending |
+| FIX-07 | Phase 10 | Pending |
+| FIX-08 | Phase 10 | Pending |
+| MIR-01 | Phase 11 | Pending |
+| MIR-02 | Phase 11 | Pending |
+| MIR-03 | Phase 11 | Pending |
+| MIR-04 | Phase 11 | Pending |
+| MIR-05 | Phase 11 | Pending |
+| MIR-06 | Phase 11 | Pending |
+| MIR-07 | Phase 11 | Pending |
+| MIR-08 | Phase 11 | Pending |
+| MIR-09 | Phase 11 | Pending |
+| MIR-10 | Phase 11 | Pending |
+| MIR-11 | Phase 11 | Pending |
+| MIR-12 | Phase 11 | Pending |
+| MIR-13 | Phase 11 | Pending |
+| MIR-14 | Phase 11 | Pending |
+| MIR-15 | Phase 11 | Pending |
+| QLT-01 | Phase 12 | Pending |
+| QLT-04 | Phase 12 | Pending |
+| QLT-05 | Phase 12 | Pending |
+| REL-02 | Phase 12 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 28 total
-- Mapped to phases: 0
-- Unmapped: 28 ⚠️
+- Mapped to phases: 28 (Phase 9: 1, Phase 10: 8, Phase 11: 15, Phase 12: 4)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-10-11*
-*Last updated: 2026-10-11 after initial definition*
+*Last updated: 2026-10-11 after roadmap creation (traceability filled)*

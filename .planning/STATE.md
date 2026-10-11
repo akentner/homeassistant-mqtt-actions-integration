@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
 status: planning
-last_updated: "2026-10-11T16:16:54.258Z"
+last_updated: "2026-10-11T17:25:26.000Z"
 last_activity: 2026-10-11
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-11)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Planning next milestone (v1.1); v1.0.1 closed with accepted gap ACCEPTED-GAP-V101, not released
+**Current focus:** Phase 9 — v1.0.1 Release (milestone v1.1 Local Actions on Mirrors, Phases 9 to 12)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-10-11 — Milestone v1.1 started
+Phase: 9 of 12 (v1.0.1 Release); milestone v1.1 covers Phases 9 to 12
+Plan: Not planned yet
+Status: Ready to plan
+Last activity: 2026-10-11 — Roadmap v1.1 created (4 phases, 28 of 28 requirements mapped)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -214,6 +216,11 @@ Recent decisions affecting current work:
 - [Phase 08]: 08-17: duplicate guard armed on every native instance, independent of the export option; candidate needs a native twin, disable-only
 - [Phase 08]: UAT-04 passes on the receiver-guard build from the restored failing tombstone state; UAT-02, UAT-03 and P1-5 pass as well; outcome recorded by plan 08-14
 - [Phase 08]: 08-14: UAT-04 recorded pass on the receiver-guard build without a pruned-state qualifier (guard-and-document, pass on the restored null-tombstone state); ledger status complete
+- [Roadmap v1.1]: Four phases continue the numbering at 9 (coarse granularity): 9 v1.0.1 release (REL-01), 10 Phase 8 info findings and IN-04 extraction (FIX-01 to FIX-08), 11 local actions on mirrors as one vertical slice (MIR-01 to MIR-15), 12 re-verification and v1.1.0 release (QLT-01, QLT-04, QLT-05, REL-02); research's split of MIR-01 into a runtime phase and a UI phase is folded into Phase 11 with a runtime-first plan order
+- [Roadmap v1.1]: Release phases commit the manifest bump before the bench run and tag exactly the bench-verified SHA; the user pushes tags; no IN-04 or MIR-01 commit on `main` before the v1.0.1 tag (or release from `release/1.0.1`)
+- [Roadmap v1.1]: The pure IN-04 move and each review fix are separate plans; the extraction lands before MIR-01
+- [Roadmap v1.1]: Phases 9 and 12 change no product code; a failed check becomes an inserted decimal phase, then the affected verification and bench run repeat on the new SHA
+- [Owner 2026-10-11, MIR-01]: one Script per mirror with a `parallel` branch for "in addition to"; local actions discarded (logged, reported) on tombstone and adoption; orphaned Select options kept inactive and re-attached; no GuardedTemplate on local actions; UI is a menu in the hub options flow
 
 ### Pending Todos
 
@@ -221,9 +228,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- [v1.0.1 close]: No v1.0.1 release before a bench re-run of UAT-02 and UAT-04 on the final build (ACCEPTED-GAP-V101)
-- [v1.0.1 close]: Verification reports of Phases 1 to 8 read stale or human_needed; full re-verification planned for the end of v1.1
-- [Owner follow-up]: Revoke the three bench tokens and tear down the bench state when nothing has to be re-run (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
+- [Phase 9]: No IN-04 or MIR-01 commit on `main` before the v1.0.1 tag (or cut the release from `release/1.0.1`); manifest 1.0.1 committed before the UAT-02/UAT-04 bench run (closes ACCEPTED-GAP-V101 for v1.0.1)
+- [Phase 11]: Open for discuss-phase: storage location of local actions (separate Store file or main Store key, which a v1.0.x downgrade drops) and the stored trigger identity; `parallel` pin test against core 2026.9.4 before relying on the owner's topology decision
+- [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
+- [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
 
 ### Quick Tasks Completed
@@ -243,10 +251,10 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-11T13:49:45.734Z
-Stopped at: Milestone v1.0.1 closed (accepted gap), ready for /gsd-new-milestone
+Last session: 2026-10-11T17:25:26.000Z
+Stopped at: Roadmap v1.1 created (Phases 9 to 12), ready to plan Phase 9
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Review the roadmap, then start Phase 9 with /gsd-discuss-phase 9 or /gsd-plan-phase 9

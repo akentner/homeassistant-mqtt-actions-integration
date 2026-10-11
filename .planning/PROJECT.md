@@ -20,7 +20,7 @@ v1.0.1 Hardening closed 2026-10-11 with an accepted verification gap (owner deci
 - v1.0.1 release: bench re-run of UAT-02 and UAT-04 on the current (v1.0.1) build, then tag v1.0.1 (closes ACCEPTED-GAP-V101 for that release)
 - Info findings of the two Phase 8 reviews: review 1 IN-01 to IN-04 (docs sentence on re-disable, shared test helpers, guard-test spy, loud test on private registry API plus extraction of the takeover/replay/guard orchestration out of `manager.py`); review 2 IN-01 to IN-03 (partial count on a mid-loop exception, no-clear guarantee independent of HA internals, Repairs hint for customized duplicates incl. the WR-03 cases)
 - MIR-01 per-instance local actions on mirrored devices (backlog 999.1, relates to MAP-01): per trigger, a follower chooses "in addition to" or "instead of" the owner's actions; local actions need no approval, run even when the owner's actions are unapproved or blocked, and never enter the central config
-- Full re-verification at the end: reports of Phases 1 to 4, 7 and the new phases current, UAT-02 and UAT-04 re-run on the final build, then release v1.1.0
+- Full re-verification at the end: reports of all Phases 1 to 12 current, UAT-02 and UAT-04 re-run on the final build, then release v1.1.0
 
 ## Requirements
 

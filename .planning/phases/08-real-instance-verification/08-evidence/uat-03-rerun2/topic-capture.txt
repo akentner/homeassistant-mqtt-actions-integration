@@ -1,0 +1,4 @@
+2026-10-11T15:06:15+0200 mqtt_actions/v1/devices/87c29b56-8abe-4531-b03c-c402a2f10cb8/state retain=0 payload=ON
+2026-10-11T15:07:21+0200 mqtt_actions/v1/devices/87c29b56-8abe-4531-b03c-c402a2f10cb8/state retain=0 payload=OFF
+2026-10-11T15:08:21+0200 mqtt_actions/v1/devices/87c29b56-8abe-4531-b03c-c402a2f10cb8/state retain=0 payload=ON
+2026-10-11T15:09:23+0200 mqtt_actions/v1/devices/87c29b56-8abe-4531-b03c-c402a2f10cb8/state retain=0 payload=banana

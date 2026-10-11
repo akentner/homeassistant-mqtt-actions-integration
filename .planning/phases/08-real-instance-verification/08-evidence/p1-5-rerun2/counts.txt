@@ -1,0 +1,4 @@
+step 1 toggle (switch.turn_off on ha-a, state before: on): ha-a 3 -> 4, ha-b 2 -> 3
+step 2 full restart (podman restart ha-a ha-b), NEW lifetime counts: ha-a 0, ha-b 0 (StartedAt ha-a 2026-10-11 15:13:05.349410961 +0200 CEST, ha-b 2026-10-11 15:13:10.803792964 +0200 CEST)
+step 3 core mqtt entry reload on both, counts after 60 s (same lifetime as step 2): ha-a 0, ha-b 0
+step 4 positive control (switch.turn_on on ha-a): ha-a 0 -> 1, ha-b 0 -> 1

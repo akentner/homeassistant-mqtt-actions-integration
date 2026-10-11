@@ -1,0 +1,13 @@
+== lifetime 1, after the toggle (process lifetime of ha-a: StartedAt 2026-10-11 15:04:10.845761377 +0200 CEST)
+2026-10-11 15:06:15.267 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER on
+2026-10-11 15:07:21.436 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER off
+2026-10-11 15:08:21.787 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER on
+2026-10-11 15:11:58.651 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER off
+== end (4 marker line(s))
+== lifetime 2, 90 s after the restart (process lifetime of ha-a: StartedAt 2026-10-11 15:13:05.349410961 +0200 CEST)
+== end (0 marker line(s))
+== lifetime 2, 60 s after the mqtt entry reload (process lifetime of ha-a: StartedAt 2026-10-11 15:13:05.349410961 +0200 CEST)
+== end (0 marker line(s))
+== lifetime 2, after the positive control (process lifetime of ha-a: StartedAt 2026-10-11 15:13:05.349410961 +0200 CEST)
+2026-10-11 15:15:46.491 WARNING (MainThread) [homeassistant.components.system_log.external] UAT03-MARKER on
+== end (1 marker line(s))

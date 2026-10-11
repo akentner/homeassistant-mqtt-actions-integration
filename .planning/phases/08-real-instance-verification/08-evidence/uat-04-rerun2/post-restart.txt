@@ -1,0 +1,7 @@
+# observation after UAT-04: both instances restarted gracefully once, 90 s settle time, then read from the registry files (fixed fields only)
+# restart finished: 2026-10-11T13:26:17Z
+ha-a live mqtt rows: 0; devices with an identifier (mqtt, mqtt_actions_*): 1
+ha-b live mqtt rows: 0; devices with an identifier (mqtt, mqtt_actions_*): 0
+check-uat02.sh clean:
+PASS UAT-02 clean .planning/phases/08-real-instance-verification/08-evidence/uat-02
+exit code of check-uat02.sh clean: 0

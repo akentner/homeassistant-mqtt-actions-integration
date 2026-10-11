@@ -1,0 +1,18 @@
+PASS A ha-a on :: delta 1 (expected 1)
+PASS A ha-b on (unapproved) :: delta 0 (expected 0)
+PASS approve ha-b :: PASS check-marker approved (a: switch.uat_marker on; b: switch.uat_marker on)
+PASS B ha-a off :: delta 1 (expected 1)
+PASS B ha-b off :: delta 1 (expected 1)
+PASS C ha-a on :: delta 1 (expected 1)
+PASS C ha-b on :: delta 1 (expected 1)
+PASS D ha-a marker on :: delta 0 (expected 0)
+PASS D ha-a marker off :: delta 0 (expected 0)
+PASS D ha-b marker on :: delta 0 (expected 0)
+PASS D ha-b marker off :: delta 0 (expected 0)
+PASS D ha-a unknown-payload warning :: delta 1 (expected 1)
+PASS D ha-b unknown-payload warning :: delta 1 (expected 1)
+PASS D ha-a state unchanged :: on
+PASS D ha-b state unchanged :: on
+PASS D retained value on the broker unchanged :: 1 ON
+PASS D banana was not retained :: capture shows retain=0
+containers: ha-a StartedAt=2026-10-11 15:04:10.845761377 +0200 CEST ha-b StartedAt=2026-10-11 15:04:10.884578861 +0200 CEST mosq StartedAt=2026-10-11 12:31:00.946469776 +0200 CEST (unchanged during the run unless a FAIL line says so)

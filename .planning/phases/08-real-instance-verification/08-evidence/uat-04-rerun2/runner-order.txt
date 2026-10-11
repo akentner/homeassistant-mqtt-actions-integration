@@ -1,0 +1,11 @@
+$ run-all-scripted.sh --list
+UAT-02  check-uat02.sh run  (two startup rounds with legacy Discovery published while stopped)
+UAT-03  check-uat03.sh run  (needs the marker fixture (check-marker.sh pending))
+P1-5  check-p15.sh run  (toggle, full restart, MQTT entry reload, positive control)
+UAT-04  check-uat04.sh run  (export on, export on the core prefix, export off)
+
+$ PHASE8_EV_SUFFIX=-rerun2 run-all-scripted.sh --dry-run
+UAT-02: /home/akentner/ha-test/bin/check-preflight.sh --quick && /home/akentner/ha-test/bin/check-uat02.sh run   # evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-02-rerun2
+UAT-03: /home/akentner/ha-test/bin/check-preflight.sh --quick && /home/akentner/ha-test/bin/check-uat03.sh run   # evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-03-rerun2
+P1-5: /home/akentner/ha-test/bin/check-preflight.sh --quick && /home/akentner/ha-test/bin/check-p15.sh run   # evidence: .planning/phases/08-real-instance-verification/08-evidence/p1-5-rerun2
+UAT-04: /home/akentner/ha-test/bin/check-preflight.sh --quick && /home/akentner/ha-test/bin/check-uat04.sh run   # evidence: .planning/phases/08-real-instance-verification/08-evidence/uat-04-rerun2

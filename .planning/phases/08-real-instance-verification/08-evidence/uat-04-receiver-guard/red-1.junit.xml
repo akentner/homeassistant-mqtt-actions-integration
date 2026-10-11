@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.987" timestamp="2026-10-11T14:16:21.016121+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_export_guard_receiver" name="test_a_receiver_disables_the_duplicate_that_a_foreign_core_prefix_export_restores" time="0.900"><failure message="AssertionError: assert None is &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt;&#10; +  where None = RegistryEntry(entity_id='switch.mqtt', unique_id='d5025955-e14d-4b97-8fb0-824480e43b81', platform='mqtt', previous_uni...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}).disabled_by&#10; +  and   &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; = &lt;enum 'RegistryEntryDisabler'&gt;.INTEGRATION&#10; +    where &lt;enum 'RegistryEntryDisabler'&gt; = er.RegistryEntryDisabler">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140030162041696'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f5b52cd6610&gt;
+
+    async def test_a_receiver_disables_the_duplicate_that_a_foreign_core_prefix_export_restores(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        make_hub_entry: Callable,
+    ) -&gt; None:
+        """
+        The bench receiver of the 08-13 re-run: the export is off here, the device is a native mirror, a null tombstone.
+    
+        Another instance exports the device on the prefix core MQTT listens to. Core restores the enabled state of the
+        removed row, and this instance, which does not export, must still end with one disabled duplicate (D-08 amended).
+        """
+        spec = make_spec(name="Foreign lamp")
+        entry = await _native_mirror(hass, make_hub_entry, spec)
+        registry = er.async_get(hass)
+    
+        # Premises: no export here, a native mirror with its native row, the core MQTT device and a null tombstone
+        assert not entry.options.get(CONF_DISCOVERY_EXPORT)
+        assert _manager(entry).is_native(spec.device_id)
+        native = _entity_id(hass, "switch", spec.device_id)
+        assert native is not None
+        # One synchronous step without an await: an enabled row on the MQTT device of the id is created and removed
+        registry.async_remove(_mqtt_row(hass, "switch", spec.device_id, device=True))
+        assert registry.deleted_entities[("switch", "mqtt", spec.device_id)].disabled_by is None
+        assert registry.async_get_entity_id("switch", "mqtt", spec.device_id) is None
+        assert _mqtt_device(hass, spec.device_id) is not None
+        published = list(mqtt_mock.async_publish.call_args_list)
+    
+        await _receive_foreign_export(hass, spec)
+    
+        duplicates = [
+            entity
+            for entity in registry.entities.values()
+            if entity.unique_id == spec.device_id and entity.platform == "mqtt"
+        ]
+        assert len(duplicates) == 1
+&gt;       assert duplicates[0].disabled_by is er.RegistryEntryDisabler.INTEGRATION
+E       AssertionError: assert None is &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt;
+E        +  where None = RegistryEntry(entity_id='switch.mqtt', unique_id='d5025955-e14d-4b97-8fb0-824480e43b81', platform='mqtt', previous_uni...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}).disabled_by
+E        +  and   &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; = &lt;enum 'RegistryEntryDisabler'&gt;.INTEGRATION
+E        +    where &lt;enum 'RegistryEntryDisabler'&gt; = er.RegistryEntryDisabler
+
+tests/test_export_guard_receiver.py:101: AssertionError</failure></testcase></testsuite></testsuites>

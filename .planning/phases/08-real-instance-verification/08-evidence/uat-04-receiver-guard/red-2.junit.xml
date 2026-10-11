@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.997" timestamp="2026-10-11T14:16:36.946618+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_discovery_export" name="test_the_guard_does_not_depend_on_the_export_option[options0]" time="0.892"><failure message="AssertionError: assert None is &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt;&#10; +  where None = RegistryEntry(entity_id='switch.mqtt_9a29e7f1_9491_4cf8_b7c3_953c1b91b243', unique_id='9a29e7f1-9491-4cf8-b7c3-953c1b9...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}).disabled_by&#10; +    where RegistryEntry(entity_id='switch.mqtt_9a29e7f1_9491_4cf8_b7c3_953c1b91b243', unique_id='9a29e7f1-9491-4cf8-b7c3-953c1b9...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}) = async_get('switch.mqtt_9a29e7f1_9491_4cf8_b7c3_953c1b91b243')&#10; +      where async_get = &lt;homeassistant.helpers.entity_registry.EntityRegistry object at 0x7f3781668980&gt;.async_get&#10; +        where &lt;homeassistant.helpers.entity_registry.EntityRegistry object at 0x7f3781668980&gt; = &lt;functools._lru_cache_wrapper object at 0x7f37887db690&gt;(&lt;HomeAssistant RUNNING&gt;)&#10; +          where &lt;functools._lru_cache_wrapper object at 0x7f37887db690&gt; = er.async_get&#10; +  and   &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; = &lt;enum 'RegistryEntryDisabler'&gt;.INTEGRATION&#10; +    where &lt;enum 'RegistryEntryDisabler'&gt; = er.RegistryEntryDisabler">options = {}, hass = &lt;HomeAssistant RUNNING&gt;
+mqtt_mock = &lt;MagicMock id='139876122918064'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...ve': {'devices': [], 'instance': True, 'pending': []}}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f378166e400&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f377290e560&gt;
+
+    @pytest.mark.parametrize("options", [{}, EXPORT_ON, CORE_EXPORT])
+    async def test_the_guard_does_not_depend_on_the_export_option(
+        options: dict[str, Any],
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """A receiver cannot know who exports, so whatever option and prefix say, the duplicate of a native device goes."""
+        _seed_native(hass_storage)
+        subentry = make_switch_subentry("Lamp")
+        device_id = _device_id(subentry)
+        entry = await _setup(hass, make_hub_entry([subentry], options=options))
+        assert entry.options == options
+        assert er.async_get(hass).async_get_entity_id("switch", DOMAIN, device_id) is not None
+        # With the export on the core prefix core created the disabled duplicate at setup: leave the enabled tombstone
+        _leave_tombstone(hass, "switch", device_id)
+        assert er.async_get(hass).deleted_entities[("switch", "mqtt", device_id)].disabled_by is None
+    
+        row = _mqtt_row(hass, "switch", device_id, device=True)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+&gt;       assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+E       AssertionError: assert None is &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt;
+E        +  where None = RegistryEntry(entity_id='switch.mqtt_9a29e7f1_9491_4cf8_b7c3_953c1b91b243', unique_id='9a29e7f1-9491-4cf8-b7c3-953c1b9...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}).disabled_by
+E        +    where RegistryEntry(entity_id='switch.mqtt_9a29e7f1_9491_4cf8_b7c3_953c1b91b243', unique_id='9a29e7f1-9491-4cf8-b7c3-953c1b9...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}) = async_get('switch.mqtt_9a29e7f1_9491_4cf8_b7c3_953c1b91b243')
+E        +      where async_get = &lt;homeassistant.helpers.entity_registry.EntityRegistry object at 0x7f3781668980&gt;.async_get
+E        +        where &lt;homeassistant.helpers.entity_registry.EntityRegistry object at 0x7f3781668980&gt; = &lt;functools._lru_cache_wrapper object at 0x7f37887db690&gt;(&lt;HomeAssistant RUNNING&gt;)
+E        +          where &lt;functools._lru_cache_wrapper object at 0x7f37887db690&gt; = er.async_get
+E        +  and   &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; = &lt;enum 'RegistryEntryDisabler'&gt;.INTEGRATION
+E        +    where &lt;enum 'RegistryEntryDisabler'&gt; = er.RegistryEntryDisabler
+
+tests/test_discovery_export.py:536: AssertionError</failure></testcase></testsuite></testsuites>

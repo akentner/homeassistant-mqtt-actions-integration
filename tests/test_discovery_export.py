@@ -510,8 +510,8 @@ async def test_an_enabled_row_that_exists_when_the_export_is_switched_on_is_disa
     assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
 
 
-@pytest.mark.parametrize("options", [{}, EXPORT_ON])
-async def test_the_guard_is_inert_while_the_export_is_off_or_on_another_prefix(
+@pytest.mark.parametrize("options", [{}, EXPORT_ON, CORE_EXPORT])
+async def test_the_guard_does_not_depend_on_the_export_option(
     options: dict[str, Any],
     hass: HomeAssistant,
     mqtt_mock: Any,
@@ -519,26 +519,31 @@ async def test_the_guard_is_inert_while_the_export_is_off_or_on_another_prefix(
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
 ) -> None:
-    """Without the export on the core prefix an mqtt row of the device id keeps what core gave it."""
+    """A receiver cannot know who exports, so whatever option and prefix say, the duplicate of a native device goes."""
     _seed_native(hass_storage)
     subentry = make_switch_subentry("Lamp")
     device_id = _device_id(subentry)
-    await _setup(hass, make_hub_entry([subentry], options=options))
+    entry = await _setup(hass, make_hub_entry([subentry], options=options))
+    assert entry.options == options
+    assert er.async_get(hass).async_get_entity_id("switch", DOMAIN, device_id) is not None
+    # With the export on the core prefix core created the disabled duplicate at setup: leave the enabled tombstone
+    _leave_tombstone(hass, "switch", device_id)
+    assert er.async_get(hass).deleted_entities[("switch", "mqtt", device_id)].disabled_by is None
 
     row = _mqtt_row(hass, "switch", device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    assert er.async_get(hass).async_get(row).disabled_by is None
+    assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
 
 
-async def test_switching_the_export_off_removes_the_guard(
+async def test_switching_the_export_off_leaves_the_guard_armed(
     hass: HomeAssistant,
     mqtt_mock: Any,
     hass_storage: dict[str, Any],
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
 ) -> None:
-    """After the export ended, a row created later keeps what core gave it."""
+    """After the export ended, a restored enabled row of the id is still disabled: the guard has no export premise."""
     _seed_native(hass_storage)
     subentry = make_switch_subentry("Lamp")
     device_id = _device_id(subentry)
@@ -546,11 +551,13 @@ async def test_switching_the_export_off_removes_the_guard(
 
     hass.config_entries.async_update_entry(entry, options={})
     await hass.async_block_till_done(wait_background_tasks=True)
+    assert entry.options == {}
     _leave_tombstone(hass, "switch", device_id)
+    assert er.async_get(hass).deleted_entities[("switch", "mqtt", device_id)].disabled_by is None
     row = _mqtt_row(hass, "switch", device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    assert er.async_get(hass).async_get(row).disabled_by is None
+    assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
 
 
 async def test_the_guard_never_touches_a_row_that_is_no_exported_device(

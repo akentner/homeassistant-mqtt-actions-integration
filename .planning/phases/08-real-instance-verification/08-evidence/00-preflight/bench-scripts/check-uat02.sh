@@ -31,7 +31,7 @@ SW_VERSION=0.1.0
 SETTLE_SECONDS=90 # HA startup plus the 5.0 s quiet period of the catch (REPLAY_QUIET_SECONDS), with margin
 LETTERS=(a b)
 
-EV="$(evidence_root)/uat-02"
+EV="$(evidence_root)/uat-02${PHASE8_EV_SUFFIX:-}"
 SNAP="$HT/_snap-pre-live"
 TMPD=$(mktemp -d)
 trap 'rm -rf "$TMPD"' EXIT

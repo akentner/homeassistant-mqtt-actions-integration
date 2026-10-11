@@ -36,7 +36,7 @@ case "$MODE" in run | clean) ;; *)
   ;;
 esac
 
-EV="$(evidence_root)/uat-04"
+EV="$(evidence_root)/uat-04${PHASE8_EV_SUFFIX:-}"
 ACL="$HT/mosquitto/acl"
 ACL_BAK="$HT/mosquitto/acl.bak-phase8-04"
 EXPORT_PREFIX=mqtt_actions_export
@@ -71,7 +71,7 @@ res() { RES+=("$1 $2 :: $3"); }
 [ -n "$ID_MARKER" ] || abort "no MARKER_ID in .fixtures.env"
 "$here/check-preflight.sh" --quick >/dev/null || abort "check-preflight.sh --quick does not print PASS"
 "$here/check-marker.sh" approved >/dev/null || abort "check-marker.sh approved does not print PASS"
-"$here/check-uat02.sh" clean >/dev/null || abort "check-uat02.sh clean does not print PASS"
+env -u PHASE8_EV_SUFFIX "$here/check-uat02.sh" clean >/dev/null || abort "check-uat02.sh clean does not print PASS"
 
 # retained read of a topic filter: lines "topic retain payload" (a second client, T-08-03)
 read_topics() { probe_sub -t "$1" -F '%t %r %p' -W 3 2>/dev/null; }
@@ -145,7 +145,7 @@ live_rows() {
 
 # ---- 0. ACL rows ------------------------------------------------------------------------------------------------------------
 [ -f "$ACL" ] || abort "no ACL file"
-cp -p "$ACL" "$ACL_BAK" || abort "cannot back up the ACL"
+[ -f "$ACL_BAK" ] || cp -p "$ACL" "$ACL_BAK" || abort "cannot back up the ACL"
 if ! grep -qxF "$ACL_ROW" "$ACL"; then
   # insert the row inside the ha_one and ha_two blocks (a line belongs to the nearest preceding `user`)
   tmp=$(mktemp)

@@ -8,7 +8,7 @@ here=$(dirname "$(readlink -f "$0")")
 # shellcheck source=lib.sh
 . "$here/lib.sh"
 G="$here/ha-test-guard"
-EV="$(evidence_root)/uat-03"
+EV="$(evidence_root)/uat-03${PHASE8_EV_SUFFIX:-}"
 mkdir -p "$EV"
 
 [ -f "$HT/.fixtures.env" ] && grep -q '^MARKER_ID=' "$HT/.fixtures.env" && {

@@ -28,7 +28,7 @@ G="$here/ha-test-guard"
   exit 2
 }
 
-EV="$(evidence_root)/uat-03"
+EV="$(evidence_root)/uat-03${PHASE8_EV_SUFFIX:-}"
 mkdir -p "$EV"
 MARKER_ID=$(sed -n 's/^MARKER_ID=//p' "$HT/.fixtures.env" 2>/dev/null | head -n1)
 TOPIC="mqtt_actions/v1/devices/${MARKER_ID}/state"

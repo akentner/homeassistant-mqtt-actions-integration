@@ -1,0 +1,95 @@
+--- bench-scripts/check-uat04.sh (committed copy)
++++ ~/ha-test/bin/check-uat04.sh (patched)
+@@ -36,7 +36,7 @@
+   ;;
+ esac
+ 
+-EV="$(evidence_root)/uat-04"
++EV="$(evidence_root)/uat-04${PHASE8_EV_SUFFIX:-}"
+ ACL="$HT/mosquitto/acl"
+ ACL_BAK="$HT/mosquitto/acl.bak-phase8-04"
+ EXPORT_PREFIX=mqtt_actions_export
+@@ -71,7 +71,7 @@
+ [ -n "$ID_MARKER" ] || abort "no MARKER_ID in .fixtures.env"
+ "$here/check-preflight.sh" --quick >/dev/null || abort "check-preflight.sh --quick does not print PASS"
+ "$here/check-marker.sh" approved >/dev/null || abort "check-marker.sh approved does not print PASS"
+-"$here/check-uat02.sh" clean >/dev/null || abort "check-uat02.sh clean does not print PASS"
++env -u PHASE8_EV_SUFFIX "$here/check-uat02.sh" clean >/dev/null || abort "check-uat02.sh clean does not print PASS"
+ 
+ # retained read of a topic filter: lines "topic retain payload" (a second client, T-08-03)
+ read_topics() { probe_sub -t "$1" -F '%t %r %p' -W 3 2>/dev/null; }
+@@ -145,7 +145,7 @@
+ 
+ # ---- 0. ACL rows ------------------------------------------------------------------------------------------------------------
+ [ -f "$ACL" ] || abort "no ACL file"
+-cp -p "$ACL" "$ACL_BAK" || abort "cannot back up the ACL"
++[ -f "$ACL_BAK" ] || cp -p "$ACL" "$ACL_BAK" || abort "cannot back up the ACL"
+ if ! grep -qxF "$ACL_ROW" "$ACL"; then
+   # insert the row inside the ha_one and ha_two blocks (a line belongs to the nearest preceding `user`)
+   tmp=$(mktemp)
+--- bench-scripts/check-uat02.sh (committed copy)
++++ ~/ha-test/bin/check-uat02.sh (patched)
+@@ -31,7 +31,7 @@
+ SETTLE_SECONDS=90 # HA startup plus the 5.0 s quiet period of the catch (REPLAY_QUIET_SECONDS), with margin
+ LETTERS=(a b)
+ 
+-EV="$(evidence_root)/uat-02"
++EV="$(evidence_root)/uat-02${PHASE8_EV_SUFFIX:-}"
+ SNAP="$HT/_snap-pre-live"
+ TMPD=$(mktemp -d)
+ trap 'rm -rf "$TMPD"' EXIT
+--- bench-scripts/check-uat03.sh (committed copy)
++++ ~/ha-test/bin/check-uat03.sh (patched)
+@@ -28,7 +28,7 @@
+   exit 2
+ }
+ 
+-EV="$(evidence_root)/uat-03"
++EV="$(evidence_root)/uat-03${PHASE8_EV_SUFFIX:-}"
+ mkdir -p "$EV"
+ MARKER_ID=$(sed -n 's/^MARKER_ID=//p' "$HT/.fixtures.env" 2>/dev/null | head -n1)
+ TOPIC="mqtt_actions/v1/devices/${MARKER_ID}/state"
+--- bench-scripts/check-p15.sh (committed copy)
++++ ~/ha-test/bin/check-p15.sh (patched)
+@@ -25,7 +25,7 @@
+   exit 2
+ }
+ 
+-EV="$(evidence_root)/p1-5"
++EV="$(evidence_root)/p1-5${PHASE8_EV_SUFFIX:-}"
+ mkdir -p "$EV"
+ MARKER_ID=$(sed -n 's/^MARKER_ID=//p' "$HT/.fixtures.env" 2>/dev/null | head -n1)
+ CONFIG_TOPIC="mqtt_actions/v1/devices/${MARKER_ID}/config"
+--- bench-scripts/setup-marker.sh (committed copy)
++++ ~/ha-test/bin/setup-marker.sh (patched)
+@@ -8,7 +8,7 @@
+ # shellcheck source=lib.sh
+ . "$here/lib.sh"
+ G="$here/ha-test-guard"
+-EV="$(evidence_root)/uat-03"
++EV="$(evidence_root)/uat-03${PHASE8_EV_SUFFIX:-}"
+ mkdir -p "$EV"
+ 
+ [ -f "$HT/.fixtures.env" ] && grep -q '^MARKER_ID=' "$HT/.fixtures.env" && {
+--- bench-scripts/run-all-scripted.sh (committed copy)
++++ ~/ha-test/bin/run-all-scripted.sh (patched)
+@@ -40,7 +40,7 @@
+   --dry-run)
+     for c in "${CHECKS[@]}"; do
+       IFS='|' read -r id cmd ev note <<<"$c"
+-      echo "$id: $BIN/$GATE && $BIN/$cmd   # evidence: $(evidence_root)/$ev"
++      echo "$id: $BIN/$GATE && $BIN/$cmd   # evidence: $(evidence_root)/$ev${PHASE8_EV_SUFFIX:-}"
+       [ -x "$BIN/${cmd%% *}" ] || {
+         echo "ABORT $BIN/${cmd%% *} is missing or not executable" >&2
+         exit 2
+@@ -72,8 +72,8 @@
+   # shellcheck disable=SC2086
+   "$BIN/${cmd%% *}" ${cmd#* }
+   rc=$?
+-  verdict_line=$(head -n1 "$(evidence_root)/$ev/verdict.txt" 2>/dev/null || echo "no verdict.txt")
+-  echo "== $id: exit $rc, verdict: $verdict_line, evidence: $(evidence_root)/$ev"
++  verdict_line=$(head -n1 "$(evidence_root)/$ev${PHASE8_EV_SUFFIX:-}/verdict.txt" 2>/dev/null || echo "no verdict.txt")
++  echo "== $id: exit $rc, verdict: $verdict_line, evidence: $(evidence_root)/$ev${PHASE8_EV_SUFFIX:-}"
+   case "$rc" in
+     0) ;;
+     2)

@@ -1,0 +1,82 @@
+== bench state found at the start of plan 08-13 (2026-10-11T10:31Z, before repin.sh)
+disposition: guard-and-document (modifier full-rerun; not-affected-confirmed yes); applies: repin yes, guard yes, full-rerun yes, scoped no, prune no
+uptime of the host: 1 day 1 h (the host was rebooted on 2026-10-10 about 11:25 local time, after plan 08-12 and before this plan)
+podman state at the start: ha-a, ha-b, ha-c and mosq all Exited (the reboot stopped them), ha-a and ha-b last stopped gracefully by the shutdown
+  (registry files last written 2026-10-10 10:07, no later write)
+broker consequence: mosq runs with persistence false, so every retained message was lost with the reboot; the broker was started again
+  with `podman start mosq` (StartedAt 2026-10-11 12:31:00 +0200). The instances republish their retained config documents and availability
+  when they connect (manager republish on connect), which is checked by check-preflight.sh --quick below and by the checks themselves.
+bench gate consequence: check-preflight.sh asserts that mosq StartedAt equals ~/ha-test/.mosq-started-before-phase8. The old value was
+  2026-10-03 18:20:28 +0200 (kept as ~/ha-test/.mosq-started-before-phase8.pre-reboot); the file was rewritten to the new StartedAt so the gate
+  keeps asserting what it is for: mosq is not restarted DURING the re-run. This is a bench repair, not a result; the recorded first runs
+  were taken in the earlier broker lifetime.
+no other bench file was changed for this recovery
+
+== re-pin (repin.sh) 2026-10-11T10:31:43Z
+old sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+new sha: caf2fe5dc003ea834104f4016d1996be4132e0c8 (gsd/phase-08-real-instance-verification), commit_time 2026-10-11T01:55:08+02:00
+mount: byte-identical to the custom_components tree of the new sha (mount_clean)
+git diff --stat b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3 caf2fe5dc003ea834104f4016d1996be4132e0c8 -- custom_components:
+   custom_components/mqtt_actions/manager.py  | 65 +++++++++++++++++++++++++++++-
+   custom_components/mqtt_actions/takeover.py | 25 ++++++++++++
+   2 files changed, 89 insertions(+), 1 deletion(-)
+product diff names only manager.py and takeover.py (the files plan 08-12 changed): yes
+ha-a and ha-b stopped; registry files are flushed (read below)
+-- ha-a deleted entities with platform mqtt (entity_id, unique_id, disabled_by), 13 in total
+  {"entity_id":"button.bar_select_test_a_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b","disabled_by":null}
+  {"entity_id":"button.bar_select_test_b_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_off_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_on_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_off_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_on_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":null}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":null}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"6f62cac5-49c9-49bc-88d5-1b804b775ac4","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e51269d3-f6e2-4cad-998d-37579c3f7c8f","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e8a6edf6-45ba-43c8-b171-88ca668c31f2","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_twin_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5","disabled_by":null}
+  {"entity_id":"switch.uat_marker_2","unique_id":"81d53f84-469e-4937-a3bb-09b24f11e4e4","disabled_by":"integration"}
+-- ha-a live rows with platform mqtt: 0
+ha-a original tombstones with disabled_by null: Lampe Test switch 1, Bar Select select 1
+-- ha-b deleted entities with platform mqtt (entity_id, unique_id, disabled_by), 13 in total
+  {"entity_id":"button.bar_select_test_a_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b","disabled_by":null}
+  {"entity_id":"button.bar_select_test_b_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_off_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.lampe_test_test_on_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_off_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b4dc66dde806","disabled_by":null}
+  {"entity_id":"button.uat_iso_twin_test_on_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5_test_b8d31e852725","disabled_by":null}
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":null}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":null}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"6f62cac5-49c9-49bc-88d5-1b804b775ac4","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e51269d3-f6e2-4cad-998d-37579c3f7c8f","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_clean_2","unique_id":"e8a6edf6-45ba-43c8-b171-88ca668c31f2","disabled_by":"integration"}
+  {"entity_id":"switch.uat_iso_twin_2","unique_id":"020b9715-2939-44bb-aafb-2340305e18d5","disabled_by":null}
+  {"entity_id":"switch.uat_marker_2","unique_id":"81d53f84-469e-4937-a3bb-09b24f11e4e4","disabled_by":"integration"}
+-- ha-b live rows with platform mqtt: 0
+ha-b original tombstones with disabled_by null: Lampe Test switch 1, Bar Select select 1
+original failing state intact on ha-a and ha-b: yes (nothing pruned)
+kept the first record as 00-preflight/build-b7f52b34.txt
+new build.txt:
+  sha: caf2fe5dc003ea834104f4016d1996be4132e0c8
+  branch: gsd/phase-08-real-instance-verification
+  commit_time: 2026-10-11T01:55:08+02:00
+  mount_source: /home/akentner/Projects/homeassistant-mqtt-actions-integration/custom_components/mqtt_actions (read-only bind mount on ha-a and ha-b)
+  mount_content: byte-identical to the custom_components tree of sha (blob-by-blob, no extra files)
+  ha_version: 2026.9.4 (a), 2026.9.4 (b)
+  image: ghcr.io/home-assistant/home-assistant:2026.9
+  started_at_a: 2026-10-11 12:31:43.914421407 +0200 CEST
+  started_at_b: 2026-10-11 12:31:43.956202409 +0200 CEST
+  instance_id_a: 3851f34f-fa67-4f3c-bba0-122465013c3d
+  instance_id_b: b4cf285b-428f-426b-9500-8e269634356e
+  previous_sha: b7f52b34a1e8d6afbf6e1ac75f3b92bbbe54a8f3
+  repin_reason: product guard of plan 08-12 (D-03)
+new mount-hashes.txt:
+  ha-a manager.py host=cb263b5c96fc55a3 container=cb263b5c96fc55a3 match
+  ha-a takeover.py host=9f7c45896e65457c container=9f7c45896e65457c match
+  ha-a const.py host=ff5ec83c3a720c28 container=ff5ec83c3a720c28 match
+  ha-a document.py host=3fa07dec17fcce94 container=3fa07dec17fcce94 match
+  ha-b manager.py host=cb263b5c96fc55a3 container=cb263b5c96fc55a3 match
+  ha-b takeover.py host=9f7c45896e65457c container=9f7c45896e65457c match
+  ha-b const.py host=ff5ec83c3a720c28 container=ff5ec83c3a720c28 match
+  ha-b document.py host=3fa07dec17fcce94 container=3fa07dec17fcce94 match
+PASS preflight (quick) /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/08-real-instance-verification/08-evidence/00-preflight

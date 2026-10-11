@@ -40,7 +40,7 @@ case "${1:-}" in
   --dry-run)
     for c in "${CHECKS[@]}"; do
       IFS='|' read -r id cmd ev note <<<"$c"
-      echo "$id: $BIN/$GATE && $BIN/$cmd   # evidence: $(evidence_root)/$ev"
+      echo "$id: $BIN/$GATE && $BIN/$cmd   # evidence: $(evidence_root)/$ev${PHASE8_EV_SUFFIX:-}"
       [ -x "$BIN/${cmd%% *}" ] || {
         echo "ABORT $BIN/${cmd%% *} is missing or not executable" >&2
         exit 2
@@ -72,8 +72,8 @@ for c in "${CHECKS[@]}"; do
   # shellcheck disable=SC2086
   "$BIN/${cmd%% *}" ${cmd#* }
   rc=$?
-  verdict_line=$(head -n1 "$(evidence_root)/$ev/verdict.txt" 2>/dev/null || echo "no verdict.txt")
-  echo "== $id: exit $rc, verdict: $verdict_line, evidence: $(evidence_root)/$ev"
+  verdict_line=$(head -n1 "$(evidence_root)/$ev${PHASE8_EV_SUFFIX:-}/verdict.txt" 2>/dev/null || echo "no verdict.txt")
+  echo "== $id: exit $rc, verdict: $verdict_line, evidence: $(evidence_root)/$ev${PHASE8_EV_SUFFIX:-}"
   case "$rc" in
     0) ;;
     2)

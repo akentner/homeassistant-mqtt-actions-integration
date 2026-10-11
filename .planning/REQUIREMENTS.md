@@ -20,10 +20,10 @@ Requirements for the Hardening milestone. Each maps to a roadmap phase. The v1.0
 
 ### Verification on Real Instances
 
-- [ ] **UAT-01**: A v0.1.0 instance next to a native instance keeps running its actions, shows no entities for migrated devices and raises no error
-- [ ] **UAT-02**: Re-published retained legacy Discovery plus two restarts yield no `_2` duplicates (proves MIG-05)
-- [ ] **UAT-03**: A command on one of two real instances runs the actions exactly once on every approved instance; an unknown payload is ignored and the state stays unchanged
-- [ ] **UAT-04**: The Discovery export has `enabled_by_default` false and no buttons, the core prefix yields only disabled duplicates, and switching it off clears the topics
+- [x] **UAT-01**: A v0.1.0 instance next to a native instance keeps running its actions, shows no entities for migrated devices and raises no error
+- [x] **UAT-02**: Re-published retained legacy Discovery plus two restarts yield no `_2` duplicates (proves MIG-05)
+- [x] **UAT-03**: A command on one of two real instances runs the actions exactly once on every approved instance; an unknown payload is ignored and the state stays unchanged
+- [x] **UAT-04**: The Discovery export has `enabled_by_default` false and no buttons, the core prefix yields only disabled duplicates, and switching it off clears the topics
 
 ## Future Requirements
 
@@ -57,10 +57,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QLT-01 | Phase 7 | Pending |
 | QLT-02 | Phase 7 | Pending |
 | QLT-03 | Phase 7 | Pending |
-| UAT-01 | Phase 8 | Pending |
-| UAT-02 | Phase 8 | Pending |
-| UAT-03 | Phase 8 | Pending |
-| UAT-04 | Phase 8 | Pending |
+| UAT-01 | Phase 8 | Complete |
+| UAT-02 | Phase 8 | Complete |
+| UAT-03 | Phase 8 | Complete |
+| UAT-04 | Phase 8 | Complete |
 
 **Coverage:**
 - v1.0.1 requirements: 9 total
@@ -69,4 +69,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-10-04*
-*Last updated: 2026-10-04 after roadmap creation (Phases 6-8)*
+*Last updated: 2026-10-11 after the UAT-04 gap closure of Phase 8 (UAT-01 to UAT-04 complete, ledger in 08-UAT.md)*

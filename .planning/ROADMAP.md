@@ -148,7 +148,7 @@ Plans:
 - [x] 08-18-PLAN.md — Re-pin the bench to the new build, clear the 08-13 leftovers, re-run the scripted group (UAT-02, UAT-03, P1-5, UAT-04) into the `-rerun2` evidence folders with the failing tombstone state restored before UAT-04
 
 **Wave 17** *(blocked on Wave 16 completion)*
-- [ ] 08-14-PLAN.md — Record the final re-run in the ledger (the 08-13 FAIL stays as history; pruned-state qualifier where it applies), update the REQUIREMENTS.md traceability
+- [x] 08-14-PLAN.md — Record the final re-run in the ledger (the 08-13 FAIL stays as history; pruned-state qualifier where it applies), update the REQUIREMENTS.md traceability
 
 **Wave 18** *(blocked on Wave 17 completion)*
 - [ ] 08-15-PLAN.md — Final gate, refresh or re-run of the archived Phase 1 to 4 reports, Phase 8 re-verification

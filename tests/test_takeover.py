@@ -34,6 +34,7 @@ from custom_components.mqtt_actions.takeover import (
     TakeoverStatus,
     TakeoverTarget,
     async_take_over,
+    disable_duplicates,
     is_legacy_entity,
     remove_replay_twins,
 )
@@ -982,6 +983,43 @@ async def test_remove_replay_twins_leaves_an_older_entry_that_carries_the_identi
         assert entity_registry.async_get(entity_id) == old
     for twin in natives.values():
         assert entity_registry.async_get(twin.entity_id) == twin
+
+
+def _disable_duplicates_of(hass: HomeAssistant, legacy: LegacyDevice) -> int:
+    return disable_duplicates(hass, legacy.entry.entry_id, legacy.device_id, mqtt_entry_id=_mqtt_entry_id(hass))
+
+
+async def test_disable_duplicates_leaves_an_older_entry_that_carries_the_identity_enabled(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """WR-02: the duplicate test is the one of `remove_replay_twins`, so the entry the user knows is never disabled."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    entity_registry = er.async_get(hass)
+    switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
+    assert switch.disabled_by is None
+
+    assert _disable_duplicates_of(hass, legacy) == 0
+
+    assert entity_registry.async_get(switch.entity_id).disabled_by is None
+    assert entity_registry.async_get(natives[("switch", legacy.device_id)].entity_id).disabled_by is None
+
+
+async def test_disable_duplicates_disables_a_legacy_entry_when_the_native_twin_carries_the_identity(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """WR-02: only the native twin holds the user's choices, so the legacy entry is the duplicate and gets disabled."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    entity_registry = er.async_get(hass)
+    switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
+    twin = natives[("switch", legacy.device_id)]
+    entity_registry.async_update_entity(twin.entity_id, name="My own name")
+
+    assert _disable_duplicates_of(hass, legacy) == 1
+
+    assert entity_registry.async_get(switch.entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert entity_registry.async_get(twin.entity_id).disabled_by is None
 
 
 async def test_remove_replay_twins_never_touches_a_foreign_mqtt_entity(

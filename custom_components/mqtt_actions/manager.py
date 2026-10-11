@@ -545,7 +545,7 @@ class Manager:
         self._cancel_cutover: CALLBACK_TYPE | None = None
         # The timer of the catch for duplicates a replayed legacy discovery creates; None while none is armed (D-05)
         self._cancel_replay_catch: CALLBACK_TYPE | None = None
-        # The registry listener that disables an enabled export duplicate; None unless the export is on the core prefix
+        # The registry listener that disables an enabled duplicate of a native device; None while the manager is stopped
         self._cancel_export_guard: CALLBACK_TYPE | None = None
         # Set once the settle time has passed; only then does a roster change start a cutover check
         self._cutover_ready = False
@@ -804,7 +804,7 @@ class Manager:
             await self._async_reconcile_locked(startup=True)
             # Before the platform forward and before any document: the entities move first, then the retained clear
             await self._async_native_takeover()
-            # The export may be on the core prefix already: arm before it is published, so its duplicate is caught
+            # Any instance may export on the core prefix: arm before the owned devices are published
             self._sync_export_guard()
             await self._async_publish_owned()
             # The pass decided which devices are native, so only now is it known whether discovery is still needed
@@ -885,12 +885,8 @@ class Manager:
                 await takeover.async_flush_registries(self._hass)
 
     def _export_guard_ids(self) -> set[str]:
-        """Return the ids of the devices the export covers: owned, native and not transferred away."""
-        return {
-            device_id
-            for device_id in self.devices
-            if self.is_native(device_id) and device_id not in self.sync.transferred_away
-        }
+        """Return the ids of the native devices this instance holds: owned or mirrored, not transferred away (R-1)."""
+        return {device_id for device_id in self._native_device_ids() if device_id not in self.sync.transferred_away}
 
     @callback
     def _disarm_export_guard(self) -> None:
@@ -902,15 +898,17 @@ class Manager:
     @callback
     def _sync_export_guard(self) -> None:
         """
-        Arm the guard while the export is on and its prefix is the one core MQTT listens to, otherwise disarm it (D-03).
+        Arm the guard for duplicates of native devices whenever the manager runs, whatever the export option says.
 
-        Core MQTT restores the state of a deleted registry entry with the same platform and unique id, so the duplicate
-        that an export on its own prefix creates can come back enabled. The guard disables it, once for the rows that
-        exist now and then for every row core creates while it is armed. Registry logic only: nothing is published.
+        Core MQTT restores the state of a deleted registry entry with the same platform and unique id, so a discovery
+        export on the prefix core listens to can create a duplicate that comes back enabled. Any instance on the broker
+        may publish that export and a receiver cannot know who does, so the guard does not read this instance's export
+        option or prefix. It disables the rows that exist now and then every row core creates while it is armed. The
+        replay catch may remove a disabled row at a later start; the removal leaves a record with the disabled state
+        `integration`, so every later restore is disabled as well. Registry logic only: nothing is published.
         """
         self._disarm_export_guard()
-        enabled, prefix = self._export_signature()
-        if not self._running or not enabled or prefix != self.gateway.discovery_prefix():
+        if not self._running:
             return
         self._cancel_export_guard = self._hass.bus.async_listen(
             er.EVENT_ENTITY_REGISTRY_UPDATED, self._on_export_registry_updated
@@ -919,7 +917,7 @@ class Manager:
 
     @callback
     def _on_export_registry_updated(self, event: Event[er.EventEntityRegistryUpdatedData]) -> None:
-        """Look at every new core MQTT row of an exported device id; everything else returns at once (T-08-36)."""
+        """Look at every new core MQTT row of a native device id; everything else returns at once (T-08-36)."""
         if event.data["action"] != "create":
             return
         entry = er.async_get(self._hass).async_get(event.data["entity_id"])
@@ -1169,7 +1167,6 @@ class Manager:
                     partial(self._publisher.async_clear_export, device.device_id, old_prefix),
                     f"clear the discovery export of device {device.name}",
                 )
-        self._sync_export_guard()
         if current[0]:
             for device in exported:
                 await self.async_publish_discovery(device)

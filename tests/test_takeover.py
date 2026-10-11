@@ -989,15 +989,20 @@ def _disable_duplicates_of(hass: HomeAssistant, legacy: LegacyDevice) -> int:
     return disable_duplicates(hass, legacy.entry.entry_id, legacy.device_id, mqtt_entry_id=_mqtt_entry_id(hass))
 
 
-async def test_disable_duplicates_leaves_an_older_entry_that_carries_the_identity_enabled(
+async def test_disable_duplicates_leaves_a_customized_entry_enabled_next_to_an_untouched_native_twin(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
 ) -> None:
-    """WR-02: the duplicate test is the one of `remove_replay_twins`, so the entry the user knows is never disabled."""
+    """
+    WR-02: the entry that holds the user's name, area or labels is the one automations use, so it is never disabled.
+
+    Age is no criterion here: a row that core restores from a deleted record keeps the old creation time, and that
+    row is the duplicate the guard exists for.
+    """
     legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
     natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
     entity_registry = er.async_get(hass)
     switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
-    assert switch.disabled_by is None
+    entity_registry.async_update_entity(switch.entity_id, name="My own name")
 
     assert _disable_duplicates_of(hass, legacy) == 0
 

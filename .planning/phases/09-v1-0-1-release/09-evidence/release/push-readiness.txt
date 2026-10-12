@@ -1,0 +1,12 @@
+recorded_utc: 2026-10-12T01:54:17Z
+bump_sha: 7baec9878badc8fb49ea0d80243277d5ff3fb443
+origin_main: d0f660cb2422c7688d22a674cf54f955a8c26c7f
+origin_main_is_ancestor_of_bump: yes (git merge-base --is-ancestor origin/main 7baec9878badc8fb49ea0d80243277d5ff3fb443 exits 0, after git fetch origin)
+commits_to_push: 191
+non_planning_paths_changed_after_bump: none (git diff --name-only 7baec9878badc8fb49ea0d80243277d5ff3fb443 HEAD -- . ':(exclude).planning' is empty)
+local_gate_ruff_check: pass (All checks passed!)
+local_gate_ruff_format: pass (92 files already formatted)
+local_gate_pytest: 1535 passed, 2 xfailed in 118.37s (0:01:58) (uv run pytest -q, all tiers; mosquitto was on PATH, so the broker tier ran)
+push_command: git push origin 7baec9878badc8fb49ea0d80243277d5ff3fb443:refs/heads/main
+why_refspec: local main already carries Phase 9 evidence commits after the bump; ci.yml and validate.yml run on the head of a push, and D-04 needs them green on the bump SHA itself, so the owner pushes exactly the bump SHA with a refspec instead of a plain git push origin main
+tag: not created (plan 09-04, after the bench)

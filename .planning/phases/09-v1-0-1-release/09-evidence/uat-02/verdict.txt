@@ -1,0 +1,9 @@
+FAIL
+FAIL E1 round 1 ha-a :: platform mqtt rows: [{"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a"},{"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001"}]
+FAIL E2 round 1 ha-a :: _2 rows: ["select.bar_select_2","switch.lampe_test_2"]
+FAIL E3 round 1 ha-a :: legacy devices: [[["mqtt","mqtt_actions_11111111-aaaa-4aaa-8aaa-000000000001"]],[["mqtt","mqtt_actions_b6bd2c0e-6d81-49ea-8025-4bd087bd718a"]]]
+FAIL E1 round 1 ha-b :: platform mqtt rows: [{"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a"},{"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001"}]
+FAIL E2 round 1 ha-b :: _2 rows: ["select.bar_select_2","switch.lampe_test_2"]
+FAIL E3 round 1 ha-b :: legacy devices: [[["mqtt","mqtt_actions_11111111-aaaa-4aaa-8aaa-000000000001"]],[["mqtt","mqtt_actions_b6bd2c0e-6d81-49ea-8025-4bd087bd718a"]]]
+FAIL E1 round 2 ha-a :: platform mqtt rows: [{"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a"},{"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001"}]
+FAIL E2 round 2 ha-a :: _2 rows: ["select.bar_select_2","switch.lampe_test_2"]

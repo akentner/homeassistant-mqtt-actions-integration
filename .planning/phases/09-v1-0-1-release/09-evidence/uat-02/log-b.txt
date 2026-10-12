@@ -1,0 +1,10 @@
+== round 1 (instance started 2026-10-12 21:49:37.771693294 +0200 CEST) ==
+2026-10-12 21:49:45.482 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-12 21:49:45.491 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-12 21:49:50.458 INFO (MainThread) [custom_components.mqtt_actions] Removed 2 duplicate entities that a replayed legacy discovery created
+2026-10-12 21:49:50.471 INFO (MainThread) [custom_components.mqtt_actions] Removed 2 duplicate entities that a replayed legacy discovery created
+== round 2 (instance started 2026-10-12 21:51:26.699748882 +0200 CEST) ==
+2026-10-12 21:51:32.853 WARNING (MainThread) [custom_components.mqtt_actions] Device '11111111-aaaa-4aaa-8aaa-000000000001' keeps its MQTT device: it has entries this integration did not create
+2026-10-12 21:51:32.853 WARNING (MainThread) [custom_components.mqtt_actions] Device 'b6bd2c0e-6d81-49ea-8025-4bd087bd718a' keeps its MQTT device: it has entries this integration did not create
+2026-10-12 21:51:37.866 INFO (MainThread) [custom_components.mqtt_actions] Removed 2 duplicate entities that a replayed legacy discovery created
+2026-10-12 21:51:37.868 INFO (MainThread) [custom_components.mqtt_actions] Removed 2 duplicate entities that a replayed legacy discovery created

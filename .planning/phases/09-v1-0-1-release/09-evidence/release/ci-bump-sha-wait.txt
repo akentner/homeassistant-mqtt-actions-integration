@@ -1,0 +1,40 @@
+recorded_utc: 2026-10-12T08:01:25Z
+bump_sha: 7baec9878badc8fb49ea0d80243277d5ff3fb443
+origin_main_at_end: 7baec9878badc8fb49ea0d80243277d5ff3fb443 (git ls-remote origin refs/heads/main)
+verdict: STOP - no CI and no Validate run exists for the bump SHA after the 45-minute window (plan 09-02 Task 2 step 4)
+judgment: not red, not green; GitHub Actions created no run at all for the owner's push
+
+== poll
+command: gh run list --commit 7baec9878badc8fb49ea0d80243277d5ff3fb443 --json databaseId,workflowName,event,headSha,status,conclusion,createdAt,url
+interval: 30 s
+window_start_utc: 2026-10-12T07:15:47Z (Task 1 verify passed)
+window_end_utc: 2026-10-12T08:00:47Z (45 minutes)
+polls: 07:16:13 to 08:00:41, every result []
+final_result: [] (stored in ci-bump-sha.json)
+ci-bump-sha-jobs.json: not written, because there is no run whose jobs could be listed
+
+== diagnostics (GitHub API reads only)
+actions_runs_head_sha_total_count: 0 (GET repos/{owner}/{repo}/actions/runs?head_sha=<bump>)
+check_suites_on_bump: claude (queued, created 2026-10-12T07:15:13Z), renovate (queued, created 2026-10-12T07:15:13Z); no github-actions check suite
+push_received_by_github: yes; origin main moved d0f660c -> 7baec98, and the two app check suites above were created at 07:15:13Z
+push_event_in_repo_events_feed: none for refs/heads/main (latest PushEvent in the feed: 2026-10-04T13:37:59Z, refs/heads/gsd/phase-06-native-entity-residual-fixes)
+actions_permissions: enabled true, allowed_actions all
+workflows_state: CI active, Validate active, Release active
+ci_yml_trigger_at_bump: on push with tags-ignore v*.*.* only (branch main is not excluded)
+validate_yml_trigger_at_bump: on push with tags-ignore v*.*.* only (branch main is not excluded)
+skip_markers_in_pushed_commits: none (grep of d0f660c..7baec98 messages for [skip ci], [ci skip], [no ci], [skip actions], [actions skip], skip-checks)
+githubstatus_at_check: All Systems Operational (Actions, Webhooks, Git Operations operational)
+history: earlier push events on main did trigger CI and Validate (for example 97c178d on 2026-10-02)
+
+== runs on other SHAs (do not count for the bump SHA, T-09-07)
+renovate PR #16 (renovate/ubuntu-26.x, head 7334f6d62f437a661efec642a71fe3fbdeaf6b39, parent = bump SHA, changes only runs-on in ci.yml, release.yml, validate.yml):
+  CI 38216782253 pull_request failure; Broker tests (Mosquitto) failure at step "Run uv run pytest -q -m broker"; Ruff, Unit tests, Multi-instance tests success
+  Validate 38216782572 pull_request success; hassfest, HACS success
+  https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38216782253
+  https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38216782572
+note: that PR moves the runners to Ubuntu 26; the bump tree pins ubuntu-24.04, so this failure says nothing about the bump SHA
+
+== actions by Claude
+git_push: none
+gh_run_rerun: none
+workflow_dispatch: none (a dispatch run would have event workflow_dispatch, not push, and is the owner's call)

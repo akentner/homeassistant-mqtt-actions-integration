@@ -1,0 +1,12 @@
+green gate after the pin (env: . ~/ha-test/phase9.env), recorded_utc: 2026-10-12T01:49:12Z
+bump_sha: 7baec9878badc8fb49ea0d80243277d5ff3fb443
+
+== check-preflight.sh (full, with the guard routing proof)
+PASS preflight /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09-v1-0-1-release/09-evidence/00-preflight
+rc=0
+
+== check-stale-anchor.sh
+recorded build sha: 7baec9878badc8fb49ea0d80243277d5ff3fb443
+empty mount-source (7baec9878badc8fb49ea0d80243277d5ff3fb443): git diff --stat 7baec9878badc8fb49ea0d80243277d5ff3fb443 7baec9878badc8fb49ea0d80243277d5ff3fb443 -- custom_components tests .github
+PASS stale anchor: custom_components, tests and .github unchanged since the recorded build sha
+rc=0

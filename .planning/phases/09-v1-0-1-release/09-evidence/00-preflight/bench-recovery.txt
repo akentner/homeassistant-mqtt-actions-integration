@@ -1,0 +1,24 @@
+bench recovery before the Phase 9 pin (bench recovery, not a result)
+recorded_utc: 2026-10-12T01:46:36Z
+
+== container states found (podman inspect, fixed fields)
+mosq status=exited running=false exit=135 started=2026-10-11 12:31:00.946469776 +0200 CEST finished=2026-10-11 21:02:09.669919935 +0200 CEST
+ha-a status=exited running=false exit=135 started=2026-10-11 15:24:40.964996231 +0200 CEST finished=2026-10-11 21:02:09.675919935 +0200 CEST
+ha-b status=exited running=false exit=135 started=2026-10-11 15:24:41.006653958 +0200 CEST finished=2026-10-11 21:02:14.389920449 +0200 CEST
+ha-c status=exited running=false exit=0 started=2026-10-06 20:13:28.106273455 +0200 CEST finished=2026-10-06 20:19:42.119733996 +0200 CEST
+
+== mosq
+mosq_started_at_old: 2026-10-11 12:31:00.946469776 +0200 CEST
+mosq_started_at_new: 2026-10-12 03:46:21.663745621 +0200 CEST
+mosq persistence is off: the restart dropped every retained message; the instances republish their own documents at start (bench recovery, not a result)
+probe after start: probe_sub -t 'mqtt_actions/#' -W 3 connected and timed out with no retained message (rc=27)
+pointer copies: ~/ha-test/.mosq-started-before-phase8.pre-phase9, ~/ha-test/.current-backup-phase8.pre-phase9
+ha-c: not started (D-07)
+
+== red gate before the pin: . ~/ha-test/phase9.env && check-preflight.sh --quick (first five lines, then exit code)
+FAIL preflight (quick)
+  - evidence file missing or empty: 00-preflight/build.txt
+  - evidence file missing or empty: 00-preflight/mount-hashes.txt
+  - evidence file missing or empty: 00-preflight/heartbeats.txt
+  - evidence file missing or empty: 00-preflight/retained-snapshot.txt
+rc=1

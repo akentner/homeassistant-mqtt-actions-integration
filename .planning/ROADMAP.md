@@ -81,13 +81,35 @@ Plans:
 
 ### Phase 09.1: UAT-02 gap closure: remove leftover disabled and legacy mqtt rows on replay, then re-run UAT-02 and UAT-04 on a new SHA (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** A retained legacy Discovery replay at start leaves no disabled or legacy mqtt rows and no legacy device behind, from integration and from null tombstones, without ever clearing another instance's export (CR-01); UAT-02 (both tombstone states) and UAT-04 pass on the bench on exactly the fix SHA, which the re-pointed plans 09-04 and 09-05 then tag and release as v1.0.1.
+**Requirements**: REL-01
 **Depends on:** Phase 9
-**Plans:** 0 plans
+**Success Criteria** (what must be TRUE):
+  1. A test that starts from integration tombstones reproduces E1 to E3 before the fix and passes after it. With legacy or empty content on the core-prefix topic the start-up catch removes integration-disabled replay twins and the emptied legacy device; export or unknown content, user-disabled and customized rows stay (D-01 to D-05, D-08). (REL-01)
+  2. The owner, and only the owner, clears a stale retained legacy discovery after the catch; a follower publishes nothing (D-06, T-5-02). (REL-01)
+  3. The fix SHA is on `main` by fast-forward with manifest 1.0.1, the owner pushed exactly that SHA, and CI and Validate are green on it (D-13 to D-15). (REL-01)
+  4. On the bench, the first start of the fix build cleans the leftover rows (D-09), UAT-02 passes from integration and from null tombstones, and UAT-04 passes, all on exactly the fix SHA (D-10 to D-12). (REL-01)
+  5. `09-UAT.md` carries the fix-SHA rows, the release notes name the fixed case, and plans 09-04 and 09-05 read the fix SHA (D-16). (REL-01)
+**Plans:** 6 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 09.1 to break down)
+**Wave 1**
+- [ ] 09.1-01-PLAN.md — Product fix, legacy-payload path (tracer, test first): content classifier, sync verdicts, refined disabled branch, owner-only clear of the stale legacy topic
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 09.1-02-PLAN.md — Product fix, empty-topic path: settle signal and grace, count-only log for unknown content, G6 rewrite, broker pin of the retained replay, docs; ends with FIX
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 09.1-03-PLAN.md — check-uat02.sh clean comparison fix (D-11) with run-path proof, phase9.1.env, push readiness of FIX
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 09.1-04-PLAN.md — Owner pushes exactly FIX and dispatches CI and Validate; both green on FIX
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 09.1-05-PLAN.md — Bench pinned to FIX, heal start recorded (D-09), UAT-02 from integration and null tombstones, UAT-04
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 09.1-06-PLAN.md — Ledger rows on FIX, release notes, 09-04 and 09-05 re-pointed to FIX, refined CR-01 rule in PROJECT and STATE
 
 ### Phase 10: Review Findings and Native Migration Extraction
 
@@ -154,6 +176,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. v1.0.1 Release | 3/5 | In Progress | - |
+| 9.1. UAT-02 Gap Closure (INSERTED) | 0/6 | Planned | - |
 | 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |

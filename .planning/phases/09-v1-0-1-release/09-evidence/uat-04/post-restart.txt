@@ -1,0 +1,15 @@
+post-restart observation (never a result; plan 09-03 Task 2 step 5c)
+graceful restart of ha-a and ha-b: podman restart -t 60 at 2026-10-12T19:56:26Z, then both answered and 90 s more
+context: UAT-04 did not run (blocked.txt); this restart follows the UAT-02 FAIL, its final start, and the start after the reseed ABORT
+live mqtt rows after the restart: a=2 b=2 (post-restart-a.json, post-restart-b.json)
+guard INFO lines of this start: a=0 b=0
+== check-uat02.sh clean (rc=1)
+FAIL UAT-02 clean
+  - ha-a: mqtt_actions rows (without hub rows) differ from the baseline
+  - ha-a: a row with platform mqtt exists
+  - ha-a: an entity id ending in _2 exists
+  - ha-a: a legacy mqtt device exists
+  - ha-b: mqtt_actions rows (without hub rows) differ from the baseline
+  - ha-b: a row with platform mqtt exists
+  - ha-b: an entity id ending in _2 exists
+  - ha-b: a legacy mqtt device exists

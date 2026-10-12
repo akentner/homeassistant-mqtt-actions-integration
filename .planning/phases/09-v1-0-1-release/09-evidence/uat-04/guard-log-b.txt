@@ -1,0 +1,3 @@
+guard INFO lines of ha-b (timestamp and text only) since the start of the UAT-02 run (2026-10-12T19:49:15Z); UAT-04 did not run (blocked.txt), so no UAT-04 window exists; line timestamps are container local time (UTC+2)
+2026-10-12 21:49:45.482 Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-12 21:49:45.491 Disabled 1 duplicate entities that core MQTT created for native devices

@@ -6,3 +6,17 @@
   {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
   {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
 would flip to disabled_by null: ha-a switch.lampe_test_2 (disabled_by integration);ha-a select.bar_select_2 (disabled_by integration);ha-b switch.lampe_test_2 (disabled_by integration);ha-b select.bar_select_2 (disabled_by integration);
+
+build under test: 7baec9878badc8fb49ea0d80243277d5ff3fb443 (00-preflight/build.txt)
+UAT-02 result (line 1 of uat-02/verdict.txt): FAIL
+== projection (--check, read-only) 2026-10-12T19:54:04Z
+-- ha-a deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 2
+-- ha-b deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 2
+nothing to flip
+== restoration of the failing tombstone state (reseed-tombstones.sh) 2026-10-12T19:55:05Z
+ha-a and ha-b stopped; registry files are flushed
+== projection before the restoration 2026-10-12T19:55:11Z
+-- ha-a deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 2
+-- ha-b deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 2
+backup of both core.entity_registry files: /home/akentner/ha-test/_backup-pre-phase9-20261012T014617Z/reseed-20261012T195511Z
+ABORT: ha-a holds live mqtt rows (2); the restoration needs none

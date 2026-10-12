@@ -1,0 +1,18 @@
+BLOCKED
+reason: UAT-04 cannot start from the D-06 restored null-tombstone state without a hand edit, so it was not run (plan 09-03 Task 2 step 2).
+build under test: 7baec9878badc8fb49ea0d80243277d5ff3fb443 (00-preflight/build.txt)
+recorded_utc: 2026-10-12T19:56Z
+
+facts (from prepare.txt, written by reseed-tombstones.sh):
+- after the UAT-02 FAIL, ha-a and ha-b each hold 2 live registry rows with platform mqtt: switch.lampe_test_2
+  (unique_id 11111111-aaaa-4aaa-8aaa-000000000001) and select.bar_select_2 (unique_id b6bd2c0e-6d81-49ea-8025-4bd087bd718a),
+  disabled_by integration (uat-02/round2-a.json, uat-02/round2-b.json)
+- the deleted-entity records of both regression ids no longer exist on either instance: the replay turned them back into
+  the live rows above (`reseed-tombstones.sh --check`: no records, "nothing to flip")
+- `reseed-tombstones.sh` (restoration run) stopped both instances, took its backup, then ended in ABORT
+  "ha-a holds live mqtt rows (2); the restoration needs none" before any file was written; both instances were started again
+- reaching the D-06 state would need the removal of live registry rows and the fabrication of deleted-entity records by hand;
+  both are forbidden (D-06, plan prohibitions), so the regression-state line was not produced and UAT-04 did not run
+
+consequence: the gap is the UAT-02 FAIL (E1 to E3). UAT-04 is blocked by that gap, not by a bench defect; it is re-run on the
+fix SHA in the inserted Phase 9.1.

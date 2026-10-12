@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 09
 current_phase_name: v1.0.1 Release
 status: executing
-stopped_at: Phase 9 context gathered
-last_updated: "2026-10-12T01:42:41.044Z"
-last_activity: 2026-10-11
-last_activity_desc: Roadmap v1.1 created (4 phases, 28 of 28 requirements mapped)
-state_head: febd844d474594aff0643a2ce7a202dcc1b4c51e
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-10-12T01:57:40.058Z"
+last_activity: 2026-10-12
+last_activity_desc: Phase 09 execution started
+state_head: 113cc5295bd99a54680f18cab84bd60c23f0848f
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-11)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 9 — v1.0.1 Release (milestone v1.1 Local Actions on Mirrors, Phases 9 to 12)
+**Current focus:** Phase 09 — v1.0.1 Release
 
 ## Current Position
 
-Phase: 09 (v1.0.1 Release) — READY TO EXECUTE
-Plan: Not planned yet
+Phase: 09 (v1.0.1 Release) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-10-11 — Roadmap v1.1 created (4 phases, 28 of 28 requirements mapped)
+Last activity: 2026-10-12 — Phase 09 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -111,6 +111,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 08 P18 | 37 min | 2 tasks | 57 files |
 | Phase 08 P14 | 20 min | 2 tasks | 4 files |
 | Phase 08 P15 | not measured | 3 tasks | 11 files |
+| Phase 09 P01 | 11 min | 3 tasks | 31 files |
 
 ## Accumulated Context
 
@@ -226,6 +227,7 @@ Recent decisions affecting current work:
 - [Roadmap v1.1]: The pure IN-04 move and each review fix are separate plans; the extraction lands before MIR-01
 - [Roadmap v1.1]: Phases 9 and 12 change no product code; a failed check becomes an inserted decimal phase, then the affected verification and bench run repeat on the new SHA
 - [Owner 2026-10-11, MIR-01]: one Script per mirror with a `parallel` branch for "in addition to"; local actions discarded (logged, reported) on tombstone and adoption; orphaned Select options kept inactive and re-attached; no GuardedTemplate on local actions; UI is a menu in the hub options flow
+- [Phase 09]: Bump SHA 7baec9878badc8fb49ea0d80243277d5ff3fb443 is the single v1.0.1 anchor; owner pushes it with git push origin 7baec9878badc8fb49ea0d80243277d5ff3fb443:refs/heads/main (09-01)
 
 ### Pending Todos
 
@@ -256,9 +258,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-12T00:34:41.917Z
-Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-v1-0-1-release/09-CONTEXT.md
+Last session: 2026-10-12T01:57:40.018Z
+Stopped at: Completed 09-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

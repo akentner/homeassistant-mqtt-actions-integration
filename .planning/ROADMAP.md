@@ -55,11 +55,11 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
   2. UAT-02 and UAT-04 pass on the bench (ha-a, ha-b, ha-c) on exactly that SHA; the evidence records the SHA and records ACCEPTED-GAP-V101 as closed for v1.0.1. (REL-01)
   3. After the user pushes the tag `v1.0.1`, the release workflow (check-version, the three test tiers, hassfest, HACS validation, release job) is green, and GitHub shows v1.0.1 as the latest release, so HACS offers 1.0.1. (REL-01)
 
-**Plans**: 5 plans
+**Plans**: 1/5 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 09-01-PLAN.md — Bump commit on main, bench pinned to the bump SHA (tracer), bench scripts proven unchanged, push readiness
+- [x] 09-01-PLAN.md — Bump commit on main, bench pinned to the bump SHA (tracer), bench scripts proven unchanged, push readiness
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 09-02-PLAN.md — Owner pushes the bump SHA to main; CI and Validate green on exactly that SHA
@@ -142,7 +142,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 9. v1.0.1 Release | 0/TBD | Not started | - |
+| 9. v1.0.1 Release | 1/5 | In Progress | - |
 | 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |

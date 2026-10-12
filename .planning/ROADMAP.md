@@ -46,6 +46,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
 ## Phase Details
 
 ### Phase 9: v1.0.1 Release
+
 **Goal**: v1.0.1 becomes a real release: the commit whose manifest says 1.0.1 passes UAT-02 and UAT-04 on the bench on exactly that SHA and is tagged, which closes ACCEPTED-GAP-V101 for that release.
 **Depends on**: Phase 8 (v1.0.1 code complete, closed with accepted gap ACCEPTED-GAP-V101)
 **Requirements**: REL-01
@@ -53,13 +54,32 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
   1. The manifest bump to 1.0.1 is committed before the bench run, and the commit to be tagged contains no IN-04 or MIR-01 change: either `main` stays frozen until the tag, or the release is cut from `release/1.0.1` and merged back afterwards. (REL-01)
   2. UAT-02 and UAT-04 pass on the bench (ha-a, ha-b, ha-c) on exactly that SHA; the evidence records the SHA and records ACCEPTED-GAP-V101 as closed for v1.0.1. (REL-01)
   3. After the user pushes the tag `v1.0.1`, the release workflow (check-version, the three test tiers, hassfest, HACS validation, release job) is green, and GitHub shows v1.0.1 as the latest release, so HACS offers 1.0.1. (REL-01)
-**Plans**: TBD
+
+**Plans**: 5 plans
+
+Plans:
+**Wave 1**
+- [ ] 09-01-PLAN.md — Bump commit on main, bench pinned to the bump SHA (tracer), bench scripts proven unchanged, push readiness
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 09-02-PLAN.md — Owner pushes the bump SHA to main; CI and Validate green on exactly that SHA
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 09-03-PLAN.md — UAT-02 and UAT-04 on the bump SHA (UAT-04 from the restored null-tombstone state), ledger 09-UAT.md, release notes
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 09-04-PLAN.md — Pre-tag gate, owner decision on the one-way tag, owner pushes v1.0.1
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 09-05-PLAN.md — Release run green, Latest, notes applied; ACCEPTED-GAP-V101 closed in ledger, PROJECT, MILESTONES, STATE
+
 **Notes**:
 - The user pushes the tag. Claude prepares the bump commit, the bench run and the evidence.
 - Standard patterns, no research needed (release mechanics: research PITFALLS 10 and RETROSPECTIVE). No `[ci skip]` in squashed commits.
 - A failed bench check is a gap, not an accepted skip. Its fix goes into an inserted Phase 9.1 on the release line, followed by a new bench run on the new SHA; no product fixes inside this verification phase (PROJECT.md Key Decision on the D-08 waiver).
 
 ### Phase 10: Review Findings and Native Migration Extraction
+
 **Goal**: The info findings of both Phase 8 reviews are closed, and the takeover, replay-catch and duplicate-guard orchestration lives in its own module, so `manager.py` is smaller and quiet before MIR-01 edits it.
 **Depends on**: Phase 9 (no IN-04 commit on `main` before the v1.0.1 tag)
 **Requirements**: FIX-01, FIX-02, FIX-03, FIX-04, FIX-05, FIX-06, FIX-07, FIX-08
@@ -69,6 +89,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
   3. When a row raises mid-loop in the replay catch, no emptied device is left behind and the partial count is still reported. (FIX-06)
   4. While customized duplicates are kept enabled (including the WR-03 cases), the user sees one non-fixable Repairs warning that lists them, in English and German; it disappears once none remain, and no registry row is ever removed. (FIX-08)
   5. README and troubleshooting state that a duplicate the user re-enables is disabled again at the next start. (FIX-05)
+
 **Plans**: TBD
 **Notes**:
 - Plan order: the loud registry-API test (FIX-01) and the shared test helpers (FIX-03) first, then the start-up ordering spy test, then the pure move (FIX-02) as a plan of its own. FIX-04 to FIX-08 build on the moved module in separate plans. Never mix the move and a fix in one plan.
@@ -76,6 +97,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
 - Standard patterns, no research needed (collaborator pattern of `SyncManager`, `PresenceManager`, `RetriggerCoordinator`; seams mapped line by line in research ARCHITECTURE).
 
 ### Phase 11: Local Actions on Mirrors
+
 **Goal**: On a follower, the user gives a mirrored device its own actions per trigger, in addition to or instead of the owner's actions. They run locally without approval under the device's mode and breaker, survive owner changes, and never leave the instance (MIR-01, backlog 999.1).
 **Depends on**: Phase 10 (migration orchestration extracted from `manager.py`, shared test helpers in place)
 **Requirements**: MIR-01, MIR-02, MIR-03, MIR-04, MIR-05, MIR-06, MIR-07, MIR-08, MIR-09, MIR-10, MIR-11, MIR-12, MIR-13, MIR-14, MIR-15
@@ -85,6 +107,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
   3. In "in addition to" mode, owner and local parts run in parallel in the device's single Script, and a runtime failure of one part does not stop the other. Device mode (observe, disabled) and the breaker apply to local runs, and a local edit releases a tripped breaker. Test buttons and the re-trigger service run the effective actions on this instance. Local action failures raise their own Repairs issue, independent of owner action failures. (MIR-03, MIR-09, MIR-10, MIR-13)
   4. Nothing local leaves the instance: the central config, actions hash, export, diagnostics content and adoption payload are byte-identical with and without local actions, existing approvals stay valid, and no new re-trigger status or reason word appears on the broker. Diagnostics show only counts of local actions (per device, orphaned). The approval issue says how many triggers are replaced locally, while the approval stays pending and adoption stays refused. (MIR-04, MIR-10, MIR-12, MIR-14)
   5. Local actions survive owner content changes, renames, rev bumps, restarts and an owner re-pin. Local actions of a Select option the owner removed stay inactive, are listed as orphaned in the options where the user can remove them, and re-attach when the same StateValue returns. A tombstone or an adoption discards them with a log entry and `adopt_device` reports it; start-up and transient prunes discard nothing. The README documents modes, mute, parallel semantics, this lifecycle, downgrade behavior and the `{{ state }}` template caveat. (MIR-06, MIR-07, MIR-08, MIR-15)
+
 **Plans**: TBD
 **UI hint**: yes
 **Research**: needed (`/gsd-plan-phase 11` with research): pin test of `parallel` branch semantics in core 2026.9.4 (`stop`, `continue_on_error`, response variables, re-raise of the first exception after both branches); validating and guarding the owner part (static denylist, `GuardedTemplate`) apart from the unguarded local part before assembly; Store skeleton with its own migrate function; `section` plus `ActionSelector` rendering in an options flow on the 2026.9 frontend (check on the bench early).
@@ -96,6 +119,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
 - End the phase with a milestone-wide cross-file review, so every product fix lands before Phase 12.
 
 ### Phase 12: Re-verification and v1.1.0 Release
+
 **Goal**: The final v1.1 build is verified end to end and published: every phase has a current verification, the bench checks pass on exactly the tagged SHA, and v1.1.0 is released.
 **Depends on**: Phase 11 (all product changes of the milestone done)
 **Requirements**: QLT-01, QLT-04, QLT-05, REL-02
@@ -104,6 +128,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
   2. The manifest bump to 1.1.0 is committed before the bench run, and UAT-02 and UAT-04 pass on the bench on exactly that SHA, which the evidence records. (QLT-04)
   3. On real instances, ha-b adds local actions to a device owned by ha-a in "in addition to" mode, in "instead of" mode and on an owner device without actions; each case runs on ha-b as configured, and nothing local appears on the broker. (QLT-05)
   4. After the user pushes the tag, `v1.1.0` points at a commit newer than `v1.0.1` with manifest 1.1.0, the release workflow, hassfest and HACS are green, and the release notes cover local actions and downgrade behavior. (REL-02)
+
 **Plans**: TBD
 **Notes**:
 - No product code changes in this phase. A failed check is a gap: its fix goes into an inserted Phase 11.x, then the affected verifications and the bench run are repeated on the new SHA.

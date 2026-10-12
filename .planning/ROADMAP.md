@@ -55,7 +55,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
   2. UAT-02 and UAT-04 pass on the bench (ha-a, ha-b, ha-c) on exactly that SHA; the evidence records the SHA and records ACCEPTED-GAP-V101 as closed for v1.0.1. (REL-01)
   3. After the user pushes the tag `v1.0.1`, the release workflow (check-version, the three test tiers, hassfest, HACS validation, release job) is green, and GitHub shows v1.0.1 as the latest release, so HACS offers 1.0.1. (REL-01)
 
-**Plans**: 2/5 plans executed
+**Plans**: 3/5 plans executed
 
 Plans:
 **Wave 1**
@@ -65,7 +65,7 @@ Plans:
 - [x] 09-02-PLAN.md — Owner pushes the bump SHA to main; CI and Validate green on exactly that SHA
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 09-03-PLAN.md — UAT-02 and UAT-04 on the bump SHA (UAT-04 from the restored null-tombstone state), ledger 09-UAT.md, release notes
+- [x] 09-03-PLAN.md — UAT-02 and UAT-04 on the bump SHA (UAT-04 from the restored null-tombstone state), ledger 09-UAT.md, release notes
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 09-04-PLAN.md — Pre-tag gate, owner decision on the one-way tag, owner pushes v1.0.1
@@ -142,7 +142,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 9. v1.0.1 Release | 2/5 | In Progress | - |
+| 9. v1.0.1 Release | 3/5 | In Progress | - |
 | 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |

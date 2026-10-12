@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 09
 current_phase_name: v1.0.1 Release
 status: executing
-stopped_at: Completed 09-02-PLAN.md
-last_updated: "2026-10-12T19:46:51.980Z"
+stopped_at: "Completed 09-03-PLAN.md (UAT-02 FAIL, UAT-04 blocked; next: insert Phase 9.1)"
+last_updated: "2026-10-12T20:03:34.767Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 09 execution started
-state_head: 8e5cd59c41531532b2ea602899c72bf82c51dd4b
+state_head: aae599c705d49c305e7f37c0b1d4831bca2be930
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -113,6 +113,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 08 P15 | not measured | 3 tasks | 11 files |
 | Phase 09 P01 | 11 min | 3 tasks | 31 files |
 | Phase 09 P02 | 47min | 2 tasks | 7 files |
+| Phase 09 P03 | 18 min | 3 tasks | 23 files |
 
 ## Accumulated Context
 
@@ -232,6 +233,7 @@ Recent decisions affecting current work:
 - [Phase 09]: Phase 9 stops before the bench: no push-event CI/Validate run exists on bump SHA 7baec98 after 45 min; D-04 not met, owner decides how to create one (resolved: owner workflow_dispatch under the D-04 amendment, CI and Validate green)
 - [Phase 09]: D-04 amendment (owner, v1.0.1 only): CI/Validate on bump SHA 7baec98 count with event workflow_dispatch as well as push; headSha exact. Runs 38299461144 (CI) and 38299494978 (Validate) green
 - [Phase 09]: ci.yml/validate.yml on.push has only tags-ignore, so branch pushes never run them (since 2f786d8); branches filter added after the v1.0.1 tag (todo 2026-10-12-ci-push-trigger-branches)
+- [Phase 09]: UAT-02 FAIL on bump SHA 7baec98 stands (E1 to E3 on ha-a and ha-b); UAT-04 blocked; v1.0.1 not tagged on 7baec98; gap routes to inserted Phase 9.1 (09-UAT.md block 3)
 
 ### Pending Todos
 
@@ -244,6 +246,7 @@ Recent decisions affecting current work:
 - [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
+- [Phase 9]: UAT-02 FAIL on 7baec98 (E1 to E3: disabled mqtt rows switch.lampe_test_2 and select.bar_select_2 plus legacy mqtt devices remain after replay), UAT-04 blocked; do NOT run 09-04/09-05; insert Phase 9.1 (gap closure, new SHA, re-run UAT-02 and UAT-04); also fix check-uat02.sh clean marker-row asymmetry (09-03-SUMMARY deviation 3)
 
 ### Quick Tasks Completed
 
@@ -262,8 +265,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-12T19:46:51.940Z
-Stopped at: Completed 09-02-PLAN.md
+Last session: 2026-10-12T20:03:34.726Z
+Stopped at: Completed 09-03-PLAN.md (UAT-02 FAIL, UAT-04 blocked; next: insert Phase 9.1)
 Resume file: None
 
 ## Operator Next Steps

@@ -1,1 +1,24 @@
-[]
+[
+  {
+    "conclusion": "success",
+    "createdAt": "2026-10-12T19:42:50Z",
+    "databaseId": 38299461144,
+    "event": "workflow_dispatch",
+    "headBranch": "main",
+    "headSha": "7baec9878badc8fb49ea0d80243277d5ff3fb443",
+    "status": "completed",
+    "url": "https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38299461144",
+    "workflowName": "CI"
+  },
+  {
+    "conclusion": "success",
+    "createdAt": "2026-10-12T19:43:09Z",
+    "databaseId": 38299494978,
+    "event": "workflow_dispatch",
+    "headBranch": "main",
+    "headSha": "7baec9878badc8fb49ea0d80243277d5ff3fb443",
+    "status": "completed",
+    "url": "https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38299494978",
+    "workflowName": "Validate"
+  }
+]

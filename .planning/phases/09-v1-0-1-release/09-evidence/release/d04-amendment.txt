@@ -1,0 +1,31 @@
+recorded_utc: 2026-10-12T19:45:09Z
+bump_sha: 7baec9878badc8fb49ea0d80243277d5ff3fb443
+decision: D-04 amendment for the v1.0.1 release, approved by the owner in the 09-02 continuation session
+approved_by: owner
+
+== amendment
+original_d04_check: ci.yml and validate.yml runs with event == "push" and headSha == bump SHA, both success
+amended_check: ci.yml and validate.yml runs with (event == "push" or event == "workflow_dispatch") and headSha == bump SHA, both success
+unchanged: headSha must equal the bump SHA exactly; a run on any other SHA (later docs commit, PR head, temp branch with another SHA) never counts (T-09-07)
+scope: this release (v1.0.1) only; the push-event requirement returns once the trigger fix below is in place
+jq_filter: select(.headSha == $b and (.event == "push" or .event == "workflow_dispatch") and .status == "completed" and .conclusion == "success")
+
+== reason (root cause of the missing push run, verified)
+- ci.yml and validate.yml at the bump SHA declare on.push with ONLY tags-ignore: ["v*.*.*"] and no branches filter
+- GitHub Actions: when only tags or tags-ignore is defined for push, the workflow does not run for branch pushes
+- introduced by 2f786d8 (2026-10-02 09:28, plan 04-01, already part of v1.0.0)
+- last push-triggered branch CI run: 97c178d (2026-10-02 02:04), before 2f786d8
+- confirmation: a test push of the bump SHA to temp branch ci/v1.0.1-bump also produced no run
+- the line "branch main is not excluded" in ci-bump-sha-wait.txt was a wrong reading at the time; it stays unchanged as history of the first attempt
+- tag release is unaffected: release.yml calls CI through workflow_call
+
+== how the runs were created
+- the owner (not Claude) dispatched both workflows on main while origin main == bump SHA
+- CI run 38299461144, event workflow_dispatch, headBranch main, headSha 7baec9878badc8fb49ea0d80243277d5ff3fb443
+- Validate run 38299494978, event workflow_dispatch, headBranch main, headSha 7baec9878badc8fb49ea0d80243277d5ff3fb443
+- Claude issued no git push, no gh workflow run and no gh run rerun
+
+== follow-up (not fixed now, a workflow change would move the anchor SHA)
+- add branches: ["**"] under on.push in ci.yml and validate.yml after the v1.0.1 tag exists
+- tracked in .planning/todos/pending/2026-10-12-ci-push-trigger-branches.md
+- the temp branch ci/v1.0.1-bump on origin is no longer needed; deleting it is left to the owner

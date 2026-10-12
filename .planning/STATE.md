@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 09
 current_phase_name: v1.0.1 Release
 status: executing
-stopped_at: "09-02 blocked at Task 2: no CI/Validate run on bump SHA 7baec98"
-last_updated: "2026-10-12T08:03:03.230Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-10-12T19:46:51.980Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 09 execution started
-state_head: 40a0f48b13f9da37a987f86ccf8ecf46d1823078
+state_head: 8e5cd59c41531532b2ea602899c72bf82c51dd4b
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09 (v1.0.1 Release) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-10-12 — Phase 09 execution started
 
@@ -112,6 +112,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 08 P14 | 20 min | 2 tasks | 4 files |
 | Phase 08 P15 | not measured | 3 tasks | 11 files |
 | Phase 09 P01 | 11 min | 3 tasks | 31 files |
+| Phase 09 P02 | 47min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -228,11 +229,13 @@ Recent decisions affecting current work:
 - [Roadmap v1.1]: Phases 9 and 12 change no product code; a failed check becomes an inserted decimal phase, then the affected verification and bench run repeat on the new SHA
 - [Owner 2026-10-11, MIR-01]: one Script per mirror with a `parallel` branch for "in addition to"; local actions discarded (logged, reported) on tombstone and adoption; orphaned Select options kept inactive and re-attached; no GuardedTemplate on local actions; UI is a menu in the hub options flow
 - [Phase 09]: Bump SHA 7baec9878badc8fb49ea0d80243277d5ff3fb443 is the single v1.0.1 anchor; owner pushes it with git push origin 7baec9878badc8fb49ea0d80243277d5ff3fb443:refs/heads/main (09-01)
-- [Phase 09]: Phase 9 stops before the bench: no push-event CI/Validate run exists on bump SHA 7baec98 after 45 min; D-04 not met, owner decides how to create one
+- [Phase 09]: Phase 9 stops before the bench: no push-event CI/Validate run exists on bump SHA 7baec98 after 45 min; D-04 not met, owner decides how to create one (resolved: owner workflow_dispatch under the D-04 amendment, CI and Validate green)
+- [Phase 09]: D-04 amendment (owner, v1.0.1 only): CI/Validate on bump SHA 7baec98 count with event workflow_dispatch as well as push; headSha exact. Runs 38299461144 (CI) and 38299494978 (Validate) green
+- [Phase 09]: ci.yml/validate.yml on.push has only tags-ignore, so branch pushes never run them (since 2f786d8); branches filter added after the v1.0.1 tag (todo 2026-10-12-ci-push-trigger-branches)
 
 ### Pending Todos
 
-None yet.
+- [CI, after the v1.0.1 tag]: add branches: ["**"] under on.push in ci.yml and validate.yml (.planning/todos/pending/2026-10-12-ci-push-trigger-branches.md)
 
 ### Blockers/Concerns
 
@@ -241,7 +244,6 @@ None yet.
 - [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
-- 09-02: GitHub Actions created no CI/Validate run for the owner's push of bump SHA 7baec98 (45 min, gh run list empty, no github-actions check suite). Owner decides: push-event on a temp branch (A), workflow_dispatch with D-04 amendment (B), or investigate (C). Bench 09-03 waits.
 
 ### Quick Tasks Completed
 
@@ -260,9 +262,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-12T08:03:03.005Z
-Stopped at: 09-02 blocked at Task 2: no CI/Validate run on bump SHA 7baec98
-Resume file: .planning/phases/09-v1-0-1-release/09-02-SUMMARY.md
+Last session: 2026-10-12T19:46:51.940Z
+Stopped at: Completed 09-02-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

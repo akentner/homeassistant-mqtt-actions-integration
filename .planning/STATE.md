@@ -2,16 +2,16 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
-current_phase: 09
-current_phase_name: v1.0.1 Release
-status: executing
-stopped_at: "Completed 09-03-PLAN.md (UAT-02 FAIL, UAT-04 blocked; next: insert Phase 9.1)"
-last_updated: "2026-10-12T20:03:34.767Z"
+current_phase: "09.1"
+current_phase_name: UAT-02 gap closure
+status: planning
+stopped_at: Phase 09.1 context gathered
+last_updated: "2026-10-12T21:53:49.706Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 09 execution started
-state_head: aae599c705d49c305e7f37c0b1d4831bca2be930
+state_head: 38a4d7bb4004a77fdbefce28a7a393463dc1688b
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 0
   total_plans: 5
   completed_plans: 3
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 
 ## Current Position
 
-Phase: 09 (v1.0.1 Release) — EXECUTING
-Plan: 3 of 5
-Status: Ready to execute
+Phase: 09.1 (UAT-02 gap closure) — INSERTED
+Plan: Not planned (next: /gsd-plan-phase 09.1)
+Status: Ready to plan
 Last activity: 2026-10-12 — Phase 09 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -255,6 +255,10 @@ Recent decisions affecting current work:
 | 261003-rmy | Native Select restore-previous-state button and previous_state attribute; new native test buttons diagnostic and disabled by default | 2026-10-03 | c7a537c | [261003-rmy-native-entities-test-buttons-disabled-by](./quick/261003-rmy-native-entities-test-buttons-disabled-by/) |
 | 261003-sfb | New native entities get short English entity id parts (_restore, _test_<StateValue>, _mode, _resync, _instances, _instance_mode) in every UI language; existing ids never renamed | 2026-10-03 | 89019df | [261003-sfb-native-entity-ids-shorter-and-english](./quick/261003-sfb-native-entity-ids-shorter-and-english/) |
 
+### Roadmap Evolution
+
+- Phase 09.1 inserted after Phase 9: UAT-02 gap closure (E1-E3 leftover mqtt rows on 7baec98), fix check-uat02.sh marker-row asymmetry, re-run UAT-02/UAT-04 on new SHA (URGENT)
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:
@@ -265,9 +269,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-12T20:03:34.726Z
-Stopped at: Completed 09-03-PLAN.md (UAT-02 FAIL, UAT-04 blocked; next: insert Phase 9.1)
-Resume file: None
+Last session: 2026-10-12T21:53:49.661Z
+Stopped at: Phase 09.1 context gathered
+Resume file: .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-CONTEXT.md
 
 ## Operator Next Steps
 

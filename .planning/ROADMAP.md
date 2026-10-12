@@ -39,6 +39,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
 **Ordering rationale (owner-fixed 2026-10-11):** The v1.0.1 tag must point at bytes that the bench verified, so Phase 9 comes before any IN-04 or MIR-01 commit on `main`. The IN-04 extraction in Phase 10 moves about 330 lines out of `manager.py`; a pure move is only verifiable on a quiet file, so it lands before MIR-01 edits the same file. MIR-01 (Phase 11) is one vertical slice from storage and runner to the options flow and docs (coarse granularity). Phase 12 comes last because any later fix makes the reports stale again (lesson of v1.0 and v1.0.1). TDD mode is on: each fix and feature starts with a failing test commit.
 
 - [ ] **Phase 9: v1.0.1 Release** - The build whose manifest says 1.0.1 passes UAT-02 and UAT-04 on the bench on exactly that SHA and is published as v1.0.1
+- [ ] **Phase 9.1: UAT-02 Gap Closure** (INSERTED) - Replay leaves no disabled or legacy mqtt rows, and UAT-02 and UAT-04 pass on the new SHA
 - [ ] **Phase 10: Review Findings and Native Migration Extraction** - The Phase 8 info findings are closed, and the start-up migration orchestration lives in its own module outside `manager.py`
 - [ ] **Phase 11: Local Actions on Mirrors** - A follower sets its own actions per trigger of a mirrored device; they run locally under the device's gates and never reach the broker
 - [ ] **Phase 12: Re-verification and v1.1.0 Release** - Every phase has a current verification, the bench checks pass on the final SHA, and v1.1.0 is published
@@ -77,6 +78,16 @@ Plans:
 - The user pushes the tag. Claude prepares the bump commit, the bench run and the evidence.
 - Standard patterns, no research needed (release mechanics: research PITFALLS 10 and RETROSPECTIVE). No `[ci skip]` in squashed commits.
 - A failed bench check is a gap, not an accepted skip. Its fix goes into an inserted Phase 9.1 on the release line, followed by a new bench run on the new SHA; no product fixes inside this verification phase (PROJECT.md Key Decision on the D-08 waiver).
+
+### Phase 09.1: UAT-02 gap closure: remove leftover disabled and legacy mqtt rows on replay, then re-run UAT-02 and UAT-04 on a new SHA (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 9
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 09.1 to break down)
 
 ### Phase 10: Review Findings and Native Migration Extraction
 

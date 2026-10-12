@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# The only entry point for API calls against the Phase 8 test instances (T-08-01).
+#
+#   ha-test-guard {a|b|c} ws raw TYPE [JSON]
+#   ha-test-guard {a|b|c} ws call DOMAIN.SERVICE [JSON]
+#   ha-test-guard {a|b|c} rest METHOD PATH [JSON body]
+#   ha-test-guard {a|b|c} --print-target
+#   ha-test-guard {a|b|c} --selftest        one WebSocket login with a fixed dummy token (needs no token file)
+#
+# The URL is built here from a fixed letter map. HA_URL and HA_TOKEN in the environment are ignored on purpose: the ha-ws
+# tool reloads ~/.config/ha-cli.env after reading the environment and would hit production. This script never calls ha-ws.
+set -euo pipefail
+unset HA_URL HA_TOKEN HA_API_URL
+
+HT="$HOME/ha-test"
+here=$(dirname "$(readlink -f "$0")")
+# shellcheck source=lib.sh
+. "$here/lib.sh"
+
+letter=${1:-}
+case "$letter" in
+  a | b | c) ;;
+  *)
+    echo "ha-test-guard: unknown instance '$letter' (accepted: a, b, c)" >&2
+    exit 2
+    ;;
+esac
+port=$(inst_port "$letter")
+url="http://localhost:$port"
+shift
+mode=${1:-}
+[ $# -gt 0 ] && shift
+
+load_token() {
+  local f="$HT/.token-$letter" perm
+  [ -f "$f" ] || {
+    echo "ha-test-guard: token file $f is missing" >&2
+    exit 2
+  }
+  perm=$(stat -c %a "$f")
+  [[ "$perm" =~ ^[0-7]00$ ]] || {
+    echo "ha-test-guard: token file $f must not be readable by group or others (mode $perm)" >&2
+    exit 2
+  }
+  tr -d '\r\n' <"$f"
+}
+
+get_py() {
+  local p
+  p=$(mount_root 2>/dev/null)/.venv/bin/python
+  if [ -x "$p" ]; then echo "$p"; else echo python3; fi
+}
+
+case "$mode" in
+  --print-target)
+    echo "$url"
+    ;;
+  --selftest)
+    # exit 3 with an authentication error is the expected, healthy outcome
+    exec "$(get_py)" "$here/ha-test-ws.py" 3 selftest 3< <(printf '%s\n%s\n' "$url" "invalid-dummy-token")
+    ;;
+  ws)
+    sub=${1:-}
+    case "$sub" in raw | call) ;; *)
+      echo "ha-test-guard: ws expects raw or call" >&2
+      exit 2
+      ;;
+    esac
+    tok=$(load_token)
+    exec "$(get_py)" "$here/ha-test-ws.py" 3 "$@" 3< <(printf '%s\n%s\n' "$url" "$tok")
+    ;;
+  rest)
+    method=${1:-}
+    path=${2:-}
+    body=${3:-}
+    case "$method" in GET | POST | PUT | DELETE) ;; *)
+      echo "ha-test-guard: rest method must be GET, POST, PUT or DELETE" >&2
+      exit 2
+      ;;
+    esac
+    [[ "$path" == /api/* ]] || {
+      echo "ha-test-guard: rest path must start with /api/" >&2
+      exit 2
+    }
+    [[ "$path" != *://* && "$path" != *@* ]] || {
+      echo "ha-test-guard: rest path must be a plain path" >&2
+      exit 2
+    }
+    tok=$(load_token)
+    args=(-sS -m 30 --max-redirs 0 -X "$method" -H 'Content-Type: application/json')
+    [ -n "$body" ] && args+=(--data-binary "$body")
+    printf 'header = "Authorization: Bearer %s"\n' "$tok" | curl -K - "${args[@]}" "$url$path"
+    echo
+    ;;
+  *)
+    echo "ha-test-guard: unknown mode '$mode' (ws, rest, --print-target, --selftest)" >&2
+    exit 2
+    ;;
+esac

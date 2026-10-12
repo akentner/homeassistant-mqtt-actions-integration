@@ -1,0 +1,8 @@
+== projection (--check, read-only) 2026-10-12T01:51:35Z
+-- ha-a deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+-- ha-b deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+would flip to disabled_by null: ha-a switch.lampe_test_2 (disabled_by integration);ha-a select.bar_select_2 (disabled_by integration);ha-b switch.lampe_test_2 (disabled_by integration);ha-b select.bar_select_2 (disabled_by integration);

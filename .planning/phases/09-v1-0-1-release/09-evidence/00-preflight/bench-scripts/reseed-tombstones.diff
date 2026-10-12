@@ -1,0 +1,32 @@
+--- .planning/milestones/v1.0.1-phases/08-real-instance-verification/08-evidence/00-preflight/bench-scripts/reseed-tombstones.sh	2026-10-11 18:13:15.083820581 +0200
++++ /home/akentner/ha-test/bin/reseed-tombstones.sh	2026-10-12 03:51:10.801732058 +0200
+@@ -14,6 +14,7 @@
+ # nothing about the receiver. The script restores the precondition of the first run; it makes the check harder, never easier. A
+ # missing record is an ABORT, a record is never fabricated.
+ # Run from inside the checkout that holds the evidence. Exit: 0 done, 2 ABORT (bench problem, never a result).
++# Phase 9 sets RESEED_EV_DIR (evidence folder) and RESEED_BACKUP_POINTER (backup pointer file); the defaults keep the Phase 8 values.
+ set -euo pipefail
+ HT="$HOME/ha-test"
+ # clean reads the baselines of the recorded run (uat-02/), never a suffixed folder
+@@ -23,10 +24,10 @@
+ . "$here/lib.sh"
+ 
+ ER="$(evidence_root)"
+-PREP="$ER/uat-04-rerun2/prepare.txt"
++PREP="$ER/${RESEED_EV_DIR:-uat-04-rerun2}/prepare.txt"
+ ID_SWITCH=11111111-aaaa-4aaa-8aaa-000000000001 # Lampe Test
+ ID_SELECT=b6bd2c0e-6d81-49ea-8025-4bd087bd718a # Bar Select
+-mkdir -p "$ER/uat-04-rerun2"
++mkdir -p "$ER/${RESEED_EV_DIR:-uat-04-rerun2}"
+ 
+ MODIFIED=0
+ BK=""
+@@ -100,7 +101,7 @@
+ say "ha-a and ha-b stopped; registry files are flushed"
+ project "before the restoration"
+ 
+-base=$(cat "$HT/.current-backup-gap08-rerun2" 2>/dev/null) || abort "no pointer ~/ha-test/.current-backup-gap08-rerun2"
++base=$(cat "${RESEED_BACKUP_POINTER:-$HT/.current-backup-gap08-rerun2}" 2>/dev/null) || abort "no pointer ${RESEED_BACKUP_POINTER:-$HT/.current-backup-gap08-rerun2}"
+ [ -d "$base" ] || abort "backup base $base is missing"
+ BK="$base/reseed-$(date -u +%Y%m%dT%H%M%SZ)"
+ mkdir -p "$BK/a" "$BK/b"

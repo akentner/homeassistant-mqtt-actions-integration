@@ -1,0 +1,25 @@
+cmp proof (D-09): ~/ha-test/bin/<script> against the scrubbed Phase 8 copy
+P8=.planning/milestones/v1.0.1-phases/08-real-instance-verification/08-evidence/00-preflight/bench-scripts
+recorded_utc: 2026-10-12T01:50:53Z
+an empty result line means byte-identical (cmp exit 0)
+
+$ cmp ~/ha-test/bin/check-uat02.sh $P8/check-uat02.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-uat04.sh $P8/check-uat04.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-preflight.sh $P8/check-preflight.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/preflight.sh $P8/preflight.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/lib.sh $P8/lib.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-evidence-clean.sh $P8/check-evidence-clean.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-stale-anchor.sh $P8/check-stale-anchor.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-marker.sh $P8/check-marker.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/bench-users.sh $P8/bench-users.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/ha-test-guard $P8/ha-test-guard
+result: [] exit=0

@@ -2,7 +2,7 @@
 phase: 09-v1-0-1-release
 plan: 02
 subsystem: release
-tags: [release, ci, github-actions, evidence, v1.0.1, blocked]
+tags: [release, ci, github-actions, evidence, v1.0.1, d04-amendment]
 
 requires:
   - phase: 09-v1-0-1-release
@@ -10,30 +10,38 @@ requires:
     provides: "bump commit 7baec9878badc8fb49ea0d80243277d5ff3fb443 and the owner's refspec push command"
 provides:
   - "origin main == bump SHA 7baec9878badc8fb49ea0d80243277d5ff3fb443, pushed by the owner (push-main.txt)"
-  - "evidence that GitHub Actions created no CI and no Validate run for that push within 45 minutes (ci-bump-sha.json, ci-bump-sha-wait.txt)"
+  - "CI run 38299461144 and Validate run 38299494978 green on exactly 7baec98, all six jobs success (ci-bump-sha.json, ci-bump-sha-jobs.json)"
+  - "written D-04 amendment: workflow_dispatch accepted instead of push for v1.0.1, headSha still exact (d04-amendment.txt, 09-CONTEXT.md)"
+  - "pending todo: branches filter for on.push in ci.yml and validate.yml after the tag"
 affects: [09-03, 09-04, 09-05]
 
 actuals:
-  tokens: 2400
-  tasks: 1
-  commits: 2
+  tokens: 6500
+  tasks: 2
+  commits: 5
 plan_head_before: e23b1a64bdc598048175bd9287eb215fb2051eba
-plan_head_after: daa1669c107cb529ac59c0d17f171d5e1b3b0519
+plan_head_after: 3863764ff628b4e68e6037c72bf3ca4b7c71c494
 
 tech-stack:
   added: []
   patterns:
-    - "CI on the bump SHA counts only for runs with event push and headSha == bump (T-09-07)"
+    - "CI on the bump SHA counts only for runs with headSha == bump; for v1.0.1 event push or workflow_dispatch (D-04 amendment, T-09-07)"
 
 key-files:
   created:
     - .planning/phases/09-v1-0-1-release/09-evidence/release/push-main.txt
     - .planning/phases/09-v1-0-1-release/09-evidence/release/ci-bump-sha.json
+    - .planning/phases/09-v1-0-1-release/09-evidence/release/ci-bump-sha-jobs.json
     - .planning/phases/09-v1-0-1-release/09-evidence/release/ci-bump-sha-wait.txt
-  modified: []
+    - .planning/phases/09-v1-0-1-release/09-evidence/release/d04-amendment.txt
+    - .planning/todos/pending/2026-10-12-ci-push-trigger-branches.md
+  modified:
+    - .planning/phases/09-v1-0-1-release/09-CONTEXT.md
 
 key-decisions:
-  - "Phase 9 stops before the bench: no CI or Validate run exists on the bump SHA after the 45-minute window, so D-04 is not met; the owner decides how a push-event run on 7baec98 gets created"
+  - "D-04 amendment (owner-approved, v1.0.1 only): CI and Validate on the bump SHA count with event workflow_dispatch as well as push; headSha must still equal 7baec98 exactly"
+  - "Root cause of the missing push run: ci.yml and validate.yml define on.push with only tags-ignore, so branch pushes never trigger them (since 2f786d8, plan 04-01)"
+  - "The trigger fix (branches: [\"**\"]) waits until after the v1.0.1 tag, because a workflow change now would move the anchor SHA"
 
 requirements-completed: []
 
@@ -47,76 +55,85 @@ coverage:
         status: pass
     human_judgment: false
   - id: D2
-    description: "ci.yml and validate.yml green on exactly the bump SHA (event push)"
+    description: "ci.yml and validate.yml green on exactly the bump SHA (event push or workflow_dispatch per D-04 amendment)"
     requirement: REL-01
     verification:
       - kind: other
-        ref: "Task 2 verify: gh run list --commit 7baec98 | jq (push, headSha == bump, completed, success, CI and Validate)"
-        status: fail
+        ref: "Task 2 verify (amended filter): ci-bump-sha.json | jq (headSha == bump, push or workflow_dispatch, completed, success, CI and Validate) -> true"
+        status: pass
+      - kind: other
+        ref: "Task 2 verify: ci-bump-sha-jobs.json six jobs all success; check-evidence-clean.sh PASS"
+        status: pass
     human_judgment: true
 
-duration: 46min
+duration: 47min
 completed: 2026-10-12
-status: blocked
+status: complete
 ---
 
 # Phase 9 Plan 02: Bump SHA push and CI gate Summary
 
-**BLOCKED: the owner's push moved origin main to the bump SHA `7baec98`, but GitHub Actions started no CI or Validate run for that push. `gh run list --commit 7baec98` stayed `[]` for the full 45-minute window. D-04 is not met, and the bench run (09-03) must not start.**
+**CI (Ruff, Unit tests, Broker tests (Mosquitto), Multi-instance tests) and Validate (hassfest, HACS) are green on exactly the bump SHA `7baec98`. The runs were dispatched by the owner, under a written D-04 amendment, because the workflows never run on branch pushes. The bench run (09-03) may start.**
 
-## Blocker (read first)
+## Result
 
-- **No CI run and no Validate run on the bump SHA.** This is not a red result, because no run exists at all. The poll ran every 30 s from 07:16:13 to 08:00:41 UTC, and every result was `[]`. `actions/runs?head_sha=7baec98` returns `total_count: 0`.
-- The commit has two check suites, `claude` and `renovate`, both created at 07:15:13Z. It has no `github-actions` check suite. GitHub received the push, but Actions never queued a workflow for it.
-- Things ruled out by API reads: Actions is enabled, and the CI, Validate and Release workflows are `active`. Both workflow files at the bump SHA trigger on `push` with only `tags-ignore: v*.*.*`. None of the pushed commit messages contains a skip marker. githubstatus showed All Systems Operational. Earlier pushes to main did trigger CI and Validate, for example 97c178d on 2026-10-02.
-- The repo events feed shows no `PushEvent` for `refs/heads/main` from this push. The cause is unknown from here.
-- Claude did not re-run, dispatch or push anything.
+| Workflow | Run | Event | headSha | Conclusion | Jobs |
+|----------|-----|-------|---------|------------|------|
+| CI | 38299461144 | workflow_dispatch (main) | 7baec9878badc8fb49ea0d80243277d5ff3fb443 | success | Ruff, Unit tests, Broker tests (Mosquitto), Multi-instance tests: all success |
+| Validate | 38299494978 | workflow_dispatch (main) | 7baec9878badc8fb49ea0d80243277d5ff3fb443 | success | hassfest, HACS: all success |
 
-### Owner decision needed
-
-Option A is recommended, because it keeps the D-04 contract: CI runs with event `push` on exactly 7baec98.
-
-| Option | What | Trade-off |
-|--------|------|-----------|
-| A | The owner re-delivers a push event for 7baec98 on a ref that is not main, for example `git push origin 7baec98…:refs/heads/ci/v1.0.1-bump`. ci.yml and validate.yml run on every branch push. Afterwards the owner deletes the branch. | A push event on the exact bump SHA. It needs one temporary branch, and it does not move main. |
-| B | The owner starts `workflow_dispatch` of CI and Validate on main, which is currently 7baec98. | The SHA is right, but the event is `workflow_dispatch`, not `push`. The plan's jq filter (`event == "push"`) would have to be relaxed, and that is a written D-04 amendment. |
-| C | The owner first investigates why the push event was dropped (repo Settings > Webhooks/Actions, GitHub support). | Slowest option, and the bench waits. |
-
-After A or B, re-run this plan's Task 2 (poll, jobs JSON, judgment) on 7baec98. Do not use any later SHA.
-
-### Side observation (another SHA, does not count)
-
-Renovate rebased PR #16 (`renovate/ubuntu-26.x`, head 7334f6d, parent = bump) right after the push. Its PR CI failed in **Broker tests (Mosquitto)** at `uv run pytest -q -m broker`. Ruff, Unit tests, Multi-instance tests, hassfest and HACS were green. The PR moves `runs-on` to Ubuntu 26, while the bump tree pins `ubuntu-24.04`. So the failure says nothing about 7baec98, but it is a warning for that PR. Per D-01, do not merge it before the tag.
+- origin main was still `7baec98` when the evidence was taken (`git ls-remote`).
+- The only annotation is a setup-uv cache-save warning, "another job may be creating this cache". It comes from two parallel jobs that share a cache key, and it does not affect the result.
 
 ## Performance
 
-- **Duration:** about 46 min, most of it the 45-minute CI wait
-- **Started:** 2026-10-12T07:15:47Z (continuation after the Task 1 checkpoint)
-- **Completed:** 2026-10-12T08:01:25Z
-- **Tasks:** 1 of 2 complete (Task 1 verified; Task 2 stopped at step 4)
-- **Files:** 3 evidence files created
+- **Duration:** about 47 min of executor time. The first attempt waited 45 min for a run that never came. The continuation took about 3 min.
+- **First attempt:** 2026-10-12T07:15:47Z to 08:01:25Z (blocked)
+- **Continuation:** 2026-10-12T19:42Z to 19:48Z
+- **Tasks:** 2 of 2
+- **Files:** 5 evidence files, 1 todo, and 1 CONTEXT note
 
 ## Accomplishments
 
-- Task 1 verify passed. `git ls-remote origin refs/heads/main` prints `7baec9878badc8fb49ea0d80243277d5ff3fb443`. `push-main.txt` records origin_main_before `d0f660c…`, origin_main_after = bump, the owner's refspec command and output, and `pushed_by: owner`.
-- Task 2: the poll ran for the full 45-minute window. The final run list is in `ci-bump-sha.json` (`[]`). The poll window and the API diagnostics are in `ci-bump-sha-wait.txt`. `check-evidence-clean.sh` printed PASS over `09-evidence/release` before each commit.
+- Task 1 verify passed. `push-main.txt` records origin_main_before `d0f660c…`, origin_main_after = bump, the owner's refspec command and `pushed_by: owner`.
+- Task 2, first attempt: the poll ran for 45 min and found no run (`ci-bump-sha-wait.txt`, kept as history).
+- Task 2, second attempt: both owner-dispatched runs completed green. `ci-bump-sha.json` now holds the real run list, and `ci-bump-sha-jobs.json` holds the six job conclusions. The amended jq filter prints `true`, the jobs check prints `true`, and `check-evidence-clean.sh` prints PASS.
 
 ## Task Commits
 
-1. **Task 1: owner push verified.** `34c61bd` (docs, push-main.txt)
-2. **Task 2: CI gate, stopped.** `daa1669` (docs, ci-bump-sha.json and ci-bump-sha-wait.txt)
+1. **Task 1: owner push verified.** `34c61bd` (push-main.txt)
+2. **Task 2, first attempt: no run.** `daa1669` (ci-bump-sha.json `[]`, ci-bump-sha-wait.txt)
+3. Blocked SUMMARY and STATE blocker: `40a0f48`, `c2b426c`
+4. **Task 2, second attempt: green under the D-04 amendment.** `3863764` (ci-bump-sha.json, ci-bump-sha-jobs.json, d04-amendment.txt, 09-CONTEXT.md amendment note, pending todo)
 
 ## Deviations from Plan
 
+### Blocker and root cause
+
+**1. [Rule 3 - Blocking] The owner's push of the bump SHA triggered no CI or Validate run**
+- **Found during:** Task 2, first attempt
+- **Issue:** `gh run list --commit 7baec98` returned `[]` for 45 min.
+- **Root cause (verified by the orchestrator):** `ci.yml` and `validate.yml` at the bump SHA define `on.push` with only `tags-ignore: ["v*.*.*"]` and no `branches` filter. When only tags or tags-ignore is set, GitHub Actions skips the workflow for branch pushes. 2f786d8 introduced this on 2026-10-02 (plan 04-01, already part of v1.0.0). The last push-triggered branch run was 97c178d, made before that commit. A test push of the bump SHA to the temporary branch `ci/v1.0.1-bump` also produced no run. Tag releases are not affected, because release.yml calls CI through `workflow_call`.
+- **Correction:** `ci-bump-sha-wait.txt` says "branch main is not excluded". That reading was wrong. The line stays unchanged as history, and `d04-amendment.txt` corrects it.
+
+### Owner decisions (D-04 amendment)
+
+**2. Event `workflow_dispatch` accepted instead of `push` (owner-approved, v1.0.1 only)**
+- The owner chose option B and dispatched CI and Validate on main (== 7baec98) themselves.
+- Amended filter: `select(.headSha == $b and (.event == "push" or .event == "workflow_dispatch") and .status == "completed" and .conclusion == "success")`. The exact-SHA rule (T-09-07) is unchanged.
+- Recorded in `09-evidence/release/d04-amendment.txt` and as an amendment note under D-04 in `09-CONTEXT.md`.
+
+**3. Trigger fix deferred, captured as a todo**
+- The fix is to add `branches: ["**"]` under `on.push` in both workflows. Making that change before the tag would move the anchor SHA (D-01, D-02), so it waits. It is tracked in `.planning/todos/pending/2026-10-12-ci-push-trigger-branches.md`.
+- The temporary branch `ci/v1.0.1-bump` on origin is no longer needed. Deleting it is left to the owner.
+
 ### Process deviations (no product change)
 
-**1. push-main.txt committed on its own (orchestrator instruction)**
-- The plan commits push-main.txt together with the two CI files in Task 2. The continuation prompt asked for push-main.txt to be committed right after Task 1's verify. Same content, two commits instead of one.
+**4. push-main.txt committed on its own.** The orchestrator asked for this after Task 1's verify. The content is the same, but it is in two commits instead of one.
 
-**2. Task 2 stopped without ci-bump-sha-jobs.json; ci-bump-sha-wait.txt added**
-- No run exists, so there are no jobs to list. Step 4 says to stop and report when the window passes. The file `ci-bump-sha-wait.txt` replaces the jobs file as evidence of the wait and of the diagnostics. The commit message says "no CI or Validate run" instead of the plan's "CI and Validate on the bump commit", because the planned message would claim something that did not happen.
+**5. Extra evidence files.** `ci-bump-sha-wait.txt` documents the failed first attempt, and `d04-amendment.txt` records the amendment. The plan lists neither file.
 
-**Total deviations:** 2 process deviations. **Impact:** the plan's truths 1 and 4 hold: only the bump SHA reached main, and Claude made no push and no re-run. Truth 2 (green CI on the bump) is **not met**. Truth 3 (stop before the bench) is honored.
+**Total deviations:** 1 blocker (resolved by an owner decision) and 4 process or decision deviations. **Impact:** all four of the plan's truths hold. Only the bump SHA reached main. CI and Validate are green on the bump SHA under the amended event rule. Nothing was red. Claude ran no push, no dispatch and no re-run.
 
 ## Known Stubs
 
@@ -124,16 +141,17 @@ None.
 
 ## Threat Flags
 
-None. The evidence holds only public run metadata, check-suite app slugs and SHAs.
+None. The evidence holds only public run metadata: ids, names, conclusions, URLs and SHAs.
 
 ## Next
 
-STOP. Phase 9 waits for the owner's decision (option A, B or C above). Do not start 09-03 (bench) until Task 2's verify passes on 7baec98.
+09-03: the bench run (UAT-02, UAT-04) on exactly 7baec98. A separate plan handles the owner's tag push, after the bench.
 
 ## Self-Check: PASSED
 
 - FOUND: 09-evidence/release/push-main.txt (origin_main_after: 7baec98…, pushed_by: owner)
-- FOUND: 09-evidence/release/ci-bump-sha.json (`[]`)
-- FOUND: 09-evidence/release/ci-bump-sha-wait.txt
-- FOUND commits on HEAD: 34c61bd, daa1669
-- ABSENT, as expected because of the blocker: 09-evidence/release/ci-bump-sha-jobs.json
+- FOUND: 09-evidence/release/ci-bump-sha.json (CI and Validate, headSha 7baec98, success)
+- FOUND: 09-evidence/release/ci-bump-sha-jobs.json (6 jobs, all success)
+- FOUND: 09-evidence/release/d04-amendment.txt
+- FOUND: .planning/todos/pending/2026-10-12-ci-push-trigger-branches.md
+- FOUND commits on HEAD: 34c61bd, daa1669, 40a0f48, c2b426c, 3863764

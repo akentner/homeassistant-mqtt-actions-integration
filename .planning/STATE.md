@@ -5,11 +5,11 @@ milestone_name: Local Actions on Mirrors
 current_phase: 09
 current_phase_name: v1.0.1 Release
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-10-12T01:57:40.058Z"
+stopped_at: "09-02 blocked at Task 2: no CI/Validate run on bump SHA 7baec98"
+last_updated: "2026-10-12T08:03:03.230Z"
 last_activity: 2026-10-12
 last_activity_desc: Phase 09 execution started
-state_head: 113cc5295bd99a54680f18cab84bd60c23f0848f
+state_head: 40a0f48b13f9da37a987f86ccf8ecf46d1823078
 progress:
   total_phases: 4
   completed_phases: 0
@@ -228,6 +228,7 @@ Recent decisions affecting current work:
 - [Roadmap v1.1]: Phases 9 and 12 change no product code; a failed check becomes an inserted decimal phase, then the affected verification and bench run repeat on the new SHA
 - [Owner 2026-10-11, MIR-01]: one Script per mirror with a `parallel` branch for "in addition to"; local actions discarded (logged, reported) on tombstone and adoption; orphaned Select options kept inactive and re-attached; no GuardedTemplate on local actions; UI is a menu in the hub options flow
 - [Phase 09]: Bump SHA 7baec9878badc8fb49ea0d80243277d5ff3fb443 is the single v1.0.1 anchor; owner pushes it with git push origin 7baec9878badc8fb49ea0d80243277d5ff3fb443:refs/heads/main (09-01)
+- [Phase 09]: Phase 9 stops before the bench: no push-event CI/Validate run exists on bump SHA 7baec98 after 45 min; D-04 not met, owner decides how to create one
 
 ### Pending Todos
 
@@ -240,6 +241,7 @@ None yet.
 - [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
+- 09-02: GitHub Actions created no CI/Validate run for the owner's push of bump SHA 7baec98 (45 min, gh run list empty, no github-actions check suite). Owner decides: push-event on a temp branch (A), workflow_dispatch with D-04 amendment (B), or investigate (C). Bench 09-03 waits.
 
 ### Quick Tasks Completed
 
@@ -258,9 +260,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-12T01:57:40.018Z
-Stopped at: Completed 09-01-PLAN.md
-Resume file: None
+Last session: 2026-10-12T08:03:03.005Z
+Stopped at: 09-02 blocked at Task 2: no CI/Validate run on bump SHA 7baec98
+Resume file: .planning/phases/09-v1-0-1-release/09-02-SUMMARY.md
 
 ## Operator Next Steps
 

@@ -568,3 +568,47 @@ async def test_a_disabled_twin_stays_while_the_topic_content_is_unknown(
     assert shown not in message
     assert legacy.payload not in message
     _assert_moved_and_native(hass, legacy, before)
+
+
+async def test_the_catch_keeps_an_enabled_customized_button_next_to_a_disabled_twin_on_legacy_content(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """
+    CR-01 (review), D-08: an integration-disabled twin on LEGACY content stays while another legacy row is kept.
+
+    Core discovered the disabled switch again in this run, so it holds the clear-on-remove hook for that row. Removing
+    the switch would make core publish an empty retained discovery, and that payload deletes every loaded legacy row
+    of the device, the renamed button the catch keeps on purpose included. The discovery publishes are looped back.
+    """
+    legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(replayed) == 3
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    button, *_others = sorted(entity_id for entity_id in replayed if entity_id.startswith("button."))
+    # The guard disabled the switch, and the user renamed a test button, which stays enabled and loaded
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    entity_registry.async_update_entity(button, name="My button")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    # Core discovers the disabled switch again, so it holds the hook that clears the topic when the row leaves
+    async_fire_mqtt_message(hass, legacy.topic, legacy.payload, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+    assert hass.states.get(button) is not None  # the kept button is loaded, so a clear would delete it
+    mqtt_mock.async_publish.reset_mock()
+
+    await _quiet_period_passes(hass)
+
+    kept = entity_registry.async_get(button)
+    assert kept is not None, "the customized, kept test button was deleted"
+    assert kept.name == "My button"
+    assert hass.states.get(button) is not None
+    assert entity_registry.async_get(switch) is not None
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+    assert _mqtt_device_of(hass, legacy.device_id) is not None
+    _assert_moved_and_native(hass, legacy, before)

@@ -28,7 +28,7 @@ from tests.test_native_start import (
     _store_the_mirror_as_native,
     _unloaded_legacy_device,
 )
-from tests.test_takeover import MIGRATE_PAYLOAD, PREFIX, legacy_entity_ids, setup_legacy_device
+from tests.test_takeover import MIGRATE_PAYLOAD, PREFIX, _discovery_clears, legacy_entity_ids, setup_legacy_device
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -323,3 +323,78 @@ async def test_a_replay_onto_tombstones_is_cleaned_at_the_next_start(
         await _quiet_period_passes(hass)
         _assert_clean(hass, legacy.device_id, replayed)
         _assert_moved_and_native(hass, legacy, before)
+
+
+async def _a_finished_native_owner(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> tuple[Any, dict[str, er.RegistryEntry]]:
+    """Return a native owner whose takeover pass is done and that has no legacy row left, with its moved entries."""
+    legacy, before = await _unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    _loop_back_discovery(hass, mqtt_mock)
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _assert_moved_and_native(hass, legacy, before)
+    assert legacy_entity_ids(hass, legacy.device_id) == []
+    return legacy, before
+
+
+async def _restart_with_the_retained_payload(hass: HomeAssistant, legacy: Any, payload: str) -> None:
+    """Restart the entry and hand the broker's retained payload to the new subscriptions (core's discovery skips it)."""
+    await _restart(hass, legacy.entry)
+    async_fire_mqtt_message(hass, legacy.topic, payload, retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _assert_one_retained_clear(mqtt_mock: Any, topic: str) -> None:
+    """Assert that the product published exactly one empty retained payload on the topic (core's own clear is None)."""
+    assert [call.args[3] for call in _discovery_clears(mqtt_mock, topic)] == [True]
+
+
+async def test_the_owner_clears_the_stale_legacy_discovery_once_after_each_catch(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-06: after each start-up catch the owner clears the retained legacy discovery once, so no replay can return."""
+    legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    first = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    _tombstone_the_replay(hass, legacy.device_id, first, "integration")
+
+    for _round in range(2):
+        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(replayed) == 3
+        await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+        mqtt_mock.async_publish.reset_mock()
+        await _quiet_period_passes(hass)
+        _assert_one_retained_clear(mqtt_mock, legacy.topic)
+        _assert_clean(hass, legacy.device_id, replayed)
+        _assert_moved_and_native(hass, legacy, before)
+
+
+async def test_the_owner_clears_a_retained_legacy_discovery_even_when_nothing_was_removed(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """User decision 4: the owner clears a retained legacy payload at the start even without any twin to remove."""
+    legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+    # Core saw a retained message on the topic before, so it creates nothing: there is nothing to remove
+    assert legacy_entity_ids(hass, legacy.device_id) == []
+    mqtt_mock.async_publish.reset_mock()
+    caplog.clear()
+
+    await _quiet_period_passes(hass)
+
+    _assert_one_retained_clear(mqtt_mock, legacy.topic)
+    assert not any("Removed" in record.getMessage() for record in caplog.records)
+    _assert_moved_and_native(hass, legacy, before)

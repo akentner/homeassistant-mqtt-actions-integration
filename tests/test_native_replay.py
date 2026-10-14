@@ -648,6 +648,7 @@ async def test_a_catch_that_runs_before_the_settle_checks_again_once_the_grace_h
     await _restart(hass, legacy.entry)
     now = [1000.0]
     _manager(legacy.entry).clock = lambda: now[0]
+    mqtt_mock.async_publish.reset_mock()
 
     await _quiet_period_passes(hass)
 

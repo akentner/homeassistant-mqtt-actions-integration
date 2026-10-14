@@ -89,6 +89,10 @@ TRANSLATION_OWNER_CONFLICT = "owner_conflict"
 TRANSLATION_SCHEMA_TOO_NEW = "schema_too_new"
 TRANSLATION_TRANSFERRED = "transferred"
 
+# Retained messages follow the SUBACK, so a discovery topic without any message counts as empty only once this margin
+# has passed after the broker acknowledged the subscription (D-03, research A2); read at call time
+DISCOVERY_SETTLE_GRACE_SECONDS = 2.0
+
 # Stored presence values; only these two payloads of the availability topic mean anything
 PRESENCE_ONLINE = "online"
 PRESENCE_OFFLINE = "offline"
@@ -183,6 +187,11 @@ class SyncManager:
         # Held device id -> what its core-prefix discovery topic holds, as last seen; bounded by the held ids (owned
         # subentries plus mirrors), and only the verdict is stored, never a payload (T-09.1-04)
         self._discovery_content: dict[str, DiscoveryContent] = {}
+        # Manager clock time at which the broker acknowledged the discovery wildcard subscription; None until then
+        self._discovery_settled_at: float | None = None
+        # Mirror ids held when the discovery wildcard subscription was made; a mirror created later had its retained
+        # message dropped, so its unseen topic is never taken as empty (D-03)
+        self._discovery_scope: frozenset[str] = frozenset()
 
     async def async_start(self) -> None:
         """Subscribe to the config wildcard; the caller does this before anything is published (SYN-04)."""
@@ -196,6 +205,14 @@ class SyncManager:
         self._unsubscribers.append(
             await manager.gateway.async_subscribe(
                 discovery_wildcard(self._discovery_prefix), self._on_discovery_message
+            )
+        )
+        self._discovery_scope = frozenset(manager.mirrors)
+        self._discovery_settled_at = None
+        # qos 1 is the gateway default of the subscribe above; any other qos never settles, so EMPTY is never inferred
+        self._unsubscribers.append(
+            manager.gateway.async_on_subscribed(
+                discovery_wildcard(self._discovery_prefix), 1, self._on_discovery_settled
             )
         )
         self._presence_overflow_logged = False
@@ -228,6 +245,10 @@ class SyncManager:
         """
         self._seen.clear()
         self._discovery_content.clear()
+        # The resubscribe after the reconnect settles again. Should its signal ever land before this reset, the settle
+        # stays unset and an unseen topic stays UNKNOWN, which is the safe direction (D-03)
+        self._discovery_settled_at = None
+        self._discovery_scope = frozenset(self._manager.mirrors)
         if self._instances:
             self._instances.clear()
             self._announce_presence_change()
@@ -371,14 +392,31 @@ class SyncManager:
         self._discovery_content.pop(device_id, None)
         self.clear_transferred(device_id)
 
+    @callback
+    def _on_discovery_settled(self) -> None:
+        """Note when the broker acknowledged the discovery wildcard subscription; its retained messages follow."""
+        self._discovery_settled_at = self._manager.clock()
+
     def discovery_content(self, device_id: str) -> DiscoveryContent:
         """
         Return what the core-prefix discovery topic of a held device holds, as last seen since the (re)connect.
 
-        A topic without any message seen is UNKNOWN here, which keeps every disabled row (D-03); plan 09.1-02 adds the
-        settle signal that turns an unseen topic into EMPTY.
+        A recorded verdict wins (D-02). A topic without any message is EMPTY only when all three hold: the broker
+        acknowledged the discovery subscription, DISCOVERY_SETTLE_GRACE_SECONDS have passed on the manager clock since,
+        and the id was in scope (an owned subentry, or a mirror held when the subscription was made). Otherwise it is
+        UNKNOWN, which keeps every disabled row, because a retained export that has not arrived yet must never read as
+        empty (D-03, CR-01).
         """
-        return self._discovery_content.get(device_id, DiscoveryContent.UNKNOWN)
+        if (verdict := self._discovery_content.get(device_id)) is not None:
+            return verdict
+        settled_at = self._discovery_settled_at
+        if (
+            settled_at is not None
+            and self._manager.clock() - settled_at >= DISCOVERY_SETTLE_GRACE_SECONDS
+            and (self._manager.subentry_id_of(device_id) is not None or device_id in self._discovery_scope)
+        ):
+            return DiscoveryContent.EMPTY
+        return DiscoveryContent.UNKNOWN
 
     @property
     def transferred_away(self) -> frozenset[str]:

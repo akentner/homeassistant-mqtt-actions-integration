@@ -133,6 +133,11 @@ class FakeGateway(MqttGateway):
 
         return _unsubscribe
 
+    def async_on_subscribed(self, topic: str, qos: int, on_done: Callable[[], None]) -> CALLBACK_TYPE:
+        """Report the subscription as done next; the fake broker already replayed its retained messages on subscribe."""
+        self.hass.loop.call_soon(on_done)
+        return lambda: None
+
     async def async_publish(self, topic: str, payload: str, *, retain: bool, qos: int = 1) -> None:
         """Record the publish and hand it to the broker."""
         self.published.append((topic, payload, retain))

@@ -60,6 +60,24 @@ class MqttGateway:
 
         return mqtt.async_subscribe_connection_status(self._hass, _forward)
 
+    def async_on_subscribed(self, topic: str, qos: int, on_done: Callable[[], None]) -> CALLBACK_TYPE:
+        """
+        Call on_done once the broker acknowledged the subscription of topic at qos, and again after every resubscribe.
+
+        Returns the stop callback.
+        """
+
+        # Must be a @callback for the same reason as in async_subscribe
+        @callback
+        def _forward() -> None:
+            on_done()
+
+        try:
+            return mqtt.async_on_subscribe_done(self._hass, topic, qos, _forward)
+        except KeyError:
+            # The MQTT integration is not loaded: without a settle signal an unseen topic is never taken as empty
+            return lambda: None
+
     async def async_publish(self, topic: str, payload: str, *, retain: bool, qos: int = 1) -> None:
         """Publish a message with explicit qos and retain values; raises HomeAssistantError when MQTT is unavailable."""
         try:

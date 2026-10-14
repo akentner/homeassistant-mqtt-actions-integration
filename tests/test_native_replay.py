@@ -73,9 +73,10 @@ def _assert_no_working_duplicate(hass: HomeAssistant, device_id: str, replayed: 
     """
     Assert that no replayed entry works: each one is gone or stays disabled by the integration, without a state.
 
-    The duplicate guard disables the replayed switch before the quiet period ends, and the catch never removes a
-    disabled entry, because core MQTT clears the retained topic when a row it discovered while disabled leaves the
-    registry (CR-01). Such an entry stays disabled, and so does the MQTT device it sits on.
+    The duplicate guard disables the replayed switch before the quiet period ends. The catch removes such an entry only
+    when the core-prefix topic is seen to hold the legacy payload or nothing (D-02), because core MQTT clears the
+    retained topic when a row it discovered while disabled leaves the registry (CR-01). Otherwise the entry stays
+    disabled, and so does the MQTT device it sits on.
     """
     entity_registry = er.async_get(hass)
     left = legacy_entity_ids(hass, device_id)

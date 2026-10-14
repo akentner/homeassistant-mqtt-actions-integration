@@ -28,6 +28,7 @@ from homeassistant.helpers.entity import entity_sources
 from homeassistant.helpers.typing import UNDEFINED
 
 from .const import DOMAIN, LOGGER
+from .discovery import DiscoveryContent
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -50,6 +51,8 @@ LEGACY_TEST_PREFIX = "_test_"
 # Core stores an assistant's exposure default on an entry the first time the assistant asks, and the stored value
 # cannot tell that default from a user's choice: it is no customization
 CORE_OPTION_KEYS = frozenset({"should_expose"})
+# The core-prefix content that holds no export, so a twin the integration disabled may go (D-02)
+REMOVABLE_DISABLED_CONTENT = frozenset({DiscoveryContent.LEGACY, DiscoveryContent.EMPTY})
 
 
 class TakeoverStatus(StrEnum):
@@ -199,7 +202,14 @@ async def async_take_over(  # noqa: PLR0913
     return TakeoverStatus.DONE
 
 
-def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str) -> int:
+def remove_replay_twins(
+    hass: HomeAssistant,
+    entry_id: str,
+    device_id: str,
+    *,
+    mqtt_entry_id: str,
+    content: DiscoveryContent = DiscoveryContent.UNKNOWN,
+) -> int:
     """
     Remove the legacy entries a replayed discovery created next to the moved entities of a device; return the count.
 
@@ -207,15 +217,18 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
     It goes only when the twin carries the identity: an older or customized legacy entry is left to the takeover pass,
     and an entry without a twin is no duplicate. A customized entry stays whatever the twin holds: with both entries
     customized no rule knows which one automations use, and removing it would leave the user's choices only in a
-    deleted record that no UI reaches (WR-03). The twin is never removed. A disabled entry is never removed either:
-    core MQTT aborts the add of a row it discovers disabled and publishes an empty retained discovery as soon as that
-    row leaves the registry, which would wipe the topic of another instance's export (CR-01). That is the usual state
-    of a duplicate after a restart and of every row an export creates, and a disabled row restores as disabled, so it
-    stays. An enabled entry is disabled before it is removed: core MQTT clears the topic of a loaded entity that leaves
-    the registry as well, and the deleted record of an enabled entry would restore as enabled (WR-01). Disabling and
-    removing run in one synchronous step, so core cannot discover the row in between. Registry logic only: nothing is
-    published here, and core publishes nothing for a row removed this way. The emptied MQTT device goes too, unless an
-    entry remains on it, whether this integration created it or not.
+    deleted record that no UI reaches (WR-03). The twin is never removed. A disabled entry goes only when the
+    integration disabled it and `content`, what the core-prefix discovery topic of the id holds, is LEGACY or EMPTY
+    (D-02): core MQTT aborts the add of a row it discovers disabled and publishes an empty retained discovery as soon
+    as that row leaves the registry, and on such a topic that clear wipes no export. With EXPORT or UNKNOWN content,
+    the default for a caller that passes none, every disabled entry stays, because the clear would wipe the topic of
+    another instance's export (CR-01, D-01, D-03). An entry the user disabled stays whatever the content (D-04). A
+    disabled entry is removed as it is: its deleted record keeps `integration` (WR-01). An enabled entry is disabled
+    before it is removed: core MQTT clears the topic of a loaded entity that leaves the registry as well, and the
+    deleted record of an enabled entry would restore as enabled (WR-01). Disabling and removing run in one synchronous
+    step, so core cannot discover the row in between. Registry logic only: nothing is published here, and core
+    publishes nothing for an enabled row removed this way. The emptied MQTT device goes too, unless an entry remains on
+    it, whether this integration created it or not.
     """
     if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
         return 0
@@ -229,7 +242,11 @@ def remove_replay_twins(hass: HomeAssistant, entry_id: str, device_id: str, *, m
         if twin.config_entry_id != entry_id or _is_customized(legacy) or _carries_the_identity(legacy, twin):
             continue
         if legacy.disabled_by is not None:
-            # Core may hold a hook for an aborted add of this row, and removing it would clear the topic (CR-01)
+            if legacy.disabled_by is er.RegistryEntryDisabler.INTEGRATION and content in REMOVABLE_DISABLED_CONTENT:
+                # The topic holds no export, so the clear core may publish for the row wipes nothing (D-02)
+                entity_registry.async_remove(legacy.entity_id)
+                removed += 1
+            # Else core may hold a hook for an aborted add of this row, and its removal may clear an export (CR-01)
             continue
         # Disabled first, so core unloads the entity and clears nothing on removal, and the deleted record carries the
         # disabled state that a later restore of the same row inherits (WR-01)
@@ -264,9 +281,10 @@ def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mq
     age half: a row that core restores from a deleted record keeps its old creation time, and that row is the
     duplicate this guard exists for. The twin, a test button, a disabled entry and every other unique id are never
     touched, and nothing is removed or enabled. Registry logic only: nothing is published. The disabled entry stays
-    in the registry: neither the replay catch nor the takeover removes a disabled entry, because core MQTT clears the
-    retained topic, another instance's export included, when a row it discovered while disabled leaves the registry
-    (CR-01). The entry keeps the disabled state `integration` across restarts, and a later export finds it disabled.
+    in the registry for now: core MQTT clears the retained topic, another instance's export included, when a row it
+    discovered while disabled leaves the registry (CR-01). The takeover never removes it, and the start-up replay catch
+    removes it only when the core-prefix topic holds the legacy payload or nothing (D-02); with an export or unknown
+    content it keeps the disabled state `integration` across restarts, and a later export finds it disabled.
     """
     if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
         return 0

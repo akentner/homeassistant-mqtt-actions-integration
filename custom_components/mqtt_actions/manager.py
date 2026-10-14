@@ -83,7 +83,7 @@ from .const import (
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
-from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
+from .discovery import AvailabilityState, DiscoveryContent, DiscoveryPublisher, button_component_key
 from .document import (
     DocumentRejectedError,
     analyze_spec,
@@ -835,12 +835,16 @@ class Manager:
         return sorted(device_id for device_id in {*self.devices, *self.mirrors} if self.is_native(device_id))
 
     @callback
-    def _remove_replay_twins(self, device_ids: Iterable[str]) -> int:
+    def _remove_replay_twins(
+        self, device_ids: Iterable[str], content: Mapping[str, DiscoveryContent] | None = None
+    ) -> int:
         """
         Remove the duplicates a replayed legacy discovery created for these devices; return how many went (D-04, D-05).
 
-        Registry logic only: nothing is published and no migrate payload is sent for a mirror (T-5-02). One device that
-        raises must not keep the others, or the start, from finishing.
+        `content` maps a device id to what its core-prefix discovery topic holds. An id without an entry, and every id
+        when it is None as on the takeover path, is UNKNOWN: an integration-disabled twin stays (CR-01), and it goes
+        only for LEGACY or EMPTY content (D-02). Registry logic only: nothing is published and no migrate payload is
+        sent for a mirror (T-5-02). One device that raises must not keep the others, or the start, from finishing.
         """
         if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None:
             return 0
@@ -848,7 +852,11 @@ class Manager:
         for device_id in device_ids:
             try:
                 removed += takeover.remove_replay_twins(
-                    self._hass, self._entry.entry_id, device_id, mqtt_entry_id=mqtt_entry_id
+                    self._hass,
+                    self._entry.entry_id,
+                    device_id,
+                    mqtt_entry_id=mqtt_entry_id,
+                    content=(content or {}).get(device_id, DiscoveryContent.UNKNOWN),
                 )
             except Exception as err:  # noqa: BLE001
                 # No registry or broker content in the log: this check must never keep the manager from running
@@ -876,11 +884,19 @@ class Manager:
         self._entry.async_create_background_task(self._hass, self._async_replay_catch(), name=f"{DOMAIN} replay catch")
 
     async def _async_replay_catch(self) -> None:
-        """Remove the duplicates that a replay created after the quiet period, for every native device (D-05)."""
+        """
+        Remove the duplicates that a replay created after the quiet period, for every native device (D-05).
+
+        The catch reads what the core-prefix discovery topic of each id holds and removes in the same synchronous step,
+        so no message can change the decision in between (WR-01). A twin the integration disabled, usually by the
+        duplicate guard, goes for LEGACY or EMPTY content and stays for EXPORT or UNKNOWN content (CR-01, D-01 to D-04).
+        """
         async with self._lock:
             if not self._running:
                 return
-            if self._remove_replay_twins(self._native_device_ids()):
+            device_ids = self._native_device_ids()
+            content = {device_id: self.sync.discovery_content(device_id) for device_id in device_ids}
+            if self._remove_replay_twins(device_ids, content):
                 # The removal is on disk like the move before it (WR-01)
                 await takeover.async_flush_registries(self._hass)
 
@@ -904,9 +920,11 @@ class Manager:
         export on the prefix core listens to can create a duplicate that comes back enabled. Any instance on the broker
         may publish that export and a receiver cannot know who does, so the guard does not read this instance's export
         option or prefix. It disables the rows that exist now and then every row core creates while it is armed. A
-        disabled row stays in the registry: the replay catch never removes it, because core MQTT clears the retained
-        topic, another instance's export included, when a row it discovered while disabled leaves the registry (CR-01).
-        The row keeps its disabled state across restarts. Registry logic only: nothing is published.
+        disabled row stays in the registry until the next start-up replay catch, which removes it only when the
+        core-prefix topic holds the legacy payload or nothing (D-02). With an export or unknown content it stays,
+        because core MQTT clears the retained topic, another instance's export included, when a row it discovered
+        while disabled leaves the registry (CR-01). Such a row keeps its disabled state across restarts. Registry logic
+        only: nothing is published.
         """
         self._disarm_duplicate_guard()
         if not self._running:

@@ -54,6 +54,7 @@ from .const import (
     SCHEMA_VERSION,
     SIGNAL_ROSTER_UPDATED,
 )
+from .discovery import DiscoveryContent, classify_discovery
 from .document import (
     DocumentRejectedError,
     SchemaTooNewError,
@@ -179,10 +180,15 @@ class SyncManager:
         # Owned device ids that another instance adopted, with the adopter's valid document; in memory only, so it is
         # bounded by the owned devices and empty again after a restart (assumption A15)
         self._transferred: dict[str, TransferInfo] = {}
+        # Held device id -> what its core-prefix discovery topic holds, as last seen; bounded by the held ids (owned
+        # subentries plus mirrors), and only the verdict is stored, never a payload (T-09.1-04)
+        self._discovery_content: dict[str, DiscoveryContent] = {}
 
     async def async_start(self) -> None:
         """Subscribe to the config wildcard; the caller does this before anything is published (SYN-04)."""
         manager = self._manager
+        # Cleared before subscribing: a retained discovery may be delivered while the subscription is set up
+        self._discovery_content.clear()
         self._unsubscribers.append(
             await manager.gateway.async_subscribe(config_wildcard(manager.base_topic), self._on_config_message)
         )
@@ -221,6 +227,7 @@ class SyncManager:
         unknown owner and never like an online one (D-10). The owner republishes documents before it announces online.
         """
         self._seen.clear()
+        self._discovery_content.clear()
         if self._instances:
             self._instances.clear()
             self._announce_presence_change()
@@ -361,7 +368,17 @@ class SyncManager:
         """Forget everything about a deleted or released device."""
         self._published.pop(device_id, None)
         self._removals.pop(device_id, None)
+        self._discovery_content.pop(device_id, None)
         self.clear_transferred(device_id)
+
+    def discovery_content(self, device_id: str) -> DiscoveryContent:
+        """
+        Return what the core-prefix discovery topic of a held device holds, as last seen since the (re)connect.
+
+        A topic without any message seen is UNKNOWN here, which keeps every disabled row (D-03); plan 09.1-02 adds the
+        settle signal that turns an unseen topic into EMPTY.
+        """
+        return self._discovery_content.get(device_id, DiscoveryContent.UNKNOWN)
 
     @property
     def transferred_away(self) -> frozenset[str]:
@@ -712,11 +729,20 @@ class SyncManager:
         Core publishes it when any instance deletes one entity of the device, and then drops every entity of it.
         Only legacy ids in `devices` are healed, and a device being deleted has already left `devices`, so the owner's
         own delete is never mistaken for a removal elsewhere.
+
+        Every message for a held id also records what the topic holds now (`discovery_content`), the latest message
+        winning; the live migrate payload changes nothing retained and is ignored there.
         """
-        if msg.payload:
-            return
         manager = self._manager
         device_id = parse_discovery_topic(self._discovery_prefix, msg.topic)
+        if (
+            device_id is not None
+            and self._holds(device_id)
+            and (verdict := classify_discovery(device_id, msg.payload)) is not None
+        ):
+            self._discovery_content[device_id] = verdict
+        if msg.payload:
+            return
         if device_id is None or (device := manager.devices.get(device_id)) is None:
             return
         # A native device has no discovery to heal, and the owner's own clear during the takeover is no removal
@@ -724,6 +750,16 @@ class SyncManager:
             return
         self._note_removal(device)
         self._discovery_heal.request(device_id)
+
+    def _holds(self, device_id: str) -> bool:
+        """
+        Return whether this instance holds a device id: an owned device or a mirror.
+
+        An owned id is read from its config subentry, which exists before the owned devices are registered at start, so
+        a retained discovery delivered during the start is not lost.
+        """
+        manager = self._manager
+        return manager.subentry_id_of(device_id) is not None or device_id in manager.mirrors
 
     def _note_removal(self, device: Device) -> None:
         """Count a removal and explain in Repairs once it keeps happening (T-03-10)."""

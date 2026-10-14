@@ -4,8 +4,9 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.json import json_dumps
+from homeassistant.util.json import json_loads
 
-from .const import BUTTON_KEY_PREFIX, DOMAIN, PAYLOAD_OFF, PAYLOAD_ON, SUBENTRY_SELECT
+from .const import BUTTON_KEY_PREFIX, DOMAIN, MAX_DOCUMENT_BYTES, PAYLOAD_OFF, PAYLOAD_ON, SUBENTRY_SELECT
 from .topics import availability_topic, config_topic, discovery_topic, state_topic, test_topic
 
 if TYPE_CHECKING:
@@ -157,6 +158,115 @@ def build_export(*, spec: DeviceSpec, base_topic: str, instance_id: str, sw_vers
         "components": {key: component},
         "availability": [{"topic": availability_topic(base_topic, instance_id)}],
     }
+
+
+class DiscoveryContent(StrEnum):
+    """
+    What the retained discovery topic of a device on the core prefix holds, as far as this instance has seen (D-02).
+
+    The start-up replay catch reads it before it decides about a replay twin that the integration disabled. LEGACY,
+    the multi-component payload with test buttons of the legacy path, and EMPTY, a live empty payload, let the catch
+    remove that twin: the topic holds no export, so the clear core publishes when such a row leaves wipes nothing of
+    value. EXPORT, the disabled-by-default export of a native device, and UNKNOWN, any other shape or no message seen,
+    keep it, because the topic may hold another instance's export (CR-01, D-01, D-03).
+    """
+
+    LEGACY = "legacy"
+    EXPORT = "export"
+    EMPTY = "empty"
+    UNKNOWN = "unknown"
+
+
+# The main component of a device payload; the test buttons sit next to it under BUTTON_KEY_PREFIX keys
+_MAIN_COMPONENT_KEYS = frozenset({"switch", "select"})
+_MIGRATE_PAYLOAD = {"migrate_discovery": True}
+_BUTTON_TOMBSTONE = {"platform": "button"}
+
+
+def classify_discovery(device_id: str, payload: str) -> DiscoveryContent | None:
+    """
+    Classify a payload seen on the core-prefix discovery topic of a device; None for the live migrate payload.
+
+    Pure: it takes no hass, never logs and never raises. Only the exact shapes that `build_discovery` (LEGACY) and
+    `build_export` (EXPORT) produce for this device id count, and every other shape is UNKNOWN, which keeps every
+    disabled row (T-09.1-03). The migrate payload is live and not retained, so it leaves the retained content as it was.
+    """
+    if not payload:
+        return DiscoveryContent.EMPTY
+    parsed = _parse_object(payload)
+    if parsed == _MIGRATE_PAYLOAD:
+        return None
+    components = None if parsed is None else _components_of(device_id, parsed)
+    if components is None:
+        return DiscoveryContent.UNKNOWN
+    if _is_export(device_id, components):
+        return DiscoveryContent.EXPORT
+    return DiscoveryContent.LEGACY if _is_legacy(device_id, components) else DiscoveryContent.UNKNOWN
+
+
+def _parse_object(payload: str) -> dict[str, Any] | None:
+    """Return the payload as a JSON object, or None when it is oversized, not JSON or not an object."""
+    try:
+        if len(payload.encode()) > MAX_DOCUMENT_BYTES:
+            return None
+        parsed = json_loads(payload)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _components_of(device_id: str, parsed: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the components of a payload whose device is exactly this device id; None for any other shape."""
+    device = parsed.get("device")
+    if not isinstance(device, dict) or device.get("identifiers") != [f"{DOMAIN}_{device_id}"]:
+        return None
+    components = parsed.get("components")
+    return components if isinstance(components, dict) else None
+
+
+def _is_main_component(device_id: str, key: str, component: Any) -> bool:
+    """Return whether a component is the switch or select of the device id, keyed by its own platform."""
+    return (
+        key in _MAIN_COMPONENT_KEYS
+        and isinstance(component, dict)
+        and component.get("platform") == key
+        and component.get("unique_id") == device_id
+    )
+
+
+def _is_export(device_id: str, components: dict[str, Any]) -> bool:
+    """Return whether the components are exactly one main component that is disabled by default."""
+    if len(components) != 1:
+        return False
+    ((key, component),) = components.items()
+    return _is_main_component(device_id, key, component) and component.get("enabled_by_default") is False
+
+
+def _is_test_button(device_id: str, key: str, component: Any) -> bool:
+    """Return whether a component is a test button of the device id or the tombstone of a retired one."""
+    return (
+        key.startswith(BUTTON_KEY_PREFIX)
+        and isinstance(component, dict)
+        and (
+            component == _BUTTON_TOMBSTONE
+            or (component.get("platform") == "button" and component.get("unique_id") == f"{device_id}_{key}")
+        )
+    )
+
+
+def _is_legacy(device_id: str, components: dict[str, Any]) -> bool:
+    """Return whether the components are one enabled main component plus at least one test button, and nothing else."""
+    mains = [key for key in components if key in _MAIN_COMPONENT_KEYS]
+    if len(mains) != 1:
+        return False
+    main = mains[0]
+    if (
+        not _is_main_component(device_id, main, components[main])
+        or components[main].get("enabled_by_default", True) is not True
+    ):
+        return False
+    buttons = {key: component for key, component in components.items() if key != main}
+    return bool(buttons) and all(_is_test_button(device_id, key, component) for key, component in buttons.items())
 
 
 class DiscoveryPublisher:

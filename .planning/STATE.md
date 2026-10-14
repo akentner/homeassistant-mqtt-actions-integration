@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
 current_phase_name: UAT-02 gap closure
 status: executing
-stopped_at: Completed 09.1-02-PLAN.md
-last_updated: "2026-10-14T14:19:04.343Z"
+stopped_at: Completed 09.1-03-PLAN.md
+last_updated: "2026-10-14T14:29:44.310Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase 09.1 execution started
-state_head: c6414b41e2b38702f185fd66c0f2b46c40199141
+state_head: 1a97a3b3678febce4929c985fa83e96cf841e1c1
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 11
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.1 (UAT-02 gap closure) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-10-14 — Phase 09.1 execution started
 
@@ -116,6 +116,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09 P03 | 18 min | 3 tasks | 23 files |
 | Phase 09.1 P01 | 19 min | 2 tasks | 8 files |
 | Phase 09.1 P02 | 13 min | 3 tasks | 10 files |
+| Phase 09.1 P03 | 8 min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -240,6 +241,8 @@ Recent decisions affecting current work:
 - [Phase 09.1]: 09.1-01: commits land on the phase branch and main is fast-forwarded after each (protected-branch guard); HEAD ends on main
 - [Phase 09.1]: 09.1-02: an unseen discovery topic counts as EMPTY only after the public subscribe-done signal at qos 1, a 2 s grace on the manager clock, and for an id held at subscribe time; FIX = 681c587
 - [Phase 09.1]: 09.1-02: G6 rewritten per user decision 2 (export off plus restart removes the disabled row); the export-row CR-01 test re-delivers the retained export
+- [Phase 09.1]: 09.1-03: check-uat02.sh clean filters the UAT Marker rows on both sides of the baseline comparison (D-11, do_clean only, run path byte-identical); phase9.1.env points the unchanged bench at 09.1-evidence
+- [Phase 09.1]: 09.1-03: FIX 681c587 is push-ready: origin/main 7baec98 is its ancestor, only the 13 planned files changed, local gate green; owner pushes it with git push origin 681c58793b656b51869906b62f2564829de7a10d:refs/heads/main and dispatches ci.yml and validate.yml
 
 ### Pending Todos
 
@@ -275,8 +278,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-14T14:19:04.284Z
-Stopped at: Completed 09.1-02-PLAN.md
+Last session: 2026-10-14T14:29:44.255Z
+Stopped at: Completed 09.1-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

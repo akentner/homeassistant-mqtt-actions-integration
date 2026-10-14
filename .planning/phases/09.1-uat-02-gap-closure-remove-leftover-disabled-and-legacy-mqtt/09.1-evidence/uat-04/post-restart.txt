@@ -1,0 +1,8 @@
+post-restart observation (never a result; plan 09.1-05 Task 3 step 5c)
+graceful restart of ha-a and ha-b: podman restart -t 60 at 2026-10-14T22:50:05Z, then both answered and 90 s more
+context: after the UAT-04 run (export on, core prefix, export off) on build 681c58793b656b51869906b62f2564829de7a10d
+live mqtt rows after the run (before the restart): a=3 b=3 (post-run-a.json, post-run-b.json)
+live mqtt rows after the restart: a=0 b=0 (post-restart-a.json, post-restart-b.json)
+guard INFO lines of this start: a=0 b=0
+== check-uat02.sh clean (rc=0)
+PASS UAT-02 clean /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/uat-02

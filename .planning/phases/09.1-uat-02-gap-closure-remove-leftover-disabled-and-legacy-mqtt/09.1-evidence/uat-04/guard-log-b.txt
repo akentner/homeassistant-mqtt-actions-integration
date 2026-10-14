@@ -1,0 +1,4 @@
+guard INFO lines of ha-b (timestamp and text only) during the UAT-04 run (2026-10-14T22:47:02Z until the observation restart 2026-10-14T22:50:05Z, podman logs --since/--until, ANSI codes stripped); line timestamps are container local time (UTC+2)
+count: 2
+2026-10-15 00:48:43.889 Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-15 00:48:43.895 Disabled 1 duplicate entities that core MQTT created for native devices

@@ -11,9 +11,11 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
+from custom_components.mqtt_actions import sync as sync_module
 from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import DOMAIN
 from custom_components.mqtt_actions.discovery import DiscoveryPublisher, build_discovery
+from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
 from custom_components.mqtt_actions.topics import discovery_topic
 from tests.documents import FOREIGN_OWNER, make_spec
 from tests.log_helpers import OWN_LOGGER
@@ -612,3 +614,50 @@ async def test_the_catch_keeps_an_enabled_customized_button_next_to_a_disabled_t
     assert _falsy_publishes(mqtt_mock, legacy.topic) == []
     assert _mqtt_device_of(hass, legacy.device_id) is not None
     _assert_moved_and_native(hass, legacy, before)
+
+
+async def test_a_catch_that_runs_before_the_settle_checks_again_once_the_grace_has_passed(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    WR-02 (review), D-02, D-03: a catch that finds the content unknown because the settle is late checks again.
+
+    A slow broker acknowledges the discovery wildcard after the quiet period. The first catch keeps the disabled twin;
+    once the settle and its grace have passed, the catch runs again and removes the twin and the legacy device.
+    """
+    settles: list[Callable[[], None]] = []
+
+    def _watch(_gateway: MqttGateway, _topic: str, _qos: int, on_done: Callable[[], None]) -> Callable[[], None]:
+        settles.append(on_done)
+        return lambda: None
+
+    monkeypatch.setattr(MqttGateway, "async_on_subscribed", _watch)
+    legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(replayed) == 3
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    monkeypatch.setattr(sync_module, "DISCOVERY_SETTLE_GRACE_SECONDS", 2.0)
+    # The bench state: nothing is retained, so nothing is handed to the new subscriptions
+    await _restart(hass, legacy.entry)
+    now = [1000.0]
+    _manager(legacy.entry).clock = lambda: now[0]
+
+    await _quiet_period_passes(hass)
+
+    # The settle is not in yet, so the content is unknown and the twin stays for now
+    assert entity_registry.async_get(switch) is not None
+    settles[-1]()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    now[0] += 2.0
+    await _quiet_period_passes(hass)
+
+    _assert_clean(hass, legacy.device_id, replayed)
+    _assert_moved_and_native(hass, legacy, before)
+    assert _falsy_publishes(mqtt_mock, legacy.topic) == []

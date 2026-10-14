@@ -4,6 +4,7 @@ import json
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+import attr
 import pytest
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
@@ -253,3 +254,71 @@ async def test_a_replay_right_after_the_move_is_removed_before_the_clear(
     assert left_at_the_clear == [[]]  # nothing is left when the clear goes out
     _assert_clean(hass, legacy.device_id, replayed[0])
     _assert_moved_and_native(hass, legacy, before)
+
+
+def _mqtt_records(hass: HomeAssistant, device_id: str) -> dict[tuple[str, str, str], Any]:
+    """Return the deleted mqtt records of the device id: the main component and the test buttons."""
+    return {
+        key: record
+        for key, record in er.async_get(hass).deleted_entities.items()
+        if record.platform == "mqtt"
+        and (record.unique_id == device_id or record.unique_id.startswith(f"{device_id}_test_"))
+    }
+
+
+def _tombstone_the_replay(hass: HomeAssistant, device_id: str, replayed: list[str], tombstones: str) -> None:
+    """
+    Remove the replayed rows so that each leaves a deleted record, disabled by the integration or reset to null.
+
+    An enabled row is disabled by the integration first, so its record keeps that state; the null variant then resets
+    every record, which is what `reseed-tombstones.sh` does on the bench.
+    """
+    entity_registry = er.async_get(hass)
+    for entity_id in replayed:
+        if entity_registry.async_get(entity_id).disabled_by is None:
+            entity_registry.async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+        entity_registry.async_remove(entity_id)
+    records = _mqtt_records(hass, device_id)
+    assert len(records) == len(replayed)
+    assert all(record.disabled_by is er.RegistryEntryDisabler.INTEGRATION for record in records.values())
+    if tombstones == "null":
+        for key, record in records.items():
+            entity_registry.deleted_entities[key] = attr.evolve(record, disabled_by=None)
+
+
+@pytest.mark.parametrize("tombstones", ["integration", "null"], ids=["integration", "null"])
+async def test_a_replay_onto_tombstones_is_cleaned_at_the_next_start(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    tombstones: str,
+) -> None:
+    """D-02, D-05: with the legacy payload retained, the next start removes the disabled twin and the legacy device."""
+    legacy, before = await _unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    _loop_back_discovery(hass, mqtt_mock)
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _assert_moved_and_native(hass, legacy, before)
+    assert legacy_entity_ids(hass, legacy.device_id) == []
+    first = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(first) == 3
+    _tombstone_the_replay(hass, legacy.device_id, first, tombstones)
+    entity_registry = er.async_get(hass)
+
+    for _round in range(2):
+        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(replayed) == 3
+        # Core re-enabled or restored the switch and the guard disabled it, so the test cannot go green for the wrong
+        # reason: this is the row the catch used to skip (CR-01)
+        (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+        assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        await _restart(hass, legacy.entry)
+        # The mocked client keeps no retained store: hand the broker's retained legacy payload to the new subscriptions
+        # (core's discovery skips it, it saw a retained message on the topic before)
+        async_fire_mqtt_message(hass, legacy.topic, legacy.payload, retain=True)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        await _quiet_period_passes(hass)
+        _assert_clean(hass, legacy.device_id, replayed)
+        _assert_moved_and_native(hass, legacy, before)

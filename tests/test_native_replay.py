@@ -1,6 +1,7 @@
 """A retained legacy Discovery replay around the native takeover leaves no duplicate entity (IN-03, MIG-05, D-04)."""
 
 import json
+import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +16,7 @@ from custom_components.mqtt_actions.const import DOMAIN
 from custom_components.mqtt_actions.discovery import DiscoveryPublisher, build_discovery
 from custom_components.mqtt_actions.topics import discovery_topic
 from tests.documents import FOREIGN_OWNER, make_spec
+from tests.log_helpers import OWN_LOGGER
 from tests.test_native_start import (
     BASE,
     _assert_moved_and_native,
@@ -507,3 +509,62 @@ async def test_a_disabled_leftover_is_removed_at_a_start_with_an_empty_topic(
     _assert_moved_and_native(hass, legacy, before)
     # No product clear for an empty topic, and no core clear: core did not rediscover the row in this run
     assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+
+
+def _abbreviated(payload: str) -> str:
+    """Return the payload with the abbreviated device and components keys, a shape the classifier does not know."""
+    document = json.loads(payload)
+    document["dev"] = document.pop("device")
+    document["cmps"] = document.pop("components")
+    return json.dumps(document)
+
+
+@pytest.mark.parametrize("content", ["unsettled", "foreign_shape"])
+async def test_a_disabled_twin_stays_while_the_topic_content_is_unknown(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    caplog: pytest.LogCaptureFixture,
+    request: pytest.FixtureRequest,
+    content: str,
+) -> None:
+    """D-03, CR-01: with unknown content the disabled twin and its device stay, and one INFO line names only a count."""
+    if content == "foreign_shape":
+        request.getfixturevalue("discovery_settled")
+    legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(replayed) == 3
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    shown = _abbreviated(legacy.payload)
+    if content == "foreign_shape":
+        await _restart_with_the_retained_payload(hass, legacy, shown)
+    else:
+        await _restart(hass, legacy.entry)
+    mqtt_mock.async_publish.reset_mock()
+    caplog.set_level(logging.INFO, logger=OWN_LOGGER)
+    caplog.clear()
+
+    await _quiet_period_passes(hass)
+
+    assert entity_registry.async_get(switch) is not None
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert _mqtt_device_of(hass, legacy.device_id) is not None
+    assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+    kept = [
+        record
+        for record in caplog.records
+        if record.name.startswith(OWN_LOGGER)
+        and record.levelno == logging.INFO
+        and "is not known" in record.getMessage()
+    ]
+    assert len(kept) == 1
+    message = kept[0].getMessage()
+    assert " 1 " in message
+    assert legacy.device_id not in message
+    assert shown not in message
+    assert legacy.payload not in message
+    _assert_moved_and_native(hass, legacy, before)

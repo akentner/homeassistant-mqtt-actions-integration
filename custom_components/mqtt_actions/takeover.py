@@ -222,7 +222,11 @@ def remove_replay_twins(
     (D-02): core MQTT aborts the add of a row it discovers disabled and publishes an empty retained discovery as soon
     as that row leaves the registry, and on such a topic that clear wipes no export. With EXPORT or UNKNOWN content,
     the default for a caller that passes none, every disabled entry stays, because the clear would wipe the topic of
-    another instance's export (CR-01, D-01, D-03). An entry the user disabled stays whatever the content (D-04). A
+    another instance's export (CR-01, D-01, D-03). With LEGACY content a disabled entry also stays while an enabled
+    legacy entry of the device stays: core discovered the disabled row in this run, and the clear it publishes when the
+    row leaves deletes every loaded legacy entry of the device, the kept ones included (D-08). A kept entry that is
+    disabled is not loaded and survives that clear. The keeps are therefore decided before anything is removed. An
+    entry the user disabled stays whatever the content (D-04). A
     disabled entry is removed as it is: its deleted record keeps `integration` (WR-01). An enabled entry is disabled
     before it is removed: core MQTT clears the topic of a loaded entity that leaves the registry as well, and the
     deleted record of an enabled entry would restore as enabled (WR-01). Disabling and removing run in one synchronous
@@ -233,24 +237,37 @@ def remove_replay_twins(
     if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
         return 0
     entity_registry = er.async_get(hass)
-    removed = 0
+    # The keeps are decided before anything goes: whether a disabled row may go depends on what else stays (D-08)
+    keeps_an_enabled_row = False
+    plan: list[tuple[er.RegistryEntry, bool]] = []  # (entry, disable first)
     for legacy in _legacy_entries(hass, device, device_id, mqtt_entry_id):
         twin_id = entity_registry.async_get_entity_id(legacy.domain, DOMAIN, legacy.unique_id)
-        if twin_id is None:
+        twin = entity_registry.entities.get(twin_id) if twin_id is not None else None
+        if (
+            twin is None
+            or twin.config_entry_id != entry_id
+            or _is_customized(legacy)
+            or _carries_the_identity(legacy, twin)
+        ):
+            keeps_an_enabled_row = keeps_an_enabled_row or legacy.disabled_by is None
             continue
-        twin = entity_registry.entities[twin_id]
-        if twin.config_entry_id != entry_id or _is_customized(legacy) or _carries_the_identity(legacy, twin):
-            continue
-        if legacy.disabled_by is not None:
-            if legacy.disabled_by is er.RegistryEntryDisabler.INTEGRATION and content in REMOVABLE_DISABLED_CONTENT:
-                # The topic holds no export, so the clear core may publish for the row wipes nothing (D-02)
-                entity_registry.async_remove(legacy.entity_id)
-                removed += 1
-            # Else core may hold a hook for an aborted add of this row, and its removal may clear an export (CR-01)
-            continue
-        # Disabled first, so core unloads the entity and clears nothing on removal, and the deleted record carries the
-        # disabled state that a later restore of the same row inherits (WR-01)
-        entity_registry.async_update_entity(legacy.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+        if legacy.disabled_by is None:
+            plan.append((legacy, True))
+        elif legacy.disabled_by is er.RegistryEntryDisabler.INTEGRATION and content in REMOVABLE_DISABLED_CONTENT:
+            # The topic holds no export, so the clear core may publish for the row wipes nothing (D-02)
+            plan.append((legacy, False))
+        # Else core may hold a hook for an aborted add of this row, and its removal may clear an export (CR-01)
+    if keeps_an_enabled_row and content is DiscoveryContent.LEGACY:
+        # Core discovered a disabled row of this topic in this run and holds a clear-on-remove hook for it: its empty
+        # retained payload would delete every loaded legacy row of the device, the kept ones included (D-08). A kept
+        # row that is disabled is not loaded, and core's clear leaves it in the registry
+        plan = [(legacy, disable_first) for legacy, disable_first in plan if disable_first]
+    removed = 0
+    for legacy, disable_first in plan:
+        if disable_first:
+            # Disabled first, so core unloads the entity and clears nothing on removal, and the deleted record carries
+            # the disabled state that a later restore of the same row inherits (WR-01)
+            entity_registry.async_update_entity(legacy.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
         entity_registry.async_remove(legacy.entity_id)
         removed += 1
     if not removed:

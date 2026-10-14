@@ -1,0 +1,33 @@
+recorded_utc: 2026-10-14T14:27:57Z
+fix_sha: 681c58793b656b51869906b62f2564829de7a10d
+fix_source: git log -1 --format=%H main -- . ':(exclude).planning' (computed, equals fix_sha in 09.1-02-SUMMARY.md)
+origin_main: 7baec9878badc8fb49ea0d80243277d5ff3fb443
+origin_main_is_ancestor_of_fix: yes (git merge-base --is-ancestor origin/main 681c58793b656b51869906b62f2564829de7a10d exits 0, after git fetch origin)
+commits_to_push: 35
+manifest_at_fix: 1.0.1
+non_planning_changes_after_fix: none (git diff --name-only 681c58793b656b51869906b62f2564829de7a10d HEAD -- . ':(exclude).planning' is empty)
+changed_paths_since_bump: (git diff --name-only 7baec9878badc8fb49ea0d80243277d5ff3fb443 681c58793b656b51869906b62f2564829de7a10d -- . ':(exclude).planning'; all 13 are in the allowlist of plan 09.1-02 Task 3, none outside it)
+  custom_components/mqtt_actions/discovery.py
+  custom_components/mqtt_actions/manager.py
+  custom_components/mqtt_actions/mqtt_gateway.py
+  custom_components/mqtt_actions/sync.py
+  custom_components/mqtt_actions/takeover.py
+  docs/troubleshooting.md
+  tests/broker/test_retain_semantics.py
+  tests/conftest.py
+  tests/fake_broker.py
+  tests/test_discovery_content.py
+  tests/test_export_guard_receiver.py
+  tests/test_native_replay.py
+  tests/test_takeover.py
+local_gate_tree: HEAD 7681b781f39a067791fa8e2eee920e37f450a753 differs from FIX only under .planning/ and no non-planning path is dirty, so the tree under test is the FIX tree
+local_gate_ruff_check: pass (All checks passed!)
+local_gate_ruff_format: pass (93 files already formatted)
+local_gate_pytest: 1584 passed, 2 xfailed in 117.05s (0:01:57) (uv run pytest -q, all tiers; the 2 xfailed are the two documented entity_id_rename parameters in tests/test_takeover.py, "Not detectable", as in Phase 9)
+local_gate_broker: 18 passed, 1568 deselected in 17.55s (MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q -m broker; no skip, the broker tier really ran)
+push_command: git push origin 681c58793b656b51869906b62f2564829de7a10d:refs/heads/main
+dispatch_commands: gh workflow run ci.yml --ref main && gh workflow run validate.yml --ref main
+why_refspec: local main carries .planning commits after FIX (the 09.1-02 summary and close-out, the 09.1-03 evidence); a plain git push origin main would put a docs commit at the head of origin main, and CI and Validate must run on FIX itself, so the owner pushes exactly FIX with a refspec
+why_dispatch: on.push in ci.yml and validate.yml has only tags-ignore ["v*.*.*"], so a branch push runs nothing; the owner dispatches both workflows while origin/main == FIX and before pushing anything else, and runs with event workflow_dispatch count under the Phase 9 D-04 amendment (09-evidence/release/d04-amendment.txt) only with headSha == FIX
+tag: not created (plan 09-04 re-pointed to FIX by plan 09.1-06, after the bench)
+claude_actions: none of push, workflow dispatch, rerun or tag; git fetch origin was the only remote operation (a read)

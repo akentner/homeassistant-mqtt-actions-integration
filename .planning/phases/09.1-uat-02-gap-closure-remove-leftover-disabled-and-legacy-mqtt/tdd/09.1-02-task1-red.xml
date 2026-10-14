@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.092" timestamp="2026-10-14T16:06:00.329531+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_disabled_leftover_is_removed_at_a_start_with_an_empty_topic" time="0.981"><failure message="AssertionError: assert ['switch.lamp_2'] == []&#10;  &#10;  Left contains one more item: 'switch.lamp_2'&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139682177777152'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f0a58371dd0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f0a4a68a090&gt;
+
+    @pytest.mark.usefixtures("discovery_settled")
+    async def test_a_disabled_leftover_is_removed_at_a_start_with_an_empty_topic(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """D-02, D-03, D-09: with nothing retained on the topic, the settled start removes the disabled twin and device."""
+        legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(replayed) == 3
+        entity_registry = er.async_get(hass)
+        (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+        # The guard disabled the switch: this is the leftover the catch used to skip (CR-01)
+        assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        # The bench state: nothing is retained, so nothing is handed to the new subscriptions
+        await _restart(hass, legacy.entry)
+        mqtt_mock.async_publish.reset_mock()
+    
+        await _quiet_period_passes(hass)
+    
+&gt;       _assert_clean(hass, legacy.device_id, replayed)
+
+tests/test_native_replay.py:506: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hass = &lt;HomeAssistant RUNNING&gt;
+device_id = '39e83cfd-ffca-4240-986d-d53a5f970b91'
+replayed = ['switch.lamp_2', 'button.lamp_test_on_2', 'button.lamp_test_off_2']
+
+    def _assert_clean(hass: HomeAssistant, device_id: str, replayed: list[str]) -&gt; None:
+        """Assert that no mqtt entry of the device id is left, the replayed ones are gone for good, and so is the device."""
+        entity_registry = er.async_get(hass)
+&gt;       assert legacy_entity_ids(hass, device_id) == []
+E       AssertionError: assert ['switch.lamp_2'] == []
+E         
+E         Left contains one more item: 'switch.lamp_2'
+E         Use -v to get more diff
+
+tests/test_native_replay.py:72: AssertionError</failure></testcase></testsuite></testsuites>

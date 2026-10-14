@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="1.283" timestamp="2026-10-14T16:08:21.989479+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_disabled_twin_stays_while_the_topic_content_is_unknown[unsettled]" time="0.998"><failure message="assert 0 == 1&#10; +  where 0 = len([])">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140681786194448'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7ff315a9a4b0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7ff307d4e820&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7ff31592dbe0&gt;
+request = &lt;FixtureRequest for &lt;Coroutine test_a_disabled_twin_stays_while_the_topic_content_is_unknown[unsettled]&gt;&gt;
+content = 'unsettled'
+
+    @pytest.mark.parametrize("content", ["unsettled", "foreign_shape"])
+    async def test_a_disabled_twin_stays_while_the_topic_content_is_unknown(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        caplog: pytest.LogCaptureFixture,
+        request: pytest.FixtureRequest,
+        content: str,
+    ) -&gt; None:
+        """D-03, CR-01: with unknown content the disabled twin and its device stay, and one INFO line names only a count."""
+        if content == "foreign_shape":
+            request.getfixturevalue("discovery_settled")
+        legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(replayed) == 3
+        entity_registry = er.async_get(hass)
+        (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+        assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        shown = _abbreviated(legacy.payload)
+        if content == "foreign_shape":
+            await _restart_with_the_retained_payload(hass, legacy, shown)
+        else:
+            await _restart(hass, legacy.entry)
+        mqtt_mock.async_publish.reset_mock()
+        caplog.set_level(logging.INFO, logger=OWN_LOGGER)
+        caplog.clear()
+    
+        await _quiet_period_passes(hass)
+    
+        assert entity_registry.async_get(switch) is not None
+        assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert _mqtt_device_of(hass, legacy.device_id) is not None
+        assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+        kept = [
+            record
+            for record in caplog.records
+            if record.name.startswith(OWN_LOGGER)
+            and record.levelno == logging.INFO
+            and "is not known" in record.getMessage()
+        ]
+&gt;       assert len(kept) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_native_replay.py:564: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_a_disabled_twin_stays_while_the_topic_content_is_unknown[foreign_shape]" time="0.159"><failure message="assert 0 == 1&#10; +  where 0 = len([])">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140681785840976'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7ff307a97d70&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7ff3078e5900&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7ff316c02710&gt;
+request = &lt;FixtureRequest for &lt;Coroutine test_a_disabled_twin_stays_while_the_topic_content_is_unknown[foreign_shape]&gt;&gt;
+content = 'foreign_shape'
+
+    @pytest.mark.parametrize("content", ["unsettled", "foreign_shape"])
+    async def test_a_disabled_twin_stays_while_the_topic_content_is_unknown(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        caplog: pytest.LogCaptureFixture,
+        request: pytest.FixtureRequest,
+        content: str,
+    ) -&gt; None:
+        """D-03, CR-01: with unknown content the disabled twin and its device stay, and one INFO line names only a count."""
+        if content == "foreign_shape":
+            request.getfixturevalue("discovery_settled")
+        legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(replayed) == 3
+        entity_registry = er.async_get(hass)
+        (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+        assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        shown = _abbreviated(legacy.payload)
+        if content == "foreign_shape":
+            await _restart_with_the_retained_payload(hass, legacy, shown)
+        else:
+            await _restart(hass, legacy.entry)
+        mqtt_mock.async_publish.reset_mock()
+        caplog.set_level(logging.INFO, logger=OWN_LOGGER)
+        caplog.clear()
+    
+        await _quiet_period_passes(hass)
+    
+        assert entity_registry.async_get(switch) is not None
+        assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert _mqtt_device_of(hass, legacy.device_id) is not None
+        assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+        kept = [
+            record
+            for record in caplog.records
+            if record.name.startswith(OWN_LOGGER)
+            and record.levelno == logging.INFO
+            and "is not known" in record.getMessage()
+        ]
+&gt;       assert len(kept) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_native_replay.py:564: AssertionError</failure></testcase></testsuite></testsuites>

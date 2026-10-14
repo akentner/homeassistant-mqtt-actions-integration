@@ -41,6 +41,10 @@ TAKEOVER_RETRY_INTERVAL = 0.25
 # Core MQTT replays retained discovery at its own pace and exposes no signal for "done"; its own discovery cooldown is
 # 5 seconds, which is the quiet period the catch for replayed duplicates waits for
 REPLAY_QUIET_SECONDS = 5.0
+# A catch that finds the content of a device unknown because the discovery settle is late or inside its grace checks
+# again, at most this often per start and never sooner than the floor below (WR-02)
+REPLAY_CATCH_RETRIES = 5
+REPLAY_RETRY_MIN_SECONDS = 1.0
 
 # The domain of core MQTT is a literal: only `mqtt_gateway.py` may import the MQTT integration
 MQTT_DOMAIN = "mqtt"

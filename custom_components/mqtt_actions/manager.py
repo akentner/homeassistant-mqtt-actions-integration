@@ -545,6 +545,8 @@ class Manager:
         self._cancel_cutover: CALLBACK_TYPE | None = None
         # The timer of the catch for duplicates a replayed legacy discovery creates; None while none is armed (D-05)
         self._cancel_replay_catch: CALLBACK_TYPE | None = None
+        # How often the catch of this start checked again because the discovery settle was not done yet (WR-02)
+        self._replay_catch_retries = 0
         # The registry listener that disables an enabled duplicate of a native device; None while the manager is stopped
         self._cancel_duplicate_guard: CALLBACK_TYPE | None = None
         # Set once the settle time has passed; only then does a roster change start a cutover check
@@ -871,6 +873,7 @@ class Manager:
             return
         if self._cancel_replay_catch is not None:
             self._cancel_replay_catch()
+        self._replay_catch_retries = 0
         self._cancel_replay_catch = async_call_later(
             self._hass, takeover.REPLAY_QUIET_SECONDS, self._on_replay_catch_due
         )
@@ -899,6 +902,8 @@ class Manager:
         publishes nothing, though its core may publish its own clear when a row leaves (D-02). A device that keeps a
         legacy row is not cleared either: the empty payload would delete a loaded row that was kept on purpose (D-08).
         The devices that keep their legacy MQTT device because the content is unknown are logged as a count (D-03).
+        While the discovery settle is not done or still inside its grace, the catch arms itself again for the time that
+        is left instead, a bounded number of times per start (WR-02).
         """
         async with self._lock:
             if not self._running:
@@ -935,7 +940,19 @@ class Manager:
                 if self.sync.discovery_content(device_id) is DiscoveryContent.UNKNOWN
                 and takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is not None
             )
-            if unknown:
+            if (
+                unknown
+                and self._replay_catch_retries < takeover.REPLAY_CATCH_RETRIES
+                and (wait := self.sync.discovery_settles_in()) is not None
+            ):
+                # The settle is not done or still inside its grace, so the content may still become known: check again
+                # instead of leaving the twins to the next start, which would meet the same timing (WR-02)
+                self._replay_catch_retries += 1
+                self._cancel_replay_catch = async_call_later(
+                    self._hass, max(wait, takeover.REPLAY_RETRY_MIN_SECONDS), self._on_replay_catch_due
+                )
+                LOGGER.debug("The discovery content of %d native devices is not settled yet, checking again", unknown)
+            elif unknown:
                 LOGGER.info(
                     "Kept the MQTT entities of %d native devices: the content of their retained discovery is not "
                     "known, the next start checks again",

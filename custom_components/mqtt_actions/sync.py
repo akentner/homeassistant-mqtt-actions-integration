@@ -22,6 +22,7 @@ A missing message alone never deletes anything: an unknown or offline owner, and
 about presence, keep every mirror.
 """
 
+import math
 from collections import deque
 from dataclasses import dataclass
 from functools import partial
@@ -399,6 +400,21 @@ class SyncManager:
     def _on_discovery_settled(self) -> None:
         """Note when the broker acknowledged the discovery wildcard subscription; its retained messages follow."""
         self._discovery_settled_at = self._manager.clock()
+
+    def discovery_settles_in(self) -> float | None:
+        """
+        Return the seconds until an unseen topic can read as EMPTY, or None when waiting changes nothing (WR-02).
+
+        Before the settle that is at least the grace; inside the grace it is what is left of it. None once the grace
+        after the settle has passed, and for a grace that never ends.
+        """
+        if (settled_at := self._discovery_settled_at) is None:
+            wait = DISCOVERY_SETTLE_GRACE_SECONDS
+        else:
+            wait = DISCOVERY_SETTLE_GRACE_SECONDS - (self._manager.clock() - settled_at)
+        if wait <= 0 or not math.isfinite(wait):
+            return None
+        return wait
 
     def discovery_content(self, device_id: str) -> DiscoveryContent:
         """

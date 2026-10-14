@@ -28,7 +28,14 @@ from tests.test_native_start import (
     _store_the_mirror_as_native,
     _unloaded_legacy_device,
 )
-from tests.test_takeover import MIGRATE_PAYLOAD, PREFIX, _discovery_clears, legacy_entity_ids, setup_legacy_device
+from tests.test_takeover import (
+    MIGRATE_PAYLOAD,
+    PREFIX,
+    _discovery_clears,
+    _falsy_publishes,
+    legacy_entity_ids,
+    setup_legacy_device,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -472,3 +479,31 @@ async def test_the_owner_keeps_a_customized_duplicate_and_its_device_and_clears_
     assert _mqtt_device_of(hass, legacy.device_id) is not None
     assert _discovery_clears(mqtt_mock, legacy.topic) == []
     _assert_moved_and_native(hass, legacy, before)
+
+
+@pytest.mark.usefixtures("discovery_settled")
+async def test_a_disabled_leftover_is_removed_at_a_start_with_an_empty_topic(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-02, D-03, D-09: with nothing retained on the topic, the settled start removes the disabled twin and device."""
+    legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(replayed) == 3
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    # The guard disabled the switch: this is the leftover the catch used to skip (CR-01)
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    # The bench state: nothing is retained, so nothing is handed to the new subscriptions
+    await _restart(hass, legacy.entry)
+    mqtt_mock.async_publish.reset_mock()
+
+    await _quiet_period_passes(hass)
+
+    _assert_clean(hass, legacy.device_id, replayed)
+    _assert_moved_and_native(hass, legacy, before)
+    # No product clear for an empty topic, and no core clear: core did not rediscover the row in this run
+    assert _falsy_publishes(mqtt_mock, legacy.topic) == []

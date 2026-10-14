@@ -1,6 +1,7 @@
 """Shared pytest configuration for the MQTT Actions integration tests."""
 
 import asyncio
+import math
 import uuid
 from typing import TYPE_CHECKING, Any
 from unittest.mock import PropertyMock, patch
@@ -11,6 +12,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mqtt_actions import const
 from custom_components.mqtt_actions import manager as manager_module
+from custom_components.mqtt_actions import sync as sync_module
 from custom_components.mqtt_actions.button import DeviceTestButton
 from custom_components.mqtt_actions.const import (
     CONF_ACTIONS,
@@ -32,6 +34,7 @@ from custom_components.mqtt_actions.const import (
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
+from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
 from tests.fake_broker import FakeBroker, InstanceFactory
 
 if TYPE_CHECKING:
@@ -79,6 +82,33 @@ def enabled_test_buttons() -> Iterator[None]:
 def enable_native_cutover(disable_native_cutover: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Restore the real settle time for the tests of the cutover; it depends on the autouse fixture for the order."""
     monkeypatch.setattr(manager_module, "CUTOVER_SETTLE_SECONDS", const.CUTOVER_SETTLE_SECONDS)
+
+
+@pytest.fixture(autouse=True)
+def discovery_never_settles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Never let a discovery topic without a message count as empty, so no test infers EMPTY by timing chance (D-03).
+
+    Only the tests that opt in through `discovery_settled` see an unseen topic as empty.
+    """
+    monkeypatch.setattr(sync_module, "DISCOVERY_SETTLE_GRACE_SECONDS", math.inf, raising=False)
+
+
+@pytest.fixture
+def discovery_settled(discovery_never_settles: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Stand for a broker that acknowledged the discovery subscription and sent its retained messages before the catch.
+
+    The grace drops to zero and the gateway reports the subscription as done right after it is watched. It depends on
+    the autouse fixture for the order.
+    """
+    monkeypatch.setattr(sync_module, "DISCOVERY_SETTLE_GRACE_SECONDS", 0.0, raising=False)
+
+    def _settled_at_once(self: MqttGateway, _topic: str, _qos: int, on_done: Callable[[], None]) -> Callable[[], None]:
+        self._hass.loop.call_soon(on_done)
+        return lambda: None
+
+    monkeypatch.setattr(MqttGateway, "async_on_subscribed", _settled_at_once, raising=False)
 
 
 @pytest.fixture

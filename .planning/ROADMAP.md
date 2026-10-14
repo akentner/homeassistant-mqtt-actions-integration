@@ -91,7 +91,7 @@ Plans:
   4. On the bench, the first start of the fix build cleans the leftover rows (D-09), UAT-02 passes from integration and from null tombstones, and UAT-04 passes, all on exactly the fix SHA (D-10 to D-12). (REL-01)
   5. `09-UAT.md` carries the fix-SHA rows, the release notes name the fixed case, and plans 09-04 and 09-05 read the fix SHA (D-16). (REL-01)
 
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 **Wave 1**
@@ -104,7 +104,7 @@ Plans:
 - [x] 09.1-03-PLAN.md — check-uat02.sh clean comparison fix (D-11) with run-path proof, phase9.1.env, push readiness of FIX
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 09.1-04-PLAN.md — Owner pushes exactly FIX and dispatches CI and Validate; both green on FIX
+- [x] 09.1-04-PLAN.md — Owner pushes exactly FIX and dispatches CI and Validate; both green on FIX
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 09.1-05-PLAN.md — Bench pinned to FIX, heal start recorded (D-09), UAT-02 from integration and null tombstones, UAT-04
@@ -177,7 +177,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. v1.0.1 Release | 3/5 | In Progress | - |
-| 9.1. UAT-02 Gap Closure (INSERTED) | 3/6 | In Progress | - |
+| 9.1. UAT-02 Gap Closure (INSERTED) | 4/6 | In Progress | - |
 | 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |

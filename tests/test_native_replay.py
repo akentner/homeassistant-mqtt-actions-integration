@@ -108,10 +108,12 @@ async def test_a_replay_during_the_pass_leaves_no_duplicate(
     real_clear = DiscoveryPublisher.async_clear_device
 
     async def _clear_with_a_replay(self: DiscoveryPublisher, device_id: str) -> None:
-        if replay_at == "before_the_clear":
+        # Only around the takeover's clear: the owner clears the stale topic again after the quiet-period catch (D-06)
+        first = not replayed
+        if replay_at == "before_the_clear" and first:
             replayed.append(await _replay(hass, legacy.topic, legacy.payload, legacy.device_id))
         await real_clear(self, device_id)
-        if replay_at == "after_the_clear":
+        if replay_at == "after_the_clear" and first:
             replayed.append(await _replay(hass, legacy.topic, legacy.payload, legacy.device_id))
 
     monkeypatch.setattr(DiscoveryPublisher, "async_clear_device", _clear_with_a_replay)
@@ -397,4 +399,76 @@ async def test_the_owner_clears_a_retained_legacy_discovery_even_when_nothing_wa
 
     _assert_one_retained_clear(mqtt_mock, legacy.topic)
     assert not any("Removed" in record.getMessage() for record in caplog.records)
+    _assert_moved_and_native(hass, legacy, before)
+
+
+async def test_a_follower_removes_its_disabled_twin_and_publishes_nothing(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+) -> None:
+    """T-5-02, D-02: a follower's catch removes the disabled twin of a native mirror; the product publishes nothing."""
+    spec = make_spec(name="Foreign lamp")
+    entry, topic = await _legacy_mirror(hass, make_hub_entry, spec)
+    async_fire_mqtt_message(hass, topic, MIGRATE_PAYLOAD, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _store_the_mirror_as_native(hass_storage, spec)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert legacy_entity_ids(hass, spec.device_id) == []  # the takeover of the mirror is done
+    discovery = json.dumps(build_discovery(spec=spec, base_topic=BASE, instance_id=FOREIGN_OWNER, sw_version="1.2.3"))
+    replayed = await _replay(hass, topic, discovery, spec.device_id)
+    assert len(replayed) == 3
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    # The round-2 state: the buttons are disabled too and core discovers all three rows again while they are disabled.
+    # A loaded button would defer the mirror's takeover at the restart and keep the id from the catch (Pitfall 8)
+    for entity_id in replayed:
+        entity_registry.async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    async_fire_mqtt_message(hass, topic, discovery, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _restart(hass, entry)
+    async_fire_mqtt_message(hass, topic, discovery, retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    mqtt_mock.async_publish.reset_mock()
+
+    await _quiet_period_passes(hass)
+
+    _assert_clean(hass, spec.device_id, replayed)
+    # The product publishes no clear; core's own clear for a row it discovered while disabled (None) is allowed (D-02)
+    assert _discovery_clears(mqtt_mock, topic) == []
+
+
+async def test_the_owner_keeps_a_customized_duplicate_and_its_device_and_clears_nothing(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-04, D-08: a customized duplicate stays with its MQTT device, so the owner does not clear the topic."""
+    legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(replayed) == 3
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    # The user names the duplicate and turns it on again; the guard keeps a customized row enabled
+    entity_registry.async_update_entity(switch, name="My own name", disabled_by=None)
+    await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+    mqtt_mock.async_publish.reset_mock()
+
+    await _quiet_period_passes(hass)
+
+    kept = entity_registry.async_get(switch)
+    assert kept is not None
+    assert kept.name == "My own name"
+    assert kept.disabled_by is None
+    assert legacy_entity_ids(hass, legacy.device_id) == [switch]  # the uncustomized buttons are gone
+    assert _mqtt_device_of(hass, legacy.device_id) is not None
+    assert _discovery_clears(mqtt_mock, legacy.topic) == []
     _assert_moved_and_native(hass, legacy, before)

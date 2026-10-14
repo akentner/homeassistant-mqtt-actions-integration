@@ -887,9 +887,17 @@ class Manager:
         """
         Remove the duplicates that a replay created after the quiet period, for every native device (D-05).
 
-        The catch reads what the core-prefix discovery topic of each id holds and removes in the same synchronous step,
-        so no message can change the decision in between (WR-01). A twin the integration disabled, usually by the
-        duplicate guard, goes for LEGACY or EMPTY content and stays for EXPORT or UNKNOWN content (CR-01, D-01 to D-04).
+        The order is fixed: the content read, the synchronous registry step, the flush, then the owner-only clear
+        (D-06). The catch reads what the core-prefix discovery topic of each id holds and removes in the same
+        synchronous step, so no message can change the decision in between (WR-01). A twin the integration disabled,
+        usually by the duplicate guard, goes for LEGACY or EMPTY content and stays for EXPORT or UNKNOWN content
+        (CR-01, D-01 to D-04).
+
+        The owner then clears a topic that still holds the legacy payload, so no later replay can bring the rows back,
+        and it does so even when nothing was removed (user decision 4). It never clears for EMPTY, EXPORT or UNKNOWN
+        content, never for a mirror and never for a device another instance adopted (T-5-02, T-04-60). A follower
+        publishes nothing, though its core may publish its own clear when a row leaves (D-02). A device that keeps a
+        legacy row is not cleared either: the empty payload would delete a loaded row that was kept on purpose (D-08).
         """
         async with self._lock:
             if not self._running:
@@ -899,6 +907,25 @@ class Manager:
             if self._remove_replay_twins(device_ids, content):
                 # The removal is on disk like the move before it (WR-01)
                 await takeover.async_flush_registries(self._hass)
+            if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None or self._publisher is None:
+                return
+            for device_id in device_ids:
+                try:
+                    # Read again after the flush: an export that arrived meanwhile is never wiped (CR-01)
+                    if (
+                        self.sync.discovery_content(device_id) is DiscoveryContent.LEGACY
+                        and device_id in self.devices
+                        and device_id not in self.sync.transferred_away
+                        and takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is None
+                    ):
+                        await _async_attempt(
+                            partial(self._publisher.async_clear_device, device_id),
+                            f"clear the discovery of device {device_id}",
+                        )
+                except Exception as err:  # noqa: BLE001
+                    # No registry or broker content in the log: one device must not keep the others from their clear
+                    LOGGER.warning("The cleanup of a stale legacy discovery raised an unexpected error")
+                    LOGGER.debug("The cleanup of a stale legacy discovery failed with %s", type(err).__name__)
 
     def _duplicate_guard_ids(self) -> set[str]:
         """Return the ids of the native devices this instance holds: owned or mirrored, not transferred away (R-1)."""

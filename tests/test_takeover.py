@@ -29,13 +29,14 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN
-from custom_components.mqtt_actions.discovery import build_discovery
+from custom_components.mqtt_actions.discovery import DiscoveryContent, build_discovery
 from custom_components.mqtt_actions.takeover import (
     TakeoverStatus,
     TakeoverTarget,
     async_take_over,
     disable_duplicates,
     is_legacy_entity,
+    legacy_device,
     remove_replay_twins,
 )
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic
@@ -958,8 +959,10 @@ async def _moved_and_replayed(
     return legacy, moved, replayed
 
 
-def _remove_replay_twins_of(hass: HomeAssistant, legacy: LegacyDevice) -> int:
-    return remove_replay_twins(hass, legacy.entry.entry_id, legacy.device_id, mqtt_entry_id=_mqtt_entry_id(hass))
+def _remove_replay_twins_of(hass: HomeAssistant, legacy: LegacyDevice, **kwargs: Any) -> int:
+    return remove_replay_twins(
+        hass, legacy.entry.entry_id, legacy.device_id, mqtt_entry_id=_mqtt_entry_id(hass), **kwargs
+    )
 
 
 async def test_remove_replay_twins_removes_the_loaded_duplicates_and_the_emptied_device(
@@ -1085,6 +1088,89 @@ async def test_remove_replay_twins_leaves_an_older_entry_that_carries_the_identi
         assert entity_registry.async_get(entity_id) == old
     for twin in natives.values():
         assert entity_registry.async_get(twin.entity_id) == twin
+
+
+@pytest.mark.parametrize("content", [DiscoveryContent.LEGACY, DiscoveryContent.EMPTY])
+async def test_remove_replay_twins_removes_an_integration_disabled_row_for_legacy_or_empty_content(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    content: DiscoveryContent,
+) -> None:
+    """D-02: with the legacy payload or nothing on the topic, the rows the integration disabled go with their device."""
+    legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    await _rediscover_disabled(hass, legacy, replayed)
+
+    assert _remove_replay_twins_of(hass, legacy, content=content) == 3
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    entity_registry = er.async_get(hass)
+    assert legacy_entity_ids(hass, legacy.device_id) == []
+    assert all(entity_registry.async_get(entity_id) is None for entity_id in replayed)
+    assert legacy_device(hass, _mqtt_entry_id(hass), legacy.device_id) is None
+
+
+@pytest.mark.parametrize("content", [DiscoveryContent.EXPORT, DiscoveryContent.UNKNOWN])
+async def test_remove_replay_twins_keeps_an_integration_disabled_row_for_export_or_unknown_content(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    content: DiscoveryContent,
+) -> None:
+    """CR-01, D-03: the topic may hold another instance's export, so no disabled row goes and nothing is cleared."""
+    legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    await _rediscover_disabled(hass, legacy, replayed)
+    mqtt_mock.async_publish.reset_mock()
+
+    assert _remove_replay_twins_of(hass, legacy, content=content) == 0
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+    assert sorted(legacy_entity_ids(hass, legacy.device_id)) == sorted(replayed)
+    assert legacy_device(hass, _mqtt_entry_id(hass), legacy.device_id) is not None
+
+
+@pytest.mark.parametrize("content", list(DiscoveryContent))
+async def test_remove_replay_twins_keeps_a_user_disabled_row_whatever_the_content(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    content: DiscoveryContent,
+) -> None:
+    """D-04: a row the user disabled is the user's decision; it stays, and so does its MQTT device."""
+    legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    await _rediscover_disabled(hass, legacy, replayed)
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    entity_registry.async_update_entity(switch, disabled_by=er.RegistryEntryDisabler.USER)
+
+    _remove_replay_twins_of(hass, legacy, content=content)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.USER
+    assert switch in legacy_entity_ids(hass, legacy.device_id)
+    assert legacy_device(hass, _mqtt_entry_id(hass), legacy.device_id) is not None
+
+
+async def test_remove_replay_twins_keeps_a_customized_row_with_legacy_content(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """D-04, WR-02: a customized row stays even with the legacy payload on the topic; the uncustomized ones go."""
+    legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    await _rediscover_disabled(hass, legacy, replayed)
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    entity_registry.async_update_entity(switch, name="My own name")
+
+    assert _remove_replay_twins_of(hass, legacy, content=DiscoveryContent.LEGACY) == 2
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert legacy_entity_ids(hass, legacy.device_id) == [switch]
+    assert entity_registry.async_get(switch).name == "My own name"
+    assert legacy_device(hass, _mqtt_entry_id(hass), legacy.device_id) is not None
 
 
 def _disable_duplicates_of(hass: HomeAssistant, legacy: LegacyDevice) -> int:

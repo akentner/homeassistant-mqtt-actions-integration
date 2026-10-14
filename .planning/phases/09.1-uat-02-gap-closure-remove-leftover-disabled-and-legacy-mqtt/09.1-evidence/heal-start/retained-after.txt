@@ -1,0 +1,3 @@
+retained homeassistant/device/# after the heal start (probe_sub -F '%t %r' -W 3; retained flag 1 only)
+recorded_utc: 2026-10-14T22:26:55Z
+retained topics: none

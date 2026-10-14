@@ -1,0 +1,20 @@
+red gate before the pin (env: . ~/ha-test/phase9.1.env), check-preflight.sh --quick, first five lines then exit code
+FAIL preflight (quick)
+  - evidence file missing or empty: 00-preflight/build.txt
+  - evidence file missing or empty: 00-preflight/mount-hashes.txt
+  - evidence file missing or empty: 00-preflight/heartbeats.txt
+  - evidence file missing or empty: 00-preflight/retained-snapshot.txt
+rc=1
+
+green gate after the pin (env: . ~/ha-test/phase9.1.env), recorded_utc: 2026-10-14T22:28:34Z
+fix_sha: 681c58793b656b51869906b62f2564829de7a10d
+
+== check-preflight.sh (full, with the guard routing proof)
+PASS preflight /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight
+rc=0
+
+== check-stale-anchor.sh
+recorded build sha: 681c58793b656b51869906b62f2564829de7a10d
+empty mount-source (31fcb5f8ed6f4f464324e59c80438c483c30a7e2): git diff --stat 681c58793b656b51869906b62f2564829de7a10d 31fcb5f8ed6f4f464324e59c80438c483c30a7e2 -- custom_components tests .github
+PASS stale anchor: custom_components, tests and .github unchanged since the recorded build sha
+rc=0

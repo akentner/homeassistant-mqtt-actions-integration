@@ -1,0 +1,5 @@
+PASS
+build: 681c58793b656b51869906b62f2564829de7a10d
+D-09 heal start: the first start of the fix build (preflight stage2) on the pre-state of pre-state.txt
+judged on the flushed registries after a graceful stop: zero platform-mqtt rows and zero legacy devices of the two ids on both instances
+no registry file was edited by hand and no backup was restored

@@ -1,0 +1,12 @@
+backup: /home/akentner/ha-test/_backup-pre-phase9.1-20261014T222425Z
+pointer: ~/ha-test/.current-backup-phase9.1
+taken_utc: 20261014T222425Z
+mode: 700
+ha-a running: false
+ha-b running: false
+restore: with ha-a and ha-b stopped, copy /home/akentner/ha-test/_backup-pre-phase9.1-20261014T222425Z/{a,b}/core.{entity,device}_registry back into ~/ha-test/{a,b}/.storage/ with cp -p
+files (size sha256 path relative to the backup):
+127448 4d4788a69b30e06edf4bd5185dadd7a6200060cd63623d70e14eced40d847894 a/core.entity_registry
+25449 4ca49ef40dd2d041b26bf639f1ed7a47502f6aa6113c2185d2f9746619b652c3 a/core.device_registry
+103773 6432e2962022e9c986d39cf6188df7baf75da070aad56f4fe907008ee5f6cf39 b/core.entity_registry
+24903 9b1690cac261149697ff842df277d608c7c3af42792b9edf5ff3cad8885a0a00 b/core.device_registry

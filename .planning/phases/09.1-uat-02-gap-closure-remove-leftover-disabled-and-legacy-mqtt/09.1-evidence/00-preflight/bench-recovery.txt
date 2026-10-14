@@ -1,0 +1,32 @@
+bench recovery before the Phase 9.1 pin (bench recovery, not a result)
+recorded_utc: 2026-10-14T22:24:25Z
+
+== container states found (podman inspect, fixed fields)
+mosq status=exited running=false exit=135 started=2026-10-12 03:46:21.663745621 +0200 CEST finished=2026-10-14 19:14:28.527602855 +0200 CEST
+ha-a status=exited running=false exit=135 started=2026-10-12 21:56:32.263209602 +0200 CEST finished=2026-10-14 19:14:42.153605226 +0200 CEST
+ha-b status=exited running=false exit=135 started=2026-10-12 21:56:37.378185788 +0200 CEST finished=2026-10-14 19:14:28.444602841 +0200 CEST
+ha-c status=exited running=false exit=0 started=2026-10-06 20:13:28.106273455 +0200 CEST finished=2026-10-06 20:19:42.119733996 +0200 CEST
+host booted: 2026-10-14 20:12:13 (local time); mosq, ha-a and ha-b exited 135 together before that boot, nobody started them since
+ha-a home-assistant.log.fault: 'Fatal Python error: Bus error' during a storage temp-file write (host-side SIGBUS, not product behavior)
+registries checked afterwards: core.entity_registry and core.device_registry of a and b parse as JSON (written atomically by HA)
+
+== mosq
+mosq_started_at_old: 2026-10-12 03:46:21.663745621 +0200 CEST
+mosq_started_at_new: 2026-10-15 00:23:51.199036273 +0200 CEST
+mosq persistence is off: the restart dropped every retained message; the instances republish their own documents at start (bench recovery, not a result)
+probe after start: probe_sub -t 'mqtt_actions/#' -W 3 rc=27 (0 = message read, 27 = connected and timed out with no retained message)
+pointer copies: ~/ha-test/.mosq-started-before-phase8.pre-phase9.1, ~/ha-test/.current-backup-phase8.pre-phase9.1
+ha-c: not started (Phase 9 D-07)
+
+== D-09 no-intermediate-start check (heal-start/bench-before-fix.txt vs podman inspect)
+ha-a: recorded '2026-10-12 21:56:32.263209602 +0200 CEST', found '2026-10-12 21:56:32.263209602 +0200 CEST', equal
+ha-b: recorded '2026-10-12 21:56:37.378185788 +0200 CEST', found '2026-10-12 21:56:37.378185788 +0200 CEST', equal
+ha-a and ha-b were never started on any tree after 7baec98; the stage2 start of this plan is the first start of the fix build
+
+== red gate before the pin: . ~/ha-test/phase9.1.env && check-preflight.sh --quick (first five lines, then exit code)
+FAIL preflight (quick)
+  - evidence file missing or empty: 00-preflight/build.txt
+  - evidence file missing or empty: 00-preflight/mount-hashes.txt
+  - evidence file missing or empty: 00-preflight/heartbeats.txt
+  - evidence file missing or empty: 00-preflight/retained-snapshot.txt
+rc=1

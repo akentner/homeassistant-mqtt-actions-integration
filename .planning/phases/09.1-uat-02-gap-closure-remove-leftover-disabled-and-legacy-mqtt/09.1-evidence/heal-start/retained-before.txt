@@ -1,0 +1,4 @@
+retained homeassistant/device/# before the heal start (probe_sub -F '%t %r' -W 3; retained flag 1 only)
+recorded_utc: 2026-10-14T22:24:21Z
+note: mosq was started by this plan just before this read (bench recovery); persistence is off
+retained topics: none

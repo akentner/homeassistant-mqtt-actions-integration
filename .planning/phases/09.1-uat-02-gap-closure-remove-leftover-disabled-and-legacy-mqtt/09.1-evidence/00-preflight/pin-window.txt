@@ -1,0 +1,16 @@
+pin window (D-13): HEAD detached at FIX for preflight stage1 and stage2 only
+fix_sha: 681c58793b656b51869906b62f2564829de7a10d (fix_sha of release/push-readiness.txt)
+check before: git diff --name-only 681c58793b656b51869906b62f2564829de7a10d main -- . ':(exclude).planning' -> empty
+
+before: HEAD -> refs/heads/main at 31fcb5f8ed6f4f464324e59c80438c483c30a7e2
+detach_utc: 2026-10-14T22:24:55Z
+command: git update-ref --no-deref HEAD 681c58793b656b51869906b62f2564829de7a10d
+during: HEAD (detached) at 681c58793b656b51869906b62f2564829de7a10d
+stage1_utc: 2026-10-14T22:24:55Z  command: bash -c 'umask 077; . ~/ha-test/phase9.1.env && ~/ha-test/bin/preflight.sh stage1'  rc=0
+stage2_utc: 2026-10-14T22:24:56Z  command: bash -c '. ~/ha-test/phase9.1.env && ~/ha-test/bin/preflight.sh stage2'  rc=0
+stages_end_utc: 2026-10-14T22:25:59Z
+command: git symbolic-ref HEAD refs/heads/main
+restore_utc: 2026-10-14T22:25:59Z
+after: HEAD -> refs/heads/main at 31fcb5f8ed6f4f464324e59c80438c483c30a7e2
+git diff --cached --name-only after restore: empty
+nothing was committed inside the window

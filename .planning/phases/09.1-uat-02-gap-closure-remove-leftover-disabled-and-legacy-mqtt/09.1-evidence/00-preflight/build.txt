@@ -1,0 +1,11 @@
+sha: 681c58793b656b51869906b62f2564829de7a10d
+branch: (detached)
+commit_time: 2026-10-14T16:14:54+02:00
+mount_source: /home/akentner/Projects/homeassistant-mqtt-actions-integration/custom_components/mqtt_actions (read-only bind mount on ha-a and ha-b)
+mount_content: byte-identical to the custom_components tree of sha (blob-by-blob, no extra files)
+ha_version: 2026.9.4 (a), 2026.9.4 (b)
+image: ghcr.io/home-assistant/home-assistant:2026.9
+started_at_a: 2026-10-15 00:24:56.352650668 +0200 CEST
+started_at_b: 2026-10-15 00:24:56.399897108 +0200 CEST
+instance_id_a: 3851f34f-fa67-4f3c-bba0-122465013c3d
+instance_id_b: b4cf285b-428f-426b-9500-8e269634356e

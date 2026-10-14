@@ -1,0 +1,5 @@
+ha-a home-assistant.log of the heal start (stage2 start 2026-10-15 00:24:56.352650668 +0200 CEST)
+filter: Removed [0-9]* duplicate entities that a replayed legacy discovery created|Disabled [0-9]* duplicate entities|keeps its MQTT device|postponed|Kept the MQTT entities of [0-9]* native devices|could not clear the discovery
+format: timestamp, then the message text (level, thread and logger removed)
+2026-10-15 00:25:10.721 Removed 1 duplicate entities that a replayed legacy discovery created
+2026-10-15 00:25:10.721 Removed 1 duplicate entities that a replayed legacy discovery created

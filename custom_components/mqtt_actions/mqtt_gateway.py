@@ -12,6 +12,9 @@ if TYPE_CHECKING:
 
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
+# The highest MQTT qos level
+MAX_QOS = 2
+
 
 @dataclass(frozen=True, slots=True)
 class IncomingMessage:
@@ -64,7 +67,10 @@ class MqttGateway:
         """
         Call on_done once the broker acknowledged the subscription of topic at qos, and again after every resubscribe.
 
-        Returns the stop callback.
+        Core subscribes a filter once, at the highest qos any subscriber asked for, and signals that qos. Another
+        subscriber to the same filter, such as core's discovery at a discovery qos of 2, can raise it above ours, so
+        every qos from `qos` up counts as done (WR-01). When core already holds the subscription, on_done may be called
+        once per watched qos right away; it must be idempotent. Returns the stop callback.
         """
 
         # Must be a @callback for the same reason as in async_subscribe
@@ -73,10 +79,21 @@ class MqttGateway:
             on_done()
 
         try:
-            return mqtt.async_on_subscribe_done(self._hass, topic, qos, _forward)
+            # Core reads its runtime data before it registers anything, so a missing MQTT integration raises on the
+            # first level and no watch is left behind
+            stops = [
+                mqtt.async_on_subscribe_done(self._hass, topic, level, _forward) for level in range(qos, MAX_QOS + 1)
+            ]
         except KeyError:
             # The MQTT integration is not loaded: without a settle signal an unseen topic is never taken as empty
             return lambda: None
+
+        @callback
+        def _stop() -> None:
+            for stop in stops:
+                stop()
+
+        return _stop
 
     async def async_publish(self, topic: str, payload: str, *, retain: bool, qos: int = 1) -> None:
         """Publish a message with explicit qos and retain values; raises HomeAssistantError when MQTT is unavailable."""

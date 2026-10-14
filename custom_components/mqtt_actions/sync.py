@@ -92,6 +92,9 @@ TRANSLATION_TRANSFERRED = "transferred"
 # Retained messages follow the SUBACK, so a discovery topic without any message counts as empty only once this margin
 # has passed after the broker acknowledged the subscription (D-03, research A2); read at call time
 DISCOVERY_SETTLE_GRACE_SECONDS = 2.0
+# The qos of the discovery wildcard subscription; the settle watch uses the same value, and the gateway also counts a
+# higher qos that another subscriber to the filter asked for, such as core's discovery qos (WR-01)
+DISCOVERY_SUBSCRIBE_QOS = 1
 
 # Stored presence values; only these two payloads of the availability topic mean anything
 PRESENCE_ONLINE = "online"
@@ -204,15 +207,15 @@ class SyncManager:
         self._discovery_prefix = manager.gateway.discovery_prefix()
         self._unsubscribers.append(
             await manager.gateway.async_subscribe(
-                discovery_wildcard(self._discovery_prefix), self._on_discovery_message
+                discovery_wildcard(self._discovery_prefix), self._on_discovery_message, DISCOVERY_SUBSCRIBE_QOS
             )
         )
         self._discovery_scope = frozenset(manager.mirrors)
         self._discovery_settled_at = None
-        # qos 1 is the gateway default of the subscribe above; any other qos never settles, so EMPTY is never inferred
+        # The same qos as the subscribe above; core may subscribe the filter at a higher one, which counts too (WR-01)
         self._unsubscribers.append(
             manager.gateway.async_on_subscribed(
-                discovery_wildcard(self._discovery_prefix), 1, self._on_discovery_settled
+                discovery_wildcard(self._discovery_prefix), DISCOVERY_SUBSCRIBE_QOS, self._on_discovery_settled
             )
         )
         self._presence_overflow_logged = False

@@ -1,0 +1,19 @@
+recorded: 2026-10-14T13:43:44Z
+head: 422cfa5ee2f31429053936f9be89a1ddff4e10b5
+started_at_mosq: 2026-10-12 03:46:21.663745621 +0200 CEST
+running_mosq: true
+started_at_ha-a: 2026-10-12 21:56:32.263209602 +0200 CEST
+running_ha-a: true
+started_at_ha-b: 2026-10-12 21:56:37.378185788 +0200 CEST
+running_ha-b: true
+started_at_ha-c: 2026-10-06 20:13:28.106273455 +0200 CEST
+running_ha-c: false
+mqtt_rows_ha-a:
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+legacy_mqtt_devices_ha-a: 2
+mqtt_rows_ha-b:
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+legacy_mqtt_devices_ha-b: 2
+ha-a and ha-b keep running the 7baec98 tree until the heal start of plan 09.1-05 (D-09)

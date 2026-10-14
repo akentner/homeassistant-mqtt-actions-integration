@@ -260,7 +260,7 @@ Recent decisions affecting current work:
 - [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
-- [Phase 9]: UAT-02 FAIL on 7baec98 (E1 to E3: disabled mqtt rows switch.lampe_test_2 and select.bar_select_2 plus legacy mqtt devices remain after replay), UAT-04 blocked; do NOT run 09-04/09-05; insert Phase 9.1 (gap closure, new SHA, re-run UAT-02 and UAT-04); also fix check-uat02.sh clean marker-row asymmetry (09-03-SUMMARY deviation 3)
+- [Phase 9.1]: UAT-02 gap closed on fix SHA 681c58793b656b51869906b62f2564829de7a10d (heal start, UAT-02 from integration and null tombstones, UAT-04 pass); run the re-pointed 09-04 (tag, owner decision) and 09-05 (release) next
 
 ### Quick Tasks Completed
 

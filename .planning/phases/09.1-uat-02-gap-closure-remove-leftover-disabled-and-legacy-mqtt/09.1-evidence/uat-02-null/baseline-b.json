@@ -1,0 +1,281 @@
+{
+  "instance": "ha-b",
+  "started_at_before_stop": "2026-10-15 00:37:00.117182073 +0200 CEST",
+  "native_rows": [
+    {
+      "device_id": "456353121a191e548267698a01f43c1b",
+      "disabled_by": null,
+      "entity_id": "button.bar_select_test_a",
+      "id": "1b03b1c07d987f57fa2ff2aaa8c9569a",
+      "platform": "mqtt_actions",
+      "unique_id": "b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b"
+    },
+    {
+      "device_id": "456353121a191e548267698a01f43c1b",
+      "disabled_by": null,
+      "entity_id": "button.bar_select_test_b",
+      "id": "9622ad64214f874ee23be6093e9e9933",
+      "platform": "mqtt_actions",
+      "unique_id": "b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039"
+    },
+    {
+      "device_id": "456353121a191e548267698a01f43c1b",
+      "disabled_by": null,
+      "entity_id": "button.bar_select_vorherigen_zustand_wiederherstellen",
+      "id": "93c1a1e14c46344e6b14590d8117e1d8",
+      "platform": "mqtt_actions",
+      "unique_id": "b6bd2c0e-6d81-49ea-8025-4bd087bd718a_restore_previous"
+    },
+    {
+      "device_id": "01d1c25c33a0cd540bb740333dd3f2dd",
+      "disabled_by": "integration",
+      "entity_id": "button.baz_test_off",
+      "id": "438cad40bd7ac313c129fb9684a55be1",
+      "platform": "mqtt_actions",
+      "unique_id": "e2890912-ec2c-4588-a590-0f2555297fc9_test_b4dc66dde806"
+    },
+    {
+      "device_id": "01d1c25c33a0cd540bb740333dd3f2dd",
+      "disabled_by": "integration",
+      "entity_id": "button.baz_test_on",
+      "id": "19650112a1890f485d6cc6f70def5bdd",
+      "platform": "mqtt_actions",
+      "unique_id": "e2890912-ec2c-4588-a590-0f2555297fc9_test_b8d31e852725"
+    },
+    {
+      "device_id": "c19217f22fd345bcfca8a4aa1ddaced7",
+      "disabled_by": null,
+      "entity_id": "button.dfgfdgd_restore",
+      "id": "a51a066c8c8a9c5994b43d18787e6319",
+      "platform": "mqtt_actions",
+      "unique_id": "53ee0f1e-5f4d-4e9e-9893-1e698270a960_restore_previous"
+    },
+    {
+      "device_id": "c19217f22fd345bcfca8a4aa1ddaced7",
+      "disabled_by": "integration",
+      "entity_id": "button.dfgfdgd_test_dfsdfsfd",
+      "id": "25c2acc2a0a2c193ee0aabeac85d66db",
+      "platform": "mqtt_actions",
+      "unique_id": "53ee0f1e-5f4d-4e9e-9893-1e698270a960_test_085a0afdcd6d"
+    },
+    {
+      "device_id": "c19217f22fd345bcfca8a4aa1ddaced7",
+      "disabled_by": "integration",
+      "entity_id": "button.dfgfdgd_test_tzzuu",
+      "id": "7af42d638940a5dff89e5227618bff1f",
+      "platform": "mqtt_actions",
+      "unique_id": "53ee0f1e-5f4d-4e9e-9893-1e698270a960_test_f3328ac34168"
+    },
+    {
+      "device_id": "8beee0daf6ae428514c223cd2fef052b",
+      "disabled_by": "integration",
+      "entity_id": "button.dfsfasdf_test_off",
+      "id": "774859be4312dc7a6b00eb4861f53711",
+      "platform": "mqtt_actions",
+      "unique_id": "51f224e0-fa1d-4cf0-b92e-b02e5b637c40_test_b4dc66dde806"
+    },
+    {
+      "device_id": "8beee0daf6ae428514c223cd2fef052b",
+      "disabled_by": "integration",
+      "entity_id": "button.dfsfasdf_test_on",
+      "id": "789cdf637f2ab826f80ead68710c6029",
+      "platform": "mqtt_actions",
+      "unique_id": "51f224e0-fa1d-4cf0-b92e-b02e5b637c40_test_b8d31e852725"
+    },
+    {
+      "device_id": "a7383c2e4a63cf8c32b90d64438bce77",
+      "disabled_by": null,
+      "entity_id": "button.haus_x_ab_b_fett_b_resync",
+      "id": "73d58d8ac3b718f2e419fa0978077fe1",
+      "platform": "mqtt_actions",
+      "unique_id": "01M4C1QHESVP77W13PDVPMR5E2_resync"
+    },
+    {
+      "device_id": "c9578829d4da6d17450cb137fa687ebb",
+      "disabled_by": null,
+      "entity_id": "button.lampe_test_test_off",
+      "id": "fc5743fe4f13c43a54a351f7a9246a37",
+      "platform": "mqtt_actions",
+      "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806"
+    },
+    {
+      "device_id": "c9578829d4da6d17450cb137fa687ebb",
+      "disabled_by": null,
+      "entity_id": "button.lampe_test_test_on",
+      "id": "11e0b3f78637fd630be503438dd78561",
+      "platform": "mqtt_actions",
+      "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725"
+    },
+    {
+      "device_id": "58172352ee76c2a3ce40d9d6cd1ff98b",
+      "disabled_by": null,
+      "entity_id": "button.modus_test_test_one",
+      "id": "fcf9b7bffc123b079a8fa3c286381fe0",
+      "platform": "mqtt_actions",
+      "unique_id": "22222222-bbbb-4bbb-8bbb-000000000002_test_7692c3ad3540"
+    },
+    {
+      "device_id": "58172352ee76c2a3ce40d9d6cd1ff98b",
+      "disabled_by": null,
+      "entity_id": "button.modus_test_test_two",
+      "id": "58d2be3f8e85424b4d1dfebad0ad7efd",
+      "platform": "mqtt_actions",
+      "unique_id": "22222222-bbbb-4bbb-8bbb-000000000002_test_3fc4ccfe7458"
+    },
+    {
+      "device_id": "58172352ee76c2a3ce40d9d6cd1ff98b",
+      "disabled_by": null,
+      "entity_id": "button.schlafzimmer_modus_schlaf_vorherigen_zustand_wiederherstellen",
+      "id": "e471f2eda6b3d53b627fa2e1d44b2df6",
+      "platform": "mqtt_actions",
+      "unique_id": "22222222-bbbb-4bbb-8bbb-000000000002_restore_previous"
+    },
+    {
+      "device_id": "7b1bf440a7b9d12c20ec5deaafe1ebc8",
+      "disabled_by": "integration",
+      "entity_id": "button.uat_marker_test_off",
+      "id": "95b4043e1ac467cdd9ba3aedc397b728",
+      "platform": "mqtt_actions",
+      "unique_id": "87c29b56-8abe-4531-b03c-c402a2f10cb8_test_b4dc66dde806"
+    },
+    {
+      "device_id": "7b1bf440a7b9d12c20ec5deaafe1ebc8",
+      "disabled_by": "integration",
+      "entity_id": "button.uat_marker_test_on",
+      "id": "51f5e9093caf1bd903b66745b411b7bf",
+      "platform": "mqtt_actions",
+      "unique_id": "87c29b56-8abe-4531-b03c-c402a2f10cb8_test_b8d31e852725"
+    },
+    {
+      "device_id": "456353121a191e548267698a01f43c1b",
+      "disabled_by": null,
+      "entity_id": "select.bar_select",
+      "id": "63178fac3b569d08056b046692573f6e",
+      "platform": "mqtt_actions",
+      "unique_id": "b6bd2c0e-6d81-49ea-8025-4bd087bd718a"
+    },
+    {
+      "device_id": "456353121a191e548267698a01f43c1b",
+      "disabled_by": null,
+      "entity_id": "select.bar_select_modus",
+      "id": "47f70e8eedba829d425c1b19d923f85f",
+      "platform": "mqtt_actions",
+      "unique_id": "b6bd2c0e-6d81-49ea-8025-4bd087bd718a_mode"
+    },
+    {
+      "device_id": "01d1c25c33a0cd540bb740333dd3f2dd",
+      "disabled_by": null,
+      "entity_id": "select.baz_mode",
+      "id": "d75985f36dd427288be25d6209f4a778",
+      "platform": "mqtt_actions",
+      "unique_id": "e2890912-ec2c-4588-a590-0f2555297fc9_mode"
+    },
+    {
+      "device_id": "c19217f22fd345bcfca8a4aa1ddaced7",
+      "disabled_by": null,
+      "entity_id": "select.dfgfdgd",
+      "id": "45c9c41cebd8854bec7a5c611cdacd55",
+      "platform": "mqtt_actions",
+      "unique_id": "53ee0f1e-5f4d-4e9e-9893-1e698270a960"
+    },
+    {
+      "device_id": "c19217f22fd345bcfca8a4aa1ddaced7",
+      "disabled_by": null,
+      "entity_id": "select.dfgfdgd_mode",
+      "id": "d0997b4e9b73ea9ff930e860d183c01c",
+      "platform": "mqtt_actions",
+      "unique_id": "53ee0f1e-5f4d-4e9e-9893-1e698270a960_mode"
+    },
+    {
+      "device_id": "8beee0daf6ae428514c223cd2fef052b",
+      "disabled_by": null,
+      "entity_id": "select.dfsfasdf_mode",
+      "id": "afecc066a3feeeaf6e43f7dac5dbca16",
+      "platform": "mqtt_actions",
+      "unique_id": "51f224e0-fa1d-4cf0-b92e-b02e5b637c40_mode"
+    },
+    {
+      "device_id": "a7383c2e4a63cf8c32b90d64438bce77",
+      "disabled_by": null,
+      "entity_id": "select.haus_x_ab_b_fett_b_instance_mode",
+      "id": "3d1f13f62bfe621712566d6475c9cafb",
+      "platform": "mqtt_actions",
+      "unique_id": "01M4C1QHESVP77W13PDVPMR5E2_instance_mode"
+    },
+    {
+      "device_id": "c9578829d4da6d17450cb137fa687ebb",
+      "disabled_by": null,
+      "entity_id": "select.lampe_test_modus",
+      "id": "cb3b74b2304fb110f76097065a715267",
+      "platform": "mqtt_actions",
+      "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_mode"
+    },
+    {
+      "device_id": "58172352ee76c2a3ce40d9d6cd1ff98b",
+      "disabled_by": null,
+      "entity_id": "select.modus_test",
+      "id": "7001d6075e3b3bead79689ff17691acb",
+      "platform": "mqtt_actions",
+      "unique_id": "22222222-bbbb-4bbb-8bbb-000000000002"
+    },
+    {
+      "device_id": "58172352ee76c2a3ce40d9d6cd1ff98b",
+      "disabled_by": null,
+      "entity_id": "select.modus_test_modus",
+      "id": "4fe78a7a981099ad9c10ac02e5aa57fc",
+      "platform": "mqtt_actions",
+      "unique_id": "22222222-bbbb-4bbb-8bbb-000000000002_mode"
+    },
+    {
+      "device_id": "7b1bf440a7b9d12c20ec5deaafe1ebc8",
+      "disabled_by": null,
+      "entity_id": "select.uat_marker_mode",
+      "id": "fc6a182fcd84d47f86cad9f7b91774d8",
+      "platform": "mqtt_actions",
+      "unique_id": "87c29b56-8abe-4531-b03c-c402a2f10cb8_mode"
+    },
+    {
+      "device_id": "a7383c2e4a63cf8c32b90d64438bce77",
+      "disabled_by": null,
+      "entity_id": "sensor.haus_x_ab_b_fett_b_instances",
+      "id": "37f3b675f3c018f79f9d3fb83e2ff917",
+      "platform": "mqtt_actions",
+      "unique_id": "01M4C1QHESVP77W13PDVPMR5E2_roster"
+    },
+    {
+      "device_id": "01d1c25c33a0cd540bb740333dd3f2dd",
+      "disabled_by": null,
+      "entity_id": "switch.baz",
+      "id": "ba65a84663f545709971f6b58659c56c",
+      "platform": "mqtt_actions",
+      "unique_id": "e2890912-ec2c-4588-a590-0f2555297fc9"
+    },
+    {
+      "device_id": "8beee0daf6ae428514c223cd2fef052b",
+      "disabled_by": null,
+      "entity_id": "switch.dfsfasdf",
+      "id": "343e52d9f77ceedd5feb34fb862209ae",
+      "platform": "mqtt_actions",
+      "unique_id": "51f224e0-fa1d-4cf0-b92e-b02e5b637c40"
+    },
+    {
+      "device_id": "c9578829d4da6d17450cb137fa687ebb",
+      "disabled_by": null,
+      "entity_id": "switch.lampe_test",
+      "id": "f6b8e3eb90f69d1463510fa7e35caef7",
+      "platform": "mqtt_actions",
+      "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001"
+    },
+    {
+      "device_id": "7b1bf440a7b9d12c20ec5deaafe1ebc8",
+      "disabled_by": null,
+      "entity_id": "switch.uat_marker",
+      "id": "f8f0929ffbb8e5839e127908bab8a689",
+      "platform": "mqtt_actions",
+      "unique_id": "87c29b56-8abe-4531-b03c-c402a2f10cb8"
+    }
+  ],
+  "mqtt_rows": [],
+  "underscore2_rows": [],
+  "mqtt_devices": []
+}

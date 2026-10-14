@@ -429,3 +429,23 @@ async def test_the_gateway_does_not_call_back_after_the_watch_was_stopped(
     await _subscribe_and_let_the_debouncer_run(hass, gateway, freezer, mqtt_client_mock)
 
     assert calls == []
+
+
+async def test_the_gateway_calls_back_when_another_subscriber_raised_the_qos_of_the_filter(
+    hass: HomeAssistant, mqtt_mock: Any, mqtt_client_mock: Any, freezer: Any
+) -> None:
+    """
+    WR-01 (review): core signals the highest qos of all subscribers to a filter, so a qos 1 watch settles at qos 2.
+
+    Core MQTT discovery subscribes the device wildcard at the user's discovery qos; with 2 the filter is subscribed at
+    2, and a watch that only matched qos 1 would never settle, so an unseen topic would never read as empty.
+    """
+    gateway = MqttGateway(hass)
+    calls: list[None] = []
+    gateway.async_on_subscribed(WATCHED, 1, lambda: calls.append(None))
+    await gateway.async_subscribe(WATCHED, lambda _msg: None, 2)
+
+    await _subscribe_and_let_the_debouncer_run(hass, gateway, freezer, mqtt_client_mock)
+
+    assert any(call.args == (WATCHED, 2) for call in mqtt_client_mock.subscribe.call_args_list)
+    assert len(calls) == 1

@@ -3,13 +3,13 @@ gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
-current_phase_name: uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt
+current_phase_name: UAT-02 gap closure
 status: executing
 stopped_at: Phase 09.1 context gathered
-last_updated: "2026-10-12T23:23:45.987Z"
-last_activity: 2026-10-12
-last_activity_desc: Phase 09 execution started
-state_head: afcdf0da86449a1486a12dad5902a6b6e4432efa
+last_updated: "2026-10-14T13:20:51.578Z"
+last_activity: 2026-10-14
+last_activity_desc: Phase 09.1 execution started
+state_head: 36826e11f08237487b312802e4a1a8bd6a39904f
 progress:
   total_phases: 5
   completed_phases: 0
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-11)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 09 — v1.0.1 Release
+**Current focus:** Phase 09.1 — UAT-02 gap closure
 
 ## Current Position
 
-Phase: 09.1 (uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt) — READY TO EXECUTE
-Plan: Not planned (next: /gsd-plan-phase 09.1)
-Status: Ready to execute
-Last activity: 2026-10-12 — Phase 09 execution started
+Phase: 09.1 (UAT-02 gap closure) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 09.1
+Last activity: 2026-10-14 — Phase 09.1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 

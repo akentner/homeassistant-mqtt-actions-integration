@@ -1,0 +1,138 @@
+cmp proof (Phase 9.1 D-11): the bench scripts Phase 9.1 runs
+OLD=.planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts
+N=.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts
+recorded_utc: 2026-10-14T14:22:00Z
+an empty result means byte-identical (cmp exit 0) or an empty diff (diff exit 0)
+
+## 1. each of the eleven scripts in N is cmp-identical to ~/ha-test/bin/
+
+$ cmp /home/akentner/ha-test/bin/check-uat02.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-uat02.sh
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/check-uat04.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-uat04.sh
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/check-preflight.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-preflight.sh
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/preflight.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/preflight.sh
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/lib.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/lib.sh
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/check-evidence-clean.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-evidence-clean.sh
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/check-stale-anchor.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-stale-anchor.sh
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/check-marker.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-marker.sh
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/bench-users.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/bench-users.sh
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/ha-test-guard .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/ha-test-guard
+result: [] exit=0
+$ cmp /home/akentner/ha-test/bin/reseed-tombstones.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/reseed-tombstones.sh
+result: [] exit=0
+
+## 2. the ten unchanged scripts are cmp-identical to the Phase 9 copies in OLD
+
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/check-uat04.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-uat04.sh
+result: [] exit=0
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/check-preflight.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-preflight.sh
+result: [] exit=0
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/preflight.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/preflight.sh
+result: [] exit=0
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/lib.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/lib.sh
+result: [] exit=0
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/check-evidence-clean.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-evidence-clean.sh
+result: [] exit=0
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/check-stale-anchor.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-stale-anchor.sh
+result: [] exit=0
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/check-marker.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-marker.sh
+result: [] exit=0
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/bench-users.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/bench-users.sh
+result: [] exit=0
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/ha-test-guard .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/ha-test-guard
+result: [] exit=0
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/reseed-tombstones.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/reseed-tombstones.sh
+result: [] exit=0
+
+## 3. ha-test-ws.py is the scrubbed Phase 9 copy (never the live one), phase9.1.env is the live env file
+
+$ cmp .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/ha-test-ws.py .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/ha-test-ws.py
+result: [] exit=0
+$ cmp /home/akentner/ha-test/phase9.1.env .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/phase9.1.env
+result: [] exit=0
+
+## 4. check-uat02.sh: the only change is inside do_clean
+
+4a. check-uat02.sh differs from the Phase 9 copy (the edit exists)
+$ cmp -s .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/check-uat02.sh .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts/check-uat02.sh
+result: [] exit=1
+
+4b. with do_clean stripped, the script is identical to the Phase 9 copy (run, live and helper paths byte-identical)
+$ diff <(sed '/^do_clean() {$/,/^}$/d' $OLD/check-uat02.sh) <(sed '/^do_clean() {$/,/^}$/d' ~/ha-test/bin/check-uat02.sh)
+result: [] exit=0
+
+4c. do_clean spans these lines; every hunk of check-uat02.diff lies inside them
+do_clean in the edited script: lines 394-424
+hunks of check-uat02.diff:
+@@ -403,7 +403,8 @@
+@@ -412,7 +413,7 @@
+changed lines (new side):
+  line 406
+  line 407
+  line 416
+
+4d. bash -n and shellcheck on the edited script; the shellcheck findings are those of the Phase 9 copy (same codes,
+    all outside do_clean; line numbers after line 406 shift by one)
+$ bash -n /home/akentner/ha-test/bin/check-uat02.sh
+result: [] exit=0
+$ shellcheck -x -f gcc check-uat02.sh  (in ~/ha-test/bin and in OLD; codes compared)
+edited:
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: See if you can use ${variable//search/replace} instead. [SC2001]
+  note: See if you can use ${variable//search/replace} instead. [SC2001]
+  note: See if you can use ${variable//search/replace} instead. [SC2001]
+  warning: ABORT_MSG appears unused. Verify use (or export if used externally). [SC2034]
+Phase 9 copy:
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: Note that A && B || C is not if-then-else. C may run when A is true. [SC2015]
+  note: See if you can use ${variable//search/replace} instead. [SC2001]
+  note: See if you can use ${variable//search/replace} instead. [SC2001]
+  note: See if you can use ${variable//search/replace} instead. [SC2001]
+  warning: ABORT_MSG appears unused. Verify use (or export if used externally). [SC2034]
+result: identical finding sets
+
+## 5. clean against the Phase 9 baseline, before
+$ PHASE8_EVIDENCE_ROOT="$PWD/.planning/phases/09-v1-0-1-release/09-evidence" ~/ha-test/bin/check-uat02.sh clean
+recorded_utc: 2026-10-14T14:20:25Z
+FAIL UAT-02 clean
+  - ha-a: mqtt_actions rows (without hub rows) differ from the baseline
+  - ha-a: a row with platform mqtt exists
+  - ha-a: an entity id ending in _2 exists
+  - ha-a: a legacy mqtt device exists
+  - ha-b: mqtt_actions rows (without hub rows) differ from the baseline
+  - ha-b: a row with platform mqtt exists
+  - ha-b: an entity id ending in _2 exists
+  - ha-b: a legacy mqtt device exists
+exit=1
+
+## 6. clean against the Phase 9 baseline, after
+$ PHASE8_EVIDENCE_ROOT="$PWD/.planning/phases/09-v1-0-1-release/09-evidence" ~/ha-test/bin/check-uat02.sh clean
+recorded_utc: 2026-10-14T14:21:12Z
+FAIL UAT-02 clean
+  - ha-a: a row with platform mqtt exists
+  - ha-a: an entity id ending in _2 exists
+  - ha-a: a legacy mqtt device exists
+  - ha-b: a row with platform mqtt exists
+  - ha-b: an entity id ending in _2 exists
+  - ha-b: a legacy mqtt device exists
+exit=1
+
+reading: the line "mqtt_actions rows (without hub rows) differ from the baseline" is in 5 and gone from 6. The other FAIL
+lines (rows with platform mqtt, entity ids ending in _2, legacy mqtt devices) are the leftover bench state that the heal
+start of plan 09.1-05 removes; they are expected here and unchanged by the edit. No container was started, stopped or
+restarted; clean only reads the registries and the broker.

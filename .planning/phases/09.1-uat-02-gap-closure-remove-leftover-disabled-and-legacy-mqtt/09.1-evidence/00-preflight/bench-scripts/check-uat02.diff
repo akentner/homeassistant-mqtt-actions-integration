@@ -1,0 +1,21 @@
+--- .planning/phases/09-v1-0-1-release/09-evidence/00-preflight/bench-scripts/check-uat02.sh	2026-10-11 12:30:51.058968155 +0200
++++ /home/akentner/ha-test/bin/check-uat02.sh	2026-10-14 16:20:42.223857865 +0200
+@@ -403,7 +403,8 @@
+     all=$(reg_rows "$HT/$l/.storage/core.entity_registry")
+     native=$(native_rows "$l")
+     # The "UAT Marker" fixture of plan 08-03 (MARKER_ID in .fixtures.env) is deliberate bench state added after the UAT-02
+-    # baseline was taken: its native rows (unique id = marker id or marker id + suffix) are excluded from this comparison only.
++    # baseline was taken: its native rows (unique id = marker id or marker id + suffix) are removed from both sides of this
++    # comparison only, the live rows here and the baseline rows in the comparison below (Phase 9.1 D-11).
+     local mid
+     mid=$(sed -n 's/^MARKER_ID=//p' "$HT/.fixtures.env" 2>/dev/null | head -n1)
+     native=$(jq -S --arg m "${mid:-__none__}" '[.[] | select((.unique_id | startswith($m)) | not)]' <<<"$native")
+@@ -412,7 +413,7 @@
+     # by construction (bench defect, Rule 3, plan 08-11). Both sides are compared without them; E1 to E3 stay unchanged.
+     local hubf='[.[] | select((.unique_id | test("_(resync|instance_mode|roster)$")) | not)]'
+     native=$(jq -S "$hubf" <<<"$native")
+-    [ "$native" = "$(jq -S ".native_rows | $hubf" "$base")" ] || chk_fail "ha-$l: mqtt_actions rows (without hub rows) differ from the baseline"
++    [ "$native" = "$(jq -S --arg m "${mid:-__none__}" ".native_rows | [.[] | select((.unique_id | startswith(\$m)) | not)] | $hubf" "$base")" ] || chk_fail "ha-$l: mqtt_actions rows (without hub rows) differ from the baseline"
+     [ "$(jq '[.[] | select(.platform == "mqtt")] | length' <<<"$all")" -eq 0 ] || chk_fail "ha-$l: a row with platform mqtt exists"
+     [ "$(jq '[.[] | select(.entity_id | test("_2$"))] | length' <<<"$all")" -eq 0 ] || chk_fail "ha-$l: an entity id ending in _2 exists"
+     [ "$(mqtt_devices "$l" | jq length)" -eq 0 ] || chk_fail "ha-$l: a legacy mqtt device exists"

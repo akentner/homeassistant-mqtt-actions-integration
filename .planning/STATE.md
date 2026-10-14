@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
 current_phase_name: UAT-02 gap closure
-status: executing
-stopped_at: Completed 09.1-05-PLAN.md
-last_updated: "2026-10-14T22:55:06.685Z"
+status: verifying
+stopped_at: Completed 09.1-06-PLAN.md
+last_updated: "2026-10-14T23:04:29.917Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase 09.1 execution started
-state_head: f009ff87ba3b874e76f79fed0c197cee342619ea
+state_head: e09a3cf6dec2187c1f6a37de12c9455de72a9c52
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 
 Phase: 09.1 (UAT-02 gap closure) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-14 — Phase 09.1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -119,6 +119,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.1 P03 | 8 min | 2 tasks | 17 files |
 | Phase 09.1 P04 | 4min | 2 tasks | 3 files |
 | Phase 09.1 P05 | 31 min | 3 tasks | 70 files |
+| Phase 09.1 P06 | 7min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -248,6 +249,7 @@ Recent decisions affecting current work:
 - [Phase 09.1]: 09.1-04: CI run 38646428109 and Validate run 38646494618 are green on exactly FIX 681c587 (workflow_dispatch, all six jobs success); the bench may start
 - [Phase 09.1]: 09.1-05: heal start, UAT-02 (a, integration) and UAT-02 (b, null) and UAT-04 all PASS on the bench pinned to exactly FIX 681c587; the first start of FIX removed the real leftover mqtt rows and legacy devices
 - [Phase 09.1]: 09.1-05: the bench was found down after a host crash (exit 135); mosq restarted as bench recovery, ha-a and ha-b StartedAt unchanged since bench-before-fix, so the stage2 start stayed the D-09 heal start
+- [Phase 09.1]: Phase 9.1 closed on FIX 681c587: ledger blocks 6 to 11 pass, release notes written, 09-04 and 09-05 re-pointed to FIX (BUMP = FIX, planning-excluded lookup, push or workflow_dispatch, four 9.1 verdicts); REL-01 stays pending until the tag and release
 
 ### Pending Todos
 
@@ -283,8 +285,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-14T22:55:06.621Z
-Stopped at: Completed 09.1-05-PLAN.md
+Last session: 2026-10-14T23:04:29.862Z
+Stopped at: Completed 09.1-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

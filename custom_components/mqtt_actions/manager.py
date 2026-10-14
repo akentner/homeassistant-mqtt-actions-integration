@@ -898,6 +898,7 @@ class Manager:
         content, never for a mirror and never for a device another instance adopted (T-5-02, T-04-60). A follower
         publishes nothing, though its core may publish its own clear when a row leaves (D-02). A device that keeps a
         legacy row is not cleared either: the empty payload would delete a loaded row that was kept on purpose (D-08).
+        The devices that keep their legacy MQTT device because the content is unknown are logged as a count (D-03).
         """
         async with self._lock:
             if not self._running:
@@ -926,6 +927,20 @@ class Manager:
                     # No registry or broker content in the log: one device must not keep the others from their clear
                     LOGGER.warning("The cleanup of a stale legacy discovery raised an unexpected error")
                     LOGGER.debug("The cleanup of a stale legacy discovery failed with %s", type(err).__name__)
+            # A count only, never an id or a payload: the topic content of these devices was not known, so their
+            # disabled twins stay until a start that knows it (D-03)
+            unknown = sum(
+                1
+                for device_id in device_ids
+                if self.sync.discovery_content(device_id) is DiscoveryContent.UNKNOWN
+                and takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is not None
+            )
+            if unknown:
+                LOGGER.info(
+                    "Kept the MQTT entities of %d native devices: the content of their retained discovery is not "
+                    "known, the next start checks again",
+                    unknown,
+                )
 
     def _duplicate_guard_ids(self) -> set[str]:
         """Return the ids of the native devices this instance holds: owned or mirrored, not transferred away (R-1)."""

@@ -439,14 +439,21 @@ async def test_on_a_fresh_install_core_disables_the_row_and_the_guard_does_nothi
     assert calls == []
 
 
-async def test_the_export_off_cycle_leaves_the_disabled_row_in_place_across_the_restart(
-    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, monkeypatch: pytest.MonkeyPatch
+async def test_the_export_off_cycle_removes_the_disabled_row_at_the_next_start(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+    discovery_settled: None,
 ) -> None:
     """
-    G6, CR-01: cleared export keeps the disabled row, so does the restart, and the next export finds it disabled.
+    G6, user decision 2: a cleared export keeps the disabled row until the next start, which removes it.
 
-    The replay catch never removes a disabled row: it cannot tell whether a retained export still sits on the topic,
-    and core MQTT clears that topic when a row it discovered while disabled leaves the registry.
+    README and docs/troubleshooting.md promise it: when the export is switched off again, the disabled duplicates stay
+    until Home Assistant is restarted, and the next start removes them. The topic settles empty, so the clear core may
+    publish for the row wipes nothing (D-02). The replayed export row is newer than the native twin, so
+    `_carries_the_identity` does not keep it. When the export comes back, core restores the row from its record as
+    disabled.
     """
     spec = make_spec(name="Foreign lamp")
     entry = await _native_mirror(hass, make_hub_entry, spec)
@@ -462,11 +469,13 @@ async def test_the_export_off_cycle_leaves_the_disabled_row_in_place_across_the_
     await hass.async_block_till_done(wait_background_tasks=True)
     assert [row.entity_id for row in _mqtt_rows(hass, spec.device_id)] == [duplicate.entity_id]
 
-    # The next start leaves the disabled row as it is
+    # The next start finds the topic settled empty and removes the disabled row; nothing clears the topic
+    published = len(mqtt_mock.async_publish.call_args_list)
     await _restart(hass, entry)
     await _quiet_period_passes(hass)
-    assert [row.entity_id for row in _mqtt_rows(hass, spec.device_id)] == [duplicate.entity_id]
-    assert registry.async_get(duplicate.entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert _mqtt_rows(hass, spec.device_id) == []
+    clears = [call for call in mqtt_mock.async_publish.call_args_list[published:] if call.args[0] == topic]
+    assert [call.args[1:4] for call in clears if not call.args[1]] == []
 
     # The export comes back: core finds the disabled row, and the guard has nothing to do
     calls = _count_disables(monkeypatch)
@@ -478,7 +487,7 @@ async def test_the_export_off_cycle_leaves_the_disabled_row_in_place_across_the_
 
 
 async def test_a_row_a_foreign_export_created_disabled_survives_the_restart_and_its_export_is_never_cleared(
-    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, discovery_settled: None
 ) -> None:
     """
     CR-01: the export creates its row disabled, so core MQTT aborts the add and holds a hook for the row's removal.
@@ -496,6 +505,8 @@ async def test_a_row_a_foreign_export_created_disabled_survives_the_restart_and_
     published = len(mqtt_mock.async_publish.call_args_list)
 
     await _restart(hass, entry)
+    # The broker hands the retained export to the new subscriptions (the mocked client keeps no retained store)
+    await _receive_foreign_export(hass, spec)
     await _quiet_period_passes(hass)
 
     clears = [call for call in mqtt_mock.async_publish.call_args_list[published:] if call.args[0] == topic]

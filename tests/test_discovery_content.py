@@ -1,11 +1,14 @@
 """What the core-prefix discovery topic of a device holds: the pure classifier and the sync verdicts (D-02, D-03)."""
 
+import asyncio
 import json
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
+from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
+from custom_components.mqtt_actions import sync as sync_module
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, MAX_DOCUMENT_BYTES, SUBENTRY_SELECT
 from custom_components.mqtt_actions.discovery import (
     DiscoveryContent,
@@ -13,9 +16,10 @@ from custom_components.mqtt_actions.discovery import (
     build_export,
     classify_discovery,
 )
-from custom_components.mqtt_actions.topics import discovery_topic
+from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
+from custom_components.mqtt_actions.topics import discovery_topic, discovery_wildcard
 from tests.documents import FOREIGN_OWNER, make_spec
-from tests.test_native_start import _legacy_mirror, _manager, _seed_native
+from tests.test_native_start import _legacy_mirror, _manager, _restart, _seed_native
 from tests.test_takeover import MIGRATE_PAYLOAD, PREFIX
 
 if TYPE_CHECKING:
@@ -228,3 +232,200 @@ async def test_the_sync_forgets_every_verdict_on_a_reconnect(
     sync.on_reconnect()
 
     assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
+
+
+# --- the settle: when an unseen topic counts as empty (D-03) --------------------------------------------------------
+
+GRACE = 2.0
+
+
+class _Settle:
+    """Capture the settle watch of the sync and drive it and the manager clock by hand."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.watches: list[tuple[str, int]] = []
+        self._on_done: list[Callable[[], None]] = []
+        self.now = 100.0
+        watches, on_dones = self.watches, self._on_done
+
+        def _watch(_gateway: MqttGateway, topic: str, qos: int, on_done: Callable[[], None]) -> Callable[[], None]:
+            watches.append((topic, qos))
+            on_dones.append(on_done)
+            return lambda: None
+
+        monkeypatch.setattr(sync_module, "DISCOVERY_SETTLE_GRACE_SECONDS", GRACE)
+        monkeypatch.setattr(MqttGateway, "async_on_subscribed", _watch)
+
+    def use_clock_of(self, entry: MockConfigEntry) -> None:
+        _manager(entry).clock = lambda: self.now
+
+    def settle(self) -> None:
+        """Report the most recent watch as done, as core does after the SUBACK."""
+        self._on_done[-1]()
+
+
+@pytest.fixture
+def settle(monkeypatch: pytest.MonkeyPatch) -> _Settle:
+    return _Settle(monkeypatch)
+
+
+async def test_an_unseen_owned_id_is_empty_only_once_the_grace_after_the_settle_has_passed(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    settle: _Settle,
+) -> None:
+    """D-03: UNKNOWN before the settle and inside the grace, EMPTY from the end of the grace on."""
+    entry, spec = await _owned(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    settle.use_clock_of(entry)
+    sync = _manager(entry).sync
+    assert settle.watches == [(discovery_wildcard(PREFIX), 1)]
+
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
+    settle.now += 60
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
+    settle.settle()
+    settle.now += 1.9
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
+    settle.now += 0.1
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.EMPTY
+
+
+async def test_a_recorded_verdict_wins_over_the_settle(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    settle: _Settle,
+) -> None:
+    """D-02: a topic seen to hold the legacy payload stays LEGACY after the settle and the grace."""
+    entry, spec = await _owned(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    settle.use_clock_of(entry)
+    await _send(hass, spec.device_id, _foreign_legacy(spec))
+    settle.settle()
+    settle.now += 10 * GRACE
+
+    assert _manager(entry).sync.discovery_content(spec.device_id) is DiscoveryContent.LEGACY
+
+
+async def test_a_mirror_created_after_the_subscription_stays_unknown_until_a_message_for_it_arrives(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, settle: _Settle
+) -> None:
+    """D-03: the retained message of a mirror created later was dropped, so its unseen topic is never empty."""
+    entry, spec = await _mirrored(hass, make_hub_entry)
+    settle.use_clock_of(entry)
+    sync = _manager(entry).sync
+    settle.settle()
+    settle.now += 10 * GRACE
+
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
+    await _send(hass, spec.device_id, "")
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.EMPTY
+
+
+async def test_a_mirror_held_when_the_subscription_was_made_is_in_scope(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, settle: _Settle
+) -> None:
+    """D-03: after a restart the mirror is held at subscribe time, so its unseen topic is empty after the grace."""
+    entry, spec = await _mirrored(hass, make_hub_entry)
+    await _restart(hass, entry)
+    assert spec.device_id in _manager(entry).mirrors
+    settle.use_clock_of(entry)
+    settle.settle()
+    settle.now += GRACE
+
+    assert _manager(entry).sync.discovery_content(spec.device_id) is DiscoveryContent.EMPTY
+
+
+async def test_a_reconnect_makes_every_unseen_id_unknown_until_the_next_settle(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    settle: _Settle,
+) -> None:
+    """D-03: the reconnect resets the settle; the resubscribe settles again and the grace starts over."""
+    entry, spec = await _owned(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    settle.use_clock_of(entry)
+    sync = _manager(entry).sync
+    settle.settle()
+    settle.now += GRACE
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.EMPTY
+
+    sync.on_reconnect()
+
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
+    settle.now += 10 * GRACE
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
+    settle.settle()
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
+    settle.now += GRACE
+    assert sync.discovery_content(spec.device_id) is DiscoveryContent.EMPTY
+
+
+# --- the gateway wrapper over core's subscribe-done signal -----------------------------------------------------------
+
+WATCHED = "mqtt_actions_test/settle/+/config"
+
+
+async def _subscribe_and_let_the_debouncer_run(
+    hass: HomeAssistant, gateway: MqttGateway, freezer: Any, mqtt_client_mock: Any
+) -> None:
+    """Subscribe, move the clock past the subscribe cooldown and wait until core subscribed the topic and signalled."""
+    await gateway.async_subscribe(WATCHED, lambda _msg: None, 1)
+    freezer.tick(timedelta(seconds=5))
+    async_fire_time_changed(hass)
+    # Core subscribes the queued topics one by one, each after its acknowledgement, in a task hass does not wait for
+    for _turn in range(2000):
+        if any(call.args[0] == WATCHED for call in mqtt_client_mock.subscribe.call_args_list):
+            break
+        await asyncio.sleep(0)
+    assert any(call.args[0] == WATCHED for call in mqtt_client_mock.subscribe.call_args_list)
+    # The acknowledgement, the dispatcher task and core's call_soon of the signal
+    for _turn in range(50):
+        await asyncio.sleep(0)
+    await hass.async_block_till_done()
+
+
+async def test_the_gateway_calls_back_once_the_subscription_is_done(
+    hass: HomeAssistant, mqtt_mock: Any, mqtt_client_mock: Any, freezer: Any
+) -> None:
+    """The wrapper forwards core's signal for the topic and qos after the subscribe debouncer has run."""
+    gateway = MqttGateway(hass)
+    calls: list[None] = []
+    gateway.async_on_subscribed(WATCHED, 1, lambda: calls.append(None))
+
+    await _subscribe_and_let_the_debouncer_run(hass, gateway, freezer, mqtt_client_mock)
+
+    assert len(calls) == 1
+
+
+async def test_the_gateway_never_calls_back_for_another_qos(
+    hass: HomeAssistant, mqtt_mock: Any, mqtt_client_mock: Any, freezer: Any
+) -> None:
+    """A watch for qos 2 on a qos 1 subscription never settles, so EMPTY is never inferred."""
+    gateway = MqttGateway(hass)
+    calls: list[None] = []
+    gateway.async_on_subscribed(WATCHED, 2, lambda: calls.append(None))
+
+    await _subscribe_and_let_the_debouncer_run(hass, gateway, freezer, mqtt_client_mock)
+
+    assert calls == []
+
+
+async def test_the_gateway_does_not_call_back_after_the_watch_was_stopped(
+    hass: HomeAssistant, mqtt_mock: Any, mqtt_client_mock: Any, freezer: Any
+) -> None:
+    """The stop callback ends the watch before the debouncer runs."""
+    gateway = MqttGateway(hass)
+    calls: list[None] = []
+    stop = gateway.async_on_subscribed(WATCHED, 1, lambda: calls.append(None))
+    stop()
+
+    await _subscribe_and_let_the_debouncer_run(hass, gateway, freezer, mqtt_client_mock)
+
+    assert calls == []

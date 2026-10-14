@@ -141,3 +141,29 @@ def test_retained_clear_is_a_live_empty_message(mosquitto_port: int, clients: li
     newcomer = _new_client(clients, mosquitto_port, "newcomer")
     newcomer.subscribe()
     newcomer.assert_silent()
+
+
+DISCOVERY_TOPIC = "homeassistant/device/x/config"
+DISCOVERY_FILTER = "homeassistant/device/+/config"
+
+
+def test_an_identical_subscribe_with_a_higher_qos_replays_the_retained_message(
+    mosquitto_port: int, clients: list[RecordingClient]
+) -> None:
+    """
+    (e) Research A1: subscribing an identical wildcard filter again, with a higher qos, replays the retained message.
+
+    Core MQTT and the sync subscription share the discovery wildcard string. The sync's subscribe raises the qos of the
+    filter, and the export verdict that keeps a row (CR-01) depends on the broker replaying the retained payload then.
+    """
+    publisher = _new_client(clients, mosquitto_port, "publisher")
+    info = publisher.client.publish(DISCOVERY_TOPIC, '{"retained": true}', qos=1, retain=True)
+    info.wait_for_publish(TIMEOUT)
+    assert info.is_published()
+    subscriber = _new_client(clients, mosquitto_port, "subscriber")
+
+    subscriber.client.subscribe(DISCOVERY_FILTER, qos=0)
+    assert subscriber.next_message() == (DISCOVERY_TOPIC, '{"retained": true}', True)
+
+    subscriber.client.subscribe(DISCOVERY_FILTER, qos=1)
+    assert subscriber.next_message() == (DISCOVERY_TOPIC, '{"retained": true}', True)

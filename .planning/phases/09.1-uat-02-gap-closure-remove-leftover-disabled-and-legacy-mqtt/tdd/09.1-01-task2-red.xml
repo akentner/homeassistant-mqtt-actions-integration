@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="1.298" timestamp="2026-10-14T15:50:06.705079+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_the_owner_clears_the_stale_legacy_discovery_once_after_each_catch" time="0.996"><failure message="assert [] == [True]&#10;  &#10;  Right contains one more item: True&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140220593648512'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [{'area_id': None, 'config_entry_id': '01M4...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f87b76f0ca0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f87a6994eb0&gt;
+
+    async def test_the_owner_clears_the_stale_legacy_discovery_once_after_each_catch(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """D-06: after each start-up catch the owner clears the retained legacy discovery once, so no replay can return."""
+        legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        first = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        _tombstone_the_replay(hass, legacy.device_id, first, "integration")
+    
+        for _round in range(2):
+            replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+            assert len(replayed) == 3
+            await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+            mqtt_mock.async_publish.reset_mock()
+            await _quiet_period_passes(hass)
+&gt;           _assert_one_retained_clear(mqtt_mock, legacy.topic)
+
+tests/test_native_replay.py:375: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mqtt_mock = &lt;MagicMock id='140220593648512'&gt;
+topic = 'homeassistant/device/960276d5-7396-4247-94a1-dfecfb7c1732/config'
+
+    def _assert_one_retained_clear(mqtt_mock: Any, topic: str) -&gt; None:
+        """Assert that the product published exactly one empty retained payload on the topic (core's own clear is None)."""
+&gt;       assert [call.args[3] for call in _discovery_clears(mqtt_mock, topic)] == [True]
+E       assert [] == [True]
+E         
+E         Right contains one more item: True
+E         Use -v to get more diff
+
+tests/test_native_replay.py:354: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_the_owner_clears_a_retained_legacy_discovery_even_when_nothing_was_removed" time="0.155"><failure message="assert [] == [True]&#10;  &#10;  Right contains one more item: True&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140220587201200'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f87a6880250&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f87a65a6c40&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7f87a64a4ec0&gt;
+
+    async def test_the_owner_clears_a_retained_legacy_discovery_even_when_nothing_was_removed(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        caplog: pytest.LogCaptureFixture,
+    ) -&gt; None:
+        """User decision 4: the owner clears a retained legacy payload at the start even without any twin to remove."""
+        legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+        # Core saw a retained message on the topic before, so it creates nothing: there is nothing to remove
+        assert legacy_entity_ids(hass, legacy.device_id) == []
+        mqtt_mock.async_publish.reset_mock()
+        caplog.clear()
+    
+        await _quiet_period_passes(hass)
+    
+&gt;       _assert_one_retained_clear(mqtt_mock, legacy.topic)
+
+tests/test_native_replay.py:398: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mqtt_mock = &lt;MagicMock id='140220587201200'&gt;
+topic = 'homeassistant/device/5b95e63a-8b2c-463a-af84-b4b05ab17eb8/config'
+
+    def _assert_one_retained_clear(mqtt_mock: Any, topic: str) -&gt; None:
+        """Assert that the product published exactly one empty retained payload on the topic (core's own clear is None)."""
+&gt;       assert [call.args[3] for call in _discovery_clears(mqtt_mock, topic)] == [True]
+E       assert [] == [True]
+E         
+E         Right contains one more item: True
+E         Use -v to get more diff
+
+tests/test_native_replay.py:354: AssertionError</failure></testcase></testsuite></testsuites>

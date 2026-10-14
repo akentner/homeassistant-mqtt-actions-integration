@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
 current_phase_name: UAT-02 gap closure
 status: executing
-stopped_at: Completed 09.1-01-PLAN.md
-last_updated: "2026-10-14T14:03:08.856Z"
+stopped_at: Completed 09.1-02-PLAN.md
+last_updated: "2026-10-14T14:19:04.343Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase 09.1 execution started
-state_head: b99a7da6d78d3aff7bd54094bc976ef990a05c3a
+state_head: c6414b41e2b38702f185fd66c0f2b46c40199141
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 11
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.1 (UAT-02 gap closure) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-10-14 — Phase 09.1 execution started
 
@@ -115,6 +115,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09 P02 | 47min | 2 tasks | 7 files |
 | Phase 09 P03 | 18 min | 3 tasks | 23 files |
 | Phase 09.1 P01 | 19 min | 2 tasks | 8 files |
+| Phase 09.1 P02 | 13 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -237,6 +238,8 @@ Recent decisions affecting current work:
 - [Phase 09]: UAT-02 FAIL on bump SHA 7baec98 stands (E1 to E3 on ha-a and ha-b); UAT-04 blocked; v1.0.1 not tagged on 7baec98; gap routes to inserted Phase 9.1 (09-UAT.md block 3)
 - [Phase 09.1]: 09.1-01: the start-up replay catch removes an integration-disabled twin only for LEGACY or EMPTY core-prefix content (default UNKNOWN keeps CR-01); the owner clears a stale legacy topic after the flush, never a follower
 - [Phase 09.1]: 09.1-01: commits land on the phase branch and main is fast-forwarded after each (protected-branch guard); HEAD ends on main
+- [Phase 09.1]: 09.1-02: an unseen discovery topic counts as EMPTY only after the public subscribe-done signal at qos 1, a 2 s grace on the manager clock, and for an id held at subscribe time; FIX = 681c587
+- [Phase 09.1]: 09.1-02: G6 rewritten per user decision 2 (export off plus restart removes the disabled row); the export-row CR-01 test re-delivers the retained export
 
 ### Pending Todos
 
@@ -272,8 +275,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-14T14:03:08.806Z
-Stopped at: Completed 09.1-01-PLAN.md
+Last session: 2026-10-14T14:19:04.284Z
+Stopped at: Completed 09.1-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

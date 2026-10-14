@@ -90,11 +90,12 @@ Plans:
   3. The fix SHA is on `main` by fast-forward with manifest 1.0.1, the owner pushed exactly that SHA, and CI and Validate are green on it (D-13 to D-15). (REL-01)
   4. On the bench, the first start of the fix build cleans the leftover rows (D-09), UAT-02 passes from integration and from null tombstones, and UAT-04 passes, all on exactly the fix SHA (D-10 to D-12). (REL-01)
   5. `09-UAT.md` carries the fix-SHA rows, the release notes name the fixed case, and plans 09-04 and 09-05 read the fix SHA (D-16). (REL-01)
-**Plans:** 6 plans
+
+**Plans:** 1/6 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 09.1-01-PLAN.md — Product fix, legacy-payload path (tracer, test first): content classifier, sync verdicts, refined disabled branch, owner-only clear of the stale legacy topic
+- [x] 09.1-01-PLAN.md — Product fix, legacy-payload path (tracer, test first): content classifier, sync verdicts, refined disabled branch, owner-only clear of the stale legacy topic
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 09.1-02-PLAN.md — Product fix, empty-topic path: settle signal and grace, count-only log for unknown content, G6 rewrite, broker pin of the retained replay, docs; ends with FIX
@@ -176,7 +177,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. v1.0.1 Release | 3/5 | In Progress | - |
-| 9.1. UAT-02 Gap Closure (INSERTED) | 0/6 | Planned | - |
+| 9.1. UAT-02 Gap Closure (INSERTED) | 1/6 | In Progress | - |
 | 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |

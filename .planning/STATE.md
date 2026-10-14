@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
 current_phase_name: UAT-02 gap closure
 status: executing
-stopped_at: Phase 09.1 context gathered
-last_updated: "2026-10-14T13:20:51.578Z"
+stopped_at: Completed 09.1-01-PLAN.md
+last_updated: "2026-10-14T14:03:08.856Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase 09.1 execution started
-state_head: 36826e11f08237487b312802e4a1a8bd6a39904f
+state_head: b99a7da6d78d3aff7bd54094bc976ef990a05c3a
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 11
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.1 (UAT-02 gap closure) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 09.1
+Plan: 2 of 6
+Status: Ready to execute
 Last activity: 2026-10-14 — Phase 09.1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -114,6 +114,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09 P01 | 11 min | 3 tasks | 31 files |
 | Phase 09 P02 | 47min | 2 tasks | 7 files |
 | Phase 09 P03 | 18 min | 3 tasks | 23 files |
+| Phase 09.1 P01 | 19 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -234,6 +235,8 @@ Recent decisions affecting current work:
 - [Phase 09]: D-04 amendment (owner, v1.0.1 only): CI/Validate on bump SHA 7baec98 count with event workflow_dispatch as well as push; headSha exact. Runs 38299461144 (CI) and 38299494978 (Validate) green
 - [Phase 09]: ci.yml/validate.yml on.push has only tags-ignore, so branch pushes never run them (since 2f786d8); branches filter added after the v1.0.1 tag (todo 2026-10-12-ci-push-trigger-branches)
 - [Phase 09]: UAT-02 FAIL on bump SHA 7baec98 stands (E1 to E3 on ha-a and ha-b); UAT-04 blocked; v1.0.1 not tagged on 7baec98; gap routes to inserted Phase 9.1 (09-UAT.md block 3)
+- [Phase 09.1]: 09.1-01: the start-up replay catch removes an integration-disabled twin only for LEGACY or EMPTY core-prefix content (default UNKNOWN keeps CR-01); the owner clears a stale legacy topic after the flush, never a follower
+- [Phase 09.1]: 09.1-01: commits land on the phase branch and main is fast-forwarded after each (protected-branch guard); HEAD ends on main
 
 ### Pending Todos
 
@@ -269,9 +272,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-12T21:53:49.661Z
-Stopped at: Phase 09.1 context gathered
-Resume file: .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-CONTEXT.md
+Last session: 2026-10-14T14:03:08.806Z
+Stopped at: Completed 09.1-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

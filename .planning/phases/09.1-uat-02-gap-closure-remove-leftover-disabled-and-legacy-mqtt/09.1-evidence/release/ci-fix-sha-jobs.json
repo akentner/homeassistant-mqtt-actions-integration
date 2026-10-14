@@ -1,0 +1,36 @@
+{
+  "CI": [
+    {
+      "name": "Ruff",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Unit tests",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Multi-instance tests",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Broker tests (Mosquitto)",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "Validate": [
+    {
+      "name": "hassfest",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "HACS",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
+}

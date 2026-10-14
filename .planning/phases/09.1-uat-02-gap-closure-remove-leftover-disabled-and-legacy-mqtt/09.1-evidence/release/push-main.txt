@@ -1,0 +1,17 @@
+recorded_utc: 2026-10-14T22:18:58Z
+fix_sha: 681c58793b656b51869906b62f2564829de7a10d
+origin_main_before: 7baec9878badc8fb49ea0d80243277d5ff3fb443
+origin_main_after: 681c58793b656b51869906b62f2564829de7a10d
+ls_remote_after: 681c58793b656b51869906b62f2564829de7a10d	refs/heads/main
+push_command: git push origin 681c587:refs/heads/main
+push_output: 7baec98..681c587  681c587 -> main
+push_note: a first attempt "git push origin 681c58" failed with "cannot be resolved to branch" and pushed nothing; the refspec form above was the only push that moved origin main
+pushed_by: owner
+fast_forward: yes (the orchestrator ran git fetch and confirmed 7baec98 is an ancestor of FIX, 35 commits, before the checkpoint)
+dispatch_commands: gh workflow run ci.yml --ref main ; gh workflow run validate.yml --ref main
+dispatch_note: the owner ran the two dispatches as separate commands, because a chained "; and" failed in zsh after the CI dispatch; validate was dispatched right after, and nothing was pushed in between (both runs have headSha == FIX)
+dispatched_by: owner
+ci_run: 38646428109 (https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38646428109)
+validate_run: 38646494618 (https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38646494618)
+claude_push_dispatch_or_rerun: none (Claude issued no git push, no gh workflow run and no gh run rerun; its remote operations were git ls-remote, gh auth status, gh run list and gh run view, all reads)
+tag: not created (plan 09-04, re-pointed to FIX by plan 09.1-06, after the bench)

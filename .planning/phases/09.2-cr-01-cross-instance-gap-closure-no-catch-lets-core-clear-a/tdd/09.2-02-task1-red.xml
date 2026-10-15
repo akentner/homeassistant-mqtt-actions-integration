@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="6" time="1.824" timestamp="2026-10-15T20:45:42.111523+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_presence" name="test_heartbeat_is_published_non_retained_with_qos_0" time="0.956"><failure message="AssertionError: assert {'devices', '...n', 'version'} == {'devices', '...session', ...}&#10;  &#10;  Extra items in the right set:&#10;  'kept_legacy'&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140000273421984'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f54604b22a0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f545a76e770&gt;
+
+    async def test_heartbeat_is_published_non_retained_with_qos_0(
+        hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+    ) -&gt; None:
+        """
+        Contract changed on purpose by Phase 9.2 D-01: the heartbeat also carries `kept_legacy`, the kept device ids.
+    
+        D-05: one heartbeat after the online availability, QoS 0, not retained, five keys, the capability key and the list
+        of the devices this instance keeps a legacy MQTT entity of, empty for an instance without legacy entities.
+        """
+        sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
+        entry = await _setup(hass, make_hub_entry([sub]))
+        instance_id = entry.data[CONF_INSTANCE_ID]
+        topic = heartbeat_topic(BASE, instance_id)
+    
+        published = _publishes(mqtt_mock, topic)
+        assert len(published) == 1
+        payload, qos, retain = published[0]
+        assert qos == 0
+        assert retain is False
+        data = json.loads(payload)
+&gt;       assert set(data) == {"instance_id", "name", "version", "devices", "session", "entities", "kept_legacy"}
+E       AssertionError: assert {'devices', '...n', 'version'} == {'devices', '...session', ...}
+E         
+E         Extra items in the right set:
+E         'kept_legacy'
+E         Use -v to get more diff
+
+tests/test_presence.py:92: AssertionError</failure></testcase><testcase classname="tests.test_presence" name="test_the_heartbeat_omits_the_kept_list_when_it_would_not_fit[over_cap]" time="0.086"><failure message="assert 0 == 1&#10; +  where 0 = len([])">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140000269775744'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f545a76f690&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f54626f4110&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7f545a593a10&gt;
+case = 'over_cap'
+
+    @pytest.mark.parametrize("case", ["over_cap", "over_size"])
+    async def test_the_heartbeat_omits_the_kept_list_when_it_would_not_fit(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        make_hub_entry: Callable,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        case: str,
+    ) -&gt; None:
+        """
+        D-01, D-03, T-09.2-07: a list over the cap or a payload over the size cap leaves the key out, never the heartbeat.
+    
+        Peers read a heartbeat without the key as UNKNOWN and keep their rows, which is the safe direction. A long
+        non-ASCII instance name leaves room for one id only. One count-only warning per start (T-04-14).
+        """
+        ids = _kept_ids(MAX_HEARTBEAT_KEPT_DEVICES + 1) if case == "over_cap" else _kept_ids(3)
+        # raising=False: a RED run against code without the builder must fail on the heartbeat, not on the patch
+        monkeypatch.setattr(Manager, "kept_legacy_ids", lambda _self: list(ids), raising=False)
+        overrides: dict[str, Any] = {}
+        if case == "over_size":
+            overrides["data"] = {
+                const.CONF_BASE_TOPIC: BASE,
+                CONF_INSTANCE_NAME: "\U0001f600" * 64,
+                CONF_INSTANCE_ID: str(uuid.uuid4()),
+            }
+        caplog.set_level(logging.WARNING, logger=OWN_LOGGER)
+        entry = await _setup(hass, make_hub_entry(**overrides))
+        topic = heartbeat_topic(BASE, entry.data[CONF_INSTANCE_ID])
+        # A second heartbeat in the same start logs no second warning
+        await entry.runtime_data.presence.async_publish_heartbeat()
+    
+        published = _publishes(mqtt_mock, topic)
+        assert len(published) == 2
+        for payload, _qos, _retain in published:
+            data = json.loads(payload)
+            assert "kept_legacy" not in data
+            assert len(payload.encode()) &lt;= MAX_BROKER_MESSAGE_BYTES
+            heartbeat = parse_heartbeat(BASE, topic, payload)
+            assert heartbeat is not None
+            assert heartbeat.kept_legacy is None
+        if case == "over_size":
+            # The setup really is over the size cap with the key, not over the count cap
+            assert len(json.dumps({**json.loads(published[0][0]), "kept_legacy": ids})) &gt; MAX_BROKER_MESSAGE_BYTES
+        warnings = [record.getMessage() for record in own_warnings(caplog, exact=True)]
+&gt;       assert len(warnings) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_presence.py:161: AssertionError</failure></testcase><testcase classname="tests.test_presence" name="test_the_heartbeat_omits_the_kept_list_when_it_would_not_fit[over_size]" time="0.110"><failure message="assert 0 == 1&#10; +  where 0 = len([])">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140000267462240'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f545a2a6ae0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5462922040&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7f546268a490&gt;
+case = 'over_size'
+
+    @pytest.mark.parametrize("case", ["over_cap", "over_size"])
+    async def test_the_heartbeat_omits_the_kept_list_when_it_would_not_fit(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        make_hub_entry: Callable,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+        case: str,
+    ) -&gt; None:
+        """
+        D-01, D-03, T-09.2-07: a list over the cap or a payload over the size cap leaves the key out, never the heartbeat.
+    
+        Peers read a heartbeat without the key as UNKNOWN and keep their rows, which is the safe direction. A long
+        non-ASCII instance name leaves room for one id only. One count-only warning per start (T-04-14).
+        """
+        ids = _kept_ids(MAX_HEARTBEAT_KEPT_DEVICES + 1) if case == "over_cap" else _kept_ids(3)
+        # raising=False: a RED run against code without the builder must fail on the heartbeat, not on the patch
+        monkeypatch.setattr(Manager, "kept_legacy_ids", lambda _self: list(ids), raising=False)
+        overrides: dict[str, Any] = {}
+        if case == "over_size":
+            overrides["data"] = {
+                const.CONF_BASE_TOPIC: BASE,
+                CONF_INSTANCE_NAME: "\U0001f600" * 64,
+                CONF_INSTANCE_ID: str(uuid.uuid4()),
+            }
+        caplog.set_level(logging.WARNING, logger=OWN_LOGGER)
+        entry = await _setup(hass, make_hub_entry(**overrides))
+        topic = heartbeat_topic(BASE, entry.data[CONF_INSTANCE_ID])
+        # A second heartbeat in the same start logs no second warning
+        await entry.runtime_data.presence.async_publish_heartbeat()
+    
+        published = _publishes(mqtt_mock, topic)
+        assert len(published) == 2
+        for payload, _qos, _retain in published:
+            data = json.loads(payload)
+            assert "kept_legacy" not in data
+            assert len(payload.encode()) &lt;= MAX_BROKER_MESSAGE_BYTES
+            heartbeat = parse_heartbeat(BASE, topic, payload)
+            assert heartbeat is not None
+            assert heartbeat.kept_legacy is None
+        if case == "over_size":
+            # The setup really is over the size cap with the key, not over the count cap
+            assert len(json.dumps({**json.loads(published[0][0]), "kept_legacy": ids})) &gt; MAX_BROKER_MESSAGE_BYTES
+        warnings = [record.getMessage() for record in own_warnings(caplog, exact=True)]
+&gt;       assert len(warnings) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_presence.py:161: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_the_first_heartbeat_after_a_start_lists_a_device_with_a_kept_customized_row[renamed]" time="0.176"><failure message="AssertionError: assert None == ['b22b84f5-8683-49c9-8525-32d48dd23cc5']&#10; +  where None = &lt;built-in method get of dict object at 0x7f545a319dc0&gt;('kept_legacy')&#10; +    where &lt;built-in method get of dict object at 0x7f545a319dc0&gt; = {'devices': 1, 'entities': 'native', 'instance_id': '2f7c83bd-5768-4f79-afea-f2ba322a7965', 'name': 'Test instance', ...}.get">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140000268344960'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f545a5bec40&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f54626fe090&gt;
+row = 'renamed'
+
+    @pytest.mark.parametrize("row", ["renamed", "untouched"])
+    async def test_the_first_heartbeat_after_a_start_lists_a_device_with_a_kept_customized_row(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        row: str,
+    ) -&gt; None:
+        """
+        D-01, research Pitfall 2: the kept list is read from the registry, so the first heartbeat of a start is right.
+    
+        A renamed replayed test button is a kept, enabled legacy row: the very first heartbeat after the restart lists the
+        device, before any entity of it loaded. Uncustomized replay twins are no kept row, so a native device lists nothing.
+        """
+        legacy, _before = await _a_finished_native_owner(
+            hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+        )
+        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(replayed) == 3
+        if row == "renamed":
+            button, *_others = sorted(entity_id for entity_id in replayed if entity_id.startswith("button."))
+            er.async_get(hass).async_update_entity(button, name="Kept")
+            await hass.async_block_till_done(wait_background_tasks=True)
+        mqtt_mock.async_publish.reset_mock()
+    
+        await _restart(hass, legacy.entry)
+    
+        heartbeats = _heartbeats(mqtt_mock, legacy.entry)
+        assert heartbeats, "no heartbeat after the restart"
+        expected = [legacy.device_id] if row == "renamed" else []
+&gt;       assert heartbeats[0].get("kept_legacy") == expected
+E       AssertionError: assert None == ['b22b84f5-8683-49c9-8525-32d48dd23cc5']
+E        +  where None = &lt;built-in method get of dict object at 0x7f545a319dc0&gt;('kept_legacy')
+E        +    where &lt;built-in method get of dict object at 0x7f545a319dc0&gt; = {'devices': 1, 'entities': 'native', 'instance_id': '2f7c83bd-5768-4f79-afea-f2ba322a7965', 'name': 'Test instance', ...}.get
+
+tests/test_native_replay.py:926: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_the_first_heartbeat_after_a_start_lists_a_device_with_a_kept_customized_row[untouched]" time="0.152"><failure message="AssertionError: assert None == []&#10; +  where None = &lt;built-in method get of dict object at 0x7f5459ec80c0&gt;('kept_legacy')&#10; +    where &lt;built-in method get of dict object at 0x7f5459ec80c0&gt; = {'devices': 1, 'entities': 'native', 'instance_id': 'f045169d-63fe-416c-80ef-9d32b2be469c', 'name': 'Test instance', ...}.get">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140000264672928'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f54604b1220&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f545a250250&gt;
+row = 'untouched'
+
+    @pytest.mark.parametrize("row", ["renamed", "untouched"])
+    async def test_the_first_heartbeat_after_a_start_lists_a_device_with_a_kept_customized_row(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        row: str,
+    ) -&gt; None:
+        """
+        D-01, research Pitfall 2: the kept list is read from the registry, so the first heartbeat of a start is right.
+    
+        A renamed replayed test button is a kept, enabled legacy row: the very first heartbeat after the restart lists the
+        device, before any entity of it loaded. Uncustomized replay twins are no kept row, so a native device lists nothing.
+        """
+        legacy, _before = await _a_finished_native_owner(
+            hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+        )
+        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(replayed) == 3
+        if row == "renamed":
+            button, *_others = sorted(entity_id for entity_id in replayed if entity_id.startswith("button."))
+            er.async_get(hass).async_update_entity(button, name="Kept")
+            await hass.async_block_till_done(wait_background_tasks=True)
+        mqtt_mock.async_publish.reset_mock()
+    
+        await _restart(hass, legacy.entry)
+    
+        heartbeats = _heartbeats(mqtt_mock, legacy.entry)
+        assert heartbeats, "no heartbeat after the restart"
+        expected = [legacy.device_id] if row == "renamed" else []
+&gt;       assert heartbeats[0].get("kept_legacy") == expected
+E       AssertionError: assert None == []
+E        +  where None = &lt;built-in method get of dict object at 0x7f5459ec80c0&gt;('kept_legacy')
+E        +    where &lt;built-in method get of dict object at 0x7f5459ec80c0&gt; = {'devices': 1, 'entities': 'native', 'instance_id': 'f045169d-63fe-416c-80ef-9d32b2be469c', 'name': 'Test instance', ...}.get
+
+tests/test_native_replay.py:926: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_a_heartbeat_lists_a_held_device_that_is_not_native_in_this_run" time="0.102"><failure message="AssertionError: assert None == ['2ba55066-b38d-4005-8ff7-d4e6977bf2a6']&#10; +  where None = &lt;built-in method get of dict object at 0x7f5459d27a00&gt;('kept_legacy')&#10; +    where &lt;built-in method get of dict object at 0x7f5459d27a00&gt; = {'devices': 0, 'entities': 'native', 'instance_id': '3b8f050d-a250-48bc-bd1e-d197f84537f2', 'name': 'Test instance', ...}.get">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140000263198032'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f5459f014e0&gt;
+
+    async def test_a_heartbeat_lists_a_held_device_that_is_not_native_in_this_run(
+        hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+    ) -&gt; None:
+        """
+        D-01, research Pitfall 2: a held device that is not native in this run keeps its loaded legacy rows: it is listed.
+    
+        A legacy mirror on a legacy instance has three loaded legacy rows and no native twin: an empty retained payload on
+        the shared topic would delete them, so the heartbeat lists the device whatever its rows look like.
+        """
+        spec = make_spec(name="Foreign lamp")
+        entry, _topic = await _legacy_mirror(hass, make_hub_entry, spec)
+        mqtt_mock.async_publish.reset_mock()
+    
+        await _manager(entry).presence.async_publish_heartbeat()
+    
+        heartbeats = _heartbeats(mqtt_mock, entry)
+        assert heartbeats
+&gt;       assert heartbeats[-1].get("kept_legacy") == [spec.device_id]
+E       AssertionError: assert None == ['2ba55066-b38d-4005-8ff7-d4e6977bf2a6']
+E        +  where None = &lt;built-in method get of dict object at 0x7f5459d27a00&gt;('kept_legacy')
+E        +    where &lt;built-in method get of dict object at 0x7f5459d27a00&gt; = {'devices': 0, 'entities': 'native', 'instance_id': '3b8f050d-a250-48bc-bd1e-d197f84537f2', 'name': 'Test instance', ...}.get
+
+tests/test_native_replay.py:946: AssertionError</failure></testcase></testsuite></testsuites>

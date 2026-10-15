@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="8" time="2.051" timestamp="2026-10-15T20:55:14.499482+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_cutover" name="test_a_legacy_install_without_peers_cuts_over_after_the_settle_time" time="0.942"><failure message="AssertionError: assert [({'migrate_d...), ('', True)] == [({'migrate_d...), ('', True)]&#10;  &#10;  At index 1 diff: ('', True) != ({'migrate_discovery': True}, False)&#10;  Right contains one more item: ('', True)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140315511052944'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': 'kitchen', 'com...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9dc0f01430&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f9dc03a19b0&gt;
+enable_native_cutover = None
+
+    async def test_a_legacy_install_without_peers_cuts_over_after_the_settle_time(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        enable_native_cutover: None,
+    ) -&gt; None:
+        """D-09, D-12, MIG-02: after the settle time the flag is set and the takeover keeps every identity of the device."""
+        legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+        entity_registry = er.async_get(hass)
+        device_registry = dr.async_get(hass)
+        device_id = legacy.device_id
+        customize_mqtt_device(hass, device_id, area_id="kitchen", name_by_user="Stehlampe")
+        legacy_ids = legacy_entity_ids(hass, device_id)
+        before = {entity_id: entity_registry.async_get(entity_id) for entity_id in legacy_ids}
+        assert len(legacy_ids) == 3  # the switch and the two test buttons
+        assert _stored_native(hass_storage) is None
+        mqtt_mock.async_publish.reset_mock()
+        _loop_back_discovery(hass, mqtt_mock)
+    
+        await _settle(hass)
+    
+        assert _stored_native(hass_storage) == {"instance": True, "pending": [], "devices": []}
+        assert _manager(legacy.entry).is_native(device_id)
+        for entity_id, old in before.items():
+            moved = entity_registry.async_get(entity_id)
+            assert moved is not None
+            assert (moved.id, moved.platform) == (old.id, DOMAIN)
+        switch_id = entity_registry.async_get_entity_id("switch", DOMAIN, device_id)
+        assert switch_id == next(entity_id for entity_id in legacy_ids if entity_id.startswith("switch."))
+        assert hass.states.get(switch_id) is not None
+        device = device_registry.async_get_device_by_identifier((DOMAIN, device_id), legacy.entry.entry_id)
+        assert device is not None
+        assert (device.area_id, device.name_by_user) == ("kitchen", "Stehlampe")
+        published = _discovery_publishes(mqtt_mock, device_id)
+        # Phase 9.2 D-09: a fresh migrate right before the clear
+&gt;       assert [(json.loads(payload) if payload else payload, retain) for payload, retain in published] == [
+            ({"migrate_discovery": True}, False),
+            ({"migrate_discovery": True}, False),
+            (CLEAR_PAYLOAD, True),
+        ]
+E       AssertionError: assert [({'migrate_d...), ('', True)] == [({'migrate_d...), ('', True)]
+E         
+E         At index 1 diff: ('', True) != ({'migrate_discovery': True}, False)
+E         Right contains one more item: ('', True)
+E         Use -v to get more diff
+
+tests/test_cutover.py:171: AssertionError</failure></testcase><testcase classname="tests.test_cutover" name="test_the_cutover_runs_once" time="0.124"><failure message="assert 1 == 2&#10; +  where 1 = len(['{&quot;migrate_discovery&quot;:true}'])">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140315404067776'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9dc03a1f30&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f9db9d452d0&gt;
+enable_native_cutover = None
+
+    async def test_the_cutover_runs_once(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        enable_native_cutover: None,
+    ) -&gt; None:
+        """T-5-13: after the flip and the reload no further flip, timer or pass happens and the flag stays stored."""
+        subentry = make_switch_subentry("Lamp")
+        entry = await _setup(hass, make_hub_entry([subentry]))
+        original = hass.config_entries.async_schedule_reload
+        with patch.object(hass.config_entries, "async_schedule_reload", wraps=original) as schedule_reload:
+            await _settle(hass)
+            assert schedule_reload.call_count == 1
+            migrates = [p for p, _retain in _discovery_publishes(mqtt_mock, _device_id(subentry)) if p and "migrate" in p]
+            # Phase 9.2 D-09: a fresh migrate right before the clear, so the one pass publishes two
+&gt;           assert len(migrates) == 2
+E           assert 1 == 2
+E            +  where 1 = len(['{"migrate_discovery":true}'])
+
+tests/test_cutover.py:426: AssertionError</failure></testcase><testcase classname="tests.test_native_start" name="test_an_upgrade_takes_over_the_legacy_entities_and_marks_the_document[en]" time="0.136"><failure message="AssertionError: assert [({'migrate_d...), ('', True)] == [({'migrate_d...), ('', True)]&#10;  &#10;  At index 1 diff: ('', True) != ({'migrate_discovery': True}, False)&#10;  Right contains one more item: ('', True)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140315404068784'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': 'kitchen', 'com...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9dc02792d0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f9dc03a3e20&gt;
+language = 'en'
+
+    @pytest.mark.parametrize("language", ["en", "de"])
+    async def test_an_upgrade_takes_over_the_legacy_entities_and_marks_the_document(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        language: str,
+    ) -&gt; None:
+        """D-05, D-09, D-12, MIG-01: migrate, move, retained clear, in that order; every identity of the device is kept."""
+        hass.config.language = language
+        legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+        entity_registry = er.async_get(hass)
+        device_registry = dr.async_get(hass)
+        device_id = legacy.device_id
+        customize_mqtt_device(hass, device_id, area_id="kitchen", name_by_user="Stehlampe")
+        switch_id = entity_registry.async_get_entity_id("switch", "mqtt", device_id)
+        assert switch_id is not None
+        legacy_ids = legacy_entity_ids(hass, device_id)
+        assert len(legacy_ids) == 3  # the switch and the two test buttons
+        before = {entity_id: entity_registry.async_get(entity_id) for entity_id in legacy_ids}
+        unique_ids = {entity_id: (old.domain, old.unique_id) for entity_id, old in before.items()}
+        mqtt_device = device_registry.async_get_device_by_identifier(
+            ("mqtt", f"{DOMAIN}_{device_id}"), hass.config_entries.async_entries("mqtt")[0].entry_id
+        )
+        assert mqtt_device is not None
+        assert await hass.config_entries.async_unload(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        _seed_native(hass_storage, pending=[device_id])
+        mqtt_mock.async_publish.reset_mock()
+        _loop_back_discovery(hass, mqtt_mock)
+    
+        assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+        sub_id = next(iter(legacy.entry.subentries.values())).subentry_id
+        for entity_id, old in before.items():
+            moved = entity_registry.async_get(entity_id)
+            assert moved is not None
+            assert (moved.id, moved.platform, moved.device_id) == (old.id, DOMAIN, mqtt_device.id)
+            assert (moved.config_entry_id, moved.config_subentry_id) == (legacy.entry.entry_id, sub_id)
+        # The legacy entities, the test buttons too, keep their entity id and unique id in every language
+        for entity_id, (domain, unique_id) in unique_ids.items():
+            assert entity_registry.async_get_entity_id(domain, DOMAIN, unique_id) == entity_id
+        assert entity_registry.async_get_entity_id("switch", DOMAIN, device_id) == switch_id
+        assert hass.states.get(switch_id) is not None
+        device = device_registry.async_get(mqtt_device.id)
+        assert device is not None
+        assert (device.area_id, device.name_by_user) == ("kitchen", "Stehlampe")
+        assert (device.config_entry_id, device.config_subentry_id) == (legacy.entry.entry_id, sub_id)
+        assert device.identifiers == {(DOMAIN, device_id)}
+        assert _stored_pending(hass_storage) == []
+    
+        published = _publishes(mqtt_mock, legacy.topic)
+        # Phase 9.2 D-09: a fresh migrate right before the clear
+&gt;       assert [(json.loads(payload) if payload else payload, retain) for payload, retain in published] == [
+            ({"migrate_discovery": True}, False),
+            ({"migrate_discovery": True}, False),
+            (CLEAR_PAYLOAD, True),
+        ]
+E       AssertionError: assert [({'migrate_d...), ('', True)] == [({'migrate_d...), ('', True)]
+E         
+E         At index 1 diff: ('', True) != ({'migrate_discovery': True}, False)
+E         Right contains one more item: ('', True)
+E         Use -v to get more diff
+
+tests/test_native_start.py:197: AssertionError</failure></testcase><testcase classname="tests.test_native_start" name="test_an_upgrade_takes_over_the_legacy_entities_and_marks_the_document[de]" time="0.138"><failure message="AssertionError: assert [({'migrate_d...), ('', True)] == [({'migrate_d...), ('', True)]&#10;  &#10;  At index 1 diff: ('', True) != ({'migrate_discovery': True}, False)&#10;  Right contains one more item: ('', True)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140315398767008'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9db9c10040&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f9db9c301a0&gt;
+language = 'de'
+
+    @pytest.mark.parametrize("language", ["en", "de"])
+    async def test_an_upgrade_takes_over_the_legacy_entities_and_marks_the_document(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        language: str,
+    ) -&gt; None:
+        """D-05, D-09, D-12, MIG-01: migrate, move, retained clear, in that order; every identity of the device is kept."""
+        hass.config.language = language
+        legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+        entity_registry = er.async_get(hass)
+        device_registry = dr.async_get(hass)
+        device_id = legacy.device_id
+        customize_mqtt_device(hass, device_id, area_id="kitchen", name_by_user="Stehlampe")
+        switch_id = entity_registry.async_get_entity_id("switch", "mqtt", device_id)
+        assert switch_id is not None
+        legacy_ids = legacy_entity_ids(hass, device_id)
+        assert len(legacy_ids) == 3  # the switch and the two test buttons
+        before = {entity_id: entity_registry.async_get(entity_id) for entity_id in legacy_ids}
+        unique_ids = {entity_id: (old.domain, old.unique_id) for entity_id, old in before.items()}
+        mqtt_device = device_registry.async_get_device_by_identifier(
+            ("mqtt", f"{DOMAIN}_{device_id}"), hass.config_entries.async_entries("mqtt")[0].entry_id
+        )
+        assert mqtt_device is not None
+        assert await hass.config_entries.async_unload(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        _seed_native(hass_storage, pending=[device_id])
+        mqtt_mock.async_publish.reset_mock()
+        _loop_back_discovery(hass, mqtt_mock)
+    
+        assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+        sub_id = next(iter(legacy.entry.subentries.values())).subentry_id
+        for entity_id, old in before.items():
+            moved = entity_registry.async_get(entity_id)
+            assert moved is not None
+            assert (moved.id, moved.platform, moved.device_id) == (old.id, DOMAIN, mqtt_device.id)
+            assert (moved.config_entry_id, moved.config_subentry_id) == (legacy.entry.entry_id, sub_id)
+        # The legacy entities, the test buttons too, keep their entity id and unique id in every language
+        for entity_id, (domain, unique_id) in unique_ids.items():
+            assert entity_registry.async_get_entity_id(domain, DOMAIN, unique_id) == entity_id
+        assert entity_registry.async_get_entity_id("switch", DOMAIN, device_id) == switch_id
+        assert hass.states.get(switch_id) is not None
+        device = device_registry.async_get(mqtt_device.id)
+        assert device is not None
+        assert (device.area_id, device.name_by_user) == ("kitchen", "Stehlampe")
+        assert (device.config_entry_id, device.config_subentry_id) == (legacy.entry.entry_id, sub_id)
+        assert device.identifiers == {(DOMAIN, device_id)}
+        assert _stored_pending(hass_storage) == []
+    
+        published = _publishes(mqtt_mock, legacy.topic)
+        # Phase 9.2 D-09: a fresh migrate right before the clear
+&gt;       assert [(json.loads(payload) if payload else payload, retain) for payload, retain in published] == [
+            ({"migrate_discovery": True}, False),
+            ({"migrate_discovery": True}, False),
+            (CLEAR_PAYLOAD, True),
+        ]
+E       AssertionError: assert [({'migrate_d...), ('', True)] == [({'migrate_d...), ('', True)]
+E         
+E         At index 1 diff: ('', True) != ({'migrate_discovery': True}, False)
+E         Right contains one more item: ('', True)
+E         Use -v to get more diff
+
+tests/test_native_start.py:197: AssertionError</failure></testcase><testcase classname="tests.test_native_start" name="test_a_device_without_legacy_entities_still_gets_the_migrate_and_the_clear" time="0.090"><failure message="AssertionError: assert [({'migrate_d...), ('', True)] == [({'migrate_d...), ('', True)]&#10;  &#10;  At index 1 diff: ('', True) != ({'migrate_discovery': True}, False)&#10;  Right contains one more item: ('', True)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140315400206528'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9db9c321f0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f9db99d9f30&gt;
+
+    async def test_a_device_without_legacy_entities_still_gets_the_migrate_and_the_clear(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """A fresh install has no legacy registry entry, but followers may: the migrate and the clear go out anyway."""
+        subentry = make_switch_subentry("Lamp")
+        device_id = subentry["data"][CONF_DEVICE_ID]
+        _seed_native(hass_storage, pending=[device_id])
+    
+        await _setup(hass, make_hub_entry([subentry]))
+    
+        published = _publishes(mqtt_mock, discovery_topic(PREFIX, device_id))
+        # Phase 9.2 D-09: a fresh migrate right before the clear
+&gt;       assert [(json.loads(payload) if payload else payload, retain) for payload, retain in published] == [
+            ({"migrate_discovery": True}, False),
+            ({"migrate_discovery": True}, False),
+            (CLEAR_PAYLOAD, True),
+        ]
+E       AssertionError: assert [({'migrate_d...), ('', True)] == [({'migrate_d...), ('', True)]
+E         
+E         At index 1 diff: ('', True) != ({'migrate_discovery': True}, False)
+E         Right contains one more item: ('', True)
+E         Use -v to get more diff
+
+tests/test_native_start.py:269: AssertionError</failure></testcase><testcase classname="tests.test_native_start" name="test_a_failed_retained_clear_after_the_move_keeps_the_device_native_and_is_retried" time="0.130"><failure message="AssertionError: assert [('', True), ('', True)] == [({'migrate_d...), ('', True)]&#10;  &#10;  At index 0 diff: ('', True) != ({'migrate_discovery': True}, False)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140315397496784'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9db960fd70&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f9db97dbc10&gt;
+
+    async def test_a_failed_retained_clear_after_the_move_keeps_the_device_native_and_is_retried(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """WR-02: the registry moved, so the device stays native; only the clear is pending and a resync retries it."""
+        legacy, before = await _unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        _loop_back_discovery(hass, mqtt_mock)
+        deliver = mqtt_mock.async_publish.side_effect
+        broker_down = True
+    
+        def _publish(topic: str, payload: Any, *args: Any, **kwargs: Any) -&gt; Any:
+            if broker_down and topic == legacy.topic and payload == CLEAR_PAYLOAD:
+                msg = "MQTT is not available"
+                raise HomeAssistantError(msg)
+            return deliver(topic, payload, *args, **kwargs)
+    
+        mqtt_mock.async_publish.side_effect = _publish
+    
+        assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+        _assert_moved_and_native(hass, legacy, before)
+        assert _stored_pending(hass_storage) == [legacy.device_id]
+        # No legacy discovery goes out again, or core MQTT would create the entities a second time
+        assert [
+            payload for payload, _retain in _publishes(mqtt_mock, legacy.topic) if payload and "components" in payload
+        ] == []
+    
+        broker_down = False
+        assert await _manager(legacy.entry).async_resync()
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+        assert (CLEAR_PAYLOAD, True) in _publishes(mqtt_mock, legacy.topic)
+        # Phase 9.2 D-09: a fresh migrate right before the clear, on the retry too
+        retried = _publishes(mqtt_mock, legacy.topic)[-2:]
+&gt;       assert [(json.loads(payload) if payload else payload, retain) for payload, retain in retried] == [
+            ({"migrate_discovery": True}, False),
+            (CLEAR_PAYLOAD, True),
+        ]
+E       AssertionError: assert [('', True), ('', True)] == [({'migrate_d...), ('', True)]
+E         
+E         At index 0 diff: ('', True) != ({'migrate_discovery': True}, False)
+E         Use -v to get more diff
+
+tests/test_native_start.py:516: AssertionError</failure></testcase><testcase classname="tests.test_cutover_instances" name="test_the_owner_cuts_over_and_a_running_follower_follows" time="0.152"><failure message="assert [('{&quot;migrate_...), ('', True)] == [('{&quot;migrate_...), ('', True)]&#10;  &#10;  At index 1 diff: ('', True) != ('{&quot;migrate_discovery&quot;:true}', False)&#10;  Right contains one more item: ('', True)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;
+fake_broker = &lt;tests.fake_broker.FakeBroker object at 0x7f9db9801010&gt;
+make_instance = &lt;tests.fake_broker.InstanceFactory object at 0x7f9db9a3e660&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f9db9d441a0&gt;
+enable_native_cutover = None
+
+    async def test_the_owner_cuts_over_and_a_running_follower_follows(
+        hass: HomeAssistant,
+        fake_broker: FakeBroker,
+        make_instance: Callable,
+        make_switch_subentry: Callable,
+        enable_native_cutover: None,
+    ) -&gt; None:
+        """D-09, D-12, MIG-02: the owner switches, its marked document makes the follower reload into native entities."""
+        owner, follower, device_id = await _owner_and_follower(hass, make_instance, make_switch_subentry)
+        discovery = discovery_topic(PREFIX, device_id)
+        assert discovery in fake_broker.retained
+        old_follower_manager = follower.manager
+    
+        publishes = await _cut_over(owner, follower, device_id)
+    
+        assert owner.manager.is_native(device_id)
+        # Phase 9.2 D-09: a fresh migrate right before the clear
+&gt;       assert publishes == [(MIGRATE, False), (MIGRATE, False), ("", True)]
+E       assert [('{"migrate_...), ('', True)] == [('{"migrate_...), ('', True)]
+E         
+E         At index 1 diff: ('', True) != ('{"migrate_discovery":true}', False)
+E         Right contains one more item: ('', True)
+E         Use -v to get more diff
+
+tests/test_cutover_instances.py:103: AssertionError</failure></testcase><testcase classname="tests.test_cutover_instances" name="test_a_legacy_peer_online_blocks_the_owner_and_going_offline_releases_it" time="0.077"><failure message="assert [('{&quot;migrate_...), ('', True)] == [('{&quot;migrate_...), ('', True)]&#10;  &#10;  At index 1 diff: ('', True) != ('{&quot;migrate_discovery&quot;:true}', False)&#10;  Right contains one more item: ('', True)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;
+fake_broker = &lt;tests.fake_broker.FakeBroker object at 0x7f9dc20bd6d0&gt;
+make_instance = &lt;tests.fake_broker.InstanceFactory object at 0x7f9db9a1f890&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f9db93c5850&gt;
+enable_native_cutover = None
+
+    async def test_a_legacy_peer_online_blocks_the_owner_and_going_offline_releases_it(
+        hass: HomeAssistant,
+        fake_broker: FakeBroker,
+        make_instance: Callable,
+        make_switch_subentry: Callable,
+        enable_native_cutover: None,
+    ) -&gt; None:
+        """D-10: a v0.1.0-shaped online peer keeps the owner legacy; its offline announcement releases it at once."""
+        sub = make_switch_subentry("Lamp")
+        device_id = sub["data"]["device_id"]
+        owner = await make_instance("owner", hass=hass, subentries=[sub], real_setup=True)
+        peer = "legacy-peer"
+        fake_broker.publish(availability_topic(BASE, peer), "online", retain=True)
+        fake_broker.publish(heartbeat_topic(BASE, peer), heartbeat_payload(peer, native=False), retain=False)
+        await _settle(owner)
+    
+        await _pass_time(owner)
+    
+        assert not owner.manager.is_native(device_id)
+        assert all("migrate" not in payload for payload, _retain in _discovery_publishes(owner, device_id))
+        assert discovery_topic(PREFIX, device_id) in fake_broker.retained
+        start = len(owner.gateway.published)
+    
+        fake_broker.publish(availability_topic(BASE, peer), "offline", retain=True)
+        await _settle(owner)
+    
+        assert owner.manager.is_native(device_id)
+        # Phase 9.2 D-09: a fresh migrate right before the clear
+&gt;       assert _discovery_publishes(owner, device_id, start) == [(MIGRATE, False), (MIGRATE, False), ("", True)]
+E       assert [('{"migrate_...), ('', True)] == [('{"migrate_...), ('', True)]
+E         
+E         At index 1 diff: ('', True) != ('{"migrate_discovery":true}', False)
+E         Right contains one more item: ('', True)
+E         Use -v to get more diff
+
+tests/test_cutover_instances.py:143: AssertionError</failure></testcase></testsuite></testsuites>

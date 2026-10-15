@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="1.657" timestamp="2026-10-15T20:51:26.494009+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_the_owner_sends_the_migrate_payload_before_it_lets_the_topic_go_empty[hooked]" time="0.981"><failure message="AssertionError: assert (None, True) == ({'migrate_di... True}, False)&#10;  &#10;  At index 0 diff: None != {'migrate_discovery': True}&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139701877673328'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [{'area_id': None, 'config_entry_id': '01M5...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f0ee29f9430&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f0ee0cbd6f0&gt;
+hook = 'hooked'
+
+    @pytest.mark.parametrize("hook", ["hooked", "not_hooked"])
+    async def test_the_owner_sends_the_migrate_payload_before_it_lets_the_topic_go_empty(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        hook: str,
+    ) -&gt; None:
+        """
+        D-09: before an action that can empty the shared topic the owner publishes the migrate payload.
+    
+        A peer that started while the gate was open has loaded the legacy rows; the migrate makes its core unload them,
+        so the empty payload that follows deletes no registry row there (research Q1). Without a hook the sequence is the
+        migrate before the removal, a fresh migrate and the owner's retained clear. With a hook, core's own empty payload
+        follows the migrate when the twin leaves, and, looped back, it made the content EMPTY, so no product clear follows.
+        """
+        legacy, before, replayed, _switch = await _an_owner_with_a_disabled_twin_on_legacy_content(
+            hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry, hooked=hook == "hooked"
+        )
+    
+        await _quiet_period_passes(hass)
+    
+        _assert_clean(hass, legacy.device_id, replayed)
+        _assert_moved_and_native(hass, legacy, before)
+        sequence = _topic_sequence(mqtt_mock, legacy.topic)
+        if hook == "not_hooked":
+            assert sequence == [(MIGRATE, False), (MIGRATE, False), ("", True)]
+            return
+        assert sequence, "nothing was published on the topic"
+&gt;       assert sequence[0] == (MIGRATE, False)
+E       AssertionError: assert (None, True) == ({'migrate_di... True}, False)
+E         
+E         At index 0 diff: None != {'migrate_discovery': True}
+E         Use -v to get more diff
+
+tests/test_native_replay.py:1029: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_the_owner_sends_the_migrate_payload_before_it_lets_the_topic_go_empty[not_hooked]" time="0.155"><failure message="AssertionError: assert [('', True)] == [({'migrate_d...), ('', True)]&#10;  &#10;  At index 0 diff: ('', True) != ({'migrate_discovery': True}, False)&#10;  Right contains 2 more items, first extra item: ({'migrate_discovery': True}, False)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139701872683600'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [{'area_id': None, 'config_entry_id': '01M5...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f0ee0954b40&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f0ee095ab90&gt;
+hook = 'not_hooked'
+
+    @pytest.mark.parametrize("hook", ["hooked", "not_hooked"])
+    async def test_the_owner_sends_the_migrate_payload_before_it_lets_the_topic_go_empty(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        hook: str,
+    ) -&gt; None:
+        """
+        D-09: before an action that can empty the shared topic the owner publishes the migrate payload.
+    
+        A peer that started while the gate was open has loaded the legacy rows; the migrate makes its core unload them,
+        so the empty payload that follows deletes no registry row there (research Q1). Without a hook the sequence is the
+        migrate before the removal, a fresh migrate and the owner's retained clear. With a hook, core's own empty payload
+        follows the migrate when the twin leaves, and, looped back, it made the content EMPTY, so no product clear follows.
+        """
+        legacy, before, replayed, _switch = await _an_owner_with_a_disabled_twin_on_legacy_content(
+            hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry, hooked=hook == "hooked"
+        )
+    
+        await _quiet_period_passes(hass)
+    
+        _assert_clean(hass, legacy.device_id, replayed)
+        _assert_moved_and_native(hass, legacy, before)
+        sequence = _topic_sequence(mqtt_mock, legacy.topic)
+        if hook == "not_hooked":
+&gt;           assert sequence == [(MIGRATE, False), (MIGRATE, False), ("", True)]
+E           AssertionError: assert [('', True)] == [({'migrate_d...), ('', True)]
+E             
+E             At index 0 diff: ('', True) != ({'migrate_discovery': True}, False)
+E             Right contains 2 more items, first extra item: ({'migrate_discovery': True}, False)
+E             Use -v to get more diff
+
+tests/test_native_replay.py:1026: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_the_owner_reads_the_peer_signal_again_right_before_it_empties_the_topic[before_the_removal]" time="0.153"><failure message="AssertionError: the owner removed its disabled twin after a peer announced a kept row&#10;assert None is not None">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139701869964864'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [{'area_id': None, 'config_entry_id': '01M5...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f0ee050b110&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f0ee09594e0&gt;
+moment = 'before_the_removal'
+
+    @pytest.mark.parametrize("moment", ["before_the_removal", "before_the_clear"])
+    async def test_the_owner_reads_the_peer_signal_again_right_before_it_empties_the_topic(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        moment: str,
+    ) -&gt; None:
+        """
+        D-10: a peer that announces a kept row while a migrate is on its way stops the removal or the clear that follows.
+    
+        The peer's heartbeat is delivered during the publish of the first migrate (before the removal) or of the second
+        one (before the clear); the owner reads the peer signal again after each migrate await.
+        """
+        legacy, _before, _replayed, switch = await _an_owner_with_a_disabled_twin_on_legacy_content(
+            hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+        )
+        deliver = mqtt_mock.async_publish.side_effect
+        migrates = [0]
+        trigger = 1 if moment == "before_the_removal" else 2
+    
+        def _deliver_and_announce(topic: str, payload: Any, *args: Any, **kwargs: Any) -&gt; Any:
+            result = deliver(topic, payload, *args, **kwargs)
+            if topic == legacy.topic and isinstance(payload, str) and "migrate_discovery" in payload:
+                migrates[0] += 1
+                if migrates[0] == trigger:
+                    _fire_peer(hass, PEER, [legacy.device_id])
+            return result
+    
+        mqtt_mock.async_publish.side_effect = _deliver_and_announce
+    
+        await _quiet_period_passes(hass)
+    
+        if moment == "before_the_removal":
+            kept = er.async_get(hass).async_get(switch)
+&gt;           assert kept is not None, "the owner removed its disabled twin after a peer announced a kept row"
+E           AssertionError: the owner removed its disabled twin after a peer announced a kept row
+E           assert None is not None
+
+tests/test_native_replay.py:1101: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_the_owner_reads_the_peer_signal_again_right_before_it_empties_the_topic[before_the_clear]" time="0.181"><failure message="AssertionError: assert [call('homeas...nterval=None)] == []&#10;  &#10;  Left contains one more item: call('homeassistant/device/26ec2429-dfc2-4827-bca2-820394d6c827/config', '', 1, True, message_expiry_interval=None)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139701872046976'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [{'area_id': None, 'config_entry_id': '01M5...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f0ee06deb90&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f0ee07090c0&gt;
+moment = 'before_the_clear'
+
+    @pytest.mark.parametrize("moment", ["before_the_removal", "before_the_clear"])
+    async def test_the_owner_reads_the_peer_signal_again_right_before_it_empties_the_topic(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        moment: str,
+    ) -&gt; None:
+        """
+        D-10: a peer that announces a kept row while a migrate is on its way stops the removal or the clear that follows.
+    
+        The peer's heartbeat is delivered during the publish of the first migrate (before the removal) or of the second
+        one (before the clear); the owner reads the peer signal again after each migrate await.
+        """
+        legacy, _before, _replayed, switch = await _an_owner_with_a_disabled_twin_on_legacy_content(
+            hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+        )
+        deliver = mqtt_mock.async_publish.side_effect
+        migrates = [0]
+        trigger = 1 if moment == "before_the_removal" else 2
+    
+        def _deliver_and_announce(topic: str, payload: Any, *args: Any, **kwargs: Any) -&gt; Any:
+            result = deliver(topic, payload, *args, **kwargs)
+            if topic == legacy.topic and isinstance(payload, str) and "migrate_discovery" in payload:
+                migrates[0] += 1
+                if migrates[0] == trigger:
+                    _fire_peer(hass, PEER, [legacy.device_id])
+            return result
+    
+        mqtt_mock.async_publish.side_effect = _deliver_and_announce
+    
+        await _quiet_period_passes(hass)
+    
+        if moment == "before_the_removal":
+            kept = er.async_get(hass).async_get(switch)
+            assert kept is not None, "the owner removed its disabled twin after a peer announced a kept row"
+            assert kept.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+            assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+        else:
+&gt;           assert _discovery_clears(mqtt_mock, legacy.topic) == []
+E           AssertionError: assert [call('homeas...nterval=None)] == []
+E             
+E             Left contains one more item: call('homeassistant/device/26ec2429-dfc2-4827-bca2-820394d6c827/config', '', 1, True, message_expiry_interval=None)
+E             Use -v to get more diff
+
+tests/test_native_replay.py:1105: AssertionError</failure></testcase></testsuite></testsuites>

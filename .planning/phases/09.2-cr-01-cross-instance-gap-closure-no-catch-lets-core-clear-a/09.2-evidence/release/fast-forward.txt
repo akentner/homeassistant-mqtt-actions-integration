@@ -1,0 +1,30 @@
+recorded: 2026-10-15T20:09:11Z
+main_before: 5f9799aac39b728a10add2dec9a000c66559e8e0
+main_after: ae738fe960fe1c0b434ad86d35dd308a20aa30bb
+phase_branch: gsd/phase-09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a
+phase_branch_head: ae738fe960fe1c0b434ad86d35dd308a20aa30bb
+fix_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+fix_subject: docs(09.2): IN-01 say that the one-time cutover clear is not held back by kept entities
+fix_note: the last review-fix commit on the phase branch (09.2-REVIEW-FIX.md, IN-01); it supersedes the 09.2-03 FIX candidate a4d08950b0e7be8f190adebe32f65b3a3941af99
+ancestor_check: ok
+ancestor_check_command: git merge-base --is-ancestor main gsd/phase-09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a exited 0 before the fast-forward
+path_check: ok
+path_check_rule: every path matches ^(custom_components/mqtt_actions/(takeover|presence|manager|sync)\.py|tests/[a-z0-9_]+\.py|docs/troubleshooting\.md|README\.md)$; takeover.py and docs/troubleshooting.md present
+method: git fetch . gsd/phase-09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a:main (fast-forward only), then git switch main; no merge, no rebase, no force
+head_after: main
+paths_since_dc6513c:
+  README.md
+  custom_components/mqtt_actions/manager.py
+  custom_components/mqtt_actions/presence.py
+  custom_components/mqtt_actions/sync.py
+  custom_components/mqtt_actions/takeover.py
+  docs/troubleshooting.md
+  tests/test_cutover.py
+  tests/test_cutover_instances.py
+  tests/test_docs.py
+  tests/test_native_replay.py
+  tests/test_native_start.py
+  tests/test_presence.py
+  tests/test_shared_topic_gate.py
+  tests/test_takeover.py
+manifest_at_fix: 1.0.1

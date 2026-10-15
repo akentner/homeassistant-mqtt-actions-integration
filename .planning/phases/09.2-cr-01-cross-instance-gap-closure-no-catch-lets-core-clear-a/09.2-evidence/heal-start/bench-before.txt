@@ -1,0 +1,13 @@
+recorded: 2026-10-15T20:09:53Z
+head: ae738fe960fe1c0b434ad86d35dd308a20aa30bb
+fix_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+started_at_mosq: 2026-10-15 00:23:51.199036273 +0200 CEST
+running_mosq: true
+started_at_ha-a: 2026-10-15 12:39:04.897226266 +0200 CEST
+running_ha-a: true
+started_at_ha-b: 2026-10-15 12:39:04.937589314 +0200 CEST
+running_ha-b: true
+started_at_ha-c: 2026-10-06 20:13:28.106273455 +0200 CEST
+running_ha-c: false
+source: podman inspect (read-only); no container was started, stopped or restarted
+ha-a and ha-b keep running the dc6513c process until plan 09.2-06 stops them; the next start of either is planned as the heal start on the restored pre-state (09.1 owner decision 2, confirmed for 09.2 in plan 09.2-06)

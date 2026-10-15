@@ -1,6 +1,8 @@
-choice: fix-first
-date: 2026-10-15T19:43:57Z
-phase_branch_head: d31b00f01395c591a1c9f280f6f59a11c674aa5e
+choice: reviewed-clean
+date: 2026-10-15T20:08:19Z
+phase_branch_head: ae738fe960fe1c0b434ad86d35dd308a20aa30bb
 review: .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-REVIEW.md
-scope: WR-01, WR-02, WR-03, IN-01, IN-02 (owner chose to fix all five, test first, on the phase branch)
-note: 09.1 lesson - review fixes after the bench moved FIX and repeated push, CI and the whole bench; fixing before the fast-forward avoids that
+review_fix: .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-REVIEW-FIX.md
+history: first round 2026-10-15T19:43:57Z choice fix-first (WR-01, WR-02, WR-03, IN-01, IN-02; commit 9d4f05f); all five fixed test first (e138bae..3dc9093); iteration 2 review status clean (c19282d)
+owner_notes: WR-03 keeps the conservative shared REPLAY_CATCH_RETRIES budget (D-04, T-09.2-12 unchanged); IN-01 is mirrored into the release notes by plan 09.2-09 on a full pass
+note: 09.1 lesson - review fixes after the bench moved FIX and repeated push, CI and the whole bench; the fixes landed before the fast-forward

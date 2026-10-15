@@ -1,0 +1,46 @@
+cmp proof (Phase 9.2, plan 09.2-04 Task 2): the bench scripts of the 09.2 re-run on FIX
+S=.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/00-preflight/bench-scripts
+E3=.planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence
+recorded_utc: 2026-10-15T20:09:38Z
+an empty result means byte-identical (cmp exit 0)
+
+## 1. each live bench script in ~/ha-test/bin/ is cmp-identical to the 9.1 snapshot in S (the scripts of the
+##    681c587 and dc6513c runs, including the D-11 do_clean fix of check-uat02.sh)
+
+$ cmp ~/ha-test/bin/check-uat02.sh S/check-uat02.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-uat04.sh S/check-uat04.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-preflight.sh S/check-preflight.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/preflight.sh S/preflight.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/lib.sh S/lib.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-evidence-clean.sh S/check-evidence-clean.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-stale-anchor.sh S/check-stale-anchor.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/check-marker.sh S/check-marker.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/bench-users.sh S/bench-users.sh
+result: [] exit=0
+$ cmp ~/ha-test/bin/ha-test-guard S/ha-test-guard
+result: [] exit=0
+$ cmp ~/ha-test/bin/reseed-tombstones.sh S/reseed-tombstones.sh
+result: [] exit=0
+
+## 2. the earlier env files are unchanged
+
+$ cmp ~/ha-test/phase9.1.env S/phase9.1.env
+result: [] exit=0
+$ cmp ~/ha-test/phase9.1-fix2.env 09.1-evidence/fix2/00-preflight/bench-scripts/phase9.1-fix2.env
+result: [] exit=0
+
+## 3. the env copy of the 09.2 re-run is the live env file (paths only, no secret)
+
+$ cmp ~/ha-test/phase9.2.env E3/00-preflight/bench-scripts/phase9.2.env
+result: [] exit=0
+
+reading: the 09.2 re-run uses exactly the scripts of the 9.1 runs; no script is copied again. No container was
+started, stopped or restarted for this proof.

@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
-current_phase: "09.2"
-current_phase_name: CR-01 cross-instance gap closure
-status: verifying
-stopped_at: Completed 09.2-09-PLAN.md
-last_updated: "2026-10-15T22:30:17.621Z"
-last_activity: 2026-10-15
-last_activity_desc: Phase 09.2 execution started
-state_head: 88d03a0dae609c0840acbde224b9325a990f44f8
+current_phase: 9
+current_phase_name: v1.0.1 Release
+status: planning
+stopped_at: Phase 09.2 complete, ready to plan Phase 9
+last_updated: "2026-10-15T23:14:58.315Z"
+last_activity: 2026-10-16
+last_activity_desc: Phase 09.2 complete, transitioned to Phase 9
+state_head: 6bf33fea7b0f01685d0e732bc661dacbe055c9ac
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 26
   completed_plans: 24
-  percent: 0
+  percent: 17
 ---
 
 # Project State
@@ -25,21 +25,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-11)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 09.2 — CR-01 cross-instance gap closure
+**Current focus:** Phase 9 — v1.0.1 Release (remaining plans 09-04 tag, 09-05)
 
 ## Current Position
 
-Phase: 09.2 (CR-01 cross-instance gap closure) — EXECUTING
-Plan: 9 of 9
-Status: Phase complete — ready for verification
-Last activity: 2026-10-15 — Phase 09.2 execution started
+Phase: 9 — v1.0.1 Release
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-16 — Phase 09.2 complete, transitioned to Phase 9
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 17%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 62
+- Total plans completed: 71
 - Average duration: - min
 - Total execution time: 0.0 hours
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 | 5 | 9 | - | - |
 | 6 | 2 | - | - |
 | 8 | 18 | - | - |
+| 09.2 | 9 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -327,8 +328,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T22:30:17.547Z
-Stopped at: Completed 09.2-09-PLAN.md
+Last session: 2026-10-16
+Stopped at: Phase 09.2 complete, ready to plan Phase 9
 Resume file: None
 
 ## Operator Next Steps

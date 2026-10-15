@@ -144,7 +144,7 @@ Gap closure (09.1-VERIFICATION.md: the review fixes moved FIX past 681c587; stri
   4. On the bench pinned to exactly FIX, the heal start, UAT-02 from integration and null tombstones and UAT-04 pass, and the CR-01 release gate reads `holds` on ha-a and ha-b in variants 3, 2 and 1 with expectations fixed before the run (D-14 to D-16). (REL-01)
   5. `09-UAT.md` carries blocks 18 to 24 on FIX (blocks 12 to 17 superseded), and plans 09-04 and 09-05 read FIX with both BUMP definitions equal and the CR-01 gate as a pre-tag fact (D-17, D-18). (REL-01)
 
-**Plans:** 9/9 plans executed
+**Plans:** 9/9 plans complete
 
 Plans:
 **Wave 1**

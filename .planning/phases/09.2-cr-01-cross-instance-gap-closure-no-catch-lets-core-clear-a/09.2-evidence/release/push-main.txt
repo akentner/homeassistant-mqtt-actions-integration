@@ -1,0 +1,20 @@
+recorded_utc: 2026-10-15T20:47:18Z (after both runs completed)
+fix_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+origin_main_before: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+origin_main_after: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+ls_remote_after: 3dc9093f3cc49900bf76576cb4432d84aa94cd74	refs/heads/main
+push_command: git push origin 3dc9093f3cc49900bf76576cb4432d84aa94cd74:refs/heads/main
+push_output: dc6513c..3dc9093  3dc9093f3cc49900bf76576cb4432d84aa94cd74 -> main
+pushed_by: owner
+push_decision: choice: push (push-decision.txt, 2026-10-15T20:36:07Z, wire_field_ack: kept_legacy)
+fast_forward: yes (dc6513c is an ancestor of FIX, 62 commits; re-checked by Claude with git fetch and git merge-base --is-ancestor after the push)
+dispatch_commands: gh workflow run ci.yml --ref main ; gh workflow run validate.yml --ref main
+dispatch_note: the owner ran the two dispatches as two separate commands right after the push, from the main checkout; nothing was pushed in between (both runs have headSha == FIX)
+dispatch_output_ci: https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38803359122
+dispatch_output_validate: https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38803379292
+dispatched_by: owner
+ci_run: 38803359122 (https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38803359122), workflow_dispatch, success, 20:36:46Z to 20:46:46Z
+validate_run: 38803379292 (https://github.com/akentner/homeassistant-mqtt-actions-integration/actions/runs/38803379292), workflow_dispatch, success, 20:36:55Z to 20:37:46Z
+claude_push_dispatch_or_rerun: none (Claude issued no git push, no gh workflow run and no gh run rerun; its remote operations were git fetch, git ls-remote, gh auth status, gh run list, gh run watch and gh run view, all reads)
+tag: not created (plan 09-04, re-pointed to this FIX by plan 09.2-09, after the bench)
+history: 09.1-evidence/fix2/release/ (the dc6513c runs 38713873705 and 38713877413) is unchanged and does not count as CI on this FIX

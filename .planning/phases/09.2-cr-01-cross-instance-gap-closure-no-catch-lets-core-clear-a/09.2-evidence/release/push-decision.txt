@@ -1,0 +1,4 @@
+choice: push
+date: 2026-10-15T20:36:07Z
+fix_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+wire_field_ack: kept_legacy

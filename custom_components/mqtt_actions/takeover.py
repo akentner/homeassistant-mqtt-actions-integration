@@ -12,6 +12,10 @@ retained discovery at its own pace, so a second set of `mqtt` entities can appea
 registry logic as well; it still never publishes and never imports the MQTT integration. The same goes for the helper
 that disables an enabled duplicate which core MQTT created for a native device, whoever published its discovery.
 
+The core-prefix discovery topic of a device is shared by every instance on the broker, so whether the catch may let it
+go empty is one decision for the whole fleet: `shared_topic_verdict` takes the role of this instance, the topic content,
+this instance's own keep and what the online peers announce, and nothing else decides it (D-02 to D-05, D-08).
+
 The order of the steps is load-bearing and each edge is pinned by a core test in `tests/test_takeover.py`:
 nothing moves while a legacy entity is loaded, entities move before their device, and the companion device of the
 mode select is merged last.
@@ -55,8 +59,66 @@ LEGACY_TEST_PREFIX = "_test_"
 # Core stores an assistant's exposure default on an entry the first time the assistant asks, and the stored value
 # cannot tell that default from a user's choice: it is no customization
 CORE_OPTION_KEYS = frozenset({"should_expose"})
-# The core-prefix content that holds no export, so a twin the integration disabled may go (D-02)
+# The core-prefix content that holds no export, so a twin the integration disabled may go: for EMPTY content always,
+# for LEGACY content only when the shared topic may go empty (D-02, D-05)
 REMOVABLE_DISABLED_CONTENT = frozenset({DiscoveryContent.LEGACY, DiscoveryContent.EMPTY})
+
+
+class PeerKeep(StrEnum):
+    """
+    What the online peers announce about one device id, for the gate of the shared legacy topic (D-02, D-03).
+
+    KEPT: an online peer lists the id among the devices it keeps an enabled legacy row of. UNKNOWN: an online peer sent
+    no valid list (an older version, an overflow or a malformed field), or the roster had no room for a peer.
+    UNHEARD: an instance announced online has sent no heartbeat since this start. CLEAR: none of these; offline and
+    stale peers never count. The precedence is KEPT, UNKNOWN, UNHEARD, CLEAR.
+    """
+
+    CLEAR = "clear"
+    UNHEARD = "unheard"
+    UNKNOWN = "unknown"
+    KEPT = "kept"
+
+
+@dataclass(frozen=True, slots=True)
+class TopicVerdict:
+    """
+    What the catch may do on the shared core-prefix topic of one device id (D-02 to D-05, D-08).
+
+    `remove_disabled`: an integration-disabled twin may leave the registry, though core may clear the topic for it.
+    `may_clear`: the owner may publish its explicit retained clear. `rearm`: only a peer not heard yet blocks, so the
+    catch may look again once a heartbeat interval passed (D-04).
+    """
+
+    remove_disabled: bool
+    may_clear: bool
+    rearm: bool
+
+
+_NOTHING = TopicVerdict(remove_disabled=False, may_clear=False, rearm=False)
+
+
+def shared_topic_verdict(*, owner: bool, content: DiscoveryContent, local_keeps: bool, peers: PeerKeep) -> TopicVerdict:
+    """
+    Return what the catch may do on the shared core-prefix topic of a device; a pure decision, no hass and no log.
+
+    EMPTY content holds nothing to wipe, so an integration-disabled twin may go and there is nothing to clear (D-02).
+    Any other content than LEGACY (an export or unknown content) keeps everything (CR-01, D-03). On LEGACY content only
+    the owner may let the topic go empty (D-05): a follower keeps its disabled twins, because core's clear-on-remove
+    hook would empty a topic every instance shares. The owner keeps everything while it keeps an enabled legacy row
+    itself (D-08), and while an online peer keeps one (KEPT) or has not said what it keeps (UNKNOWN) (D-02, D-03). A
+    peer announced online but not heard since this start keeps everything as well, and asks for a re-arm (UNHEARD,
+    D-04). Only CLEAR lets the owner remove the twin and clear the topic.
+    """
+    if content is DiscoveryContent.EMPTY:
+        return TopicVerdict(remove_disabled=True, may_clear=False, rearm=False)
+    if content is not DiscoveryContent.LEGACY or not owner or local_keeps:
+        return _NOTHING
+    if peers is PeerKeep.CLEAR:
+        return TopicVerdict(remove_disabled=True, may_clear=True, rearm=False)
+    if peers is PeerKeep.UNHEARD:
+        return TopicVerdict(remove_disabled=False, may_clear=False, rearm=True)
+    return _NOTHING
 
 
 class TakeoverStatus(StrEnum):
@@ -206,13 +268,47 @@ async def async_take_over(  # noqa: PLR0913
     return TakeoverStatus.DONE
 
 
-def remove_replay_twins(
+def _is_kept(entity_registry: er.EntityRegistry, legacy: er.RegistryEntry, entry_id: str) -> bool:
+    """
+    Return whether a legacy entry is no replayed duplicate but an entry to keep (WR-03, WR-04).
+
+    It has no native twin under this config entry, it holds the user's choices, or it carries the identity of the
+    two. One predicate for the catch and for the kept set a heartbeat announces, so the two can never drift apart.
+    """
+    twin_id = entity_registry.async_get_entity_id(legacy.domain, DOMAIN, legacy.unique_id)
+    twin = entity_registry.entities.get(twin_id) if twin_id is not None else None
+    return (
+        twin is None
+        or twin.config_entry_id != entry_id
+        or _is_customized(legacy)
+        or _carries_the_identity(legacy, twin)
+    )
+
+
+def keeps_enabled_legacy_row(hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str) -> bool:
+    """
+    Return whether this instance keeps an enabled legacy entry of the device, the one the catch never removes (D-08).
+
+    A kept entry that is enabled is loaded, so an empty retained payload on the shared topic would delete it. False
+    without a legacy device. Registry logic only.
+    """
+    if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
+        return False
+    entity_registry = er.async_get(hass)
+    return any(
+        legacy.disabled_by is None and _is_kept(entity_registry, legacy, entry_id)
+        for legacy in _legacy_entries(hass, device, device_id, mqtt_entry_id)
+    )
+
+
+def remove_replay_twins(  # noqa: PLR0913
     hass: HomeAssistant,
     entry_id: str,
     device_id: str,
     *,
     mqtt_entry_id: str,
     content: DiscoveryContent = DiscoveryContent.UNKNOWN,
+    may_empty_topic: bool = False,
 ) -> int:
     """
     Remove the legacy entries a replayed discovery created next to the moved entities of a device; return the count.
@@ -222,11 +318,15 @@ def remove_replay_twins(
     and an entry without a twin is no duplicate. A customized entry stays whatever the twin holds: with both entries
     customized no rule knows which one automations use, and removing it would leave the user's choices only in a
     deleted record that no UI reaches (WR-03). The twin is never removed. A disabled entry goes only when the
-    integration disabled it and `content`, what the core-prefix discovery topic of the id holds, is LEGACY or EMPTY
-    (D-02): core MQTT aborts the add of a row it discovers disabled and publishes an empty retained discovery as soon
-    as that row leaves the registry, and on such a topic that clear wipes no export. With EXPORT or UNKNOWN content,
-    the default for a caller that passes none, every disabled entry stays, because the clear would wipe the topic of
-    another instance's export (CR-01, D-01, D-03). With LEGACY content a disabled entry also stays while an enabled
+    integration disabled it and `content`, what the core-prefix discovery topic of the id holds, allows it: core MQTT
+    aborts the add of a row it discovers disabled and publishes an empty retained discovery as soon as that row leaves
+    the registry, and that topic is shared by every instance. With EMPTY content the clear wipes nothing, so the entry
+    goes. With LEGACY content it goes only when the caller says the topic may go empty (`may_empty_topic`): only the
+    owner may let it, and only while no online instance keeps a legacy row of the device (D-02, D-05,
+    `shared_topic_verdict`); the default False keeps the entry, like the UNKNOWN default of `content`. With EXPORT or
+    UNKNOWN content, the default for a caller that passes none, every disabled entry stays, because the clear would
+    wipe the topic of another instance's export (CR-01, D-01, D-03). With LEGACY content a disabled entry also stays
+    while an enabled
     legacy entry of the device stays: core discovered the disabled row in this run, and the clear it publishes when the
     row leaves deletes every loaded legacy entry of the device, the kept ones included (D-08). A kept entry that is
     disabled is not loaded and survives that clear. The keeps are therefore decided before anything is removed. An
@@ -245,20 +345,16 @@ def remove_replay_twins(
     keeps_an_enabled_row = False
     plan: list[tuple[er.RegistryEntry, bool]] = []  # (entry, disable first)
     for legacy in _legacy_entries(hass, device, device_id, mqtt_entry_id):
-        twin_id = entity_registry.async_get_entity_id(legacy.domain, DOMAIN, legacy.unique_id)
-        twin = entity_registry.entities.get(twin_id) if twin_id is not None else None
-        if (
-            twin is None
-            or twin.config_entry_id != entry_id
-            or _is_customized(legacy)
-            or _carries_the_identity(legacy, twin)
-        ):
+        if _is_kept(entity_registry, legacy, entry_id):
             keeps_an_enabled_row = keeps_an_enabled_row or legacy.disabled_by is None
             continue
         if legacy.disabled_by is None:
             plan.append((legacy, True))
-        elif legacy.disabled_by is er.RegistryEntryDisabler.INTEGRATION and content in REMOVABLE_DISABLED_CONTENT:
-            # The topic holds no export, so the clear core may publish for the row wipes nothing (D-02)
+        elif legacy.disabled_by is er.RegistryEntryDisabler.INTEGRATION and (
+            content is DiscoveryContent.EMPTY or (content in REMOVABLE_DISABLED_CONTENT and may_empty_topic)
+        ):
+            # The topic holds no export, and on LEGACY content the caller decided that no instance keeps a row the
+            # clear core may publish for this row would delete (D-02, D-05)
             plan.append((legacy, False))
         # Else core may hold a hook for an aborted add of this row, and its removal may clear an export (CR-01)
     if keeps_an_enabled_row and content is DiscoveryContent.LEGACY:

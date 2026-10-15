@@ -110,7 +110,7 @@ from .topics import is_valid_device_id, state_topic, test_topic
 from .trust import ApprovalState, build_approval_view
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Iterable, Mapping
+    from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant
@@ -836,16 +836,54 @@ class Manager:
         """Return the sorted ids of the owned devices and mirrors that are native; a deferred device is never one."""
         return sorted(device_id for device_id in {*self.devices, *self.mirrors} if self.is_native(device_id))
 
+    def _topic_verdict(
+        self, device_id: str, content: DiscoveryContent, mqtt_entry_id: str | None
+    ) -> takeover.TopicVerdict:
+        """
+        Return what the catch may do on the shared core-prefix topic of a device, from the inputs now (D-02 to D-05).
+
+        The role (an owned device not adopted by another instance is the owner's, anything else a follower's), this
+        instance's own enabled kept legacy row and what the online peers announce, read now: a caller that awaited in
+        between reads it again (D-10).
+        """
+        owner = device_id in self.devices and device_id not in self.sync.transferred_away
+        local_keeps = mqtt_entry_id is not None and takeover.keeps_enabled_legacy_row(
+            self._hass, self._entry.entry_id, device_id, mqtt_entry_id=mqtt_entry_id
+        )
+        return takeover.shared_topic_verdict(
+            owner=owner, content=content, local_keeps=local_keeps, peers=self.presence.peer_keep_state(device_id)
+        )
+
+    def _ids_that_may_empty_the_topic(
+        self, content: Mapping[str, DiscoveryContent], mqtt_entry_id: str | None
+    ) -> frozenset[str]:
+        """Return the ids whose verdict lets an integration-disabled twin go; an id that raises keeps its twins."""
+        allowed: set[str] = set()
+        for device_id, device_content in content.items():
+            try:
+                if self._topic_verdict(device_id, device_content, mqtt_entry_id).remove_disabled:
+                    allowed.add(device_id)
+            except Exception as err:  # noqa: BLE001
+                # No registry or broker content in the log; keeping the twins is the safe direction
+                LOGGER.warning("The check whether a shared discovery topic may go empty raised an unexpected error")
+                LOGGER.debug("The shared topic check failed with %s", type(err).__name__)
+        return frozenset(allowed)
+
     @callback
     def _remove_replay_twins(
-        self, device_ids: Iterable[str], content: Mapping[str, DiscoveryContent] | None = None
+        self,
+        device_ids: Iterable[str],
+        content: Mapping[str, DiscoveryContent] | None = None,
+        may_empty_topic: Collection[str] = frozenset(),
     ) -> int:
         """
         Remove the duplicates a replayed legacy discovery created for these devices; return how many went (D-04, D-05).
 
         `content` maps a device id to what its core-prefix discovery topic holds. An id without an entry, and every id
-        when it is None as on the takeover path, is UNKNOWN: an integration-disabled twin stays (CR-01), and it goes
-        only for LEGACY or EMPTY content (D-02). Registry logic only: nothing is published and no migrate payload is
+        when it is None as on the takeover path, is UNKNOWN: an integration-disabled twin stays (CR-01). It goes for
+        EMPTY content, and for LEGACY content only when the id is in `may_empty_topic`, the ids whose shared topic may
+        go empty (D-02, D-05): the takeover path passes none, so a follower, and an owner whose peers keep a row, never
+        lets core clear the shared topic there. Registry logic only: nothing is published and no migrate payload is
         sent for a mirror (T-5-02). One device that raises must not keep the others, or the start, from finishing.
         """
         if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None:
@@ -859,6 +897,7 @@ class Manager:
                     device_id,
                     mqtt_entry_id=mqtt_entry_id,
                     content=(content or {}).get(device_id, DiscoveryContent.UNKNOWN),
+                    may_empty_topic=device_id in may_empty_topic,
                 )
             except Exception as err:  # noqa: BLE001
                 # No registry or broker content in the log: this check must never keep the manager from running
@@ -890,18 +929,24 @@ class Manager:
         """
         Remove the duplicates that a replay created after the quiet period, for every native device (D-05).
 
-        The order is fixed: the content read, the synchronous registry step, the flush, then the owner-only clear
-        (D-06). The catch reads what the core-prefix discovery topic of each id holds and removes in the same
-        synchronous step, so no message can change the decision in between (WR-01). A twin the integration disabled,
-        usually by the duplicate guard, goes for LEGACY or EMPTY content and stays for EXPORT or UNKNOWN content
-        (CR-01, D-01 to D-04).
+        The order is fixed: the content read, the verdicts, the synchronous registry step, the flush, then the
+        owner-only clear (D-06). The catch reads what the core-prefix discovery topic of each id holds and what the
+        online peers announce, and removes in the same synchronous step, so no message can change the decision in
+        between (WR-01). The core-prefix topic is shared by every instance, so one gate decides every action that can
+        let it go empty (`takeover.shared_topic_verdict`): a twin the integration disabled, usually by the duplicate
+        guard, goes for EMPTY content; for LEGACY content only on the owner, and only when the owner keeps no enabled
+        legacy row itself and no online peer announces one or has not said what it keeps (D-02, D-03, D-05, D-08). A
+        follower keeps it on LEGACY content: core's clear-on-remove hook would empty the shared topic (D-05). Every
+        disabled twin stays for EXPORT or UNKNOWN content (CR-01, D-01 to D-04).
 
         The owner then clears a topic that still holds the legacy payload, so no later replay can bring the rows back,
-        and it does so even when nothing was removed (user decision 4). It never clears for EMPTY, EXPORT or UNKNOWN
+        and it does so even when nothing was removed (user decision 4). The content and the peer signal are read again
+        after the flush and the clear needs the same gate (D-10); it never goes out for EMPTY, EXPORT or UNKNOWN
         content, never for a mirror and never for a device another instance adopted (T-5-02, T-04-60). A follower
-        publishes nothing, though its core may publish its own clear when a row leaves (D-02). A device that keeps a
-        legacy row is not cleared either: the empty payload would delete a loaded row that was kept on purpose (D-08).
-        The devices that keep their legacy MQTT device because the content is unknown are logged as a count (D-03).
+        publishes nothing. A device that keeps a legacy row is not cleared either: the empty payload would delete a
+        loaded row that was kept on purpose (D-08). The owned devices kept because a peer keeps a row or has not
+        announced what it keeps, and the devices that keep their legacy MQTT device because the content is unknown, are
+        logged as counts (D-03, T-04-14).
         While the discovery settle is not done or still inside its grace, the catch arms itself again for the time that
         is left instead, a bounded number of times per start (WR-02).
         """
@@ -909,29 +954,51 @@ class Manager:
             if not self._running:
                 return
             device_ids = self._native_device_ids()
+            # The MQTT entry, the content, the verdicts and the removal in one synchronous step: no await in between,
+            # so no message can change the decision (WR-01)
+            mqtt_entry_id = self.gateway.mqtt_entry_id()
             content = {device_id: self.sync.discovery_content(device_id) for device_id in device_ids}
-            if self._remove_replay_twins(device_ids, content):
+            may_empty = self._ids_that_may_empty_the_topic(content, mqtt_entry_id)
+            if self._remove_replay_twins(device_ids, content, may_empty):
                 # The removal is on disk like the move before it (WR-01)
                 await takeover.async_flush_registries(self._hass)
             if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None or self._publisher is None:
                 return
+            kept_for_peers = 0
             for device_id in device_ids:
                 try:
-                    # Read again after the flush: an export that arrived meanwhile is never wiped (CR-01)
+                    # Read again after the flush: an export that arrived meanwhile is never wiped (CR-01), and a peer
+                    # that announced a kept row meanwhile keeps the topic (D-10)
+                    fresh = self.sync.discovery_content(device_id)
                     if (
-                        self.sync.discovery_content(device_id) is DiscoveryContent.LEGACY
-                        and device_id in self.devices
-                        and device_id not in self.sync.transferred_away
-                        and takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is None
+                        fresh is not DiscoveryContent.LEGACY
+                        or device_id not in self.devices
+                        or device_id in self.sync.transferred_away
                     ):
-                        await _async_attempt(
-                            partial(self._publisher.async_clear_device, device_id),
-                            f"clear the discovery of device {device_id}",
-                        )
+                        continue
+                    if self._topic_verdict(device_id, fresh, mqtt_entry_id).may_clear:
+                        if takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is None:
+                            await _async_attempt(
+                                partial(self._publisher.async_clear_device, device_id),
+                                f"clear the discovery of device {device_id}",
+                            )
+                    elif self.presence.peer_keep_state(
+                        device_id
+                    ) is not takeover.PeerKeep.CLEAR and not takeover.keeps_enabled_legacy_row(
+                        self._hass, self._entry.entry_id, device_id, mqtt_entry_id=mqtt_entry_id
+                    ):
+                        kept_for_peers += 1
                 except Exception as err:  # noqa: BLE001
                     # No registry or broker content in the log: one device must not keep the others from their clear
                     LOGGER.warning("The cleanup of a stale legacy discovery raised an unexpected error")
                     LOGGER.debug("The cleanup of a stale legacy discovery failed with %s", type(err).__name__)
+            if kept_for_peers:
+                # A count only, never an id, a heartbeat field or a payload (T-04-14)
+                LOGGER.info(
+                    "Kept the MQTT entities of %d native devices: another instance keeps an MQTT entity of them or has "
+                    "not announced what it keeps",
+                    kept_for_peers,
+                )
             # A count only, never an id or a payload: the topic content of these devices was not known, so their
             # disabled twins stay until a start that knows it (D-03)
             unknown = sum(

@@ -960,6 +960,9 @@ async def _moved_and_replayed(
 
 
 def _remove_replay_twins_of(hass: HomeAssistant, legacy: LegacyDevice, **kwargs: Any) -> int:
+    # These tests pin the registry step for an instance whose shared topic may go empty (the owner, no peer keeps a
+    # row); the production default of `may_empty_topic` is False, the fail-safe one (D-05)
+    kwargs.setdefault("may_empty_topic", True)
     return remove_replay_twins(
         hass, legacy.entry.entry_id, legacy.device_id, mqtt_entry_id=_mqtt_entry_id(hass), **kwargs
     )

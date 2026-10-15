@@ -9,6 +9,11 @@ A clean shutdown is faster: the retained `offline` availability that the sync si
 Everything received is validated strictly before it is used (T-04-09 to T-04-12): a retained heartbeat is ignored, the
 topic id must equal the payload id, every field is typed and capped, and the number of tracked peers is capped. No
 heartbeat field ever reaches a log line (T-04-14).
+
+A heartbeat may list the devices its sender keeps an enabled legacy MQTT entity of (`kept_legacy`, D-01). The field is
+read leniently: a missing or invalid field reads as unknown while the heartbeat itself stays valid, because a dropped
+heartbeat would turn the peer offline, and an offline peer never blocks the catch (D-03). The field value, like every
+other heartbeat field, is never logged (T-04-14).
 """
 
 import json
@@ -16,7 +21,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
@@ -40,10 +45,11 @@ from .const import (
 from .document import NATIVE_KEY, NATIVE_VALUE
 from .model import invalid_name
 from .sync import PRESENCE_OFFLINE, PRESENCE_ONLINE
+from .takeover import PeerKeep
 from .topics import heartbeat_topic, heartbeat_wildcard, is_valid_device_id, parse_heartbeat_topic
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
     from datetime import datetime
 
     from homeassistant.core import CALLBACK_TYPE
@@ -56,6 +62,10 @@ HEARTBEAT_QOS = 0
 EXPIRY_MARGIN_SECONDS = 1.0
 # Shown in the cutover hint while the roster had no room for a peer, in place of a name (WR-03)
 UNTRACKED_PEERS_LABEL = "more instances than can be tracked"
+# The heartbeat key that lists the device ids its sender keeps an enabled legacy MQTT entity of (D-01)
+KEPT_LEGACY_KEY: Final = "kept_legacy"
+# A longer list reads as unknown (D-03); the whole heartbeat stays within MAX_BROKER_MESSAGE_BYTES on the sender side
+MAX_HEARTBEAT_KEPT_DEVICES: Final = 16
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +79,9 @@ class Heartbeat:
     session: str
     # True when the sender announced that its build can run native entities; a v0.1.0 heartbeat has no such key (D-10)
     native: bool = False
+    # The device ids the sender keeps an enabled legacy row of; None when it sent no valid list (an older version, an
+    # overflow or a malformed field), which reads as unknown and keeps everything (D-01, D-03)
+    kept_legacy: frozenset[str] | None = None
 
 
 def valid_text(value: object) -> bool:
@@ -99,6 +112,21 @@ def within_size_cap(payload: str) -> bool:
 def _valid_devices(value: object) -> bool:
     """Return whether a device count is a real integer (no bool, no float) within the cap."""
     return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= MAX_HEARTBEAT_DEVICES
+
+
+def _kept_legacy(value: object) -> frozenset[str] | None:
+    """
+    Return the kept device ids of a heartbeat field, None for anything that is not a valid list (D-01, D-03).
+
+    Valid is a list of at most MAX_HEARTBEAT_KEPT_DEVICES strings, each a valid device id, without duplicates; an empty
+    list means "known, nothing kept". Never raises and never logs (T-04-11, T-04-14).
+    """
+    if not isinstance(value, list) or len(value) > MAX_HEARTBEAT_KEPT_DEVICES:
+        return None
+    if not all(isinstance(item, str) and is_valid_device_id(item) for item in value):
+        return None
+    kept = frozenset(value)
+    return kept if len(kept) == len(value) else None
 
 
 def _heartbeat_object(base_topic: str, topic: str, payload: str) -> tuple[str, dict[str, Any]] | None:
@@ -135,6 +163,8 @@ def parse_heartbeat(base_topic: str, topic: str, payload: str) -> Heartbeat | No
             devices=devices,
             session=session,
             native=data.get(NATIVE_KEY) == NATIVE_VALUE,
+            # A bad field never invalidates the heartbeat: a dropped heartbeat would make the peer offline (D-03)
+            kept_legacy=_kept_legacy(data.get(KEPT_LEGACY_KEY)),
         )
     return None
 
@@ -247,6 +277,25 @@ class Roster:
             peer.seen + HEARTBEAT_OFFLINE_SECONDS - self._clock() for peer in self._peers.values() if self._online(peer)
         ]
         return None if not remaining else max(min(remaining), 0.0) + EXPIRY_MARGIN_SECONDS
+
+    def peer_keep_state(self, device_id: str, announced_online: Iterable[str]) -> PeerKeep:
+        """
+        Return what the online peers announce about a device id, for the gate of the shared legacy topic (D-02, D-03).
+
+        KEPT when an online peer lists the id; UNKNOWN when an online peer sent no valid list or the roster is
+        saturated; UNHEARD when an id of `announced_online` (the instances whose retained availability is `online`)
+        has no row; CLEAR otherwise. Offline and stale rows never count. Unlike `blocking_peers`, a peer not heard is
+        not dropped after the offline timeout: a peer whose heartbeats are malformed must never turn into "offline"
+        through silence.
+        """
+        online = [peer for peer in self._peers.values() if self._online(peer)]
+        if any(peer.heartbeat.kept_legacy is not None and device_id in peer.heartbeat.kept_legacy for peer in online):
+            return PeerKeep.KEPT
+        if self.saturated() or any(peer.heartbeat.kept_legacy is None for peer in online):
+            return PeerKeep.UNKNOWN
+        if any(self.status(instance_id) is None for instance_id in announced_online):
+            return PeerKeep.UNHEARD
+        return PeerKeep.CLEAR
 
     def owner_offline(self, instance_id: str) -> bool:
         """
@@ -522,6 +571,10 @@ class PresenceManager:
             silent = []
         untracked = [UNTRACKED_PEERS_LABEL] if self._roster.saturated() else []
         return [*names, *silent, *untracked]
+
+    def peer_keep_state(self, device_id: str) -> PeerKeep:
+        """Return what the online peers announce about a device id; see `Roster.peer_keep_state` (D-02, D-03)."""
+        return self._roster.peer_keep_state(device_id, self._manager.sync.online_instance_ids())
 
     def peer_status(self, instance_id: str) -> str | None:
         """Return `online` or `offline` for a peer that sent a heartbeat, None for any other instance."""

@@ -1,4 +1,4 @@
-recorded_utc: 2026-10-15T09:36:00Z
+recorded_utc: 2026-10-15T09:35Z (minute precision; written between 09:34:32Z and 09:35:57Z, before both runs completed)
 fix_sha: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
 origin_main_before: 681c58793b656b51869906b62f2564829de7a10d
 origin_main_after: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6

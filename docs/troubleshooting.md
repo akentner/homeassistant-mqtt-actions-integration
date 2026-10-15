@@ -111,10 +111,11 @@ duplicate that a replay of old Discovery messages created and the integration re
 a duplicate itself right after Home Assistant creates it, on every instance that holds the device natively, whichever
 instance publishes the export. An enabled duplicate that you still see therefore points to a row you enabled yourself or
 to a device that the instance does not hold natively. When the export is switched off again, the disabled duplicates
-stay in the entity list until Home Assistant is restarted, and the next start removes them, unless you renamed or
-otherwise customized another MQTT entity of that device: then they stay, so that the customized entity is kept. When
-old MQTT Discovery messages of a device are still retained on the broker, the instance that owns the device clears them
-at its next start, unless it still keeps a renamed or otherwise customized MQTT entity of that device.
+stay in the entity list until Home Assistant is restarted, and the next start removes them. When old MQTT Discovery
+messages of a device are still retained on the broker, the next start removes the disabled duplicates of that device as
+well, unless a renamed or otherwise customized MQTT entity of that device is still enabled: then the disabled duplicates
+stay, so that the customized entity is kept. The instance that owns the device clears such old messages at its next
+start, unless it still keeps a renamed or otherwise customized MQTT entity of that device.
 Every instance that follows the device then deletes its remaining MQTT entities of that device, including one that you
 renamed or customized in another way. The native entity of the device is not affected. **What to do:** if you still see
 an enabled duplicate, disable it in **Settings**, **Devices & services**, **Entities**, or set the export prefix back to

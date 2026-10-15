@@ -881,3 +881,66 @@ async def test_a_catch_that_runs_before_the_settle_checks_again_once_the_grace_h
     _assert_clean(hass, legacy.device_id, replayed)
     _assert_moved_and_native(hass, legacy, before)
     assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+
+
+# --- Phase 9.2 D-01: the sending half of kept_legacy ----------------------------------------------------------------
+
+
+def _heartbeats(mqtt_mock: Any, entry: Any) -> list[dict[str, Any]]:
+    """Return the heartbeats this instance published since the last reset, decoded, in order."""
+    topic = heartbeat_topic(BASE, _manager(entry).instance_id)
+    return [json.loads(payload) for payload, _retain in _publishes(mqtt_mock, topic)]
+
+
+@pytest.mark.parametrize("row", ["renamed", "untouched"])
+async def test_the_first_heartbeat_after_a_start_lists_a_device_with_a_kept_customized_row(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    row: str,
+) -> None:
+    """
+    D-01, research Pitfall 2: the kept list is read from the registry, so the first heartbeat of a start is right.
+
+    A renamed replayed test button is a kept, enabled legacy row: the very first heartbeat after the restart lists the
+    device, before any entity of it loaded. Uncustomized replay twins are no kept row, so a native device lists nothing.
+    """
+    legacy, _before = await _a_finished_native_owner(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+    )
+    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(replayed) == 3
+    if row == "renamed":
+        button, *_others = sorted(entity_id for entity_id in replayed if entity_id.startswith("button."))
+        er.async_get(hass).async_update_entity(button, name="Kept")
+        await hass.async_block_till_done(wait_background_tasks=True)
+    mqtt_mock.async_publish.reset_mock()
+
+    await _restart(hass, legacy.entry)
+
+    heartbeats = _heartbeats(mqtt_mock, legacy.entry)
+    assert heartbeats, "no heartbeat after the restart"
+    expected = [legacy.device_id] if row == "renamed" else []
+    assert heartbeats[0].get("kept_legacy") == expected
+
+
+async def test_a_heartbeat_lists_a_held_device_that_is_not_native_in_this_run(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """
+    D-01, research Pitfall 2: a held device that is not native in this run keeps its loaded legacy rows: it is listed.
+
+    A legacy mirror on a legacy instance has three loaded legacy rows and no native twin: an empty retained payload on
+    the shared topic would delete them, so the heartbeat lists the device whatever its rows look like.
+    """
+    spec = make_spec(name="Foreign lamp")
+    entry, _topic = await _legacy_mirror(hass, make_hub_entry, spec)
+    mqtt_mock.async_publish.reset_mock()
+
+    await _manager(entry).presence.async_publish_heartbeat()
+
+    heartbeats = _heartbeats(mqtt_mock, entry)
+    assert heartbeats
+    assert heartbeats[-1].get("kept_legacy") == [spec.device_id]

@@ -21,9 +21,11 @@ from custom_components.mqtt_actions.const import (
     MAX_BROKER_MESSAGE_BYTES,
     MAX_HEARTBEAT_DEVICES,
 )
+from custom_components.mqtt_actions.manager import Manager
 from custom_components.mqtt_actions.presence import MAX_HEARTBEAT_KEPT_DEVICES, Heartbeat, Roster, parse_heartbeat
 from custom_components.mqtt_actions.takeover import PeerKeep
 from custom_components.mqtt_actions.topics import availability_topic, heartbeat_topic
+from tests.log_helpers import OWN_LOGGER, own_warnings
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -70,7 +72,12 @@ def test_parse_heartbeat_accepts_a_valid_message() -> None:
 async def test_heartbeat_is_published_non_retained_with_qos_0(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
 ) -> None:
-    """D-05: one heartbeat after the online availability, QoS 0, not retained, five keys and the capability key."""
+    """
+    Contract changed on purpose by Phase 9.2 D-01: the heartbeat also carries `kept_legacy`, the kept device ids.
+
+    D-05: one heartbeat after the online availability, QoS 0, not retained, five keys, the capability key and the list
+    of the devices this instance keeps a legacy MQTT entity of, empty for an instance without legacy entities.
+    """
     sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
     entry = await _setup(hass, make_hub_entry([sub]))
     instance_id = entry.data[CONF_INSTANCE_ID]
@@ -82,8 +89,9 @@ async def test_heartbeat_is_published_non_retained_with_qos_0(
     assert qos == 0
     assert retain is False
     data = json.loads(payload)
-    assert set(data) == {"instance_id", "name", "version", "devices", "session", "entities"}
+    assert set(data) == {"instance_id", "name", "version", "devices", "session", "entities", "kept_legacy"}
     assert data["entities"] == "native"
+    assert data["kept_legacy"] == []
     assert data["instance_id"] == instance_id
     assert data["name"] == entry.data[CONF_INSTANCE_NAME]
     assert data["version"] == json.loads(MANIFEST.read_text())["version"]
@@ -99,6 +107,72 @@ async def test_heartbeat_is_published_non_retained_with_qos_0(
     ]
     assert online, "the online availability was not published"
     assert topics_in_order.index(topic) > online[-1]
+
+
+def _kept_ids(count: int) -> list[str]:
+    """Return `count` valid device ids of 32 characters each."""
+    return [f"kept-device-{index:020d}" for index in range(count)]
+
+
+@pytest.mark.parametrize("case", ["over_cap", "over_size"])
+async def test_the_heartbeat_omits_the_kept_list_when_it_would_not_fit(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+) -> None:
+    """
+    D-01, D-03, T-09.2-07: a list over the cap or a payload over the size cap leaves the key out, never the heartbeat.
+
+    Peers read a heartbeat without the key as UNKNOWN and keep their rows, which is the safe direction. A long
+    non-ASCII instance name leaves room for one id only. One count-only warning per start (T-04-14).
+    """
+    ids = _kept_ids(MAX_HEARTBEAT_KEPT_DEVICES + 1) if case == "over_cap" else _kept_ids(3)
+    # raising=False: a RED run against code without the builder must fail on the heartbeat, not on the patch
+    monkeypatch.setattr(Manager, "kept_legacy_ids", lambda _self: list(ids), raising=False)
+    overrides: dict[str, Any] = {}
+    if case == "over_size":
+        overrides["data"] = {
+            const.CONF_BASE_TOPIC: BASE,
+            CONF_INSTANCE_NAME: "\U0001f600" * 64,
+            CONF_INSTANCE_ID: str(uuid.uuid4()),
+        }
+    caplog.set_level(logging.WARNING, logger=OWN_LOGGER)
+    entry = await _setup(hass, make_hub_entry(**overrides))
+    topic = heartbeat_topic(BASE, entry.data[CONF_INSTANCE_ID])
+    # A second heartbeat in the same start logs no second warning
+    await entry.runtime_data.presence.async_publish_heartbeat()
+
+    published = _publishes(mqtt_mock, topic)
+    assert len(published) == 2
+    for payload, _qos, _retain in published:
+        data = json.loads(payload)
+        assert "kept_legacy" not in data
+        assert len(payload.encode()) <= MAX_BROKER_MESSAGE_BYTES
+        heartbeat = parse_heartbeat(BASE, topic, payload)
+        assert heartbeat is not None
+        assert heartbeat.kept_legacy is None
+    if case == "over_size":
+        # The setup really is over the size cap with the key, not over the count cap
+        assert len(json.dumps({**json.loads(published[0][0]), "kept_legacy": ids})) > MAX_BROKER_MESSAGE_BYTES
+    warnings = [record.getMessage() for record in own_warnings(caplog, exact=True)]
+    assert len(warnings) == 1
+    assert f" {len(ids)} " in warnings[0]
+    assert not any(device_id in warnings[0] for device_id in ids)
+    assert entry.data[CONF_INSTANCE_ID] not in warnings[0]
+
+
+async def test_the_heartbeat_announces_nothing_when_the_kept_list_is_unknown(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-01, D-03: when the kept list cannot be built the key is left out (peers read UNKNOWN), the heartbeat goes."""
+    monkeypatch.setattr(Manager, "kept_legacy_ids", lambda _self: None, raising=False)
+    entry = await _setup(hass, make_hub_entry())
+
+    (published,) = _publishes(mqtt_mock, heartbeat_topic(BASE, entry.data[CONF_INSTANCE_ID]))
+    assert "kept_legacy" not in json.loads(published[0])
 
 
 async def test_own_echo_is_not_a_peer(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:

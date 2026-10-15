@@ -1,0 +1,15 @@
+recorded: 2026-10-15T09:46:33Z
+fix_sha: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+build_sha: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+planning_excluded_head: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+head_branch: main
+heal_verdict: PASS
+started_at_mosq: 2026-10-15 00:23:51.199036273 +0200 CEST
+started_at_ha-a: 2026-10-15 11:44:29.136028657 +0200 CEST
+started_at_ha-b: 2026-10-15 11:44:29.18042763 +0200 CEST
+running_ha-c: false
+backup_pointer: /home/akentner/ha-test/_backup-pre-phase9.1-fix2-20261015T094121Z
+gate_full: PASS preflight /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/fix2/00-preflight
+gate_stale_anchor: PASS stale anchor: custom_components, tests and .github unchanged since the recorded build sha
+source: podman inspect (read-only) after the start that followed the heal verdict; gate lines from 00-preflight/gate-pin.txt
+next: plan 09.1-10 re-asserts build_sha == FIX, check-preflight.sh --quick and check-stale-anchor.sh before its first run; nothing in between re-runs preflight.sh, restores a backup, moves HEAD off main or starts ha-c

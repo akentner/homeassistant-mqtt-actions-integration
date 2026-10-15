@@ -143,11 +143,12 @@ Gap closure (09.1-VERIFICATION.md: the review fixes moved FIX past 681c587; stri
   3. The new FIX is on main by fast-forward with manifest 1.0.1, the owner pushed exactly FIX, and CI and Validate are green on it (D-14, 09.1 D-13/D-14). (REL-01)
   4. On the bench pinned to exactly FIX, the heal start, UAT-02 from integration and null tombstones and UAT-04 pass, and the CR-01 release gate reads `holds` on ha-a and ha-b in variants 3, 2 and 1 with expectations fixed before the run (D-14 to D-16). (REL-01)
   5. `09-UAT.md` carries blocks 18 to 24 on FIX (blocks 12 to 17 superseded), and plans 09-04 and 09-05 read FIX with both BUMP definitions equal and the CR-01 gate as a pre-tag fact (D-17, D-18). (REL-01)
-**Plans:** 9 plans
+
+**Plans:** 1/9 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 09.2-01-PLAN.md — Receiver gate (tracer, test first): red cross-instance tests, kept_legacy parse, peer state, pure shared-topic gate, may_empty_topic, follower never empties on LEGACY; gate matrix and core contract tests
+- [x] 09.2-01-PLAN.md — Receiver gate (tracer, test first): red cross-instance tests, kept_legacy parse, peer state, pure shared-topic gate, may_empty_topic, follower never empties on LEGACY; gate matrix and core contract tests
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 09.2-02-PLAN.md — Heartbeat announces kept rows (capped, fail-safe); migrate before every emptying action with re-checks; fresh migrate on the takeover-path clear

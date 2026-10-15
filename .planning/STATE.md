@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.2"
 current_phase_name: CR-01 cross-instance gap closure
 status: executing
-stopped_at: Phase 09.2 context gathered
-last_updated: "2026-10-15T16:37:26.042Z"
+stopped_at: Completed 09.2-01-PLAN.md
+last_updated: "2026-10-15T18:42:40.464Z"
 last_activity: 2026-10-15
-last_activity_desc: Phase 09.1 execution started
-state_head: b513330f5c70d7f84e24ca3a71367591d13dd092
+last_activity_desc: Phase 09.2 execution started
+state_head: 88340c78d67c345b08774d7476aff4b852e156c8
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 26
-  completed_plans: 15
+  completed_plans: 16
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 
 ## Current Position
 
-Phase: 09.2 (CR-01 cross-instance gap closure) — READY TO EXECUTE
-Plan: 0 of 0 (not planned)
+Phase: 09.2 (CR-01 cross-instance gap closure) — EXECUTING
+Plan: 2 of 9
 Status: Ready to execute
-Last activity: 2026-10-15 — Phase 09.1 execution started
+Last activity: 2026-10-15 — Phase 09.2 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -126,6 +126,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.1 P10 | 27min | 2 tasks | 53 files |
 | Phase 09.1 P11 | 22min | 2 tasks | 22 files |
 | Phase 09.1 P12 | 4min | 2 tasks | 3 files |
+| Phase 09.2 P01 | 13 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -266,6 +267,9 @@ Recent decisions affecting current work:
 - [Phase 09.1]: 09.1-10: UAT-04 PASS on FIX dc6513c from the D-12 null-tombstone state; 3 disabled mqtt rows per instance after export off, 0 after one graceful restart (observation); bench left clean
 - [Phase 09.1]: 09.1-11: CR-01 bench observation on FIX dc6513c contradicts: ha-b takeover moved its renamed legacy button to the native platform, its catch removed the disabled switch twin on LEGACY content, and core clear-on-remove emptied the shared topic and deleted the kept renamed button on ha-a; 09.1-12 withholds the re-pointing, owner decides
 - [Phase 09.1]: 09.1-12: FIX moved to dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 (review fixes CR-01, WR-01, WR-02 and the troubleshooting correction); the 681c587 run (ledger blocks 6 to 11, top-level 09.1-evidence folders) is history; 09-04 and 09-05 read 09.1-evidence/fix2 only after the owner's route on the CR-01 observation (not re-pointed in 09.1-12)
+- [Phase 09.2]: Phase 9.2: one pure gate takeover.shared_topic_verdict decides every catch action that can empty the shared legacy topic (role, content, local keep, peer state from the kept_legacy heartbeat field)
+- [Phase 09.2]: Phase 9.2: remove_replay_twins may_empty_topic defaults to False (fail-safe); a follower never removes an integration-disabled twin on LEGACY content (D-05)
+- [Phase 09.2]: Phase 9.2: kept_legacy is read leniently (cap 16, valid ids, no duplicates); invalid or missing reads as UNKNOWN while the heartbeat stays valid
 
 ### Pending Todos
 
@@ -302,9 +306,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T15:23:45.723Z
-Stopped at: Phase 09.2 context gathered
-Resume file: .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-CONTEXT.md
+Last session: 2026-10-15T18:42:40.394Z
+Stopped at: Completed 09.2-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
-current_phase_name: UAT-02 gap closure
-status: verifying
+current_phase_name: uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt
+status: executing
 stopped_at: Completed 09.1-06-PLAN.md
-last_updated: "2026-10-14T23:04:29.917Z"
+last_updated: "2026-10-15T01:25:11.373Z"
 last_activity: 2026-10-14
 last_activity_desc: Phase 09.1 execution started
-state_head: e09a3cf6dec2187c1f6a37de12c9455de72a9c52
+state_head: 7c022a4374d538fd9b91a33acddbd090d4a13829
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 11
+  total_plans: 17
   completed_plans: 9
   percent: 0
 ---
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 
 ## Current Position
 
-Phase: 09.1 (UAT-02 gap closure) — EXECUTING
+Phase: 09.1 (uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt) — READY TO EXECUTE
 Plan: 6 of 6
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-10-14 — Phase 09.1 execution started
 
 Progress: [░░░░░░░░░░] 0%

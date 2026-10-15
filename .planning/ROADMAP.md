@@ -91,7 +91,7 @@ Plans:
   4. On the bench, the first start of the fix build cleans the leftover rows (D-09), UAT-02 passes from integration and from null tombstones, and UAT-04 passes, all on exactly the fix SHA (D-10 to D-12). (REL-01)
   5. `09-UAT.md` carries the fix-SHA rows, the release notes name the fixed case, and plans 09-04 and 09-05 read the fix SHA (D-16). (REL-01)
 
-**Plans:** 6/6 plans executed
+**Plans:** 6/12 plans executed
 
 Plans:
 **Wave 1**
@@ -111,6 +111,26 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [x] 09.1-06-PLAN.md — Ledger rows on FIX, release notes, 09-04 and 09-05 re-pointed to FIX, refined CR-01 rule in PROJECT and STATE
+
+Gap closure (09.1-VERIFICATION.md: the review fixes moved FIX past 681c587; strict serial chain):
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 09.1-07-PLAN.md — Troubleshooting correction (owner decision 1) becomes the new FIX; fix2 bench environment; push readiness of the new FIX
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 09.1-08-PLAN.md — Owner decision and refspec push of the new FIX, dispatch; CI and Validate green with headSha == FIX
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 09.1-09-PLAN.md — Bench pinned to the new FIX, pre-state restored from the pre-9.1 backup (owner decision 2), heal start (tracer), green gate and handoff record
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 09.1-10-PLAN.md — Pin re-asserted from the handoff (same pinned session), UAT-02 from integration and null tombstones, UAT-04, clean bench
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 09.1-11-PLAN.md — CR-01 bench observation on the new FIX (observation only), clean bench
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 09.1-12-PLAN.md — Ledger blocks 12 to 17 on the new FIX (681c587 superseded), CR-01 exception in the release notes, 09-04 and 09-05 re-pointed to fix2, PROJECT and STATE
 
 ### Phase 10: Review Findings and Native Migration Extraction
 

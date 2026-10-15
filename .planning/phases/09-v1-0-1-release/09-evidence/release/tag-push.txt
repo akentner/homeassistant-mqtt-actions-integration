@@ -1,0 +1,9 @@
+recorded_utc: 2026-10-15T23:38:56Z
+ls_remote: 3dc9093f3cc49900bf76576cb4432d84aa94cd74	refs/tags/v1.0.1
+tag_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+bump_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (FIX, 09.2-evidence/00-preflight/build.txt)
+local_tag: 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (lightweight)
+push_command: git push origin v1.0.1
+push_output: * [new tag] v1.0.1 -> v1.0.1
+pushed_by: owner
+claude_push: none (Claude ran git ls-remote only)

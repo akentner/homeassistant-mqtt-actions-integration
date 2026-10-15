@@ -1004,7 +1004,8 @@ class Manager:
         rows while the gate was open unloads them and the empty payload deletes none of them (D-09, research Q1): once
         before the removal of an integration-disabled twin on LEGACY content, and again right before every clear. No
         migrate goes out while the gate keeps the device: it would unload the kept rows on every instance (T-09.2-08).
-        After each migrate await the content and the peer signal are read again, and a peer that announced a kept row
+        With several devices each migrate is decided from a read right before its own publish (WR-01). After each
+        migrate await the content and the peer signal are read again, and a peer that announced a kept row
         meanwhile stops the removal or the clear (D-10); the removal follows the re-read with no await in between
         (WR-01), and a twin whose migrate did not go out stays.
 
@@ -1155,11 +1156,23 @@ class Manager:
             )
 
     async def _async_publish_migrates(self, device_ids: Iterable[str]) -> set[str]:
-        """Publish the migrate payload of each device; return the ids where it went out (D-09)."""
+        """
+        Publish the migrate payload of each device the gate still lets go now; return the ids where it went out (D-09).
+
+        Each device is decided from a read taken right before its own publish: a peer heard during the publish of an
+        earlier device may announce a kept row of this one, and its migrate would unload that row on the peer while the
+        topic stays retained (D-10, T-09.2-08, WR-01). A device whose content is no longer LEGACY or whose gate keeps it
+        now is skipped and keeps its twins.
+        """
         migrated: set[str] = set()
         if self._publisher is None:
             return migrated
         for device_id in device_ids:
+            content_now = self.sync.discovery_content(device_id)
+            if content_now is not DiscoveryContent.LEGACY or device_id not in self._ids_that_may_empty_the_topic(
+                {device_id: content_now}, self.gateway.mqtt_entry_id()
+            ):
+                continue
             if await _async_attempt(
                 partial(self._publisher.async_publish_migrate, device_id),
                 f"publish the migrate payload of device {device_id}",

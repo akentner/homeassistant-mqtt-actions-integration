@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.163" timestamp="2026-10-15T21:07:08.644219+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_topic" time="1.020"><failure message="AssertionError: assert ['switch.fore...p_test_off_2'] == []&#10;  &#10;  Left contains 3 more items, first extra item: 'switch.foreign_lamp_2'&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140473885497328'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fc2a0d63320&gt;
+
+    async def test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_topic(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+    ) -&gt; None:
+        """
+        D-06: the owner's clear reaches a follower whose catch already kept its twins; the follower cleans up in this run.
+    
+        The start-up catch saw LEGACY content and kept the integration-disabled twins (D-05). The owner then clears the
+        shared topic; once the follower sees it empty, its catch runs again and removes the twins and the emptied legacy
+        device, without waiting for the next start. The follower publishes nothing.
+        """
+        spec, topic, _discovery, replayed = await _a_restarted_follower_on_legacy_content(
+            hass, mqtt_mock, hass_storage, make_hub_entry
+        )
+    
+        # The owner's clear arrives live
+        async_fire_mqtt_message(hass, topic, "", retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        await _quiet_period_passes(hass)
+    
+&gt;       _assert_clean(hass, spec.device_id, replayed)
+
+tests/test_native_replay.py:1276: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hass = &lt;HomeAssistant RUNNING&gt;
+device_id = '1d0543c8-de5a-41f0-8d3f-ba8387fdaa81'
+replayed = ['switch.foreign_lamp_2', 'button.foreign_lamp_test_on_2', 'button.foreign_lamp_test_off_2']
+
+    def _assert_clean(hass: HomeAssistant, device_id: str, replayed: list[str]) -&gt; None:
+        """Assert that no mqtt entry of the device id is left, the replayed ones are gone for good, and so is the device."""
+        entity_registry = er.async_get(hass)
+&gt;       assert legacy_entity_ids(hass, device_id) == []
+E       AssertionError: assert ['switch.fore...p_test_off_2'] == []
+E         
+E         Left contains 3 more items, first extra item: 'switch.foreign_lamp_2'
+E         Use -v to get more diff
+
+tests/test_native_replay.py:79: AssertionError</failure></testcase></testsuite></testsuites>

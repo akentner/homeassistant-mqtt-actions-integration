@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="1.643" timestamp="2026-10-15T21:03:17.202924+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_the_owner_waits_for_a_peer_that_is_online_but_not_heard_yet" time="1.166"><failure message="AssertionError: assert ['switch.lamp_2'] == []&#10;  &#10;  Left contains one more item: 'switch.lamp_2'&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140703874013168'&gt;
+hass_storage = {'auth': {'data': {'credentials': [], 'groups': [{'id': 'system-admin', 'name': 'Administrators'}, {'id': 'system-user...ata': {'content_user': '18fadeac24eb4784bf7cd61f1c52e47e'}, 'key': 'http.auth', 'minor_version': 1, 'version': 1}, ...}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7ff82ee82a30&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7ff82c552da0&gt;
+
+    async def test_the_owner_waits_for_a_peer_that_is_online_but_not_heard_yet(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """
+        D-04: an owner that starts together with its peers checks again once their first heartbeat is due.
+    
+        At the first catch the peer is online but not heard yet (UNHEARD), so the owner keeps its disabled twin and the
+        topic. The peer's heartbeat then says it keeps nothing; within one heartbeat interval the catch runs again, and the
+        owner removes the twin and its legacy device and clears the topic once, in the same run.
+        """
+        legacy, before, replayed, switch, now = await _an_owner_that_has_not_heard_an_online_peer(
+            hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+        )
+    
+        await _quiet_period_passes(hass)
+    
+        assert er.async_get(hass).async_get(switch) is not None, "the owner removed its twin before it heard the peer"
+        assert _discovery_clears(mqtt_mock, legacy.topic) == []
+        now[0] += 31
+        await _announce_peer(hass, PEER, [])
+        await _time_passes(hass, PEER_WAIT_PASSED)
+    
+&gt;       _assert_clean(hass, legacy.device_id, replayed)
+
+tests/test_native_replay.py:1179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hass = &lt;HomeAssistant RUNNING&gt;
+device_id = '68f089a5-f2b1-4739-b303-c9d9f232dfed'
+replayed = ['switch.lamp_2', 'button.lamp_test_on_2', 'button.lamp_test_off_2']
+
+    def _assert_clean(hass: HomeAssistant, device_id: str, replayed: list[str]) -&gt; None:
+        """Assert that no mqtt entry of the device id is left, the replayed ones are gone for good, and so is the device."""
+        entity_registry = er.async_get(hass)
+&gt;       assert legacy_entity_ids(hass, device_id) == []
+E       AssertionError: assert ['switch.lamp_2'] == []
+E         
+E         Left contains one more item: 'switch.lamp_2'
+E         Use -v to get more diff
+
+tests/test_native_replay.py:78: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_the_owner_keeps_when_a_peer_stays_unheard_until_the_retries_are_spent" time="0.210"><failure message="assert 0 == 1&#10; +  where 0 = len([])">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140703868556288'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7ff82c5d6560&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7ff825f0a8d0&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7ff82c1a97f0&gt;
+
+    async def test_the_owner_keeps_when_a_peer_stays_unheard_until_the_retries_are_spent(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        caplog: pytest.LogCaptureFixture,
+    ) -&gt; None:
+        """
+        D-04, T-04-14: a peer that stays silent keeps everything; the re-arm is bounded and one INFO line names a count.
+    
+        The catch checks again within the existing retry bound and never past it; then the owner keeps its disabled twin
+        and the topic, logs one count-only line, and leaves the device to the next start.
+        """
+        legacy, _before, _replayed, switch, now = await _an_owner_that_has_not_heard_an_online_peer(
+            hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+        )
+        caplog.set_level(logging.INFO, logger=OWN_LOGGER)
+        caplog.clear()
+    
+        for _step in range(6):
+            now[0] += PEER_WAIT_PASSED
+            await _time_passes(hass, PEER_WAIT_PASSED)
+    
+        kept = er.async_get(hass).async_get(switch)
+        assert kept is not None, "the owner removed its twin while an online peer was not heard"
+        assert kept.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+        own_info = [
+            record.getMessage()
+            for record in caplog.records
+            if record.name.startswith(OWN_LOGGER) and record.levelno == logging.INFO
+        ]
+        lines = [message for message in own_info if "was not heard yet" in message]
+&gt;       assert len(lines) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_native_replay.py:1218: AssertionError</failure></testcase></testsuite></testsuites>

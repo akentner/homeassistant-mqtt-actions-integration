@@ -1,0 +1,27 @@
+post-restart observation (never a result; plan 09.2-07 Task 2 step 5c)
+graceful restart of ha-a and ha-b: podman restart -t 60 at 2026-10-15T21:28:31Z, both answered at 2026-10-15T21:28:45Z, then 90 s more until 2026-10-15T21:30:15Z
+context: after the UAT-04 run (export on, core prefix, export off) on build 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+StartedAt after the restart: ha-a 2026-10-15 23:28:37.457561268 +0200 CEST, ha-b 2026-10-15 23:28:42.501687325 +0200 CEST
+live mqtt rows after the run (before the restart): a=3 b=3 (post-run-a.json, post-run-b.json)
+live mqtt rows after the restart: a=0 b=0 (post-restart-a.json, post-restart-b.json)
+guard INFO lines of this start: a=0 b=0
+catch INFO "Removed N duplicate entities that a replayed legacy discovery created" lines of this start: a=3 b=3
+WARNING "keeps its MQTT device" lines of this start: a=0 b=3
+"Kept the MQTT entities of N native devices" lines of this start: a=0 b=0; "cannot announce": a=0 b=0; "the next start checks again": a=0 b=0
+lines of this start, ha-a (timestamp and text only, container local time UTC+2):
+  2026-10-15 23:28:48.899 Removed 1 duplicate entities that a replayed legacy discovery created
+  2026-10-15 23:28:48.900 Removed 1 duplicate entities that a replayed legacy discovery created
+  2026-10-15 23:28:48.900 Removed 1 duplicate entities that a replayed legacy discovery created
+lines of this start, ha-b (timestamp and text only, container local time UTC+2):
+  2026-10-15 23:28:47.626 Device '11111111-aaaa-4aaa-8aaa-000000000001' keeps its MQTT device: it has entries this integration did not create
+  2026-10-15 23:28:47.627 Device '87c29b56-8abe-4531-b03c-c402a2f10cb8' keeps its MQTT device: it has entries this integration did not create
+  2026-10-15 23:28:47.627 Device 'b6bd2c0e-6d81-49ea-8025-4bd087bd718a' keeps its MQTT device: it has entries this integration did not create
+  2026-10-15 23:28:52.638 Removed 1 duplicate entities that a replayed legacy discovery created
+  2026-10-15 23:28:52.638 Removed 1 duplicate entities that a replayed legacy discovery created
+  2026-10-15 23:28:52.638 Removed 1 duplicate entities that a replayed legacy discovery created
+== check-uat02.sh clean (rc=0)
+PASS UAT-02 clean /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/uat-02
+== devices with an identifier (mqtt, mqtt_actions_*) after the restart (read-only, ha-test-guard <letter> ws raw config/device_registry/list)
+ha-a: 1 ("UAT Iso Clean", identifier mqtt_actions_e8a6edf6-45ba-43c8-b171-88ca668c31f2, no entities, created 2026-10-08T20:58:17Z; the pre-existing device outside the scripts' id filter that 09.1-RESEARCH.md names, not created by this plan)
+ha-b: 0
+none of them carries one of the regression ids (11111111-aaaa-4aaa-8aaa-000000000001, b6bd2c0e-6d81-49ea-8025-4bd087bd718a) or the marker id

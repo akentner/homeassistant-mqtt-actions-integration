@@ -1,0 +1,2 @@
+PASS
+clause 1 (shape on the default prefix), clause 2 (core prefix: one disabled mqtt row per exported device on ha-a and ha-b, no restart) and clause 3 (cleared on off) hold; see result.txt

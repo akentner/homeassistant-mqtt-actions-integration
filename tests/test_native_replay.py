@@ -1425,19 +1425,19 @@ async def test_the_follower_rearm_on_an_emptied_topic_is_bounded(
 LATE_PEER = "instance-late-peer"
 
 
-def _track_catch_timers(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, bool]]:
+def _track_catch_timers(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     """
-    Record every timer the manager arms for the replay catch; each record says whether it is still pending.
+    Record every timer the manager arms for the replay catch: whether it is still pending and the delay it asked for.
 
     A record stops being pending when its timer fires or is cancelled. Other timers of the manager pass through.
     """
-    records: list[dict[str, bool]] = []
+    records: list[dict[str, Any]] = []
     original = manager_module.async_call_later
 
     def _tracked(hass: HomeAssistant, delay: float, action: Any) -> Any:
         if getattr(action, "__func__", None) is not Manager._on_replay_catch_due:
             return original(hass, delay, action)
-        record = {"pending": True}
+        record: dict[str, Any] = {"pending": True, "delay": delay}
         records.append(record)
 
         @callback
@@ -1505,3 +1505,53 @@ async def test_a_catch_that_rearms_while_an_emptied_topic_already_armed_it_keeps
     assert sum(record["pending"] for record in records) == 1, "more than one catch timer is pending"
     # The start-up arm reset the counter; the emptied topic and the catch's own re-arm are one pending run
     assert manager._replay_catch_retries == 1
+
+
+# --- Phase 9.2 review WR-03: an unheard peer is checked again once per heartbeat interval ------------------------
+
+# When an online peer's second heartbeat arrives after the start, its first one lost; a literal on purpose
+SECOND_HEARTBEAT_AT = 60.0
+
+
+async def test_the_owner_checks_an_unheard_peer_again_once_per_heartbeat_interval(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    D-04 (review WR-03): one lost heartbeat of an online peer does not defer the owner's cleanup to the next start.
+
+    Heartbeats are QoS 0. The peer's first heartbeat after the owner's start is lost and its second one, one interval
+    later, says it keeps nothing. Every re-check after the first waits one heartbeat interval instead of the floor, so
+    the retry bound still covers the second heartbeat, and the owner removes its twin and clears the topic in this run.
+    The clock moves by exactly the wait of each pending catch timer.
+    """
+    records = _track_catch_timers(monkeypatch)
+    legacy, before, replayed, _switch, now = await _an_owner_that_has_not_heard_an_online_peer(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+    )
+    listening_since = now[0]
+    first_rearm = len(records)
+
+    await _quiet_period_passes(hass)
+    heard = False
+    for _step in range(takeover.REPLAY_CATCH_RETRIES):
+        pending = [record for record in records if record["pending"]]
+        if not pending:
+            break
+        now[0] += pending[-1]["delay"]
+        if not heard and now[0] - listening_since >= SECOND_HEARTBEAT_AT:
+            heard = True
+            await _announce_peer(hass, PEER, [])
+        await _time_passes(hass, PEER_WAIT_PASSED)
+
+    rearms = [record["delay"] for record in records[first_rearm:]]
+    assert rearms, "the owner never checked the unheard peer again"
+    assert all(delay >= 30 for delay in rearms), f"a re-check came sooner than one heartbeat interval: {rearms}"
+    assert heard, "the retries were spent before the peer's second heartbeat was due"
+    _assert_clean(hass, legacy.device_id, replayed)
+    _assert_one_retained_clear(mqtt_mock, legacy.topic)
+    _assert_moved_and_native(hass, legacy, before)

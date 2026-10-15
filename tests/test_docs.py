@@ -530,3 +530,18 @@ def test_docs_describe_the_english_entity_id_suffixes() -> None:
     test_buttons = _normalize(_section(readme, "run mode, test buttons"))
     assert "_test_<statevalue>" in test_buttons
     assert "_test_on" in test_buttons
+
+
+def test_docs_explain_a_crashed_instance_that_keeps_the_legacy_discovery() -> None:
+    """
+    Review WR-03: a crashed instance whose retained availability stays `online` keeps the old Discovery messages.
+
+    The owner waits for every instance announced online, and a crashed one never sends a heartbeat again, so the README
+    lists it as a limit and troubleshooting says how to clear the retained availability of the dead instance.
+    """
+    limitations = _normalize(_section(README.read_text(encoding="utf-8"), "limitations")).replace("`", "")
+    assert "crashed or removed instance" in limitations, "the Limitations section never names the dead instance case"
+    troubleshooting = _normalize(_page(TROUBLESHOOTING)).replace("`", "")
+    assert "crashed or removed instance" in troubleshooting
+    assert "mqtt_actions/v1/instances/<instance id>/availability" in troubleshooting
+    assert "empty retained" in troubleshooting

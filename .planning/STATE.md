@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.2"
 current_phase_name: CR-01 cross-instance gap closure
 status: executing
-stopped_at: Completed 09.2-07-PLAN.md
-last_updated: "2026-10-15T21:33:52.518Z"
+stopped_at: Completed 09.2-08-PLAN.md
+last_updated: "2026-10-15T22:19:08.304Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 09.2 execution started
-state_head: a5474e37a78bed4e77a634fc17e9daf702028b44
+state_head: eed15e1da5bd576af91e357ccb7255726fcff7ce
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 26
-  completed_plans: 22
+  completed_plans: 23
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.2 (CR-01 cross-instance gap closure) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 09.2 execution started
 
@@ -133,6 +133,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.2 P05 | 12min | 3 tasks | 4 files |
 | Phase 09.2 P06 | 9min | 3 tasks | 22 files |
 | Phase 09.2 P07 | 26min | 2 tasks | 53 files |
+| Phase 09.2 P08 | 42 min | 3 tasks | 75 files |
 
 ## Accumulated Context
 
@@ -287,6 +288,7 @@ Recent decisions affecting current work:
 - [Phase 09.2]: 09.2-06: owner bench choice confirm; heal start on FIX 3dc9093 PASS on the restored pre-state; green gate PASS; handoff.txt for 09.2-07 and 09.2-08
 - [Phase 09.2]: 09.2-07: pin re-assert PASS; UAT-02 PASS on FIX 3dc9093 from integration and from null tombstones; UAT-04 PASS from the restored null-tombstone state; bench clean for the CR-01 gate
 - [Phase 09.2]: 09.2-07 observation only: after the UAT-04 export-off restart the catch removed the 3 disabled mqtt rows per instance (0 left) and ha-b logged 'keeps its MQTT device' for 3 ids; no 09.2 'Kept the MQTT entities' or 'cannot announce' line in any run
+- [Phase 09.2]: CR-01 release gate HOLDS on FIX 3dc9093: v3, v2 (owner-only restart) and v1 hold on ha-a and ha-b, judged by expectations committed before the run (3ef996c); one D-11 hygiene restore after variant 1, never a result
 
 ### Pending Todos
 
@@ -323,8 +325,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T21:33:52.443Z
-Stopped at: Completed 09.2-07-PLAN.md
+Last session: 2026-10-15T22:19:08.228Z
+Stopped at: Completed 09.2-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

@@ -1,0 +1,8 @@
+ha-a manager.py host=afe57468ceea026d container=afe57468ceea026d match
+ha-a takeover.py host=f6b446a49cf3bebe container=f6b446a49cf3bebe match
+ha-a const.py host=ff5ec83c3a720c28 container=ff5ec83c3a720c28 match
+ha-a document.py host=3fa07dec17fcce94 container=3fa07dec17fcce94 match
+ha-b manager.py host=afe57468ceea026d container=afe57468ceea026d match
+ha-b takeover.py host=f6b446a49cf3bebe container=f6b446a49cf3bebe match
+ha-b const.py host=ff5ec83c3a720c28 container=ff5ec83c3a720c28 match
+ha-b document.py host=3fa07dec17fcce94 container=3fa07dec17fcce94 match

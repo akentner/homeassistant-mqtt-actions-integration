@@ -1,0 +1,5 @@
+choice: confirm
+date: 2026-10-15T20:55:41Z
+heal_restore: yes
+cr01_gate_procedure: plan 09.2-08 (variants 3, 2, 1; variant 2 owner-only restart; D-11 fallback after variant 1)
+fix_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74

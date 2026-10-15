@@ -1,0 +1,14 @@
+backup: /home/akentner/ha-test/_backup-pre-phase9.2-20261015T205830Z
+pointer: ~/ha-test/.current-backup-phase9.2
+taken_utc: 20261015T205830Z (graceful stop podman stop -t 60 ha-a ha-b at 2026-10-15T20:57:59Z)
+mode: 700
+ha-a running: false
+ha-b running: false
+content: the end state of ha-a and ha-b as left by the dc6513c process (09.1 bench; no start of FIX 3dc9093 yet), taken before the owner-confirmed restore (bench-decision.txt)
+restore: with ha-a and ha-b stopped, copy /home/akentner/ha-test/_backup-pre-phase9.2-20261015T205830Z/{a,b}/core.{entity,device}_registry back into ~/ha-test/{a,b}/.storage/ with cp -p
+pointer copies: ~/ha-test/.mosq-started-before-phase8.pre-phase9.2, ~/ha-test/.current-backup-phase8.pre-phase9.2
+files (size sha256 path relative to the backup):
+126987 8e54172163557eff1285de186368fe7a7850c353087eaa253bf422e652aabeff a/core.entity_registry
+24879 8c3effc5f776899f9e95536ba0dae0108e5bd26e493cbc139de71fc1f47c97e4 a/core.device_registry
+103312 df5dabef6b4e1aede5e1feed50aae0bef178b99e58173bd9c2d6ad1879825963 b/core.entity_registry
+24333 73d510474d31ad3db3e215a8de3464c656bdfc45a597bc2fbe43e730e0624813 b/core.device_registry

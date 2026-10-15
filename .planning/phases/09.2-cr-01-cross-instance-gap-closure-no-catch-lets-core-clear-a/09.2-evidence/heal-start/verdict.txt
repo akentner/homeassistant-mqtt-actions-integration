@@ -1,0 +1,6 @@
+PASS
+build: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+D-14 heal start (09.1 D-09): the first start of FIX (preflight stage2) on the restored pre-state of pre-state.txt
+judged on the flushed registries after a graceful stop at 2026-10-15T21:01:26Z: zero platform-mqtt rows and zero legacy devices of the two ids on both instances is PASS
+no registry file was edited by hand; nothing was restored after the heal start
+pre-state re-created per 09.1 owner decision 2, confirmed for 09.2 (bench-decision.txt)

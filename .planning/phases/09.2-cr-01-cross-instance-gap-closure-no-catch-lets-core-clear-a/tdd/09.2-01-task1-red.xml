@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="3" time="1.633" timestamp="2026-10-15T20:30:21.612426+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_follower_keeps_its_disabled_twins_on_legacy_content_and_publishes_nothing" time="1.079"><failure message="AssertionError: an integration-disabled twin left the registry on LEGACY content&#10;assert None is not None">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139751056657440'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [{'area_id': None, 'config_entry_id': '01M5...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f1a56e1fed0&gt;
+
+    async def test_a_follower_keeps_its_disabled_twins_on_legacy_content_and_publishes_nothing(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+    ) -&gt; None:
+        """
+        Contract changed on purpose by Phase 9.2 D-05: a follower keeps its integration-disabled twins on LEGACY content.
+    
+        This test was `test_a_follower_removes_its_disabled_twin_and_publishes_nothing`, which pinned the opposite. A
+        follower never removes an integration-disabled twin while the shared core-prefix topic holds the legacy payload:
+        core discovered the row while it was disabled and holds a clear-on-remove hook for it, so the removal would make
+        core publish an empty retained payload on a topic every instance shares, and that clear deletes the rows other
+        instances keep (09.1 bench, CR-01). The follower removes them once the content is EMPTY (plan 09.2-03). T-5-02:
+        the product publishes nothing, and neither does core.
+        """
+        spec, entry, discovery, replayed = await _a_follower_with_disabled_twins_rediscovered(
+            hass, mqtt_mock, hass_storage, make_hub_entry
+        )
+        topic = discovery_topic(PREFIX, spec.device_id)
+        await _restart(hass, entry)
+        async_fire_mqtt_message(hass, topic, discovery, retain=True)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        mqtt_mock.async_publish.reset_mock()
+    
+        await _quiet_period_passes(hass)
+    
+&gt;       _assert_disabled_twins_kept(hass, replayed)
+
+tests/test_native_replay.py:505: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hass = &lt;HomeAssistant RUNNING&gt;
+replayed = ['switch.foreign_lamp_2', 'button.foreign_lamp_test_on_2', 'button.foreign_lamp_test_off_2']
+
+    def _assert_disabled_twins_kept(hass: HomeAssistant, replayed: list[str]) -&gt; None:
+        """Assert that every replayed row is still in the registry, disabled by the integration."""
+        entity_registry = er.async_get(hass)
+        for entity_id in replayed:
+            kept = entity_registry.async_get(entity_id)
+&gt;           assert kept is not None, "an integration-disabled twin left the registry on LEGACY content"
+E           AssertionError: an integration-disabled twin left the registry on LEGACY content
+E           assert None is not None
+
+tests/test_native_replay.py:474: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_cross_instance_a_follower_keeps_its_disabled_twins_on_legacy_content_while_the_owner_keeps_a_row" time="0.154"><failure message="AssertionError: an integration-disabled twin left the registry on LEGACY content&#10;assert None is not None">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139750933142160'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [{'area_id': None, 'config_entry_id': '01M5...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f1a541894e0&gt;
+
+    async def test_cross_instance_a_follower_keeps_its_disabled_twins_on_legacy_content_while_the_owner_keeps_a_row(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+    ) -&gt; None:
+        """
+        D-12 (bench case, follower side), D-02, D-05: no catch lets the shared topic go empty under the owner's kept row.
+    
+        The owner announces in its heartbeat that it keeps an enabled legacy row of the device. Core's discovery publishes
+        are looped back, so a clear by core's hook would reach the shared topic and empty it for every instance: after the
+        quiet period the twins are still there, nothing falsy went out, the content is still LEGACY and the MQTT device
+        stays.
+        """
+        spec, entry, discovery, replayed = await _a_follower_with_disabled_twins_rediscovered(
+            hass, mqtt_mock, hass_storage, make_hub_entry
+        )
+        topic = discovery_topic(PREFIX, spec.device_id)
+        _loop_back_discovery(hass, mqtt_mock)
+        await _restart(hass, entry)
+        async_fire_mqtt_message(hass, topic, discovery, retain=True)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        await _announce_peer(hass, FOREIGN_OWNER, [spec.device_id])
+        mqtt_mock.async_publish.reset_mock()
+    
+        await _quiet_period_passes(hass)
+    
+&gt;       _assert_disabled_twins_kept(hass, replayed)
+
+tests/test_native_replay.py:537: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hass = &lt;HomeAssistant RUNNING&gt;
+replayed = ['switch.foreign_lamp_2', 'button.foreign_lamp_test_on_2', 'button.foreign_lamp_test_off_2']
+
+    def _assert_disabled_twins_kept(hass: HomeAssistant, replayed: list[str]) -&gt; None:
+        """Assert that every replayed row is still in the registry, disabled by the integration."""
+        entity_registry = er.async_get(hass)
+        for entity_id in replayed:
+            kept = entity_registry.async_get(entity_id)
+&gt;           assert kept is not None, "an integration-disabled twin left the registry on LEGACY content"
+E           AssertionError: an integration-disabled twin left the registry on LEGACY content
+E           assert None is not None
+
+tests/test_native_replay.py:474: AssertionError</failure></testcase><testcase classname="tests.test_native_replay" name="test_cross_instance_the_owner_neither_removes_nor_clears_while_a_peer_keeps_a_row" time="0.170"><failure message="AssertionError: the owner removed its disabled twin while a peer keeps a row&#10;assert None is not None">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139750931323872'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [{'area_id': None, 'config_entry_id': '01M5...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f1a4c93c9e0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f1a4c93afb0&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7f1a4c9e57f0&gt;
+
+    async def test_cross_instance_the_owner_neither_removes_nor_clears_while_a_peer_keeps_a_row(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        caplog: pytest.LogCaptureFixture,
+    ) -&gt; None:
+        """
+        D-12 (reverse case, owner side), D-02: the owner keeps its disabled twin and the topic while a peer keeps a row.
+    
+        An online peer announces in its heartbeat that it keeps an enabled legacy row of the device. Removing the twin
+        that core discovered while disabled would make core clear the shared topic, and the owner's explicit clear would
+        do the same: neither happens, the content stays LEGACY, and one INFO line names only a count (T-04-14).
+        """
+        legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(replayed) == 3
+        entity_registry = er.async_get(hass)
+        (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+        assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        # Core discovers the disabled switch again, so it holds the hook that clears the topic when the row leaves
+        async_fire_mqtt_message(hass, legacy.topic, legacy.payload, retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+        await _announce_peer(hass, PEER, [legacy.device_id])
+        mqtt_mock.async_publish.reset_mock()
+        caplog.set_level(logging.INFO, logger=OWN_LOGGER)
+        caplog.clear()
+    
+        await _quiet_period_passes(hass)
+    
+        kept = entity_registry.async_get(switch)
+&gt;       assert kept is not None, "the owner removed its disabled twin while a peer keeps a row"
+E       AssertionError: the owner removed its disabled twin while a peer keeps a row
+E       assert None is not None
+
+tests/test_native_replay.py:576: AssertionError</failure></testcase></testsuite></testsuites>

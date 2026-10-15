@@ -12,7 +12,7 @@ import pytest
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
-from custom_components.mqtt_actions import const
+from custom_components.mqtt_actions import const, takeover
 from custom_components.mqtt_actions.const import (
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
@@ -181,6 +181,48 @@ async def test_the_heartbeat_announces_nothing_when_the_kept_list_is_unknown(
 
     (published,) = _publishes(mqtt_mock, heartbeat_topic(BASE, entry.data[CONF_INSTANCE_ID]))
     assert "kept_legacy" not in json.loads(published[0])
+
+
+async def test_a_failing_kept_list_logs_one_warning_per_start(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    D-03, T-04-14 (review IN-02): a kept list that keeps failing warns once per start, not on every heartbeat.
+
+    Every failure still logs its DEBUG line, and every heartbeat still goes out without the key (peers read UNKNOWN).
+    """
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp")]))
+    topic = heartbeat_topic(BASE, entry.data[CONF_INSTANCE_ID])
+
+    def _broken(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError
+
+    monkeypatch.setattr(takeover, "legacy_device", _broken)
+    caplog.set_level(logging.DEBUG, logger=OWN_LOGGER)
+    caplog.clear()
+    mqtt_mock.async_publish.reset_mock()
+
+    for _beat in range(3):
+        await entry.runtime_data.presence.async_publish_heartbeat()
+
+    published = _publishes(mqtt_mock, topic)
+    assert len(published) == 3
+    assert all("kept_legacy" not in json.loads(payload) for payload, _qos, _retain in published)
+    warnings = [record for record in own_warnings(caplog, exact=True) if "could not be built" in record.getMessage()]
+    assert len(warnings) == 1, "a failing kept list warned on every heartbeat"
+    debug = [
+        record
+        for record in caplog.records
+        if record.name.startswith(OWN_LOGGER)
+        and record.levelno == logging.DEBUG
+        and "Building the kept device list failed" in record.getMessage()
+    ]
+    assert len(debug) == 3
 
 
 async def test_own_echo_is_not_a_peer(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -> None:

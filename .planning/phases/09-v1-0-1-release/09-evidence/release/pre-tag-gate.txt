@@ -1,0 +1,25 @@
+gate: PASS (every fact below holds; tag created)
+recorded_utc: 2026-10-15T23:17:31Z
+bump_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (FIX; equals the sha: of 09.2-evidence/00-preflight/build.txt and git log -1 --format=%H main -- . ":(exclude).planning")
+manifest_at_bump: 1.0.1
+heal_verdict: PASS (09.2-evidence/heal-start/verdict.txt line 1)
+uat02_verdict: PASS (09.2-evidence/uat-02/verdict.txt line 1, integration start)
+uat02_null_verdict: PASS (09.2-evidence/uat-02-null/verdict.txt line 1, null start)
+uat04_verdict: PASS (09.2-evidence/uat-04/verdict.txt line 1)
+cr01_gate_verdict: holds (09.2-evidence/cr01-gate/verdict.txt line 1; v3-positive-control, v2-reverse, v1-bench-case all hold)
+uat02_build: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+uat_ledger: 09-UAT.md blocks 20 to 24 read result: pass
+ci_on_bump: success (run 38803359122, workflow CI, event workflow_dispatch, headSha 3dc9093f3cc49900bf76576cb4432d84aa94cd74, fresh gh run list --commit)
+validate_on_bump: success (run 38803379292, workflow Validate, event workflow_dispatch, headSha 3dc9093f3cc49900bf76576cb4432d84aa94cd74, fresh gh run list --commit)
+ci_rule: Phase 9 D-04 amendment (event push or workflow_dispatch, headSha exact), d04-amendment.txt
+origin_main: 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (git ls-remote origin refs/heads/main after git fetch --quiet origin; equals the bump SHA)
+local_main_head: 28c69c49492d18bd78e0a94bb358840e9683ea19 (28 commits ahead of origin/main, all under .planning/, not pushed)
+non_planning_changes_since_bump: none (git diff --name-only <bump> HEAD -- . ":(exclude).planning" is empty)
+remote_tag_v1.0.1: absent (git ls-remote --tags origin refs/tags/v1.0.1 printed nothing)
+local_tag_v1.0.1_before: absent
+release_workflow: release.yml triggers on push tags v*.*.*; check-version compares the tag with manifest.json (1.0.1); no hyphen, so not a prerelease
+tag_local: v1.0.1 -> 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (lightweight, not pushed)
+tag_check: git rev-parse v1.0.1^{commit} = 3dc9093f3cc49900bf76576cb4432d84aa94cd74; git cat-file -t v1.0.1 = commit
+push_command: git push origin v1.0.1
+tagged_tree_note: this docs commit lands on main after FIX and is not part of the tagged tree; the .planning commits between 7baec98 and FIX are (Phase 9.1 D-13)
+claude_push: none (Claude ran git fetch, git ls-remote and gh run list only; no git push, no gh workflow run)

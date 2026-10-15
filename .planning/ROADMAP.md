@@ -91,7 +91,7 @@ Plans:
   4. On the bench, the first start of the fix build cleans the leftover rows (D-09), UAT-02 passes from integration and from null tombstones, and UAT-04 passes, all on exactly the fix SHA (D-10 to D-12). (REL-01)
   5. `09-UAT.md` carries the fix-SHA rows, the release notes name the fixed case, and plans 09-04 and 09-05 read the fix SHA (D-16). (REL-01)
 
-**Plans:** 9/12 plans executed
+**Plans:** 10/12 plans executed
 
 Plans:
 **Wave 1**
@@ -124,7 +124,7 @@ Gap closure (09.1-VERIFICATION.md: the review fixes moved FIX past 681c587; stri
 - [x] 09.1-09-PLAN.md — Bench pinned to the new FIX, pre-state restored from the pre-9.1 backup (owner decision 2), heal start (tracer), green gate and handoff record
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 09.1-10-PLAN.md — Pin re-asserted from the handoff (same pinned session), UAT-02 from integration and null tombstones, UAT-04, clean bench
+- [x] 09.1-10-PLAN.md — Pin re-asserted from the handoff (same pinned session), UAT-02 from integration and null tombstones, UAT-04, clean bench
 
 **Wave 11** *(blocked on Wave 10 completion)*
 - [ ] 09.1-11-PLAN.md — CR-01 bench observation on the new FIX (observation only), clean bench
@@ -197,7 +197,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. v1.0.1 Release | 3/5 | In Progress | - |
-| 9.1. UAT-02 Gap Closure (INSERTED) | 9/12 | In Progress | - |
+| 9.1. UAT-02 Gap Closure (INSERTED) | 10/12 | In Progress | - |
 | 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |

@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
 current_phase_name: UAT-02 gap closure
 status: executing
-stopped_at: Completed 09.1-09-PLAN.md
-last_updated: "2026-10-15T09:49:17.439Z"
+stopped_at: Completed 09.1-10-PLAN.md
+last_updated: "2026-10-15T10:18:24.924Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 09.1 execution started
-state_head: c18d70f0ec804b8369576cfe944828d2bf867a89
+state_head: 82c9adb1e474b088723aec4ab86f0bf574a27be4
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.1 (UAT-02 gap closure) — EXECUTING
-Plan: 10 of 12
+Plan: 11 of 12
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 09.1 execution started
 
@@ -123,6 +123,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.1 P07 | 7 min | 3 tasks | 6 files |
 | Phase 09.1 P08 | 3min | 3 tasks | 4 files |
 | Phase 09.1 P09 | 10min | 2 tasks | 21 files |
+| Phase 09.1 P10 | 27min | 2 tasks | 53 files |
 
 ## Accumulated Context
 
@@ -258,6 +259,9 @@ Recent decisions affecting current work:
 - [Phase 09.1]: 09.1-08: owner chose push and pushed exactly FIX dc6513c to main; CI 38713873705 and Validate 38713877413 (workflow_dispatch, headSha == FIX) green, all six jobs success; bench may start
 - [Phase 09.1]: 09.1-09: owner decision 2 applied - pre-state restored from _backup-pre-phase9.1-20261014T222425Z after sha256, cmp and config/Store checks; heal start PASS on FIX dc6513c
 - [Phase 09.1]: 09.1-09: bench pinned to FIX dc6513c (pin window 09:42:28Z-09:43:31Z), check-preflight full and stale anchor PASS; handoff.txt for 09.1-10
+- [Phase 09.1]: 09.1-10: pin of plan 09.1-09 re-asserted before the first run (all shas == FIX dc6513c, HEAD main, gates PASS, StartedAt unchanged)
+- [Phase 09.1]: 09.1-10: UAT-02 PASS on FIX dc6513c from integration tombstones (run a) and from null tombstones (run b)
+- [Phase 09.1]: 09.1-10: UAT-04 PASS on FIX dc6513c from the D-12 null-tombstone state; 3 disabled mqtt rows per instance after export off, 0 after one graceful restart (observation); bench left clean
 
 ### Pending Todos
 
@@ -293,8 +297,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T09:49:17.377Z
-Stopped at: Completed 09.1-09-PLAN.md
+Last session: 2026-10-15T10:18:24.861Z
+Stopped at: Completed 09.1-10-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

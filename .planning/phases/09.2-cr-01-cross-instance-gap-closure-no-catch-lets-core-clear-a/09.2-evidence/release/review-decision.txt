@@ -1,0 +1,6 @@
+choice: fix-first
+date: 2026-10-15T19:43:57Z
+phase_branch_head: d31b00f01395c591a1c9f280f6f59a11c674aa5e
+review: .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-REVIEW.md
+scope: WR-01, WR-02, WR-03, IN-01, IN-02 (owner chose to fix all five, test first, on the phase branch)
+note: 09.1 lesson - review fixes after the bench moved FIX and repeated push, CI and the whole bench; fixing before the fast-forward avoids that

@@ -101,9 +101,9 @@ def _assert_no_working_duplicate(hass: HomeAssistant, device_id: str, replayed: 
         assert hass.states.get(entity_id) is None
 
 
-async def _announce_peer(hass: HomeAssistant, peer_id: str, kept_legacy: list[str] | None) -> None:
+def _fire_peer(hass: HomeAssistant, peer_id: str, kept_legacy: list[str] | None) -> None:
     """
-    Announce a peer online and deliver one live heartbeat of it; call it after the restart, the roster is per start.
+    Announce a peer online and deliver one live heartbeat of it, without waiting; usable inside a publish side effect.
 
     The heartbeat lists the device ids the peer keeps an enabled legacy MQTT entity of; None leaves the key out, which
     is what an older peer sends. The key is a literal on purpose: a RED run against code without the product constant
@@ -114,6 +114,11 @@ async def _announce_peer(hass: HomeAssistant, peer_id: str, kept_legacy: list[st
     if kept_legacy is not None:
         data["kept_legacy"] = kept_legacy
     async_fire_mqtt_message(hass, heartbeat_topic(BASE, peer_id), json.dumps(data), retain=False)
+
+
+async def _announce_peer(hass: HomeAssistant, peer_id: str, kept_legacy: list[str] | None) -> None:
+    """Announce a peer and its heartbeat (`_fire_peer`) and let them settle; call it after the restart."""
+    _fire_peer(hass, peer_id, kept_legacy)
     await hass.async_block_till_done(wait_background_tasks=True)
 
 
@@ -944,3 +949,157 @@ async def test_a_heartbeat_lists_a_held_device_that_is_not_native_in_this_run(
     heartbeats = _heartbeats(mqtt_mock, entry)
     assert heartbeats
     assert heartbeats[-1].get("kept_legacy") == [spec.device_id]
+
+
+# --- Phase 9.2 D-09, D-10: the migrate first, and a fresh look after every await ------------------------------------
+
+MIGRATE = {"migrate_discovery": True}
+
+
+def _topic_sequence(mqtt_mock: Any, topic: str) -> list[tuple[Any, bool]]:
+    """Return the (payload, retain) pairs published on a topic since the last reset, a non-empty payload decoded."""
+    return [(json.loads(payload) if payload else payload, retain) for payload, retain in _publishes(mqtt_mock, topic)]
+
+
+async def _an_owner_with_a_disabled_twin_on_legacy_content(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    *,
+    hooked: bool = False,
+    rename_a_button: bool = False,
+) -> tuple[Any, dict[str, er.RegistryEntry], list[str], str]:
+    """
+    Return a restarted native owner with three replayed rows, the switch disabled by the guard, on LEGACY content.
+
+    With `hooked`, the payload is fired live again so core discovers the disabled switch in this run and holds the
+    clear-on-remove hook for it. With `rename_a_button`, the user renamed a replayed test button, a kept row (D-08).
+    The discovery publishes are looped back, and the publish mock is reset; no catch ran yet.
+    """
+    legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(replayed) == 3
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    if rename_a_button:
+        button, *_others = sorted(entity_id for entity_id in replayed if entity_id.startswith("button."))
+        entity_registry.async_update_entity(button, name="Kept")
+        await hass.async_block_till_done(wait_background_tasks=True)
+    if hooked:
+        async_fire_mqtt_message(hass, legacy.topic, legacy.payload, retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+    mqtt_mock.async_publish.reset_mock()
+    return legacy, before, replayed, switch
+
+
+@pytest.mark.parametrize("hook", ["hooked", "not_hooked"])
+async def test_the_owner_sends_the_migrate_payload_before_it_lets_the_topic_go_empty(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    hook: str,
+) -> None:
+    """
+    D-09: before an action that can empty the shared topic the owner publishes the migrate payload.
+
+    A peer that started while the gate was open has loaded the legacy rows; the migrate makes its core unload them,
+    so the empty payload that follows deletes no registry row there (research Q1). Without a hook the sequence is the
+    migrate before the removal, a fresh migrate and the owner's retained clear. With a hook, core's own empty payload
+    follows the migrate when the twin leaves, and, looped back, it made the content EMPTY, so no product clear follows.
+    """
+    legacy, before, replayed, _switch = await _an_owner_with_a_disabled_twin_on_legacy_content(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry, hooked=hook == "hooked"
+    )
+
+    await _quiet_period_passes(hass)
+
+    _assert_clean(hass, legacy.device_id, replayed)
+    _assert_moved_and_native(hass, legacy, before)
+    sequence = _topic_sequence(mqtt_mock, legacy.topic)
+    if hook == "not_hooked":
+        assert sequence == [(MIGRATE, False), (MIGRATE, False), ("", True)]
+        return
+    assert sequence, "nothing was published on the topic"
+    assert sequence[0] == (MIGRATE, False)
+    falsy = [index for index, (payload, _retain) in enumerate(sequence) if not payload]
+    assert falsy, "core's hook did not clear the topic"
+    assert all(index > 0 for index in falsy)
+    assert _discovery_clears(mqtt_mock, legacy.topic) == []
+
+
+@pytest.mark.parametrize("keep", ["peer_keeps", "local_keep"])
+async def test_no_migrate_goes_out_while_the_gate_keeps_the_device(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    keep: str,
+) -> None:
+    """
+    D-09, T-09.2-08: no migrate while the gate keeps the device; it would unload the kept rows on every instance.
+
+    An online peer that announces a kept row, or a renamed replayed button of this instance, keeps the device.
+    """
+    legacy, _before, _replayed, _switch = await _an_owner_with_a_disabled_twin_on_legacy_content(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry, rename_a_button=keep == "local_keep"
+    )
+    if keep == "peer_keeps":
+        await _announce_peer(hass, PEER, [legacy.device_id])
+        mqtt_mock.async_publish.reset_mock()
+
+    await _quiet_period_passes(hass)
+
+    assert not any(
+        isinstance(payload, str) and "migrate_discovery" in payload
+        for payload, _retain in _publishes(mqtt_mock, legacy.topic)
+    )
+
+
+@pytest.mark.parametrize("moment", ["before_the_removal", "before_the_clear"])
+async def test_the_owner_reads_the_peer_signal_again_right_before_it_empties_the_topic(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    moment: str,
+) -> None:
+    """
+    D-10: a peer that announces a kept row while a migrate is on its way stops the removal or the clear that follows.
+
+    The peer's heartbeat is delivered during the publish of the first migrate (before the removal) or of the second
+    one (before the clear); the owner reads the peer signal again after each migrate await.
+    """
+    legacy, _before, _replayed, switch = await _an_owner_with_a_disabled_twin_on_legacy_content(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+    )
+    deliver = mqtt_mock.async_publish.side_effect
+    migrates = [0]
+    trigger = 1 if moment == "before_the_removal" else 2
+
+    def _deliver_and_announce(topic: str, payload: Any, *args: Any, **kwargs: Any) -> Any:
+        result = deliver(topic, payload, *args, **kwargs)
+        if topic == legacy.topic and isinstance(payload, str) and "migrate_discovery" in payload:
+            migrates[0] += 1
+            if migrates[0] == trigger:
+                _fire_peer(hass, PEER, [legacy.device_id])
+        return result
+
+    mqtt_mock.async_publish.side_effect = _deliver_and_announce
+
+    await _quiet_period_passes(hass)
+
+    if moment == "before_the_removal":
+        kept = er.async_get(hass).async_get(switch)
+        assert kept is not None, "the owner removed its disabled twin after a peer announced a kept row"
+        assert kept.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+    else:
+        assert _discovery_clears(mqtt_mock, legacy.topic) == []

@@ -302,12 +302,10 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
-- [Phase 9]: No IN-04 or MIR-01 commit on `main` before the v1.0.1 tag (or cut the release from `release/1.0.1`); manifest 1.0.1 committed before the UAT-02/UAT-04 bench run (closes ACCEPTED-GAP-V101 for v1.0.1)
 - [Phase 11]: Open for discuss-phase: storage location of local actions (separate Store file or main Store key, which a v1.0.x downgrade drops) and the stored trigger identity; `parallel` pin test against core 2026.9.4 before relying on the owner's topology decision
 - [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
-- [Phase 9.2]: CR-01 cross-instance gap closed on fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (heal start, UAT-02 from integration and null tombstones and UAT-04 pass; CR-01 release gate holds in variants 3, 2 and 1); run the re-pointed 09-04 (tag, owner decision) and 09-05 (release) next
 
 ### Quick Tasks Completed
 

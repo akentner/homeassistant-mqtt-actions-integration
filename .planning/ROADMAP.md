@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-10-03)
-- ✅ **v1.0.1 Hardening** — Phases 6-8 (closed 2026-10-11 with accepted gap, not released)
+- ✅ **v1.0.1 Hardening** — Phases 6-8 (closed 2026-10-11; released as v1.0.1 on 2026-10-15)
 - 🚧 **v1.1 Local Actions on Mirrors** — Phases 9-12 (in progress)
 
 ## Phases

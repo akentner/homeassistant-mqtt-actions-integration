@@ -10,7 +10,7 @@ A state change on one MQTT-backed device reliably triggers the configured action
 
 ## Current State
 
-v1.0.1 Hardening closed 2026-10-11 with an accepted verification gap (owner decision ACCEPTED-GAP-V101). The code fixes and the real-instance UAT are done; v1.0.1 is not released or tagged. The last public release stays v1.0.0. A v1.0.1 release needs a bench re-run of UAT-02 and UAT-04 on the final build first.
+v1.0.1 Hardening closed 2026-10-11 with an accepted verification gap (owner decision ACCEPTED-GAP-V101). v1.0.1 released on 2026-10-15: tag `v1.0.1` on 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (the fix SHA), after Phase 9.2 ran UAT-02 from integration and null tombstones, UAT-04 and the CR-01 release gate on that SHA on the bench (`.planning/phases/09-v1-0-1-release/09-UAT.md`, blocks 21 to 24). ACCEPTED-GAP-V101 is closed for this release. The latest public release is v1.0.1.
 
 ## Current Milestone: v1.1 Local Actions on Mirrors
 
@@ -66,7 +66,7 @@ v1.0.1 Hardening closed 2026-10-11 with an accepted verification gap (owner deci
 
 Shipped v1.0 (2026-10-03) with about 9,200 lines of Python and three test tiers (unit, real Mosquitto, multi-instance). Released as v0.1.0 and v1.0.0 on GitHub. Known limits are listed in the README (Limitations).
 
-Closed v1.0.1 (2026-10-11, not released): about 9,500 lines of Python, 1535 tests passing (2 strict xfail), CI pinned to `ubuntu-24.04`. Real-instance bench ha-a, ha-b, ha-c with its own broker users; tokens and bench state are owner follow-ups. Tech debt: verification reports of Phases 1 to 8 read stale or human_needed after the late review fixes; disabled MQTT duplicates stay only while the core-prefix content is an export or unknown, or is the legacy payload while any online instance keeps an enabled customized MQTT entity of the device or runs an older version (CR-01, refined in Phases 9.1 and 9.2); entity-id rename and assistant exposure are not detected as customization.
+Closed v1.0.1 (2026-10-11; released as v1.0.1 on 2026-10-15 in Phase 9): about 9,500 lines of Python, 1535 tests passing (2 strict xfail), CI pinned to `ubuntu-24.04`. Real-instance bench ha-a, ha-b, ha-c with its own broker users; tokens and bench state are owner follow-ups. Tech debt: verification reports of Phases 1 to 8 read stale or human_needed after the late review fixes; disabled MQTT duplicates stay only while the core-prefix content is an export or unknown, or is the legacy payload while any online instance keeps an enabled customized MQTT entity of the device or runs an older version (CR-01, refined in Phases 9.1 and 9.2); entity-id rename and assistant exposure are not detected as customization.
 
 ## Constraints
 
@@ -83,7 +83,7 @@ Closed v1.0.1 (2026-10-11, not released): about 9,500 lines of Python, 1535 test
 | Per-device owner instance | Avoids conflict resolution in multi-writer setup | ✓ Good (v1.0), adoption added for offline owners |
 | Central config retained in MQTT | Broker is the only shared component between instances | ✓ Good (v1.0) |
 | State changes from UI and external MQTT | Supports both manual and system-driven use | ✓ Good (v1.0) |
-| HACS-ready from start | Intended for public distribution | ✓ Good (v0.1.0 and v1.0.0 released) |
+| HACS-ready from start | Intended for public distribution | ✓ Good (v0.1.0, v1.0.0 and v1.0.1 released) |
 | Remote actions need per-instance approval of the exact hash | Broker content must never execute without a local opt-in | ✓ Good (v1.0), Phase 5 audit 19/19 threats closed |
 | Native entities instead of MQTT Discovery | Every device and entity of every instance appears on the integration page, and the native path needs no healing | ✓ Good (ADR 0001, v1.0), one-way upgrade documented |
 | Broker is cooperative and unauthenticated | Owner decision, EMQX migration planned; per-instance ACL is the real control | ⚠️ Revisit with the EMQX migration |
@@ -92,7 +92,7 @@ Closed v1.0.1 (2026-10-11, not released): about 9,500 lines of Python, 1535 test
 | Start-up catch reads the core-prefix discovery content; the owner clears a stale legacy discovery (Phase 9.1, D-01 to D-06) | UAT-02 failed on 7baec98 because the guard disabled the replayed rows before the catch, which skipped disabled rows | ✓ Fixed on FIX 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (Phase 9.2; 681c587 and dc6513c superseded); limits: an online instance older than 1.0.1 or an offline owner keeps the duplicates, the live-customization moment, a narrow race after a broker restart without persistence |
 | Only the owner lets a shared legacy discovery topic go empty, gated by the peers' heartbeat key kept_legacy and preceded by a migrate (Phase 9.2, D-01 to D-10) | The 09.1 bench showed the per-instance keep let another instance's core clear the shared topic and delete kept rows | ✓ Good (CR-01 release gate holds on FIX 3dc9093f3cc49900bf76576cb4432d84aa94cd74) |
 | D-08 waiver: product fixes allowed inside the verification phase for UAT-04 clause 2 (v1.0.1) | The gap was a real product defect found on the bench | — Pending: one-off, keep fixes out of verification phases |
-| Close v1.0.1 with an accepted verification gap (ACCEPTED-GAP-V101) | Late review fixes made the reports stale; a full re-run costs a bench cycle | ⚠️ Revisit: re-verify and re-run UAT-02/UAT-04 before any release |
+| Close v1.0.1 with an accepted verification gap (ACCEPTED-GAP-V101) | Late review fixes made the reports stale; a full re-run costs a bench cycle | ✓ Closed for v1.0.1 (2026-10-15): tag v1.0.1 on 3dc9093f3cc49900bf76576cb4432d84aa94cd74, Phase 9.2 ran UAT-02 from integration and null tombstones, UAT-04 and the CR-01 release gate on that SHA (`09-UAT.md`); the full re-verification stays Phase 12 |
 
 ## Evolution
 

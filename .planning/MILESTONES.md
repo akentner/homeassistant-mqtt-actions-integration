@@ -5,7 +5,7 @@
 **Phases completed:** 3 phases (6 to 8), 25 plans
 **Timeline:** 9 days (2026-10-03 → 2026-10-11), 177 commits
 **Code:** about 9,500 lines of Python in `custom_components/mqtt_actions`; 21 files and about 2,100 lines changed across package, tests, CI and docs
-**Releases:** none. v1.0.1 is not tagged (owner decision ACCEPTED-GAP-V101: no release before a bench re-run of UAT-02 and UAT-04 on the final build). Only the `v1.0.1-rc1` prerelease run of Phase 7 existed, and it was removed again.
+**Releases:** v1.0.1 (tag `v1.0.1` on `3dc9093f3cc49900bf76576cb4432d84aa94cd74`, released 2026-10-15 by Phase 9 of milestone v1.1 after Phase 9.2 ran UAT-02 from integration and null tombstones, UAT-04 and the CR-01 release gate on that SHA; ACCEPTED-GAP-V101 closed for this release). The `v1.0.1-rc1` prerelease run of Phase 7 was removed.
 **Requirements:** 6 of 9 checked off (QLT-01 to QLT-03 open in the traceability, see Known Gaps)
 
 **Delivered:** The v1.0 residuals are closed in the code: native mirrors stay native near the size limit, a boot-time legacy Discovery replay leaves no working duplicate, CI and release run on a pinned runner, the test suite is deterministic, and the four skipped Phase 5 UAT checks pass on real instances, with a receiver-side duplicate guard added on the way.
@@ -17,7 +17,7 @@
 - Real-instance UAT (Phase 8, UAT-01 to UAT-04): straggler v0.1.0 next to the native fleet, replay with two restarts, exactly-once commands on two instances, Discovery export shape; UAT-04 passes on the receiver-guard build after two failing runs.
 - Duplicate guard on every native instance (Phase 8, plans 08-12 and 08-17): core-prefix duplicates are disabled, not removed; after the second code review a disabled MQTT row is never removed (core would clear the retained topic of a foreign export) and user-customized rows are kept.
 
-**Closeout:** override_closeout under owner decision ACCEPTED-GAP-V101 (2026-10-11, recorded in `v1.0.1-phases/08-real-instance-verification/08-UAT.md`, section "Known limitations at milestone close"). `init.manager` reads Phases 6 and 8 as stale and Phase 7 as human_needed after the late review fixes to `takeover.py`, `manager.py` and `tests/`; the archived Phase 1 to 4 reports read stale as well. Accepted as tech debt, not re-verified; the full re-verification moves to the end of v1.1.
+**Closeout:** override_closeout under owner decision ACCEPTED-GAP-V101 (2026-10-11, recorded in `v1.0.1-phases/08-real-instance-verification/08-UAT.md`, section "Known limitations at milestone close"). `init.manager` reads Phases 6 and 8 as stale and Phase 7 as human_needed after the late review fixes to `takeover.py`, `manager.py` and `tests/`; the archived Phase 1 to 4 reports read stale as well. Accepted as tech debt, not re-verified; the full re-verification moves to the end of v1.1. Release gap closed on 2026-10-15: Phase 9.2 ran UAT-02 from integration and null tombstones, UAT-04 and the CR-01 release gate on the fix SHA, and Phase 9 tagged it (`.planning/phases/09-v1-0-1-release/09-UAT.md`).
 
 Known verification overrides: 1 newly acknowledged, 0 carried forward from a prior close (see STATE.md Deferred Items)
 

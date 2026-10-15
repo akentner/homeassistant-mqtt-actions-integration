@@ -117,9 +117,12 @@ start it removes its disabled duplicates of that device and clears the old messa
 customized MQTT entity of that device is still enabled on this or on any other instance that is online. Every instance
 announces such entities in its heartbeat, and the owner waits until it has heard every instance that is online. An
 instance that follows the device keeps its disabled duplicates while the old messages are retained and removes them in
-the same run once the owner has cleared them, so the customized entity is kept on every instance. A follower that held a
-renamed MQTT entity of the device moves it to MQTT Actions at its next start, with its entity id that ends in `_2`, and
-removes the unchanged native entity it duplicated, so automations that use the renamed entity keep working. The old
+the same run once the owner has cleared them, so the customized entity is kept on every instance. This check covers
+only that cleanup: the one-time clear when the owner switches a device to native entities, and its retry after a
+reconnect or a resync, is not held back by customized entities, and such an entity on another instance then stays in
+the entity registry without a state until that instance takes it over. A follower that held a renamed MQTT entity of
+the device moves it to MQTT Actions at its next start, with its entity id that ends in `_2`, and removes the unchanged
+native entity it duplicated, so automations that use the renamed entity keep working. The old
 messages and the disabled duplicates stay as they are while an instance that is online runs a version older than 1.0.1,
 because it does not announce what it keeps, and while the owner is offline. An entity that you customize at the very
 moment the owner clears the old messages is not protected. The native entity of the device is not affected.

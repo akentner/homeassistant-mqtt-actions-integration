@@ -10,7 +10,7 @@ permissions: {}
 jobs:
   check-version:
     name: Tag matches manifest version
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -49,7 +49,7 @@ jobs:
   release:
     name: Create GitHub release
     needs: [check-version, ci, validate]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:

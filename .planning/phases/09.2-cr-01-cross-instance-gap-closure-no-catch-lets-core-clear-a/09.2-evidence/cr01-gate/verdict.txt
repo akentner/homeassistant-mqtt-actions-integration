@@ -1,0 +1,6 @@
+holds
+v3-positive-control: holds
+v2-reverse: holds
+v1-bench-case: holds
+release gate (D-15); expectations fixed in 09.2-08-PLAN.md and cr01-gate/expectations.txt before the run
+build: 3dc9093f3cc49900bf76576cb4432d84aa94cd74

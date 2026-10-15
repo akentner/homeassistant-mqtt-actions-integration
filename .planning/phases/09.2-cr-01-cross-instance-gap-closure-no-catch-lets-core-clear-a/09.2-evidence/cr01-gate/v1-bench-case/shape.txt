@@ -1,0 +1,2 @@
+ha-a (2026-10-15T22:05:23Z): platform-mqtt row with unique id ID and disabled_by integration: 1; enabled platform-mqtt button rows of ID: 2; expected shape: yes
+ha-b (2026-10-15T22:05:23Z): platform-mqtt row with unique id ID and disabled_by integration: 1; enabled platform-mqtt button rows of ID: 2; expected shape: yes

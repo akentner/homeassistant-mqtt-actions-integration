@@ -25,7 +25,17 @@ uat-02-null/    UAT-02 from null tombstones (run b, PHASE8_EV_SUFFIX=-null). pre
                 log counts.
 uat-04/         UAT-04 (X1 to X10) from the restored null-tombstone state (09.1 D-12), with the guard, post-run and
                 post-restart observations.
-cr01-gate/      plan 09.2-08: the CR-01 release gate on FIX.
+cr01-gate/      plan 09.2-08: the CR-01 release gate on FIX (D-15, D-16). Overall verdict: holds (verdict.txt, build
+                3dc9093f3cc49900bf76576cb4432d84aa94cd74). Per variant: v3-positive-control holds, v2-reverse holds
+                (ha-a restarted alone, ha-b kept running), v1-bench-case holds; each variant's outcome.txt reads
+                holds on ha-a and on ha-b. expectations.txt, cr01-gate.sh and cleanup-cr01.sh were committed before
+                the first variant ran, and pin-reassert.txt holds the pin re-assert (PASS). Each variant folder holds
+                gate.txt, pre.txt, payload-check.txt, the row, device, retained, heartbeat and log projections,
+                outcome.txt and cleanup.txt. Hygiene: one D-11 registry restore after variant 1, from the copy taken
+                right before it (v1-bench-case/bench-notes.txt, ha-b's WR-04 move). It is hygiene, never a result.
+                Variants 3 and 2 needed no restore. The bench ended clean: cleanup-cr01.sh final printed PASS
+                (check-uat02.sh clean, check-uat04.sh clean, check-preflight.sh --quick, nothing retained on
+                homeassistant/device/#, no entity or deleted record named "CR-01 kept button", ha-c stopped).
 release/        review decision, push readiness, the fast-forward, the owner's push of FIX, and CI and Validate on
                 exactly FIX (plans 09.2-04 and 09.2-05).
 

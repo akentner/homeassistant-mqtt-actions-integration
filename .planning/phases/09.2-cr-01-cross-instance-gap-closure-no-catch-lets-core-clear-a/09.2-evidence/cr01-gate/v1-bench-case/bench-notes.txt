@@ -1,0 +1,23 @@
+CR-01 gate variant 1, bench note (plan 09.2-08, Task 3 step 2, D-11): bench hygiene after the verdict, never a result
+
+What was restored: core.entity_registry and core.device_registry of ha-a and ha-b (four files), copied back with cp -p
+from the pre-variant copy <9.2 backup base>/cr01-v1-pre-20261015T220218Z/{a,b}/. That copy was taken by
+`cr01-gate.sh pre 1` with both instances stopped, right before the live publish of variant 1. The restore ran at
+2026-10-15T22:11:41Z with ha-a and ha-b stopped. TOPIC was read back empty before the start (cleanup.txt).
+
+Why: after the name reset, the empty retained publish on TOPIC and one graceful restart, check-uat02.sh clean failed on
+ha-b ("mqtt_actions rows (without hub rows) differ from the baseline", "an entity id ending in _2 exists"). The other two
+clean checks passed. In the start of variant 1, ha-b's takeover moved the renamed legacy button to platform
+mqtt_actions with its _2 entity id (button.lampe_test_test_off_2) and its registry id (WR-04; rows-after-start-b.json).
+outcome.txt allows this move. The moved row is a native row now, so no product path (EMPTY content, the catch) removes
+or renames it back. This is the restore that the plan foresees for variant 1 (D-11, order 3, 2, 1).
+
+Effect: after the restore and one start (90 s), check-uat02.sh clean, check-uat04.sh clean and check-preflight.sh --quick
+printed PASS (2026-10-15T22:13:31Z). cleanup-cr01.sh final then printed PASS: nothing is retained on
+homeassistant/device/#, neither registry file holds an entity or deleted record named "CR-01 kept button", ha-c is
+stopped, and no mosquitto_sub process runs (cleanup.txt).
+
+What this does not touch: the variant verdict (outcome.txt line 1, holds) was written before any cleanup step, from the
+files recorded after the start. The restore is hygiene and is never part of a result. No registry file was edited by
+hand. Variants 3 and 2 needed no restore: their clean checks passed by product behavior (v3) and after name reset,
+clear and restart (v2).

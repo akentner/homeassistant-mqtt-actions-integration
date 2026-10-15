@@ -1,0 +1,34 @@
+[
+  {
+    "disabled_by": null,
+    "entity_id": "switch.lampe_test",
+    "id": "f6b8e3eb90f69d1463510fa7e35caef7",
+    "name": "UAT Name lampe_test",
+    "platform": "mqtt_actions",
+    "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001"
+  },
+  {
+    "disabled_by": null,
+    "entity_id": "select.lampe_test_modus",
+    "id": "cb3b74b2304fb110f76097065a715267",
+    "name": null,
+    "platform": "mqtt_actions",
+    "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_mode"
+  },
+  {
+    "disabled_by": null,
+    "entity_id": "button.lampe_test_test_off",
+    "id": "fc5743fe4f13c43a54a351f7a9246a37",
+    "name": null,
+    "platform": "mqtt_actions",
+    "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806"
+  },
+  {
+    "disabled_by": null,
+    "entity_id": "button.lampe_test_test_on",
+    "id": "11e0b3f78637fd630be503438dd78561",
+    "name": null,
+    "platform": "mqtt_actions",
+    "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725"
+  }
+]

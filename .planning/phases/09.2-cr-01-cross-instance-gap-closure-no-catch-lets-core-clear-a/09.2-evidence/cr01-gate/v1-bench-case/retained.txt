@@ -1,0 +1,4 @@
+retained read of homeassistant/device/11111111-aaaa-4aaa-8aaa-000000000001/config after the start of variant 1 (2026-10-15T22:07:47Z)
+retained payload present: yes (retained flag 1)
+length: 1203 bytes
+JSON equals the published payload: yes

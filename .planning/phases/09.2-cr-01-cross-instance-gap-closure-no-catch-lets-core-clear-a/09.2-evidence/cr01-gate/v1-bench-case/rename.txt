@@ -1,0 +1,6 @@
+CR-01 gate rename, variant 1, through config/entity_registry/update (WebSocket API, as the UI does)
+date: 2026-10-15T22:05:23Z
+name: CR-01 kept button
+
+ha-a: entity_id button.lampe_test_test_off_2, unique_id 11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806, registry id cdd18a7de0763620f9986a40d4c2519a, returned {"entity_id":"button.lampe_test_test_off_2","platform":"mqtt","name":"CR-01 kept button","disabled_by":null}
+ha-b: entity_id button.lampe_test_test_off_2, unique_id 11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806, registry id 762b405b9f7c42cbeaffe56c63c54aeb, returned {"entity_id":"button.lampe_test_test_off_2","platform":"mqtt","name":"CR-01 kept button","disabled_by":null}

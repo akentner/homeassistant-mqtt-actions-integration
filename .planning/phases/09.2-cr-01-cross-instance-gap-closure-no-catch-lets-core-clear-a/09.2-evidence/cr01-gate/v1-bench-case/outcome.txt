@@ -1,0 +1,5 @@
+holds
+ha-a: holds; platform-mqtt row named NAME with disabled_by null present yes, platform-mqtt row with unique id ID present with disabled_by integration yes, TOPIC retained non-empty and JSON equal to the published payload yes (present yes, length 1203, equal yes); Removed lines 1, Disabled lines 0, keeps-its-MQTT-device lines 0, another-instance-keeps lines 0, postponed lines 0
+ha-b: holds; row named NAME with disabled_by null present on platform mqtt_actions or mqtt yes (mqtt_actions), every platform-mqtt row of ID integration-disabled before the start still present with disabled_by integration yes (1 rows before; switch twin with unique id ID present with disabled_by integration yes), TOPIC holds the same retained payload yes; a Removed line is allowed (enabled replay twins, D-05); Removed lines 1, Disabled lines 0, keeps-its-MQTT-device lines 1, another-instance-keeps lines 0, postponed lines 0
+release gate (D-15); expectations fixed in 09.2-08-PLAN.md and cr01-gate/expectations.txt before the run
+build: 3dc9093f3cc49900bf76576cb4432d84aa94cd74

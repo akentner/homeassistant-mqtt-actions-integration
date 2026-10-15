@@ -1,0 +1,2 @@
+ha-a, lines written at or after 2026-10-16 00:06:04 (local log time, the stop of the restart step; ha-a StartedAt 2026-10-16 00:06:10.331745333 +0200 CEST, ha-b StartedAt 2026-10-16 00:06:10.371756175 +0200 CEST) matching the gate patterns (timestamp and text)
+2026-10-16 00:06:21.449 Removed 1 duplicate entities that a replayed legacy discovery created

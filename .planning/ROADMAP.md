@@ -134,13 +134,44 @@ Gap closure (09.1-VERIFICATION.md: the review fixes moved FIX past 681c587; stri
 
 ### Phase 09.2: CR-01 cross-instance gap closure: no catch lets core clear a shared legacy topic under another instance's kept row, then re-run the bench and re-point 09-04 and 09-05 on a new SHA (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** While a legacy Discovery message is retained, a customized, enabled MQTT entity of a device that any instance keeps survives on every instance: only the owner lets the shared legacy topic go empty, and only when no online instance announces a kept row in its heartbeat (unknown or unheard peers keep, a migrate payload goes first). The new fix SHA then passes CI and Validate, the full bench re-run (preflight, heal start, UAT-02 from integration and null tombstones, UAT-04) and the CR-01 release gate (holds on ha-a and ha-b in three variants), and plans 09-04 and 09-05 are re-pointed to it with truthful release notes.
+**Requirements**: REL-01 (contributes; mapped to Phase 9)
 **Depends on:** Phase 09.1 (CR-01 route (a), owner decision after 09.1-VERIFICATION)
-**Plans:** 0 plans
+**Success Criteria** (what must be TRUE):
+  1. Red-first tests in one `hass` with core's empty payload looped back show that neither a follower's nor an owner's catch lets the shared legacy topic go empty while a peer heartbeat lists the device; a follower never removes an integration-disabled twin on legacy content; the owner removes and clears only when every online peer was heard with the new field and none lists the device, after a migrate payload and a re-check; the gate matrix is unit-tested (D-01 to D-13). (REL-01)
+  2. An owner waits one heartbeat interval for an online peer it has not heard yet, within the existing retry bound; a follower removes its disabled twins in the same run once the owner cleared the topic; troubleshooting, README and release notes state the final behavior and its limits (mixed-version fleet, offline owner, live-customization moment) (D-03, D-04, D-06, D-07, D-10, D-11, D-19). (REL-01)
+  3. The new FIX is on main by fast-forward with manifest 1.0.1, the owner pushed exactly FIX, and CI and Validate are green on it (D-14, 09.1 D-13/D-14). (REL-01)
+  4. On the bench pinned to exactly FIX, the heal start, UAT-02 from integration and null tombstones and UAT-04 pass, and the CR-01 release gate reads `holds` on ha-a and ha-b in variants 3, 2 and 1 with expectations fixed before the run (D-14 to D-16). (REL-01)
+  5. `09-UAT.md` carries blocks 18 to 24 on FIX (blocks 12 to 17 superseded), and plans 09-04 and 09-05 read FIX with both BUMP definitions equal and the CR-01 gate as a pre-tag fact (D-17, D-18). (REL-01)
+**Plans:** 9 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 09.2 to break down)
+**Wave 1**
+- [ ] 09.2-01-PLAN.md — Receiver gate (tracer, test first): red cross-instance tests, kept_legacy parse, peer state, pure shared-topic gate, may_empty_topic, follower never empties on LEGACY; gate matrix and core contract tests
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 09.2-02-PLAN.md — Heartbeat announces kept rows (capped, fail-safe); migrate before every emptying action with re-checks; fresh migrate on the takeover-path clear
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 09.2-03-PLAN.md — Owner waits for unheard peers within the bound; follower cleans up on EMPTY in the same run; troubleshooting and README corrected (FIX candidate)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 09.2-04-PLAN.md — Owner review gate, fast-forward of main to the fix, 09.2 bench environment, push readiness of FIX
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 09.2-05-PLAN.md — Owner decision and refspec push of FIX (heartbeat key acknowledged), dispatch; CI and Validate green with headSha == FIX
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 09.2-06-PLAN.md — Owner confirms the bench procedure; bench pinned to FIX, pre-state restored, heal start (tracer), green gate and handoff
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 09.2-07-PLAN.md — Pin re-assert, UAT-02 from integration and null tombstones, UAT-04, clean bench
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 09.2-08-PLAN.md — CR-01 release gate on FIX: expectations committed first, variants 3, 2 (owner-only restart) and 1, verdict, clean bench
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 09.2-09-PLAN.md — Ledger blocks 18 to 24, release notes (full pass), 09-04 and 09-05 re-pointed to FIX, PROJECT and STATE
 
 ### Phase 10: Review Findings and Native Migration Extraction
 

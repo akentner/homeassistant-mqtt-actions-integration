@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: Local Actions on Mirrors
 current_phase: 9
 current_phase_name: v1.0.1 Release
-status: planning
-stopped_at: Phase 09.2 complete, ready to plan Phase 9
-last_updated: "2026-10-15T23:14:58.315Z"
+status: executing
+stopped_at: Completed 09-04-PLAN.md
+last_updated: "2026-10-15T23:39:51.744Z"
 last_activity: 2026-10-16
-last_activity_desc: Phase 09.2 complete, transitioned to Phase 9
-state_head: 6bf33fea7b0f01685d0e732bc661dacbe055c9ac
+last_activity_desc: 09-04 complete, v1.0.1 tag pushed by the owner
+state_head: 7aff2f345eb7e9254365326ce0589904e1fbfd7f
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 26
-  completed_plans: 24
+  completed_plans: 25
   percent: 17
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-11)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 9 — v1.0.1 Release (remaining plans 09-04 tag, 09-05)
+**Current focus:** Phase 9 — v1.0.1 Release
 
 ## Current Position
 
-Phase: 9 — v1.0.1 Release
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-10-16 — Phase 09.2 complete, transitioned to Phase 9
+Phase: 9 (v1.0.1 Release) — EXECUTING
+Plan: 5 of 5 (09-05 next; 09-01 to 09-04 complete)
+Status: Ready to execute
+Last activity: 2026-10-16 — 09-04 complete: v1.0.1 tag on FIX 3dc9093 pushed by the owner, release run 38824818079 started
 
 Progress: [██░░░░░░░░] 17%
 
@@ -136,6 +136,7 @@ Progress: [██░░░░░░░░] 17%
 | Phase 09.2 P07 | 26min | 2 tasks | 53 files |
 | Phase 09.2 P08 | 42 min | 3 tasks | 75 files |
 | Phase 09.2 P09 | 9min | 2 tasks | 6 files |
+| Phase 09 P04 | 22min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -292,6 +293,8 @@ Recent decisions affecting current work:
 - [Phase 09.2]: 09.2-07 observation only: after the UAT-04 export-off restart the catch removed the 3 disabled mqtt rows per instance (0 left) and ha-b logged 'keeps its MQTT device' for 3 ids; no 09.2 'Kept the MQTT entities' or 'cannot announce' line in any run
 - [Phase 09.2]: CR-01 release gate HOLDS on FIX 3dc9093: v3, v2 (owner-only restart) and v1 hold on ha-a and ha-b, judged by expectations committed before the run (3ef996c); one D-11 hygiene restore after variant 1, never a result
 - [Phase 09.2]: 09.2-09: FIX moved to 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (cross-instance CR-01 fix: owner-only release of the shared legacy topic gated by the heartbeat key kept_legacy, migrate first, follower cleanup on EMPTY); the dc6513c run (09.1-evidence/fix2, ledger blocks 12 to 17) is history; 09-04 and 09-05 read 09.2-evidence
+- [Phase 09]: Phase 9-04: v1.0.1 lightweight tag on FIX 3dc9093 pushed by the owner; owner chose push-tag-claude-notes (Claude applies release notes in 09-05)
+- [Phase 09]: Phase 9-04: REL-01 stays pending until 09-05 verifies release workflow, hassfest and HACS green
 
 ### Pending Todos
 
@@ -328,8 +331,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16
-Stopped at: Phase 09.2 complete, ready to plan Phase 9
+Last session: 2026-10-15T23:39:51.609Z
+Stopped at: Completed 09-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

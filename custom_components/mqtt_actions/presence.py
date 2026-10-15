@@ -595,6 +595,10 @@ class PresenceManager:
         untracked = [UNTRACKED_PEERS_LABEL] if self._roster.saturated() else []
         return [*names, *silent, *untracked]
 
+    def listening_seconds(self) -> float:
+        """Return how long this instance has listened for heartbeats since the start or the last reconnect (D-04)."""
+        return self._roster.listening_seconds()
+
     def peer_keep_state(self, device_id: str) -> PeerKeep:
         """Return what the online peers announce about a device id; see `Roster.peer_keep_state` (D-02, D-03)."""
         return self._roster.peer_keep_state(device_id, self._manager.sync.online_instance_ids())

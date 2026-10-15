@@ -47,6 +47,7 @@ from .const import (
     CUTOVER_SETTLE_SECONDS,
     DEFAULT_EXPORT_PREFIX,
     DOMAIN,
+    HEARTBEAT_INTERVAL_SECONDS,
     ISSUE_APPROVAL_PREFIX,
     ISSUE_BLOCKED_PREFIX,
     ISSUE_CIRCUIT_BREAKER_PREFIX,
@@ -101,7 +102,7 @@ from .model import DeviceSpec, TriggerSpec, shown, spec_from_subentry, trigger_k
 from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway
 from .portability import subentry_payload
-from .presence import PresenceManager
+from .presence import EXPIRY_MARGIN_SECONDS, PresenceManager
 from .retrigger import RetriggerCoordinator
 from .runner import ActionRunner
 from .state import StateTracker
@@ -545,7 +546,8 @@ class Manager:
         self._cancel_cutover: CALLBACK_TYPE | None = None
         # The timer of the catch for duplicates a replayed legacy discovery creates; None while none is armed (D-05)
         self._cancel_replay_catch: CALLBACK_TYPE | None = None
-        # How often the catch of this start checked again because the discovery settle was not done yet (WR-02)
+        # How often the catch of this start checked again, because the discovery settle was not done yet (WR-02) or an
+        # online peer was not heard yet (D-04); both reasons share the bound REPLAY_CATCH_RETRIES
         self._replay_catch_retries = 0
         # The registry listener that disables an enabled duplicate of a native device; None while the manager is stopped
         self._cancel_duplicate_guard: CALLBACK_TYPE | None = None
@@ -985,7 +987,12 @@ class Manager:
         not announced what it keeps, and the devices that keep their legacy MQTT device because the content is unknown,
         are logged as counts (D-03, T-04-14).
         While the discovery settle is not done or still inside its grace, the catch arms itself again for the time that
-        is left instead, a bounded number of times per start (WR-02).
+        is left instead, a bounded number of times per start (WR-02). An owned device that the gate keeps only because
+        an instance announced online was not heard since this start (UNHEARD) arms it again too, for the rest of one
+        heartbeat interval plus the expiry margin, so a peer that starts together with the owner no longer keeps the
+        owner from cleaning up in that run (D-04). Both reasons share the same retry counter and bound; with both, the
+        longer wait wins. After the bound the owner keeps the device and logs a count; the next start checks again. A
+        peer that sent no valid kept list (UNKNOWN, an older version) never re-arms: nothing changes in this run.
         """
         async with self._lock:
             if not self._running:
@@ -1019,6 +1026,7 @@ class Manager:
             if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None or self._publisher is None:
                 return
             kept_for_peers = 0
+            unheard = 0
             for device_id in device_ids:
                 try:
                     # Read again after the flush: an export that arrived meanwhile is never wiped (CR-01), and a peer
@@ -1034,11 +1042,16 @@ class Manager:
                                 f"clear the discovery of device {device_id}",
                             )
                         continue
-                    if (
-                        self.sync.discovery_content(device_id) is DiscoveryContent.LEGACY
-                        and device_id in self.devices
+                    if (content_now := self.sync.discovery_content(device_id)) is not DiscoveryContent.LEGACY:
+                        continue
+                    # The gate asks for a re-arm: an owned device kept only for a peer not heard yet (D-04)
+                    if self._topic_verdict(device_id, content_now, mqtt_entry_id).rearm:
+                        unheard += 1
+                    elif (
+                        device_id in self.devices
                         and device_id not in self.sync.transferred_away
-                        and self.presence.peer_keep_state(device_id) is not takeover.PeerKeep.CLEAR
+                        and self.presence.peer_keep_state(device_id)
+                        in (takeover.PeerKeep.KEPT, takeover.PeerKeep.UNKNOWN)
                         and not takeover.keeps_enabled_legacy_row(
                             self._hass, self._entry.entry_id, device_id, mqtt_entry_id=mqtt_entry_id
                         )
@@ -1063,24 +1076,54 @@ class Manager:
                 if self.sync.discovery_content(device_id) is DiscoveryContent.UNKNOWN
                 and takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is not None
             )
-            if (
-                unknown
-                and self._replay_catch_retries < takeover.REPLAY_CATCH_RETRIES
-                and (wait := self.sync.discovery_settles_in()) is not None
-            ):
-                # The settle is not done or still inside its grace, so the content may still become known: check again
-                # instead of leaving the twins to the next start, which would meet the same timing (WR-02)
-                self._replay_catch_retries += 1
-                self._cancel_replay_catch = async_call_later(
-                    self._hass, max(wait, takeover.REPLAY_RETRY_MIN_SECONDS), self._on_replay_catch_due
+            self._rearm_or_log_replay_catch(unknown, unheard)
+
+    @callback
+    def _rearm_or_log_replay_catch(self, unknown: int, unheard: int) -> None:
+        """
+        Arm the catch again for devices kept only for now, within the bound, or log the counts once it is spent.
+
+        `unknown` counts the devices whose topic content is not known while the settle may still make it known (WR-02),
+        `unheard` the owned devices kept only for an online peer not heard yet (D-04). Both share the retry counter and
+        REPLAY_CATCH_RETRIES; with both, the longer wait wins. The lines carry counts only (T-04-14).
+        """
+        waits: list[float] = []
+        if unknown and (settles_in := self.sync.discovery_settles_in()) is not None:
+            # The settle is not done or still inside its grace, so the content may still become known: check again
+            # instead of leaving the twins to the next start, which would meet the same timing (WR-02)
+            waits.append(max(settles_in, takeover.REPLAY_RETRY_MIN_SECONDS))
+        if unheard:
+            # A peer announced online sends its first heartbeat within one interval of this start: check again
+            # once it is due, instead of keeping until the next start (D-04)
+            waits.append(
+                max(
+                    HEARTBEAT_INTERVAL_SECONDS + EXPIRY_MARGIN_SECONDS - self.presence.listening_seconds(),
+                    takeover.REPLAY_RETRY_MIN_SECONDS,
                 )
-                LOGGER.debug("The discovery content of %d native devices is not settled yet, checking again", unknown)
-            elif unknown:
-                LOGGER.info(
-                    "Kept the MQTT entities of %d native devices: the content of their retained discovery is not "
-                    "known, the next start checks again",
-                    unknown,
-                )
+            )
+        if waits and self._replay_catch_retries < takeover.REPLAY_CATCH_RETRIES:
+            self._replay_catch_retries += 1
+            self._cancel_replay_catch = async_call_later(self._hass, max(waits), self._on_replay_catch_due)
+            LOGGER.debug(
+                "Checking %d native devices again: %d with unsettled discovery content, %d waiting for an instance",
+                unknown + unheard,
+                unknown,
+                unheard,
+            )
+            return
+        if unknown:
+            LOGGER.info(
+                "Kept the MQTT entities of %d native devices: the content of their retained discovery is not "
+                "known, the next start checks again",
+                unknown,
+            )
+        if unheard:
+            # A count only, never an id, a heartbeat field or a payload (T-04-14)
+            LOGGER.info(
+                "Kept the MQTT entities of %d native devices: another online instance was not heard yet, the next "
+                "start checks again",
+                unheard,
+            )
 
     async def _async_publish_migrates(self, device_ids: Iterable[str]) -> set[str]:
         """Publish the migrate payload of each device; return the ids where it went out (D-09)."""

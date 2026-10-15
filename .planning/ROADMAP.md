@@ -132,6 +132,16 @@ Gap closure (09.1-VERIFICATION.md: the review fixes moved FIX past 681c587; stri
 **Wave 12** *(blocked on Wave 11 completion)*
 - [x] 09.1-12-PLAN.md — Ledger blocks 12 to 17 on the new FIX (681c587 superseded), CR-01 exception in the release notes, 09-04 and 09-05 re-pointed to fix2, PROJECT and STATE
 
+### Phase 09.2: CR-01 cross-instance gap closure: no catch lets core clear a shared legacy topic under another instance's kept row, then re-run the bench and re-point 09-04 and 09-05 on a new SHA (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 09.1 (CR-01 route (a), owner decision after 09.1-VERIFICATION)
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 09.2 to break down)
+
 ### Phase 10: Review Findings and Native Migration Extraction
 
 **Goal**: The info findings of both Phase 8 reviews are closed, and the takeover, replay-catch and duplicate-guard orchestration lives in its own module, so `manager.py` is smaller and quiet before MIR-01 edits it.

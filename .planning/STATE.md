@@ -2,16 +2,16 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
-current_phase: "09.1"
-current_phase_name: UAT-02 gap closure
-status: verifying
-stopped_at: Completed 09.1-12-PLAN.md
-last_updated: "2026-10-15T10:51:49.790Z"
+current_phase: "09.2"
+current_phase_name: CR-01 cross-instance gap closure
+status: planning
+stopped_at: Phase 09.2 context gathered
+last_updated: "2026-10-15T15:23:45.792Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 09.1 execution started
-state_head: 772c3bb56e08c62d5b8ffcb0897d6d0516f3d8e1
+state_head: b30a6860b86b571fa335d1f3dec0f5ee781d8290
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 0
   total_plans: 17
   completed_plans: 15
@@ -25,13 +25,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-11)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 09.1 — UAT-02 gap closure
+**Current focus:** Phase 09.2 — CR-01 cross-instance gap closure
 
 ## Current Position
 
-Phase: 09.1 (UAT-02 gap closure) — EXECUTING
-Plan: 12 of 12
-Status: Phase complete — ready for verification
+Phase: 09.2 (CR-01 cross-instance gap closure) — READY TO PLAN
+Plan: 0 of 0 (not planned)
+Status: Ready to plan
 Last activity: 2026-10-15 — Phase 09.1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -290,6 +290,7 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Phase 09.1 inserted after Phase 9: UAT-02 gap closure (E1-E3 leftover mqtt rows on 7baec98), fix check-uat02.sh marker-row asymmetry, re-run UAT-02/UAT-04 on new SHA (URGENT)
+- Phase 09.2 inserted after Phase 9: CR-01 cross-instance gap closure (route a from 09.1-VERIFICATION): fix shared-topic clear, new FIX, full bench re-run incl. CR-01 observation, re-point 09-04/09-05 (URGENT)
 
 ## Deferred Items
 
@@ -301,9 +302,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T10:51:49.723Z
-Stopped at: Completed 09.1-12-PLAN.md
-Resume file: None
+Last session: 2026-10-15T15:23:45.723Z
+Stopped at: Phase 09.2 context gathered
+Resume file: .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-CONTEXT.md
 
 ## Operator Next Steps
 

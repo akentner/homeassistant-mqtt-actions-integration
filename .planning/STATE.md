@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
 current_phase_name: UAT-02 gap closure
 status: executing
-stopped_at: Completed 09.1-08-PLAN.md
-last_updated: "2026-10-15T09:36:59.805Z"
+stopped_at: Completed 09.1-09-PLAN.md
+last_updated: "2026-10-15T09:49:17.439Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 09.1 execution started
-state_head: aa9ef668bc62c5dec253cd9d03271c39511bb1b4
+state_head: c18d70f0ec804b8369576cfe944828d2bf867a89
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 17
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.1 (UAT-02 gap closure) — EXECUTING
-Plan: 9 of 12
+Plan: 10 of 12
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 09.1 execution started
 
@@ -122,6 +122,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.1 P06 | 7min | 2 tasks | 6 files |
 | Phase 09.1 P07 | 7 min | 3 tasks | 6 files |
 | Phase 09.1 P08 | 3min | 3 tasks | 4 files |
+| Phase 09.1 P09 | 10min | 2 tasks | 21 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,8 @@ Recent decisions affecting current work:
 - [Phase 09.1]: [09.1-07] Owner decision 1 applied: troubleshooting keeps disabled duplicates for a customized entity only while legacy Discovery is retained; new FIX dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
 - [Phase 09.1]: [09.1-07] Re-run evidence root 09.1-evidence/fix2 via ~/ha-test/phase9.1-fix2.env; 681c587 evidence stays as history
 - [Phase 09.1]: 09.1-08: owner chose push and pushed exactly FIX dc6513c to main; CI 38713873705 and Validate 38713877413 (workflow_dispatch, headSha == FIX) green, all six jobs success; bench may start
+- [Phase 09.1]: 09.1-09: owner decision 2 applied - pre-state restored from _backup-pre-phase9.1-20261014T222425Z after sha256, cmp and config/Store checks; heal start PASS on FIX dc6513c
+- [Phase 09.1]: 09.1-09: bench pinned to FIX dc6513c (pin window 09:42:28Z-09:43:31Z), check-preflight full and stale anchor PASS; handoff.txt for 09.1-10
 
 ### Pending Todos
 
@@ -290,8 +293,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T09:36:59.743Z
-Stopped at: Completed 09.1-08-PLAN.md
+Last session: 2026-10-15T09:49:17.377Z
+Stopped at: Completed 09.1-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

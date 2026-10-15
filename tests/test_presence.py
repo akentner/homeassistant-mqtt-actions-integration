@@ -21,7 +21,8 @@ from custom_components.mqtt_actions.const import (
     MAX_BROKER_MESSAGE_BYTES,
     MAX_HEARTBEAT_DEVICES,
 )
-from custom_components.mqtt_actions.presence import Heartbeat, Roster, parse_heartbeat
+from custom_components.mqtt_actions.presence import MAX_HEARTBEAT_KEPT_DEVICES, Heartbeat, Roster, parse_heartbeat
+from custom_components.mqtt_actions.takeover import PeerKeep
 from custom_components.mqtt_actions.topics import availability_topic, heartbeat_topic
 
 if TYPE_CHECKING:
@@ -494,3 +495,141 @@ def test_a_full_roster_is_saturated_for_the_timeout_after_it_dropped_a_new_peer(
     assert roster.saturated() is True
     clock.now += HEARTBEAT_OFFLINE_SECONDS + 1
     assert roster.saturated() is False
+
+
+# --- the kept_legacy field and the peer state of a device (D-01 to D-03) ------------------------------------------
+
+_IDS = [f"device-{number}" for number in range(MAX_HEARTBEAT_KEPT_DEVICES + 1)]
+KEPT_LEGACY_FIELDS = {
+    "empty list": ([], frozenset()),
+    "two valid ids": (_IDS[:2], frozenset(_IDS[:2])),
+    "exactly the cap": (_IDS[:MAX_HEARTBEAT_KEPT_DEVICES], frozenset(_IDS[:MAX_HEARTBEAT_KEPT_DEVICES])),
+    "one over the cap": (_IDS, None),
+    "a duplicate id": ([_IDS[0], _IDS[0]], None),
+    "a string": (_IDS[0], None),
+    "an object": ({"ids": _IDS[:2]}, None),
+    "a number": (3, None),
+    "true": (True, None),
+    "json null": (None, None),
+    "a non-string item": ([_IDS[0], 7], None),
+    "an id with a slash": (["dev/ice"], None),
+    "an empty id": ([""], None),
+    "a 65-character id": (["d" * 65], None),
+}
+
+
+@pytest.mark.parametrize(("field", "expected"), list(KEPT_LEGACY_FIELDS.values()), ids=list(KEPT_LEGACY_FIELDS))
+def test_parse_heartbeat_reads_the_kept_legacy_field_leniently(field: Any, expected: frozenset[str] | None) -> None:
+    """D-01, D-03: a valid list becomes a frozenset; anything else reads as None while the heartbeat stays valid."""
+    heartbeat = parse_heartbeat(BASE, GOOD_TOPIC, _message(kept_legacy=field))
+
+    assert heartbeat is not None
+    assert heartbeat.kept_legacy == expected
+
+
+def test_parse_heartbeat_reads_a_missing_kept_legacy_field_as_unknown() -> None:
+    """D-03: an older peer sends no field, which is unknown, not "nothing kept"."""
+    heartbeat = parse_heartbeat(BASE, GOOD_TOPIC, _message())
+
+    assert heartbeat is not None
+    assert heartbeat.kept_legacy is None
+
+
+def _keeper(instance_id: str, kept_legacy: frozenset[str] | None) -> Heartbeat:
+    return Heartbeat(
+        instance_id=instance_id,
+        name="Peer",
+        version="1.0.1",
+        devices=1,
+        session=SESSION,
+        native=True,
+        kept_legacy=kept_legacy,
+    )
+
+
+def test_peer_keep_state_is_clear_without_a_peer() -> None:
+    roster, _clock, _availability = _roster()
+    assert roster.peer_keep_state("x", []) is PeerKeep.CLEAR
+
+
+@pytest.mark.parametrize(
+    ("kept_legacy", "expected"),
+    [
+        (frozenset({"x"}), PeerKeep.KEPT),
+        (frozenset({"y"}), PeerKeep.CLEAR),
+        (frozenset(), PeerKeep.CLEAR),
+        (None, PeerKeep.UNKNOWN),
+    ],
+    ids=["lists_x", "lists_y", "lists_nothing", "no_valid_list"],
+)
+def test_peer_keep_state_of_one_online_peer(kept_legacy: frozenset[str] | None, expected: PeerKeep) -> None:
+    """D-02, D-03: an online peer keeps X when it lists X, and keeps everything when it sent no valid list."""
+    roster, _clock, availability = _roster()
+    availability["peer"] = "online"
+    roster.observe(_keeper("peer", kept_legacy))
+
+    assert roster.peer_keep_state("x", ["peer"]) is expected
+
+
+def test_peer_keep_state_is_unheard_for_an_announced_peer_without_a_row_and_stays_so() -> None:
+    """D-04: an instance announced online but not heard since this start keeps, even past the offline timeout."""
+    roster, clock, _availability = _roster()
+    assert roster.peer_keep_state("x", ["silent"]) is PeerKeep.UNHEARD
+
+    clock.now += HEARTBEAT_OFFLINE_SECONDS + 1
+
+    assert roster.peer_keep_state("x", ["silent"]) is PeerKeep.UNHEARD
+
+
+def test_peer_keep_state_ignores_a_peer_announced_offline() -> None:
+    """D-02: an offline peer never blocks, whatever its last heartbeat listed."""
+    roster, _clock, availability = _roster()
+    roster.observe(_keeper("peer", frozenset({"x"})))
+    availability["peer"] = "offline"
+
+    assert roster.peer_keep_state("x", []) is PeerKeep.CLEAR
+
+
+def test_peer_keep_state_ignores_a_stale_heartbeat() -> None:
+    """D-02: a peer whose heartbeat is older than the offline timeout never blocks, even while announced online."""
+    roster, clock, availability = _roster()
+    availability["peer"] = "online"
+    roster.observe(_keeper("peer", frozenset({"x"})))
+    clock.now += HEARTBEAT_OFFLINE_SECONDS + 1
+
+    assert roster.peer_keep_state("x", ["peer"]) is PeerKeep.CLEAR
+
+
+def test_peer_keep_state_is_unknown_while_the_roster_is_saturated() -> None:
+    """T-09.2-06: a peer the roster had no room for may keep a row, so a saturated roster reads as unknown."""
+    roster, clock, _availability = _roster()
+    for number in range(const.MAX_TRACKED_INSTANCES):
+        assert roster.observe(_keeper(f"peer-{number}", frozenset())) is True
+    assert roster.peer_keep_state("x", []) is PeerKeep.CLEAR
+
+    assert roster.observe(_keeper("late-peer", frozenset({"x"}))) is False
+
+    assert roster.peer_keep_state("x", []) is PeerKeep.UNKNOWN
+    clock.now += HEARTBEAT_OFFLINE_SECONDS + 1
+    assert roster.saturated() is False
+
+
+@pytest.mark.parametrize(
+    ("rows", "announced", "expected"),
+    [
+        ({"keeps": frozenset({"x"}), "older": None}, [], PeerKeep.KEPT),
+        ({"older": None}, ["silent"], PeerKeep.UNKNOWN),
+        ({"clear": frozenset()}, ["silent"], PeerKeep.UNHEARD),
+    ],
+    ids=["kept_over_unknown", "unknown_over_unheard", "unheard_over_clear"],
+)
+def test_peer_keep_state_precedence(
+    rows: dict[str, frozenset[str] | None], announced: list[str], expected: PeerKeep
+) -> None:
+    """D-02 to D-04: KEPT wins over UNKNOWN, UNKNOWN over UNHEARD, UNHEARD over CLEAR."""
+    roster, _clock, availability = _roster()
+    for instance_id, kept_legacy in rows.items():
+        availability[instance_id] = "online"
+        roster.observe(_keeper(instance_id, kept_legacy))
+
+    assert roster.peer_keep_state("x", [*rows, *announced]) is expected

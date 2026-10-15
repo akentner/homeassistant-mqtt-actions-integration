@@ -753,6 +753,88 @@ async def test_the_catch_keeps_an_enabled_customized_button_next_to_a_disabled_t
     _assert_moved_and_native(hass, legacy, before)
 
 
+async def _a_renamed_loaded_button_next_to_a_hooked_disabled_switch(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> tuple[Any, str, str]:
+    """
+    Return the legacy device, a disabled switch core holds a clear-on-remove hook for, and a renamed button.
+
+    A native owner with loop-back, a live replay whose switch the guard disables, a test button the user renamed
+    ("Kept"), enabled and loaded, and the payload fired live again so core discovers the disabled switch in this run.
+    No time is advanced, so no catch runs.
+    """
+    legacy, _before = await _a_finished_native_owner(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+    )
+    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(replayed) == 3
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    button, *_others = sorted(entity_id for entity_id in replayed if entity_id.startswith("button."))
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    entity_registry.async_update_entity(button, name="Kept")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    async_fire_mqtt_message(hass, legacy.topic, legacy.payload, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get(button) is not None
+    return legacy, switch, button
+
+
+async def test_core_deletes_a_loaded_renamed_row_when_a_hooked_disabled_row_leaves_without_a_migrate(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """
+    Core contract (research Q1 probe 4, CR-01): core's hook clear deletes every loaded legacy row of the device.
+
+    A version guard of the mechanism behind CR-01: removing the disabled switch makes core publish an empty retained
+    discovery, and that payload, looped back, deletes the renamed button. A core bump that changes it turns this red.
+    """
+    _legacy, switch, button = await _a_renamed_loaded_button_next_to_a_hooked_disabled_switch(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+    )
+
+    er.async_get(hass).async_remove(switch)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert er.async_get(hass).async_get(button) is None
+
+
+async def test_core_keeps_a_loaded_renamed_row_when_the_migrate_comes_before_the_hooked_clear(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """
+    Core contract (research Q1 probe 3, D-09 groundwork): a migrate before the hook clear unloads instead of deleting.
+
+    The migrate payload unloads the loaded legacy rows and forgets their discovery, so the empty payload of the hook
+    that follows deletes nothing: the renamed button keeps its registry row and its name, without a state.
+    """
+    legacy, switch, button = await _a_renamed_loaded_button_next_to_a_hooked_disabled_switch(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+    )
+    async_fire_mqtt_message(hass, legacy.topic, MIGRATE_PAYLOAD, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    er.async_get(hass).async_remove(switch)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    kept = er.async_get(hass).async_get(button)
+    assert kept is not None
+    assert kept.name == "Kept"
+    assert hass.states.get(button) is None
+
+
 async def test_a_catch_that_runs_before_the_settle_checks_again_once_the_grace_has_passed(
     hass: HomeAssistant,
     mqtt_mock: Any,

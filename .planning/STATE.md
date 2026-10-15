@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
 current_phase_name: UAT-02 gap closure
 status: executing
-stopped_at: Completed 09.1-10-PLAN.md
-last_updated: "2026-10-15T10:18:24.924Z"
+stopped_at: Completed 09.1-11-PLAN.md
+last_updated: "2026-10-15T10:44:40.530Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 09.1 execution started
-state_head: 82c9adb1e474b088723aec4ab86f0bf574a27be4
+state_head: 2892744daa298e07ae027852e01cb6c14130e2af
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 14
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.1 (UAT-02 gap closure) — EXECUTING
-Plan: 11 of 12
+Plan: 12 of 12
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 09.1 execution started
 
@@ -124,6 +124,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.1 P08 | 3min | 3 tasks | 4 files |
 | Phase 09.1 P09 | 10min | 2 tasks | 21 files |
 | Phase 09.1 P10 | 27min | 2 tasks | 53 files |
+| Phase 09.1 P11 | 22min | 2 tasks | 22 files |
 
 ## Accumulated Context
 
@@ -262,6 +263,7 @@ Recent decisions affecting current work:
 - [Phase 09.1]: 09.1-10: pin of plan 09.1-09 re-asserted before the first run (all shas == FIX dc6513c, HEAD main, gates PASS, StartedAt unchanged)
 - [Phase 09.1]: 09.1-10: UAT-02 PASS on FIX dc6513c from integration tombstones (run a) and from null tombstones (run b)
 - [Phase 09.1]: 09.1-10: UAT-04 PASS on FIX dc6513c from the D-12 null-tombstone state; 3 disabled mqtt rows per instance after export off, 0 after one graceful restart (observation); bench left clean
+- [Phase 09.1]: 09.1-11: CR-01 bench observation on FIX dc6513c contradicts: ha-b takeover moved its renamed legacy button to the native platform, its catch removed the disabled switch twin on LEGACY content, and core clear-on-remove emptied the shared topic and deleted the kept renamed button on ha-a; 09.1-12 withholds the re-pointing, owner decides
 
 ### Pending Todos
 
@@ -275,6 +277,7 @@ Recent decisions affecting current work:
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
 - [Phase 9.1]: UAT-02 gap closed on fix SHA 681c58793b656b51869906b62f2564829de7a10d (heal start, UAT-02 from integration and null tombstones, UAT-04 pass); run the re-pointed 09-04 (tag, owner decision) and 09-05 (release) next
+- CR-01 bench observation (09.1-11) contradicts on FIX dc6513c: the per-instance D-08 keep does not stop another instance from clearing the shared legacy topic; owner decision needed before 09.1-12 re-points 09-04/09-05 and before the v1.0.1 tag
 
 ### Quick Tasks Completed
 
@@ -297,8 +300,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T10:18:24.861Z
-Stopped at: Completed 09.1-10-PLAN.md
+Last session: 2026-10-15T10:44:40.461Z
+Stopped at: Completed 09.1-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

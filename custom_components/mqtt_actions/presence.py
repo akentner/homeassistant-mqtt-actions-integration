@@ -330,6 +330,8 @@ class PresenceManager:
         # The ids that were online at the last evaluation; a change of this set is what the entities are told about
         self._announced: frozenset[str] = frozenset()
         self._overflow_logged = False
+        # Whether the kept list was left out of a heartbeat in this start, so the warning is logged once (D-03)
+        self._kept_overflow_logged = False
         # When a heartbeat with this instance's own id and another session was heard, on the manager clock; bounded
         self._duplicate_seen: deque[float] = deque(maxlen=MAX_DUPLICATE_OBSERVATIONS)
         self._duplicate_detected = False
@@ -347,6 +349,7 @@ class PresenceManager:
         """Subscribe to the heartbeat of every instance and start the heartbeat tick."""
         manager = self._manager
         self._overflow_logged = False
+        self._kept_overflow_logged = False
         self._roster.restart_listening()
         self._unsubscribe = await manager.gateway.async_subscribe(
             heartbeat_wildcard(manager.base_topic), self._on_message, HEARTBEAT_QOS
@@ -387,19 +390,39 @@ class PresenceManager:
         return self._refresh()
 
     async def async_publish_heartbeat(self) -> None:
-        """Publish one heartbeat, not retained; an unavailable MQTT client is logged, never raised."""
+        """
+        Publish one heartbeat, not retained; an unavailable MQTT client is logged, never raised.
+
+        The heartbeat lists the held devices this instance keeps legacy MQTT entities of (`kept_legacy`, D-01). A list
+        over MAX_HEARTBEAT_KEPT_DEVICES ids or a payload over the message cap leaves the key out, which peers read as
+        unknown and keep their rows, the safe direction; the heartbeat itself always goes out (D-03, T-09.2-07).
+        """
         manager = self._manager
-        payload = json.dumps(
-            {
-                "instance_id": manager.instance_id,
-                "name": manager.instance_name,
-                "version": manager.version,
-                "devices": len(manager.devices),
-                "session": self.session,
-                # What this build can do, whether or not this instance already switched; legacy builds lack the key
-                NATIVE_KEY: NATIVE_VALUE,
-            }
-        )
+        data: dict[str, Any] = {
+            "instance_id": manager.instance_id,
+            "name": manager.instance_name,
+            "version": manager.version,
+            "devices": len(manager.devices),
+            "session": self.session,
+            # What this build can do, whether or not this instance already switched; legacy builds lack the key
+            NATIVE_KEY: NATIVE_VALUE,
+        }
+        payload: str | None = None
+        kept = manager.kept_legacy_ids()
+        if kept is not None and len(kept) <= MAX_HEARTBEAT_KEPT_DEVICES:
+            with_kept = json.dumps({**data, KEPT_LEGACY_KEY: kept})
+            if within_size_cap(with_kept):
+                payload = with_kept
+        if payload is None:
+            payload = json.dumps(data)
+            if kept is not None and not self._kept_overflow_logged:
+                self._kept_overflow_logged = True
+                # A count only, never an id (T-04-14)
+                LOGGER.warning(
+                    "The heartbeat cannot announce the %d devices whose MQTT entities this instance keeps, so other "
+                    "instances keep their duplicates of them",
+                    len(kept),
+                )
         try:
             await manager.gateway.async_publish(
                 heartbeat_topic(manager.base_topic, manager.instance_id), payload, retain=False, qos=HEARTBEAT_QOS

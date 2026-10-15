@@ -836,6 +836,37 @@ class Manager:
         """Return the sorted ids of the owned devices and mirrors that are native; a deferred device is never one."""
         return sorted(device_id for device_id in {*self.devices, *self.mirrors} if self.is_native(device_id))
 
+    def kept_legacy_ids(self) -> list[str] | None:
+        """
+        Return the sorted ids of the held devices this instance keeps legacy MQTT entities of, None when unknown (D-01).
+
+        A held device (owned or mirrored) that has a legacy MQTT device is listed when it is not native in this run (a
+        legacy instance, a legacy mirror, a deferred takeover: its legacy rows are its entities, research Pitfall 2)
+        or when it keeps an enabled legacy row by the predicate the catch uses (`takeover.keeps_enabled_legacy_row`), so
+        what this instance announces and what its catch keeps cannot drift. Read from the registry at every call, so
+        the first heartbeat of a start is right before any entity loaded; enabled in the registry is a superset of
+        loaded, the safe direction. Empty without an MQTT entry. A failure returns None, which peers read as unknown.
+        """
+        try:
+            if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None:
+                return []
+            return sorted(
+                device_id
+                for device_id in {*self.devices, *self.mirrors}
+                if takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is not None
+                and (
+                    not self.is_native(device_id)
+                    or takeover.keeps_enabled_legacy_row(
+                        self._hass, self._entry.entry_id, device_id, mqtt_entry_id=mqtt_entry_id
+                    )
+                )
+            )
+        except Exception as err:  # noqa: BLE001
+            # No registry or broker content in the log; peers keep their rows while the list is unknown (D-03)
+            LOGGER.warning("The list of the devices whose MQTT entities this instance keeps could not be built")
+            LOGGER.debug("Building the kept device list failed with %s", type(err).__name__)
+            return None
+
     def _topic_verdict(
         self, device_id: str, content: DiscoveryContent, mqtt_entry_id: str | None
     ) -> takeover.TopicVerdict:

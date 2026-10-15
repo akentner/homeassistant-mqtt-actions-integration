@@ -26,6 +26,7 @@ from custom_components.mqtt_actions.presence import MAX_HEARTBEAT_KEPT_DEVICES, 
 from custom_components.mqtt_actions.takeover import PeerKeep
 from custom_components.mqtt_actions.topics import availability_topic, heartbeat_topic
 from tests.log_helpers import OWN_LOGGER, own_warnings
+from tests.test_native_start import _seed_native
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -70,14 +71,21 @@ def test_parse_heartbeat_accepts_a_valid_message() -> None:
 
 
 async def test_heartbeat_is_published_non_retained_with_qos_0(
-    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
 ) -> None:
     """
     Contract changed on purpose by Phase 9.2 D-01: the heartbeat also carries `kept_legacy`, the kept device ids.
 
     D-05: one heartbeat after the online availability, QoS 0, not retained, five keys, the capability key and the list
-    of the devices this instance keeps a legacy MQTT entity of, empty for an instance without legacy entities.
+    of the devices this instance keeps a legacy MQTT entity of, empty for an instance without legacy entities. The
+    instance is native, so no legacy discovery creates a legacy MQTT device (a legacy instance lists its devices as
+    soon as core created their legacy device, which races the first heartbeat on the mocked broker).
     """
+    _seed_native(hass_storage, pending=[])
     sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
     entry = await _setup(hass, make_hub_entry([sub]))
     instance_id = entry.data[CONF_INSTANCE_ID]

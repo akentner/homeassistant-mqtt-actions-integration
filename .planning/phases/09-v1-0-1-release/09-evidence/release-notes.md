@@ -18,10 +18,12 @@ replay of old MQTT Discovery messages, and it adds a guard against MQTT duplicat
 
 - Core MQTT duplicates of native devices are disabled automatically. A duplicate that you re-enable is
   disabled again at the next start.
-- At start, an instance removes the disabled MQTT duplicates of its native devices when the old Discovery message is still
-  retained or nothing is retained on that topic. It keeps them while a Discovery export sits on that topic.
-- The instance that owns a device clears a stale legacy Discovery message of it. Instances that follow the device then delete
-  their remaining MQTT entities of it, customized ones included.
+- At start, an instance removes the disabled MQTT duplicates of its native devices when nothing is retained on their Discovery
+  topic, and keeps them while a Discovery export sits on that topic. While the old Discovery message is still retained, only
+  the instance that owns the device removes its duplicates and clears the message, and only when no online instance still
+  keeps a renamed or otherwise customized MQTT entity of that device; instances announce such entities in their heartbeat.
+- Instances that follow the device keep their disabled duplicates until the owner has cleared the old message and then remove
+  them in the same run. A customized MQTT entity is kept on every instance.
 
 ## Known limitations
 
@@ -29,6 +31,14 @@ replay of old MQTT Discovery messages, and it adds a guard against MQTT duplicat
   only after the next start.
 - If a broker restart without persistence and a Home Assistant start fall into the same few seconds, another instance's
   Discovery export on the core prefix can be cleared until that instance publishes it again.
+- While an instance that is online runs a version older than 1.0.1, the old Discovery message and the disabled duplicates
+  stay, because that instance does not announce which MQTT entities it keeps. They go once every online instance runs 1.0.1.
+- While the instance that owns a device is offline, its old Discovery message and the disabled duplicates on the other
+  instances stay.
+- An MQTT entity that you customize at the very moment the owner clears the old Discovery message is not protected.
+- The one-time clear of the old Discovery message when the owner switches a device to native entities, and its retry after a
+  reconnect or a resync, is not held back by customized MQTT entities on other instances; such an entity then stays in the
+  entity registry without a state until that instance takes it over.
 
 ## Upgrade
 

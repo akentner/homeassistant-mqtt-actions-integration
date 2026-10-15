@@ -1,0 +1,6 @@
+ha-b, started 2026-10-15T10:27:31Z (ha-a 2026-10-15 12:27:27.291032045 +0200 CEST); lines of this start from custom_components.mqtt_actions and
+homeassistant.components.mqtt.discovery (timestamp, logger and text)
+2026-10-15 12:27:33.115 [custom_components.mqtt_actions] Device '11111111-aaaa-4aaa-8aaa-000000000001' keeps its MQTT device: it has entries this integration did not create
+2026-10-15 12:27:38.131 [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+2026-10-15 12:27:38.141 [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-15 12:27:38.174 [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'

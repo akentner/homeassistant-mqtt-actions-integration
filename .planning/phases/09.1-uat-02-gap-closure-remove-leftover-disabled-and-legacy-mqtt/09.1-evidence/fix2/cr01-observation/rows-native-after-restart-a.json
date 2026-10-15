@@ -1,0 +1,26 @@
+[
+  {
+    "disabled_by": null,
+    "entity_id": "switch.lampe_test",
+    "name": "UAT Name lampe_test",
+    "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001"
+  },
+  {
+    "disabled_by": null,
+    "entity_id": "select.lampe_test_modus",
+    "name": null,
+    "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_mode"
+  },
+  {
+    "disabled_by": null,
+    "entity_id": "button.lampe_test_test_off",
+    "name": null,
+    "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806"
+  },
+  {
+    "disabled_by": null,
+    "entity_id": "button.lampe_test_test_on",
+    "name": null,
+    "unique_id": "11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725"
+  }
+]

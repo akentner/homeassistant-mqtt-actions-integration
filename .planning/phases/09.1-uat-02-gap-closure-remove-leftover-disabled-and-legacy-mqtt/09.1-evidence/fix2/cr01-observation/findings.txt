@@ -1,0 +1,51 @@
+CR-01 bench observation on FIX dc6513c0b4ac54d68fbf5207161508c18cc2a5b6: what the start did (observation only, never a UAT result)
+
+Outcome: contradicts (outcome.txt). The CR-01 fix does not hold across two real instances that share the retained legacy
+topic. Plan 09.1-12 withholds the re-pointing of 09-04 and 09-05; the owner decides.
+
+Facts (each from a recorded file of this folder):
+- After the live publish (T+20 s) both instances had the expected shape: switch.lampe_test_2 disabled_by integration and
+  two enabled replayed buttons (rows-after-publish-a.json, -b.json).
+- button.lampe_test_test_off_2 (unique id ..._test_b4dc66dde806) was renamed to "CR-01 kept button" on both instances;
+  the API returned the name and disabled_by null (rename.txt).
+- After one graceful start with the legacy message still retained (LEGACY content):
+  - no row with platform mqtt for the id remains on ha-a or ha-b (rows-after-restart-a.json, -b.json: []);
+  - TOPIC holds no retained payload (retained.txt);
+  - ha-b logged at 12:27:33.115 "Device '11111111-...' keeps its MQTT device: it has entries this integration did not
+    create" and at 12:27:38.131 "Removed 3 duplicate entities that a replayed legacy discovery created" (log-b.txt);
+  - ha-a logged no line of custom_components.mqtt_actions in this start (log-a.txt, log-context-a.txt);
+  - both logged "No device components to cleanup for 11111111-..." from core MQTT discovery at 12:27:38.141/.174 (ha-b)
+    and 12:27:38.156 (ha-a) (log-context-*.txt);
+  - ha-b: the native row of ..._test_b4dc66dde806 is now button.lampe_test_test_off_2 named "CR-01 kept button" and
+    enabled (rows-native-after-restart-b.json); a deleted record of the former native row button.lampe_test_test_off
+    (platform mqtt_actions) was written at 10:27:33.115Z, and the platform mqtt records of all three legacy rows were
+    written at 10:27:38.128 to .131Z with disabled_by integration (deleted-after-restart-b.json);
+  - ha-a: the native rows are unchanged (rows-native-after-restart-a.json); the platform mqtt records of all three legacy
+    rows were written at 10:27:38.135 to .153Z, the renamed button's record with name "CR-01 kept button" and
+    disabled_by null, the switch twin's with disabled_by integration (deleted-after-restart-a.json).
+
+Reading of the facts (interpretation, derived from takeover.py at FIX and the timestamps above; not separately proven):
+1. ha-b (the native mirror) ran the takeover first. The renamed legacy button carries the identity (customized) and its
+   native twin was not loaded, so async_take_over removed the native twin and moved the legacy row to platform
+   mqtt_actions with its entity id (_2) and name (WR-04). The other legacy rows have native twins and stayed, so the MQTT
+   device stayed ("keeps its MQTT device").
+2. The retained replay then made core MQTT create a new platform mqtt row for ..._test_b4dc66dde806 under the entity id
+   that the removed native twin had freed (button.lampe_test_test_off).
+3. ha-b's catch (remove_replay_twins) found no kept, enabled legacy row any more (the customized one is native now), so
+   keeps_an_enabled_row was false and, with LEGACY content, the integration-disabled switch twin was removed together
+   with the two uncustomized buttons ("Removed 3").
+4. Core MQTT on ha-b had discovered that switch row disabled in this start and published an empty retained discovery
+   when it left the registry (the clear-on-remove hook, D-02/D-08). That emptied TOPIC on the shared broker.
+5. Core MQTT on ha-a received the empty payload 4 to 22 ms later and deleted every loaded legacy row of the device, the
+   renamed and kept button included. Its deleted record keeps the name "CR-01 kept button" (a customized record that no
+   UI reaches, the WR-03 concern).
+
+Gap in the fix (for the owner, not fixed here): the D-08 keep is decided per instance, but the clear it guards against
+is published on a topic that every instance shares. When one instance (here the mirror, via the takeover move) has no
+enabled kept legacy row, it removes the disabled twin on LEGACY content, and core's clear deletes the kept, customized
+rows of every other instance. test_the_catch_keeps_an_enabled_customized_button_next_to_a_disabled_twin_on_legacy_content
+covers one instance only. Whether ha-a's own catch evaluated the device before the clear arrived is not visible: the
+catch logs only when it removes something.
+
+Bench impact: ha-b's native row of ..._test_b4dc66dde806 now differs from the baseline (entity id _2, name, registry id
+of the moved row), and ha-a holds a deleted record with the observation name. Task 2 cleans up per plan.

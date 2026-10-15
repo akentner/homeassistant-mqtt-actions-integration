@@ -1,0 +1,5 @@
+contradicts
+ha-a: contradicts; renamed button button.lampe_test_test_off_2 (11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806) present on platform mqtt with NAME and enabled no, moved to platform mqtt_actions with NAME and enabled no, switch twin present with disabled_by integration no, TOPIC retained non-empty no, postponed lines 0, Removed lines 0
+ha-b: contradicts; renamed button button.lampe_test_test_off_2 (11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806) present on platform mqtt with NAME and enabled no, moved to platform mqtt_actions with NAME and enabled yes, switch twin present with disabled_by integration no, TOPIC retained non-empty no, postponed lines 0, Removed lines 1
+observation only, never a UAT result; classes fixed in 09.1-11-PLAN.md before the run
+build: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6

@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 09-v1-0-1-release
 source:
   - .planning/phases/09-v1-0-1-release/09-CONTEXT.md
@@ -7,19 +7,14 @@ source:
   - .planning/milestones/v1.0.1-REQUIREMENTS.md (wording of UAT-02 and UAT-04)
   - .planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-CONTEXT.md
 started: 2026-10-12T01:45:21Z
-updated: 2026-10-15T22:30:00Z
+updated: 2026-10-15T23:45:00Z
 ---
 
 ## Current Test
 
-number: 5
-name: REL on the fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (tag, release workflow, Latest, release notes)
-expected: |
-  On the fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74, CI and Validate are green (block 19), the heal start (block 20),
-  UAT-02 from integration tombstones (block 21), UAT-02 from null tombstones (block 22) and UAT-04 (block 23) pass, and the
-  CR-01 release gate holds (block 24). The owner decides the one-way tag v1.0.1 on that SHA in plan 09-04, and plan 09-05
-  checks the release and records block 5.
-awaiting: the re-pointed plans 09-04 (tag) and 09-05 (release)
+[testing complete]
+
+Block 5 (REL) was the last open block. Plan 09-05 recorded it as pass on the fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74 on 2026-10-15.
 
 ## Build under test
 
@@ -129,7 +124,7 @@ Blocks 18 to 24 ran on this build. The pinned identity is in
 | UAT-02 (null, 9.2) | UAT-02 from null tombstones (Phase 9.1 D-10 b), REL-01 | pass | 2026-10-15 | 3dc9093f3cc49900bf76576cb4432d84aa94cd74 | .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/uat-02-null |
 | UAT-04 (9.2) | UAT-04 from null tombstones (Phase 9.1 D-12), REL-01 | pass | 2026-10-15 | 3dc9093f3cc49900bf76576cb4432d84aa94cd74 | .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/uat-04 |
 | CR-01 gate (9.2) | cross-instance keep, release gate (Phase 9.2 D-15 and D-16), REL-01 | pass | 2026-10-15 | 3dc9093f3cc49900bf76576cb4432d84aa94cd74 | .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/cr01-gate |
-| REL | tag, release workflow, Latest, notes (D-14), REL-01 | pending | - | - | .planning/phases/09-v1-0-1-release/09-evidence/release |
+| REL | tag, release workflow, Latest, notes (D-14), REL-01 | pass | 2026-10-15 | 3dc9093f3cc49900bf76576cb4432d84aa94cd74 | .planning/phases/09-v1-0-1-release/09-evidence/release |
 
 The allowed result tokens are the same as in 08-UAT.md: pending, pass, issue, blocked. A recorded block carries `sha:` (40 hex),
 `date:` (ISO date), `evidence:` (a folder under 09-evidence) and `note:` after `result:`. An issue also carries `reported:` and
@@ -137,8 +132,8 @@ The allowed result tokens are the same as in 08-UAT.md: pending, pass, issue, bl
 
 The rows PRE, CI, UAT-02 and UAT-04 (blocks 1 to 4) are the 7baec98 history and stay as recorded (Phase 9.1 D-16). The six
 rows PRE (9.1) to UAT-04 (9.1) (blocks 6 to 11) ran on the fix SHA, and their `evidence:` is a folder under
-`.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence`. The REL row (block 5) stays
-`pending` until plan 09-05 records it on the fix SHA.
+`.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence`. The REL row (block 5) was
+recorded by plan 09-05 on the fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74.
 
 The rows PRE (9.1) to UAT-04 (9.1) (blocks 6 to 11) ran on 681c58793b656b51869906b62f2564829de7a10d and are superseded by the
 six fix2 rows PRE (9.1 fix2) to UAT-04 (9.1 fix2) (blocks 12 to 17). Those ran on the fix SHA
@@ -190,8 +185,11 @@ note: Not run. UAT-04 must start from the D-06 state, which is proven by the exa
 
 ### 5. REL: tag, release workflow, Latest, release notes
 expected: The owner pushes tag v1.0.1 on the bump SHA (re-pointed by Phase 9.2: on the fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74; 681c58793b656b51869906b62f2564829de7a10d and dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 are superseded and never tagged). release.yml is fully green (check-version, CI tiers, hassfest, HACS, release job). GitHub shows v1.0.1 as Latest, and the hand-written notes are applied (D-14).
-result: pending
-note: Not reached. The tag may follow only after UAT-02 and UAT-04 pass on the tagged SHA (REL-01). With block 3 `issue` and block 4 `blocked`, no tag is pushed on 7baec98, no release notes are written, and plans 09-04 and 09-05 do not run. Phase 9.2 (plan 09.2-09): the tag candidate is now the fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74, on which blocks 18 to 23 pass and the CR-01 release gate (block 24) holds in all three variants. 681c58793b656b51869906b62f2564829de7a10d (blocks 6 to 11) is superseded and never tagged, because it carries the CR-01 defect that the 9.1 review fixes addressed. dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 (blocks 12 to 17) is superseded and never tagged, because it carries the cross-instance CR-01 defect that the 09.1 bench observation found and Phase 9.2 fixed. Plan 09.2-09 writes the final CR-01 behavior into the release notes and re-points plans 09-04 (tag, owner decision) and 09-05 (release) to this SHA; this block runs next, in those plans.
+result: pass
+sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+date: 2026-10-15
+evidence: .planning/phases/09-v1-0-1-release/09-evidence/release
+note: Plans 09-04 and 09-05. After the pre-tag gate passed (`pre-tag-gate.txt`), the owner chose push-tag-claude-notes (`decision.txt`) and pushed the lightweight tag v1.0.1 on FIX; `git ls-remote origin refs/tags/v1.0.1` prints FIX (`tag-push.txt`). The tag push started release.yml run 38824818079 (event push, headBranch v1.0.1, headSha FIX, created 2026-10-15T23:38:48Z), which completed with conclusion success (`release-run.json`). All eight jobs succeeded: Tag matches manifest version, CI / Ruff, CI / Unit tests, CI / Broker tests (Mosquitto), CI / Multi-instance tests, Validate / hassfest, Validate / HACS and Create GitHub release (`release-jobs.json`). The release v1.0.1 was published at 2026-10-15T23:41:07Z, not a draft and not a prerelease (`release-view.json`), and `gh release list` shows it as Latest ahead of v1.0.0 and v0.1.0 (`release-latest.json`). Claude then applied the hand-written notes with `gh release edit v1.0.1 --notes-file .planning/phases/09-v1-0-1-release/09-evidence/release-notes.md` (notes_route claude, D-10); the body read back equals the notes file under `diff -B --strip-trailing-cr` (`release-body.md`, `notes-applied.txt`), and the replaced generated body is kept in `release-body-generated.md`. release.yml was not changed. Claude issued no push, no rerun and no tag change. History of this block before plan 09-05: Not reached. The tag may follow only after UAT-02 and UAT-04 pass on the tagged SHA (REL-01). With block 3 `issue` and block 4 `blocked`, no tag is pushed on 7baec98, no release notes are written, and plans 09-04 and 09-05 do not run. Phase 9.2 (plan 09.2-09): the tag candidate is now the fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74, on which blocks 18 to 23 pass and the CR-01 release gate (block 24) holds in all three variants. 681c58793b656b51869906b62f2564829de7a10d (blocks 6 to 11) is superseded and never tagged, because it carries the CR-01 defect that the 9.1 review fixes addressed. dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 (blocks 12 to 17) is superseded and never tagged, because it carries the cross-instance CR-01 defect that the 09.1 bench observation found and Phase 9.2 fixed. Plan 09.2-09 writes the final CR-01 behavior into the release notes and re-points plans 09-04 (tag, owner decision) and 09-05 (release) to this SHA; this block runs next, in those plans.
 
 ### 6. PRE (9.1): bench pinned to the fix SHA
 expected: ha-a and ha-b run exactly the custom_components tree of the fix SHA (byte-identical mount, pin check in lib.sh). The Phase 9.1 D-08 registry backups were taken with both instances stopped. check-preflight.sh (full) and check-stale-anchor.sh print PASS against the Phase 9.1 evidence root.
@@ -365,29 +363,29 @@ Not run in Phase 9 (D-05). They are not re-verified here, and nothing in this le
 ## Summary
 
 total: 24
-passed: 21
+passed: 22
 issues: 1
-pending: 1
+pending: 0
 skipped: 0
 blocked: 1
 
 The issue (block 3) and the blocked block (block 4) are the 7baec98 history. Blocks 6 to 11 passed on
 681c58793b656b51869906b62f2564829de7a10d and blocks 12 to 17 passed on dc6513c0b4ac54d68fbf5207161508c18cc2a5b6; both are
 superseded history. On the current fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74, blocks 18 to 23 pass, the CR-01 release
-gate (block 24) passes with the verdict `holds` in all three variants, and block 5 is pending. The CR-01 bench observation of
+gate (block 24) passes with the verdict `holds` in all three variants, and block 5 (REL) passes: tag v1.0.1 on that SHA,
+release run 38824818079 green in all eight jobs, Latest, hand-written notes applied. The CR-01 bench observation of
 plan 09.1-11 (`contradicts` on dc6513c) stays an observation and is not counted here.
 
 ## Requirement verdicts
 
-A requirement is complete only when all of its blocks are `pass`. The verdict stays `pending` until block 5 is recorded (plan
-09-05). With block 3 `issue`, REL-01 cannot pass on 7baec98. On the fix SHA, blocks 3 and 4 are superseded by blocks 9 to 11.
+A requirement is complete only when all of its blocks are `pass`. Block 5 was recorded as pass by plan 09-05 on 2026-10-15. With block 3 `issue`, REL-01 cannot pass on 7baec98. On the fix SHA, blocks 3 and 4 are superseded by blocks 9 to 11.
 On the fix SHA dc6513c0b4ac54d68fbf5207161508c18cc2a5b6, blocks 9 to 11 are superseded by blocks 15 to 17. On the current fix
 SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74, blocks 15 to 17 are superseded by blocks 21 to 23, and block 24 (the CR-01
 release gate) is added.
 
 | Requirement | Block | Verdict | Evidence |
 |-------------|-------|---------|----------|
-| REL-01 | 1 to 24 (blocks 3 and 4 superseded by blocks 9 to 11, then by blocks 15 to 17, then on the current fix SHA by blocks 21 to 23, plus the CR-01 release gate block 24) | pending | 7baec98 history: 09-evidence/00-preflight (pass), 09-evidence/release (CI pass), 09-evidence/uat-02 (issue), 09-evidence/uat-04 (blocked); 681c58793b656b51869906b62f2564829de7a10d history: 09.1-evidence/00-preflight (pass), 09.1-evidence/release (CI pass), 09.1-evidence/heal-start (pass), 09.1-evidence/uat-02 (pass), 09.1-evidence/uat-02-null (pass), 09.1-evidence/uat-04 (pass); dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 history: 09.1-evidence/fix2/00-preflight (pass), 09.1-evidence/fix2/release (CI pass), 09.1-evidence/fix2/heal-start (pass), 09.1-evidence/fix2/uat-02 (pass), 09.1-evidence/fix2/uat-02-null (pass), 09.1-evidence/fix2/uat-04 (pass); current fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74: 09.2-evidence/00-preflight (pass), 09.2-evidence/release (CI pass), 09.2-evidence/heal-start (pass), 09.2-evidence/uat-02 (pass), 09.2-evidence/uat-02-null (pass), 09.2-evidence/uat-04 (pass), 09.2-evidence/cr01-gate (holds, pass); REL pending (block 5, plans 09-04 and 09-05) |
+| REL-01 | 1 to 24 (blocks 3 and 4 superseded by blocks 9 to 11, then by blocks 15 to 17, then on the current fix SHA by blocks 21 to 23, plus the CR-01 release gate block 24) | pass | 7baec98 history: 09-evidence/00-preflight (pass), 09-evidence/release (CI pass), 09-evidence/uat-02 (issue), 09-evidence/uat-04 (blocked); 681c58793b656b51869906b62f2564829de7a10d history: 09.1-evidence/00-preflight (pass), 09.1-evidence/release (CI pass), 09.1-evidence/heal-start (pass), 09.1-evidence/uat-02 (pass), 09.1-evidence/uat-02-null (pass), 09.1-evidence/uat-04 (pass); dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 history: 09.1-evidence/fix2/00-preflight (pass), 09.1-evidence/fix2/release (CI pass), 09.1-evidence/fix2/heal-start (pass), 09.1-evidence/fix2/uat-02 (pass), 09.1-evidence/fix2/uat-02-null (pass), 09.1-evidence/fix2/uat-04 (pass); current fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74: 09.2-evidence/00-preflight (pass), 09.2-evidence/release (CI pass), 09.2-evidence/heal-start (pass), 09.2-evidence/uat-02 (pass), 09.2-evidence/uat-02-null (pass), 09.2-evidence/uat-04 (pass), 09.2-evidence/cr01-gate (holds, pass); REL pass (block 5, plans 09-04 and 09-05, 09-evidence/release, release run 38824818079) |
 
 ## Gap closure
 
@@ -408,6 +406,12 @@ Phase 9.2 (plan 09.2-09): the owner's route was Phase 9.2. On the current fix SH
 ACCEPTED-GAP-V101 closes for v1.0.1 only when blocks 21, 22, 23, 24 and 5 pass. Blocks 21, 22, 23 and 24 pass; block 5 is
 pending. 681c587 and dc6513c are superseded and never tagged. Plan 09.2-09 re-points plans 09-04 and 09-05 to this SHA, and
 plan 09-05 records the closure after the tag and release.
+
+Plan 09-05: ACCEPTED-GAP-V101 is closed for v1.0.1 on 2026-10-15, with the tag v1.0.1 on 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (FIX). On that SHA, UAT-02
+from integration tombstones (block 21) and from null tombstones (block 22), UAT-04 (block 23) and the CR-01 release gate
+(block 24) pass (Phase 9.2), and block 5 passes: release.yml run 38824818079 is green in all eight jobs, v1.0.1 is Latest, and
+the hand-written notes are applied. The closure covers this release only; it is not a full re-verification of Phases 1 to 8,
+which stays Phase 12 (QLT-01).
 
 ## Gaps
 

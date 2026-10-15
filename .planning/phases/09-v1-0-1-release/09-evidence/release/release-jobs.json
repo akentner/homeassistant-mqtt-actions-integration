@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Tag matches manifest version",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "CI / Unit tests",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "CI / Ruff",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "Validate / hassfest",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "CI / Broker tests (Mosquitto)",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "CI / Multi-instance tests",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "Validate / HACS",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "Create GitHub release",
+    "status": "completed",
+    "conclusion": "success"
+  }
+]

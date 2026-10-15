@@ -1,0 +1,7 @@
+route: claude
+applied_by: Claude (plan 09-05, gh release edit v1.0.1 --notes-file .planning/phases/09-v1-0-1-release/09-evidence/release-notes.md)
+decision: decision.txt (choice push-tag-claude-notes, notes_route claude)
+release_run: 38824818079 (conclusion success, all 8 jobs success, before the edit)
+replaced_body: release-body-generated.md (the --generate-notes body of release.yml)
+date: 2026-10-15T23:41:31Z
+body_matches_file: yes

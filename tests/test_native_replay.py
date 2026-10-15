@@ -15,6 +15,7 @@ from custom_components.mqtt_actions import sync as sync_module
 from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import DOMAIN
 from custom_components.mqtt_actions.discovery import DiscoveryContent, DiscoveryPublisher, build_discovery
+from custom_components.mqtt_actions.manager import Manager
 from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
 from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, heartbeat_topic
 from tests.documents import FOREIGN_OWNER, heartbeat_payload, make_spec
@@ -1221,3 +1222,95 @@ async def test_the_owner_keeps_when_a_peer_stays_unheard_until_the_retries_are_s
     assert PEER not in lines[0]
     # An unheard peer is counted on its own line, not as a peer that keeps a row or has not said what it keeps
     assert not any("another instance keeps" in message for message in own_info)
+
+
+# --- Phase 9.2 D-06: a follower removes its waiting twins once the owner cleared the topic ----------------------------
+
+
+async def _a_restarted_follower_on_legacy_content(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> tuple[Any, str, str, list[str]]:
+    """
+    Return a restarted follower whose integration-disabled twins the start-up catch kept on LEGACY content (D-05).
+
+    Core's discovery publishes are looped back, so a clear by core's hook would reach the shared topic. The publish
+    mock is reset before the catch. Returns the spec, the core-prefix topic, the legacy payload and the replayed ids.
+    """
+    spec, entry, discovery, replayed = await _a_follower_with_disabled_twins_rediscovered(
+        hass, mqtt_mock, hass_storage, make_hub_entry
+    )
+    topic = discovery_topic(PREFIX, spec.device_id)
+    _loop_back_discovery(hass, mqtt_mock)
+    await _restart(hass, entry)
+    async_fire_mqtt_message(hass, topic, discovery, retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    mqtt_mock.async_publish.reset_mock()
+    await _quiet_period_passes(hass)
+    _assert_disabled_twins_kept(hass, replayed)
+    assert _manager(entry).sync.discovery_content(spec.device_id) is DiscoveryContent.LEGACY
+    return spec, topic, discovery, replayed
+
+
+async def test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_topic(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+) -> None:
+    """
+    D-06: the owner's clear reaches a follower whose catch already kept its twins; the follower cleans up in this run.
+
+    The start-up catch saw LEGACY content and kept the integration-disabled twins (D-05). The owner then clears the
+    shared topic; once the follower sees it empty, its catch runs again and removes the twins and the emptied legacy
+    device, without waiting for the next start. The follower publishes nothing.
+    """
+    spec, topic, _discovery, replayed = await _a_restarted_follower_on_legacy_content(
+        hass, mqtt_mock, hass_storage, make_hub_entry
+    )
+
+    # The owner's clear arrives live
+    async_fire_mqtt_message(hass, topic, "", retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _quiet_period_passes(hass)
+
+    _assert_clean(hass, spec.device_id, replayed)
+    assert _discovery_clears(mqtt_mock, topic) == []
+
+
+async def test_the_follower_rearm_on_an_emptied_topic_is_bounded(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    D-06, T-09.2-12: a topic that flips between LEGACY and EMPTY never re-arms the catch past REPLAY_CATCH_RETRIES.
+
+    Anyone on the broker can publish on the shared topic. Here the legacy payload comes back right after each empty
+    one, so every re-armed catch finds LEGACY content again and the follower keeps its twins, and the next empty
+    payload asks for one more run. Every re-arm shares the retry counter of the start, so seven flips give exactly the
+    bounded number of extra runs and no more. The follower publishes no clear.
+    """
+    _spec, topic, discovery, replayed = await _a_restarted_follower_on_legacy_content(
+        hass, mqtt_mock, hass_storage, make_hub_entry
+    )
+    runs = [0]
+    original = Manager._async_replay_catch
+
+    async def _counted(manager: Manager) -> None:
+        runs[0] += 1
+        await original(manager)
+
+    monkeypatch.setattr(Manager, "_async_replay_catch", _counted)
+
+    for _flip in range(7):
+        async_fire_mqtt_message(hass, topic, "", retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        async_fire_mqtt_message(hass, topic, discovery, retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        await _quiet_period_passes(hass)
+
+    assert runs[0] == takeover.REPLAY_CATCH_RETRIES
+    _assert_disabled_twins_kept(hass, replayed)
+    assert _discovery_clears(mqtt_mock, topic) == []

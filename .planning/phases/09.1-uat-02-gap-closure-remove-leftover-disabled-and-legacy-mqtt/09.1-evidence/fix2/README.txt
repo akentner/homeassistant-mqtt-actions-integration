@@ -32,3 +32,13 @@ release/        push readiness, the owner's push of FIX, and CI and Validate on 
 Observations (never expectations): neither UAT-02 run logged "Takeover of device ... postponed" (research
 Pitfall 8), "keeps its MQTT device" or the catch's final-pass "the next start checks again" line; see
 observations.txt in uat-02/ and uat-02-null/.
+
+cr01-observation/  Plan 09.1-11: one bench observation of the CR-01 case on FIX (observation only, never a UAT
+                result; no verdict above changed). A renamed, enabled legacy test button next to an
+                integration-disabled switch twin, with the legacy discovery still retained, across one start of
+                ha-a and ha-b. Outcome: contradicts (outcome.txt, findings.txt): ha-b's takeover moved its renamed
+                row to the native platform, its catch then removed the disabled switch twin on LEGACY content, and
+                the clear core published deleted ha-a's kept, renamed button and emptied the topic. The bench was
+                returned to the clean state with the fallback restore of the pre-observation registry copy
+                (cleanup.txt, bench-notes.txt): check-uat02.sh clean, check-uat04.sh clean and
+                check-preflight.sh --quick PASS, nothing retained, no record named "CR-01 kept button".

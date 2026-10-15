@@ -1,0 +1,15 @@
+CR-01 observation, bench note (plan 09.1-11, Task 2 step 4 fallback): bench hygiene after all verdicts, never a result
+
+What was restored: core.entity_registry and core.device_registry of ha-a and ha-b, copied back with cp -p from the
+pre-observation copy <fix2 backup base>/cr01-pre-20261015T102353Z/{a,b}/ (taken with both instances stopped before the
+live publish), at 2026-10-15T10:38:54Z with ha-a and ha-b stopped. TOPIC was read back empty before the start.
+
+Why: after the name reset, the empty retained publish on TOPIC and two graceful restarts, check-uat02.sh clean still
+failed on ha-b ("mqtt_actions rows (without hub rows) differ from the baseline", "an entity id ending in _2 exists").
+In the observed start ha-b's takeover moved the renamed legacy button to platform mqtt_actions with its _2 entity id
+and registry id and removed the original native row (findings.txt). That moved row is a native row now, so no
+product path (EMPTY content, the catch) removes or renames it back. ha-a also held a deleted record named
+"CR-01 kept button" that core MQTT wrote when it deleted the kept row; the restore removes it as well.
+
+Effect: check-uat02.sh clean PASS at 2026-10-15T10:40:39Z, then check-uat04.sh clean and check-preflight.sh --quick
+PASS (cleanup.txt). D-09 (heal start) and every recorded verdict are unaffected; no registry file was edited by hand.

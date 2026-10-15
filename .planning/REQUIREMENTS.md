@@ -10,7 +10,7 @@ Order is fixed by the owner: release v1.0.1 first, then the review findings, the
 
 ### Release
 
-- [ ] **REL-01**: v1.0.1 is tagged on the commit whose manifest says 1.0.1, after UAT-02 and UAT-04 pass on the bench on exactly that SHA; release workflow, hassfest and HACS are green (closes ACCEPTED-GAP-V101 for that release)
+- [x] **REL-01**: v1.0.1 is tagged on the commit whose manifest says 1.0.1, after UAT-02 and UAT-04 pass on the bench on exactly that SHA; release workflow, hassfest and HACS are green (closes ACCEPTED-GAP-V101 for that release)
 - [ ] **REL-02**: v1.1.0 is tagged on a commit newer than v1.0.1 after all verification requirements pass; manifest says 1.1.0; release notes cover local actions and downgrade behavior
 
 ### Review Findings (Phase 8 info findings)
@@ -77,7 +77,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REL-01 | Phase 9 | Pending |
+| REL-01 | Phase 9 | Complete |
 | FIX-01 | Phase 10 | Pending |
 | FIX-02 | Phase 10 | Pending |
 | FIX-03 | Phase 10 | Pending |

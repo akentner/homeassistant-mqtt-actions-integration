@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: Local Actions on Mirrors
 current_phase: 9
 current_phase_name: v1.0.1 Release
-status: executing
-stopped_at: Completed 09-04-PLAN.md
-last_updated: "2026-10-15T23:39:51.744Z"
+status: verifying
+stopped_at: Completed 09-05-PLAN.md
+last_updated: "2026-10-15T23:43:11.986Z"
 last_activity: 2026-10-16
-last_activity_desc: 09-04 complete, v1.0.1 tag pushed by the owner
-state_head: 7aff2f345eb7e9254365326ce0589904e1fbfd7f
+last_activity_desc: 09-05 complete, v1.0.1 released and ACCEPTED-GAP-V101 closed
+state_head: f6ec105f2b01f8b336ee2b9aa419e671eba4f725
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 26
-  completed_plans: 25
+  completed_plans: 26
   percent: 17
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 9 (v1.0.1 Release) — EXECUTING
-Plan: 5 of 5 (09-05 next; 09-01 to 09-04 complete)
-Status: Ready to execute
-Last activity: 2026-10-16 — 09-04 complete: v1.0.1 tag on FIX 3dc9093 pushed by the owner, release run 38824818079 started
+Plan: 5 of 5 (09-01 to 09-05 complete)
+Status: Phase complete — ready for verification
+Last activity: 2026-10-16 — 09-05 complete: v1.0.1 released (run 38824818079 green, Latest, notes applied), ACCEPTED-GAP-V101 closed
 
 Progress: [██░░░░░░░░] 17%
 
@@ -137,6 +137,7 @@ Progress: [██░░░░░░░░] 17%
 | Phase 09.2 P08 | 42 min | 3 tasks | 75 files |
 | Phase 09.2 P09 | 9min | 2 tasks | 6 files |
 | Phase 09 P04 | 22min | 3 tasks | 3 files |
+| Phase 09 P05 | 5min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -295,6 +296,7 @@ Recent decisions affecting current work:
 - [Phase 09.2]: 09.2-09: FIX moved to 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (cross-instance CR-01 fix: owner-only release of the shared legacy topic gated by the heartbeat key kept_legacy, migrate first, follower cleanup on EMPTY); the dc6513c run (09.1-evidence/fix2, ledger blocks 12 to 17) is history; 09-04 and 09-05 read 09.2-evidence
 - [Phase 09]: Phase 9-04: v1.0.1 lightweight tag on FIX 3dc9093 pushed by the owner; owner chose push-tag-claude-notes (Claude applies release notes in 09-05)
 - [Phase 09]: Phase 9-04: REL-01 stays pending until 09-05 verifies release workflow, hassfest and HACS green
+- [Phase 09]: v1.0.1 released 2026-10-15 on tag v1.0.1 -> 3dc9093 (release run 38824818079 green in all 8 jobs, Latest, hand-written notes applied by Claude); ACCEPTED-GAP-V101 closed for v1.0.1 only, full re-verification stays Phase 12
 
 ### Pending Todos
 
@@ -329,8 +331,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T23:39:51.609Z
-Stopped at: Completed 09-04-PLAN.md
+Last session: 2026-10-15T23:43:11.889Z
+Stopped at: Completed 09-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

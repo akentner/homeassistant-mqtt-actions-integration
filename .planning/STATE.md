@@ -264,6 +264,7 @@ Recent decisions affecting current work:
 - [Phase 09.1]: 09.1-10: UAT-02 PASS on FIX dc6513c from integration tombstones (run a) and from null tombstones (run b)
 - [Phase 09.1]: 09.1-10: UAT-04 PASS on FIX dc6513c from the D-12 null-tombstone state; 3 disabled mqtt rows per instance after export off, 0 after one graceful restart (observation); bench left clean
 - [Phase 09.1]: 09.1-11: CR-01 bench observation on FIX dc6513c contradicts: ha-b takeover moved its renamed legacy button to the native platform, its catch removed the disabled switch twin on LEGACY content, and core clear-on-remove emptied the shared topic and deleted the kept renamed button on ha-a; 09.1-12 withholds the re-pointing, owner decides
+- [Phase 09.1]: 09.1-12: FIX moved to dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 (review fixes CR-01, WR-01, WR-02 and the troubleshooting correction); the 681c587 run (ledger blocks 6 to 11, top-level 09.1-evidence folders) is history; 09-04 and 09-05 read 09.1-evidence/fix2 only after the owner's route on the CR-01 observation (not re-pointed in 09.1-12)
 
 ### Pending Todos
 
@@ -276,8 +277,7 @@ Recent decisions affecting current work:
 - [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
-- [Phase 9.1]: UAT-02 gap closed on fix SHA 681c58793b656b51869906b62f2564829de7a10d (heal start, UAT-02 from integration and null tombstones, UAT-04 pass); run the re-pointed 09-04 (tag, owner decision) and 09-05 (release) next
-- CR-01 bench observation (09.1-11) contradicts on FIX dc6513c: the per-instance D-08 keep does not stop another instance from clearing the shared legacy topic; owner decision needed before 09.1-12 re-points 09-04/09-05 and before the v1.0.1 tag
+- [Phase 9.1]: Failing check: CR-01 bench observation (plan 09.1-11) contradicts on fix SHA dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 (the per-instance D-08 keep does not stop another instance from clearing the shared legacy topic); heal start, UAT-02 from integration and null tombstones and UAT-04 pass on that SHA (09-UAT.md blocks 12 to 17); 09-04 and 09-05 are not re-pointed and the release notes are unchanged; owner decides: new decimal phase or decision
 
 ### Quick Tasks Completed
 

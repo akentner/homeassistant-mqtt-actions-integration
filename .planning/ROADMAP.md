@@ -91,7 +91,7 @@ Plans:
   4. On the bench, the first start of the fix build cleans the leftover rows (D-09), UAT-02 passes from integration and from null tombstones, and UAT-04 passes, all on exactly the fix SHA (D-10 to D-12). (REL-01)
   5. `09-UAT.md` carries the fix-SHA rows, the release notes name the fixed case, and plans 09-04 and 09-05 read the fix SHA (D-16). (REL-01)
 
-**Plans:** 11/12 plans executed
+**Plans:** 12/12 plans executed
 
 Plans:
 **Wave 1**
@@ -130,7 +130,7 @@ Gap closure (09.1-VERIFICATION.md: the review fixes moved FIX past 681c587; stri
 - [x] 09.1-11-PLAN.md — CR-01 bench observation on the new FIX (observation only), clean bench
 
 **Wave 12** *(blocked on Wave 11 completion)*
-- [ ] 09.1-12-PLAN.md — Ledger blocks 12 to 17 on the new FIX (681c587 superseded), CR-01 exception in the release notes, 09-04 and 09-05 re-pointed to fix2, PROJECT and STATE
+- [x] 09.1-12-PLAN.md — Ledger blocks 12 to 17 on the new FIX (681c587 superseded), CR-01 exception in the release notes, 09-04 and 09-05 re-pointed to fix2, PROJECT and STATE
 
 ### Phase 10: Review Findings and Native Migration Extraction
 
@@ -197,7 +197,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. v1.0.1 Release | 3/5 | In Progress | - |
-| 9.1. UAT-02 Gap Closure (INSERTED) | 11/12 | In Progress | - |
+| 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | In Progress | - |
 | 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |

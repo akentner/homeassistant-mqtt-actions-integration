@@ -1349,11 +1349,20 @@ class Manager:
         Finish a taken-over device; False when the retained clear of an owned device could not be published.
 
         The owner clears the retained discovery last and ends the stale test-topic subscription of the legacy path. A
-        follower has nothing to clear.
+        follower has nothing to clear. A fresh migrate goes out right before the clear (D-09): it closes the window
+        since the pass's migrate, in which a peer may have loaded the legacy rows, and covers the unconfirmed-clear
+        retry after a reconnect, which runs with no migrate of its own. A failed migrate returns False, so the clear
+        stays unconfirmed and is retried with a fresh migrate, never sent bare. No peer gate here (research Q5): it
+        would block the owner's cutover clear whenever a legacy peer keeps its rows.
         """
         if device_id not in owned:
             return True
         assert self._publisher is not None  # noqa: S101
+        if not await _async_attempt(
+            partial(self._publisher.async_publish_migrate, device_id),
+            f"publish the migrate payload of device {device_id}",
+        ):
+            return False
         if not await _async_attempt(
             partial(self._publisher.async_clear_device, device_id), f"clear the discovery of device {device_id}"
         ):

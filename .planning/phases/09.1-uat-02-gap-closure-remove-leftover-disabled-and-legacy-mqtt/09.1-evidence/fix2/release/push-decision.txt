@@ -1,0 +1,6 @@
+choice: push
+date: 2026-10-15T09:34:32Z
+fix_sha: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+decided_by: owner
+decision_note: the owner resolved the Task 1 decision checkpoint by running the push himself from the main checkout (the push is the decision); the date is when Claude recorded it after the owner's push
+reversibility: one-way (a pushed public main can only be undone by a force push; no tag created)

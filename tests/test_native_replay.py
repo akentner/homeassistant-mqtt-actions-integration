@@ -14,10 +14,10 @@ from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 from custom_components.mqtt_actions import sync as sync_module
 from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import DOMAIN
-from custom_components.mqtt_actions.discovery import DiscoveryPublisher, build_discovery
+from custom_components.mqtt_actions.discovery import DiscoveryContent, DiscoveryPublisher, build_discovery
 from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
-from custom_components.mqtt_actions.topics import discovery_topic
-from tests.documents import FOREIGN_OWNER, make_spec
+from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, heartbeat_topic
+from tests.documents import FOREIGN_OWNER, heartbeat_payload, make_spec
 from tests.log_helpers import OWN_LOGGER
 from tests.test_native_start import (
     BASE,
@@ -49,6 +49,8 @@ if TYPE_CHECKING:
 # Longer than the production quiet period, and a literal on purpose: a RED run against code without the production
 # constant must fail on an assertion about the duplicates, not on a missing name
 QUIET_PERIOD_PASSED = 10.0
+# Another instance on the broker, next to the owner of a mirror (FOREIGN_OWNER)
+PEER = "instance-peer"
 
 
 @pytest.fixture(autouse=True)
@@ -97,6 +99,22 @@ def _assert_no_working_duplicate(hass: HomeAssistant, device_id: str, replayed: 
     )
     for entity_id in replayed:
         assert hass.states.get(entity_id) is None
+
+
+async def _announce_peer(hass: HomeAssistant, peer_id: str, kept_legacy: list[str] | None) -> None:
+    """
+    Announce a peer online and deliver one live heartbeat of it; call it after the restart, the roster is per start.
+
+    The heartbeat lists the device ids the peer keeps an enabled legacy MQTT entity of; None leaves the key out, which
+    is what an older peer sends. The key is a literal on purpose: a RED run against code without the product constant
+    must fail on an assertion about the kept rows, not on a missing name.
+    """
+    async_fire_mqtt_message(hass, availability_topic(BASE, peer_id), "online", retain=True)
+    data = json.loads(heartbeat_payload(peer_id, native=True))
+    if kept_legacy is not None:
+        data["kept_legacy"] = kept_legacy
+    async_fire_mqtt_message(hass, heartbeat_topic(BASE, peer_id), json.dumps(data), retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 @pytest.mark.parametrize("replay_at", ["before_the_clear", "after_the_clear"])
@@ -413,13 +431,17 @@ async def test_the_owner_clears_a_retained_legacy_discovery_even_when_nothing_wa
     _assert_moved_and_native(hass, legacy, before)
 
 
-async def test_a_follower_removes_its_disabled_twin_and_publishes_nothing(
-    hass: HomeAssistant,
-    mqtt_mock: Any,
-    hass_storage: dict[str, Any],
-    make_hub_entry: Callable,
-) -> None:
-    """T-5-02, D-02: a follower's catch removes the disabled twin of a native mirror; the product publishes nothing."""
+async def _a_follower_with_disabled_twins_rediscovered(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> tuple[Any, Any, str, list[str]]:
+    """
+    Return a follower whose native mirror has three replayed rows, all disabled by the integration and rediscovered.
+
+    The guard disables the replayed switch; the buttons are disabled too and core discovers all three rows again while
+    they are disabled, so core holds its clear-on-remove hook for each. A loaded button would defer the mirror's
+    takeover at the restart and keep the id from the catch (Pitfall 8). Returns the spec, the entry, the core-prefix
+    topic and the replayed entity ids.
+    """
     spec = make_spec(name="Foreign lamp")
     entry, topic = await _legacy_mirror(hass, make_hub_entry, spec)
     async_fire_mqtt_message(hass, topic, MIGRATE_PAYLOAD, retain=False)
@@ -436,13 +458,43 @@ async def test_a_follower_removes_its_disabled_twin_and_publishes_nothing(
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
     assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
-    # The round-2 state: the buttons are disabled too and core discovers all three rows again while they are disabled.
-    # A loaded button would defer the mirror's takeover at the restart and keep the id from the catch (Pitfall 8)
     for entity_id in replayed:
         entity_registry.async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
     await hass.async_block_till_done(wait_background_tasks=True)
     async_fire_mqtt_message(hass, topic, discovery, retain=False)
     await hass.async_block_till_done(wait_background_tasks=True)
+    return spec, entry, discovery, replayed
+
+
+def _assert_disabled_twins_kept(hass: HomeAssistant, replayed: list[str]) -> None:
+    """Assert that every replayed row is still in the registry, disabled by the integration."""
+    entity_registry = er.async_get(hass)
+    for entity_id in replayed:
+        kept = entity_registry.async_get(entity_id)
+        assert kept is not None, "an integration-disabled twin left the registry on LEGACY content"
+        assert kept.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+async def test_a_follower_keeps_its_disabled_twins_on_legacy_content_and_publishes_nothing(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+) -> None:
+    """
+    Contract changed on purpose by Phase 9.2 D-05: a follower keeps its integration-disabled twins on LEGACY content.
+
+    This test was `test_a_follower_removes_its_disabled_twin_and_publishes_nothing`, which pinned the opposite. A
+    follower never removes an integration-disabled twin while the shared core-prefix topic holds the legacy payload:
+    core discovered the row while it was disabled and holds a clear-on-remove hook for it, so the removal would make
+    core publish an empty retained payload on a topic every instance shares, and that clear deletes the rows other
+    instances keep (09.1 bench, CR-01). The follower removes them once the content is EMPTY (plan 09.2-03). T-5-02:
+    the product publishes nothing, and neither does core.
+    """
+    spec, entry, discovery, replayed = await _a_follower_with_disabled_twins_rediscovered(
+        hass, mqtt_mock, hass_storage, make_hub_entry
+    )
+    topic = discovery_topic(PREFIX, spec.device_id)
     await _restart(hass, entry)
     async_fire_mqtt_message(hass, topic, discovery, retain=True)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -450,9 +502,94 @@ async def test_a_follower_removes_its_disabled_twin_and_publishes_nothing(
 
     await _quiet_period_passes(hass)
 
-    _assert_clean(hass, spec.device_id, replayed)
-    # The product publishes no clear; core's own clear for a row it discovered while disabled (None) is allowed (D-02)
-    assert _discovery_clears(mqtt_mock, topic) == []
+    _assert_disabled_twins_kept(hass, replayed)
+    assert _mqtt_device_of(hass, spec.device_id) is not None
+    assert _falsy_publishes(mqtt_mock, topic) == []
+
+
+async def test_cross_instance_a_follower_keeps_its_disabled_twins_on_legacy_content_while_the_owner_keeps_a_row(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+) -> None:
+    """
+    D-12 (bench case, follower side), D-02, D-05: no catch lets the shared topic go empty under the owner's kept row.
+
+    The owner announces in its heartbeat that it keeps an enabled legacy row of the device. Core's discovery publishes
+    are looped back, so a clear by core's hook would reach the shared topic and empty it for every instance: after the
+    quiet period the twins are still there, nothing falsy went out, the content is still LEGACY and the MQTT device
+    stays.
+    """
+    spec, entry, discovery, replayed = await _a_follower_with_disabled_twins_rediscovered(
+        hass, mqtt_mock, hass_storage, make_hub_entry
+    )
+    topic = discovery_topic(PREFIX, spec.device_id)
+    _loop_back_discovery(hass, mqtt_mock)
+    await _restart(hass, entry)
+    async_fire_mqtt_message(hass, topic, discovery, retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _announce_peer(hass, FOREIGN_OWNER, [spec.device_id])
+    mqtt_mock.async_publish.reset_mock()
+
+    await _quiet_period_passes(hass)
+
+    _assert_disabled_twins_kept(hass, replayed)
+    assert _falsy_publishes(mqtt_mock, topic) == []
+    assert _manager(entry).sync.discovery_content(spec.device_id) is DiscoveryContent.LEGACY
+    assert _mqtt_device_of(hass, spec.device_id) is not None
+
+
+async def test_cross_instance_the_owner_neither_removes_nor_clears_while_a_peer_keeps_a_row(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    D-12 (reverse case, owner side), D-02: the owner keeps its disabled twin and the topic while a peer keeps a row.
+
+    An online peer announces in its heartbeat that it keeps an enabled legacy row of the device. Removing the twin
+    that core discovered while disabled would make core clear the shared topic, and the owner's explicit clear would
+    do the same: neither happens, the content stays LEGACY, and one INFO line names only a count (T-04-14).
+    """
+    legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    assert len(replayed) == 3
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    # Core discovers the disabled switch again, so it holds the hook that clears the topic when the row leaves
+    async_fire_mqtt_message(hass, legacy.topic, legacy.payload, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+    await _announce_peer(hass, PEER, [legacy.device_id])
+    mqtt_mock.async_publish.reset_mock()
+    caplog.set_level(logging.INFO, logger=OWN_LOGGER)
+    caplog.clear()
+
+    await _quiet_period_passes(hass)
+
+    kept = entity_registry.async_get(switch)
+    assert kept is not None, "the owner removed its disabled twin while a peer keeps a row"
+    assert kept.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert _falsy_publishes(mqtt_mock, legacy.topic) == []
+    assert _manager(legacy.entry).sync.discovery_content(legacy.device_id) is DiscoveryContent.LEGACY
+    assert _mqtt_device_of(hass, legacy.device_id) is not None
+    _assert_moved_and_native(hass, legacy, before)
+    lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name.startswith(OWN_LOGGER)
+        and record.levelno == logging.INFO
+        and "another instance keeps" in record.getMessage()
+    ]
+    assert len(lines) == 1
+    assert " 1 " in lines[0]
+    assert legacy.device_id not in lines[0]
+    assert PEER not in lines[0]
 
 
 async def test_the_owner_keeps_a_customized_duplicate_and_its_device_and_clears_nothing(

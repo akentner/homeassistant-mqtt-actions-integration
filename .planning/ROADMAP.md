@@ -144,7 +144,7 @@ Gap closure (09.1-VERIFICATION.md: the review fixes moved FIX past 681c587; stri
   4. On the bench pinned to exactly FIX, the heal start, UAT-02 from integration and null tombstones and UAT-04 pass, and the CR-01 release gate reads `holds` on ha-a and ha-b in variants 3, 2 and 1 with expectations fixed before the run (D-14 to D-16). (REL-01)
   5. `09-UAT.md` carries blocks 18 to 24 on FIX (blocks 12 to 17 superseded), and plans 09-04 and 09-05 read FIX with both BUMP definitions equal and the CR-01 gate as a pre-tag fact (D-17, D-18). (REL-01)
 
-**Plans:** 3/9 plans executed
+**Plans:** 4/9 plans executed
 
 Plans:
 **Wave 1**
@@ -157,7 +157,7 @@ Plans:
 - [x] 09.2-03-PLAN.md — Owner waits for unheard peers within the bound; follower cleans up on EMPTY in the same run; troubleshooting and README corrected (FIX candidate)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 09.2-04-PLAN.md — Owner review gate, fast-forward of main to the fix, 09.2 bench environment, push readiness of FIX
+- [x] 09.2-04-PLAN.md — Owner review gate, fast-forward of main to the fix, 09.2 bench environment, push readiness of FIX
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 09.2-05-PLAN.md — Owner decision and refspec push of FIX (heartbeat key acknowledged), dispatch; CI and Validate green with headSha == FIX

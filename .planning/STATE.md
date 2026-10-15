@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.2"
 current_phase_name: CR-01 cross-instance gap closure
 status: executing
-stopped_at: Completed 09.2-03-PLAN.md
-last_updated: "2026-10-15T19:12:03.602Z"
+stopped_at: Completed 09.2-04-PLAN.md
+last_updated: "2026-10-15T20:16:40.205Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 09.2 execution started
-state_head: 2ba47e72aabd39b1cd1e1a3e4a500aafd5941ea8
+state_head: 2d525a0ac7b9717519a81429d2700dfc448a44e7
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 26
-  completed_plans: 18
+  completed_plans: 19
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.2 (CR-01 cross-instance gap closure) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 09.2 execution started
 
@@ -129,6 +129,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.2 P01 | 13 min | 2 tasks | 7 files |
 | Phase 09.2 P02 | 16min | 3 tasks | 7 files |
 | Phase 09.2 P03 | 12 min | 3 tasks | 6 files |
+| Phase 09.2 P04 | 7 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -278,6 +279,7 @@ Recent decisions affecting current work:
 - [Phase 09.2]: 09.2-03: the UNHEARD re-arm (D-04) and the settle re-arm share _replay_catch_retries and REPLAY_CATCH_RETRIES, the longer wait wins; no new constant
 - [Phase 09.2]: 09.2-03: a LEGACY to EMPTY transition on the sync side calls Manager.on_discovery_emptied, which re-arms a follower's catch within the same bound and never publishes (D-06)
 - [Phase 09.2]: 09.2-03: FIX candidate is the docs commit a4d08950b0e7be8f190adebe32f65b3a3941af99
+- [Phase 09.2]: 09.2-04: FIX = 3dc9093 (IN-01 review-fix commit, supersedes a4d0895); local main fast-forwarded to ae738fe; owner push: git push origin 3dc9093f3cc49900bf76576cb4432d84aa94cd74:refs/heads/main, then dispatch ci.yml and validate.yml
 
 ### Pending Todos
 
@@ -314,8 +316,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T19:12:03.531Z
-Stopped at: Completed 09.2-03-PLAN.md
+Last session: 2026-10-15T20:16:40.133Z
+Stopped at: Completed 09.2-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

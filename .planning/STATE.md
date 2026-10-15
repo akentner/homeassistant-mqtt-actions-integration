@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.2"
 current_phase_name: CR-01 cross-instance gap closure
 status: executing
-stopped_at: Completed 09.2-02-PLAN.md
-last_updated: "2026-10-15T18:59:40.717Z"
+stopped_at: Completed 09.2-03-PLAN.md
+last_updated: "2026-10-15T19:12:03.602Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 09.2 execution started
-state_head: 030ed411287c6787ade2466abe6ad2de820fa199
+state_head: 2ba47e72aabd39b1cd1e1a3e4a500aafd5941ea8
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 26
-  completed_plans: 17
+  completed_plans: 18
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.2 (CR-01 cross-instance gap closure) — EXECUTING
-Plan: 3 of 9
+Plan: 4 of 9
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 09.2 execution started
 
@@ -128,6 +128,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.1 P12 | 4min | 2 tasks | 3 files |
 | Phase 09.2 P01 | 13 min | 2 tasks | 7 files |
 | Phase 09.2 P02 | 16min | 3 tasks | 7 files |
+| Phase 09.2 P03 | 12 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -274,6 +275,9 @@ Recent decisions affecting current work:
 - [Phase 09.2]: 09.2-02: kept_legacy is built in Manager.kept_legacy_ids from the registry by the catch's own predicate; any failure returns None, the key is left out and peers read UNKNOWN
 - [Phase 09.2]: 09.2-02: the catch migrates before it lets the shared topic go empty and re-reads content and peer signal after every await; no migrate while the gate keeps the device
 - [Phase 09.2]: 09.2-02: _async_finish_takeover publishes a fresh migrate before its clear (pass and retry); a failed migrate leaves the clear unconfirmed, no peer gate on that path (research Q5)
+- [Phase 09.2]: 09.2-03: the UNHEARD re-arm (D-04) and the settle re-arm share _replay_catch_retries and REPLAY_CATCH_RETRIES, the longer wait wins; no new constant
+- [Phase 09.2]: 09.2-03: a LEGACY to EMPTY transition on the sync side calls Manager.on_discovery_emptied, which re-arms a follower's catch within the same bound and never publishes (D-06)
+- [Phase 09.2]: 09.2-03: FIX candidate is the docs commit a4d08950b0e7be8f190adebe32f65b3a3941af99
 
 ### Pending Todos
 
@@ -310,8 +314,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T18:59:40.630Z
-Stopped at: Completed 09.2-02-PLAN.md
+Last session: 2026-10-15T19:12:03.531Z
+Stopped at: Completed 09.2-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

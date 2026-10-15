@@ -1,0 +1,37 @@
+recorded_utc: 2026-10-15T20:13:23Z
+fix_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+fix_source: git log -1 --format=%H main -- . ':(exclude).planning' (computed after the fast-forward; equals fix_sha of fast-forward.txt; the IN-01 docs commit of the owner-approved review fixes)
+origin_main: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+origin_main_is_ancestor_of_fix: yes (git ls-remote origin refs/heads/main prints dc6513c0b4ac54d68fbf5207161508c18cc2a5b6; git merge-base --is-ancestor origin/main 3dc9093f3cc49900bf76576cb4432d84aa94cd74 exits 0, after git fetch origin)
+commits_to_push: 62
+manifest_at_fix: 1.0.1
+non_planning_changes_after_fix: none (git diff --name-only 3dc9093f3cc49900bf76576cb4432d84aa94cd74 HEAD -- . ':(exclude).planning' is empty)
+changed_paths_since_origin_main: (git diff --name-only dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 3dc9093f3cc49900bf76576cb4432d84aa94cd74 -- . ':(exclude).planning'; the planned set of plans 09.2-01 to 09.2-03 and the review fixes)
+  README.md
+  custom_components/mqtt_actions/manager.py
+  custom_components/mqtt_actions/presence.py
+  custom_components/mqtt_actions/sync.py
+  custom_components/mqtt_actions/takeover.py
+  docs/troubleshooting.md
+  tests/test_cutover.py
+  tests/test_cutover_instances.py
+  tests/test_docs.py
+  tests/test_native_replay.py
+  tests/test_native_start.py
+  tests/test_presence.py
+  tests/test_shared_topic_gate.py
+  tests/test_takeover.py
+local_gate_tree: HEAD c53500d9eb54d9e767729a2fe17b1cc36b23ebd0 differs from FIX only under .planning/ and no non-planning path is dirty, so the tree under test is the FIX tree
+local_gate_ruff_check: pass (All checks passed!)
+local_gate_ruff_format: pass (94 files already formatted)
+local_gate_pytest: 1727 passed, 2 xfailed in 127.64s (0:02:07) (uv run pytest -q, all tiers; the 2 xfailed are the strict xfail entity_id_rename parameters in tests/test_takeover.py, "Not detectable", as in Phase 9 and 9.1)
+local_gate_broker: 18 passed, 1711 deselected in 17.71s (MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q -m broker; no skip, the broker tier really ran)
+wire_field: kept_legacy (new optional heartbeat key, Phase 9.2 D-01; costly to rename or remove after the release, because newer peers would read older ones as UNKNOWN)
+push_command: git push origin 3dc9093f3cc49900bf76576cb4432d84aa94cd74:refs/heads/main
+dispatch_commands: gh workflow run ci.yml --ref main ; gh workflow run validate.yml --ref main (two separate commands)
+why_refspec: local main carries .planning commits after FIX (the 09.2-04 evidence and later records); a plain git push origin main would put a docs commit at the head of origin main, and CI and Validate must run on FIX itself, so the owner pushes exactly FIX with a refspec
+why_dispatch: on.push in ci.yml and validate.yml has only tags-ignore ["v*.*.*"], so a branch push runs nothing; the owner dispatches both workflows while origin/main == FIX and before pushing anything else, and runs with event workflow_dispatch count under the Phase 9 D-04 amendment (09-evidence/release/d04-amendment.txt) only with headSha == FIX
+ci_jobs: ci.yml Ruff, Unit tests, Broker tests (Mosquitto), Multi-instance tests; validate.yml hassfest, HACS
+supersedes: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 (the cross-instance CR-01 defect of the 09.1 bench observation)
+tag: not created (plan 09-04, re-pointed to this FIX by plan 09.2-09 after the bench)
+claude_actions: none of push, workflow dispatch, rerun or tag; git fetch origin and git ls-remote origin were the only remote operations (reads)

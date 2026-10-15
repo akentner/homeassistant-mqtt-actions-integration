@@ -5,3 +5,16 @@ FAIL preflight (quick)
   - evidence file missing or empty: 00-preflight/heartbeats.txt
   - evidence file missing or empty: 00-preflight/retained-snapshot.txt
 rc=1
+
+green gate after the pin (env: . ~/ha-test/phase9.2.env), recorded_utc: 2026-10-15T21:02:10Z
+fix_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+
+== check-preflight.sh (full, with the guard routing proof)
+PASS preflight /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/00-preflight
+rc=0
+
+== check-stale-anchor.sh
+recorded build sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+empty mount-source (4a588e738c070982463b3defaeb57e9ea621e134): git diff --stat 3dc9093f3cc49900bf76576cb4432d84aa94cd74 4a588e738c070982463b3defaeb57e9ea621e134 -- custom_components tests .github
+PASS stale anchor: custom_components, tests and .github unchanged since the recorded build sha
+rc=0

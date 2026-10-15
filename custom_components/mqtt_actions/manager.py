@@ -961,8 +961,10 @@ class Manager:
         The owner cleared the topic, so a follower's integration-disabled twins that the catch kept on LEGACY content
         may go now, in this run and not only at the next start. Only while the manager runs, after the start-up catch
         was armed in this run, with no catch timer pending, for a native id that still has a legacy MQTT device, and
-        within the retry bound that every re-arm of this start shares (T-09.2-12). The owner's own clear comes back as
-        EMPTY too; that extra bounded run only removes leftovers. The catch decides as always, and this never publishes.
+        within the retry bound that every re-arm of this start shares (T-09.2-12). A catch that is running when this
+        arms folds its own re-arm into this timer instead of arming a second one (review WR-02). The owner's own clear
+        comes back as EMPTY too; that extra bounded run only removes leftovers. The catch decides as always, and this
+        never publishes.
         """
         if (
             not self._running
@@ -1115,7 +1117,10 @@ class Manager:
 
         `unknown` counts the devices whose topic content is not known while the settle may still make it known (WR-02),
         `unheard` the owned devices kept only for an online peer not heard yet (D-04). Both share the retry counter and
-        REPLAY_CATCH_RETRIES; with both, the longer wait wins. The lines carry counts only (T-04-14).
+        REPLAY_CATCH_RETRIES; with both, the longer wait wins. A timer that an emptied topic armed while this run
+        awaited (D-06) is replaced, not kept next to the new one, and its count covers the new run: exactly one catch
+        timer is ever pending, so a stop cancels it and no second catch chain spends the bound (review WR-02). The
+        lines carry counts only (T-04-14).
         """
         waits: list[float] = []
         if unknown and (settles_in := self.sync.discovery_settles_in()) is not None:
@@ -1131,8 +1136,15 @@ class Manager:
                     takeover.REPLAY_RETRY_MIN_SECONDS,
                 )
             )
-        if waits and self._replay_catch_retries < takeover.REPLAY_CATCH_RETRIES:
-            self._replay_catch_retries += 1
+        if waits and (
+            self._cancel_replay_catch is not None or self._replay_catch_retries < takeover.REPLAY_CATCH_RETRIES
+        ):
+            if self._cancel_replay_catch is not None:
+                # An emptied topic armed the catch while this run awaited (D-06); that run is counted already, so one
+                # run covers both reasons and exactly one timer stays pending (review WR-02)
+                self._cancel_replay_catch()
+            else:
+                self._replay_catch_retries += 1
             self._cancel_replay_catch = async_call_later(self._hass, max(waits), self._on_replay_catch_due)
             LOGGER.debug(
                 "Checking %d native devices again: %d with unsettled discovery content, %d waiting for an instance",

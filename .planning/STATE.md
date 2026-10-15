@@ -3,18 +3,18 @@ gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
 current_phase: "09.1"
-current_phase_name: uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt
+current_phase_name: UAT-02 gap closure
 status: executing
-stopped_at: Completed 09.1-06-PLAN.md
-last_updated: "2026-10-15T01:25:11.373Z"
-last_activity: 2026-10-14
+stopped_at: Completed 09.1-07-PLAN.md
+last_updated: "2026-10-15T08:42:43.155Z"
+last_activity: 2026-10-15
 last_activity_desc: Phase 09.1 execution started
-state_head: 7c022a4374d538fd9b91a33acddbd090d4a13829
+state_head: edbb1af13efbe5e58c5e6e86734419d496a481a1
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 17
-  completed_plans: 9
+  completed_plans: 10
   percent: 0
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 
 ## Current Position
 
-Phase: 09.1 (uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt) — READY TO EXECUTE
-Plan: 6 of 6
+Phase: 09.1 (UAT-02 gap closure) — EXECUTING
+Plan: 2 of 12
 Status: Ready to execute
-Last activity: 2026-10-14 — Phase 09.1 execution started
+Last activity: 2026-10-15 — Phase 09.1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -120,6 +120,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.1 P04 | 4min | 2 tasks | 3 files |
 | Phase 09.1 P05 | 31 min | 3 tasks | 70 files |
 | Phase 09.1 P06 | 7min | 2 tasks | 6 files |
+| Phase 09.1 P07 | 7 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -250,6 +251,8 @@ Recent decisions affecting current work:
 - [Phase 09.1]: 09.1-05: heal start, UAT-02 (a, integration) and UAT-02 (b, null) and UAT-04 all PASS on the bench pinned to exactly FIX 681c587; the first start of FIX removed the real leftover mqtt rows and legacy devices
 - [Phase 09.1]: 09.1-05: the bench was found down after a host crash (exit 135); mosq restarted as bench recovery, ha-a and ha-b StartedAt unchanged since bench-before-fix, so the stage2 start stayed the D-09 heal start
 - [Phase 09.1]: Phase 9.1 closed on FIX 681c587: ledger blocks 6 to 11 pass, release notes written, 09-04 and 09-05 re-pointed to FIX (BUMP = FIX, planning-excluded lookup, push or workflow_dispatch, four 9.1 verdicts); REL-01 stays pending until the tag and release
+- [Phase 09.1]: [09.1-07] Owner decision 1 applied: troubleshooting keeps disabled duplicates for a customized entity only while legacy Discovery is retained; new FIX dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+- [Phase 09.1]: [09.1-07] Re-run evidence root 09.1-evidence/fix2 via ~/ha-test/phase9.1-fix2.env; 681c587 evidence stays as history
 
 ### Pending Todos
 
@@ -285,8 +288,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-14T23:04:29.862Z
-Stopped at: Completed 09.1-06-PLAN.md
+Last session: 2026-10-15T08:42:43.096Z
+Stopped at: Completed 09.1-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

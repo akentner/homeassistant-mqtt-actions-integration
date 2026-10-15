@@ -1,0 +1,50 @@
+PASS X1 default prefix 11111111-aaaa-4aaa-8aaa-000000000001 :: retained payload present
+PASS X2 default prefix 11111111-aaaa-4aaa-8aaa-000000000001 :: components are only switch or select
+PASS X3 default prefix 11111111-aaaa-4aaa-8aaa-000000000001 :: enabled_by_default false on every component
+PASS X4 default prefix 11111111-aaaa-4aaa-8aaa-000000000001 buttons :: no button, no test_ key
+PASS X4 default prefix 11111111-aaaa-4aaa-8aaa-000000000001 test topic :: no /test topic in the payload
+PASS X1 default prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: retained payload present
+PASS X2 default prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: components are only switch or select
+PASS X3 default prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: enabled_by_default false on every component
+PASS X4 default prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a buttons :: no button, no test_ key
+PASS X4 default prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a test topic :: no /test topic in the payload
+PASS X1 default prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: retained payload present
+PASS X2 default prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: components are only switch or select
+PASS X3 default prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: enabled_by_default false on every component
+PASS X4 default prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 buttons :: no button, no test_ key
+PASS X4 default prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 test topic :: no /test topic in the payload
+PASS X5 :: nothing retained on homeassistant/device/+/config
+PASS X6 old prefix :: no retained message under mqtt_actions_export/ after the prefix change
+PASS X1 core prefix 11111111-aaaa-4aaa-8aaa-000000000001 :: retained payload present
+PASS X2 core prefix 11111111-aaaa-4aaa-8aaa-000000000001 :: components are only switch or select
+PASS X3 core prefix 11111111-aaaa-4aaa-8aaa-000000000001 :: enabled_by_default false on every component
+PASS X4 core prefix 11111111-aaaa-4aaa-8aaa-000000000001 buttons :: no button, no test_ key
+PASS X4 core prefix 11111111-aaaa-4aaa-8aaa-000000000001 test topic :: no /test topic in the payload
+PASS X1 core prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: retained payload present
+PASS X2 core prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: components are only switch or select
+PASS X3 core prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: enabled_by_default false on every component
+PASS X4 core prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a buttons :: no button, no test_ key
+PASS X4 core prefix b6bd2c0e-6d81-49ea-8025-4bd087bd718a test topic :: no /test topic in the payload
+PASS X1 core prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: retained payload present
+PASS X2 core prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: components are only switch or select
+PASS X3 core prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: enabled_by_default false on every component
+PASS X4 core prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 buttons :: no button, no test_ key
+PASS X4 core prefix 87c29b56-8abe-4531-b03c-c402a2f10cb8 test topic :: no /test topic in the payload
+PASS X7 ha-a 11111111-aaaa-4aaa-8aaa-000000000001 :: one mqtt row, disabled_by integration
+PASS X9 ha-a 11111111-aaaa-4aaa-8aaa-000000000001 :: native row present and enabled
+PASS X7 ha-a b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: one mqtt row, disabled_by integration
+PASS X9 ha-a b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: native row present and enabled
+PASS X7 ha-a 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: one mqtt row, disabled_by integration
+PASS X9 ha-a 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: native row present and enabled
+PASS X8 ha-a :: no enabled mqtt row
+PASS X7 ha-b 11111111-aaaa-4aaa-8aaa-000000000001 :: one mqtt row, disabled_by integration
+PASS X9 ha-b 11111111-aaaa-4aaa-8aaa-000000000001 :: native row present and enabled
+PASS X7 ha-b b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: one mqtt row, disabled_by integration
+PASS X9 ha-b b6bd2c0e-6d81-49ea-8025-4bd087bd718a :: native row present and enabled
+PASS X7 ha-b 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: one mqtt row, disabled_by integration
+PASS X9 ha-b 87c29b56-8abe-4531-b03c-c402a2f10cb8 :: native row present and enabled
+PASS X8 ha-b :: no enabled mqtt row
+PASS X10 :: no retained message under mqtt_actions_export/ or homeassistant/device/ after the export was switched off
+INFO after off ha-a (observation) :: mqtt rows left: 3
+INFO after off ha-b (observation) :: mqtt rows left: 3
+containers: ha-a StartedAt=2026-10-15 12:07:23.357057844 +0200 CEST ha-b StartedAt=2026-10-15 12:07:23.500884548 +0200 CEST (unchanged during the run unless a FAIL line says so)

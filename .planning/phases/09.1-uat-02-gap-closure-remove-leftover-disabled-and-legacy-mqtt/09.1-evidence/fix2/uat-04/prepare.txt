@@ -1,0 +1,34 @@
+build under test: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 (00-preflight/build.txt)
+UAT-02 run (a), uat-02/verdict.txt line 1: PASS
+UAT-02 run (b), uat-02-null/verdict.txt line 1: PASS
+== projection (--check, read-only) 2026-10-15T10:06:18Z
+-- ha-a deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+-- ha-b deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+would flip to disabled_by null: ha-a switch.lampe_test_2 (disabled_by integration);ha-a select.bar_select_2 (disabled_by integration);ha-b switch.lampe_test_2 (disabled_by integration);ha-b select.bar_select_2 (disabled_by integration);
+== restoration of the failing tombstone state (reseed-tombstones.sh) 2026-10-15T10:07:16Z
+ha-a and ha-b stopped; registry files are flushed
+== projection before the restoration 2026-10-15T10:07:23Z
+-- ha-a deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+-- ha-b deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+backup of both core.entity_registry files: /home/akentner/ha-test/_backup-pre-phase9.1-fix2-20261015T094121Z/reseed-20261015T100723Z
+precondition holds: zero live mqtt rows on both, exactly one record per regression id on both
+validation passed on both files (valid JSON, entities identical, deleted-entity count unchanged, other records identical, targets differ only in disabled_by)
+== projection after the restoration (files, instances still stopped) 2026-10-15T10:07:23Z
+-- ha-a deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":null}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":null}
+-- ha-b deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":null}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":null}
+both started again on the restored registries
+PASS preflight (quick) /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/fix2/00-preflight
+PASS UAT-02 clean /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/fix2/uat-02
+regression state before UAT-04: ha-a null tombstones switch=1 select=1; ha-b null tombstones switch=1 select=1; live mqtt rows a=0 b=0

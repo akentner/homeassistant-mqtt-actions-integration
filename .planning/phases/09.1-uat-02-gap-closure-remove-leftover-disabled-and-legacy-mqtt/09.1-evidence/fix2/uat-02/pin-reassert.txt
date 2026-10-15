@@ -1,0 +1,18 @@
+pin re-assert of plan 09.1-09 before the first run of plan 09.1-10 (D-13, one pinned-SHA session)
+recorded: 2026-10-15T09:52:55Z
+fix_sha: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+build_sha: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+handoff_build_sha: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+planning_excluded_head: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+head_branch: main
+tree_diff_fix_to_head_excluding_planning: 0 files
+status_00-preflight_and_heal-start: 0 changes
+check_preflight_quick: PASS preflight (quick) /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.1-uat-02-gap-closure-remove-leftover-disabled-and-legacy-mqtt/09.1-evidence/fix2/00-preflight
+check_stale_anchor: PASS stale anchor: custom_components, tests and .github unchanged since the recorded build sha
+started_at_ha-a_handoff: 2026-10-15 11:44:29.136028657 +0200 CEST
+started_at_ha-a_now: 2026-10-15 11:44:29.136028657 +0200 CEST
+started_at_ha-b_handoff: 2026-10-15 11:44:29.18042763 +0200 CEST
+started_at_ha-b_now: 2026-10-15 11:44:29.18042763 +0200 CEST
+running_ha-c: false
+source: git (read-only), podman inspect (read-only), check scripts under . ~/ha-test/phase9.1-fix2.env; preflight.sh not run
+result: PASS

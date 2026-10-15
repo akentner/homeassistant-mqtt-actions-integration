@@ -1,0 +1,14 @@
+== round 1 (instance started 2026-10-15 12:01:39.991821867 +0200 CEST) ==
+2026-10-15 12:01:45.298 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-15 12:01:45.306 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-15 12:01:50.291 INFO (MainThread) [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+2026-10-15 12:01:50.297 INFO (MainThread) [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+2026-10-15 12:01:50.689 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-15 12:01:50.691 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'
+== round 2 (instance started 2026-10-15 12:03:26.801630754 +0200 CEST) ==
+2026-10-15 12:03:34.584 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-15 12:03:34.596 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-15 12:03:37.117 INFO (MainThread) [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+2026-10-15 12:03:37.121 INFO (MainThread) [custom_components.mqtt_actions] Removed 3 duplicate entities that a replayed legacy discovery created
+2026-10-15 12:03:37.492 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-15 12:03:37.534 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'

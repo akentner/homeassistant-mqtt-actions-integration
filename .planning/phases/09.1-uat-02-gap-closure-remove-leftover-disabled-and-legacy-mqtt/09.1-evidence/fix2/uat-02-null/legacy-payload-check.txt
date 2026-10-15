@@ -1,0 +1,34 @@
+legacy payload check (A7): built with custom_components.mqtt_actions.discovery.build_discovery from the retained
+config documents, instance_id=3851f34f-fa67-4f3c-bba0-122465013c3d, sw_version=0.1.0
+
+device 11111111-aaaa-4aaa-8aaa-000000000001: topic homeassistant/device/11111111-aaaa-4aaa-8aaa-000000000001/config, device name Lampe Test
+  built unique ids:
+    11111111-aaaa-4aaa-8aaa-000000000001
+    11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806
+    11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725
+  registry of ha-a (platform mqtt_actions, unique id = id or id_test_*):
+    11111111-aaaa-4aaa-8aaa-000000000001
+    11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806
+    11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725
+  ha-a: built unique ids equal the registry rows: yes
+  registry of ha-b (platform mqtt_actions, unique id = id or id_test_*):
+    11111111-aaaa-4aaa-8aaa-000000000001
+    11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806
+    11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725
+  ha-b: built unique ids equal the registry rows: yes
+device b6bd2c0e-6d81-49ea-8025-4bd087bd718a: topic homeassistant/device/b6bd2c0e-6d81-49ea-8025-4bd087bd718a/config, device name Bar Select
+  built unique ids:
+    b6bd2c0e-6d81-49ea-8025-4bd087bd718a
+    b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039
+    b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b
+  registry of ha-a (platform mqtt_actions, unique id = id or id_test_*):
+    b6bd2c0e-6d81-49ea-8025-4bd087bd718a
+    b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039
+    b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b
+  ha-a: built unique ids equal the registry rows: yes
+  registry of ha-b (platform mqtt_actions, unique id = id or id_test_*):
+    b6bd2c0e-6d81-49ea-8025-4bd087bd718a
+    b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_3e23e8160039
+    b6bd2c0e-6d81-49ea-8025-4bd087bd718a_test_ca978112ca1b
+  ha-b: built unique ids equal the registry rows: yes
+result: built payloads match the registry unique ids on ha-a and ha-b

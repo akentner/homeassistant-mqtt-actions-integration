@@ -1,0 +1,11 @@
+observations of UAT-02 run (a), integration tombstones (never expectations; plan 09.1-10 Task 1 step 6)
+sources: log-a.txt and log-b.txt of this folder (script extracts per round) and podman logs --since 2026-10-15T09:53:58Z --until 2026-10-15T09:58:01Z of ha-a and ha-b
+ha-a: "postponed" (research Pitfall 8) in the script log: 0; in podman logs: 0
+ha-a: "keeps its MQTT device" in the script log: 0; in podman logs: 0
+ha-a: catch "checks again" line (INFO, final pass) in the script log: 0; in podman logs: 0
+ha-a: INFO "Removed N duplicate entities that a replayed legacy discovery created" lines in the script log: 4 (two rounds)
+ha-b: "postponed" (research Pitfall 8) in the script log: 0; in podman logs: 0
+ha-b: "keeps its MQTT device" in the script log: 0; in podman logs: 0
+ha-b: catch "checks again" line (INFO, final pass) in the script log: 0; in podman logs: 0
+ha-b: INFO "Removed N duplicate entities that a replayed legacy discovery created" lines in the script log: 4 (two rounds)
+the WR-02 re-arm logs "checking again" at DEBUG only; the bench runs at INFO, so a re-arm is not visible here and the final-pass INFO line "the next start checks again" was not logged: the catch resolved in every start

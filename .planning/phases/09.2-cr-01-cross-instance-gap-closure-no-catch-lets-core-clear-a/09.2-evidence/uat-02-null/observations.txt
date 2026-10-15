@@ -1,0 +1,29 @@
+observations of UAT-02 run (b), null tombstones (PHASE8_EV_SUFFIX=-null) (never expectations; plan 09.2-07 Task 1 step 6)
+sources: log-a.txt and log-b.txt of this folder (script extracts per round) and podman logs --since 2026-10-15T21:17:14Z --until 2026-10-15T21:21:17Z of ha-a and ha-b
+ha-a: "postponed: its legacy entities are still loaded" in the script log: 0; in podman logs: 0
+ha-a: "keeps its MQTT device" in the script log: 0; in podman logs: 0
+ha-a: "Kept the MQTT entities of [0-9]* native devices: another instance keeps" in the script log: 0; in podman logs: 0
+ha-a: "Kept the MQTT entities of [0-9]* native devices: another online instance was not heard yet" in the script log: 0; in podman logs: 0
+ha-a: "Kept the MQTT entities of [0-9]* native devices: the content of their retained discovery is not" in the script log: 0; in podman logs: 0
+ha-a: "cannot announce the [0-9]* devices" in the script log: 0; in podman logs: 0
+ha-a: "the next start checks again" in the script log: 0; in podman logs: 0
+ha-a: "Removed [0-9]* duplicate entities that a replayed legacy discovery created" in the script log: 8; in podman logs: 8
+ha-a: "Disabled [0-9]* duplicate entities that core MQTT created for native devices" in the script log: 4; in podman logs: 4
+ha-a: timestamps and fixed texts of the 09.2 lines (postponed, keeps its MQTT device, Kept the MQTT entities, cannot announce) in podman logs:
+  (end of list)
+ha-b: "postponed: its legacy entities are still loaded" in the script log: 0; in podman logs: 0
+ha-b: "keeps its MQTT device" in the script log: 0; in podman logs: 0
+ha-b: "Kept the MQTT entities of [0-9]* native devices: another instance keeps" in the script log: 0; in podman logs: 0
+ha-b: "Kept the MQTT entities of [0-9]* native devices: another online instance was not heard yet" in the script log: 0; in podman logs: 0
+ha-b: "Kept the MQTT entities of [0-9]* native devices: the content of their retained discovery is not" in the script log: 0; in podman logs: 0
+ha-b: "cannot announce the [0-9]* devices" in the script log: 0; in podman logs: 0
+ha-b: "the next start checks again" in the script log: 0; in podman logs: 0
+ha-b: "Removed [0-9]* duplicate entities that a replayed legacy discovery created" in the script log: 8; in podman logs: 8
+ha-b: "Disabled [0-9]* duplicate entities that core MQTT created for native devices" in the script log: 4; in podman logs: 4
+ha-b: timestamps and fixed texts of the 09.2 lines (postponed, keeps its MQTT device, Kept the MQTT entities, cannot announce) in podman logs:
+  (end of list)
+catch lines per start (INFO "Removed N duplicate entities ...", podman logs, per container start):
+  ha-a: 23:17:43.288 removed=2;23:17:43.290 removed=2;23:18:09.328 removed=1;23:18:09.328 removed=1;23:19:30.111 removed=2;23:19:30.113 removed=2;23:19:56.152 removed=1;23:19:56.153 removed=1;
+  ha-b: 23:17:42.954 removed=2;23:17:42.955 removed=2;23:18:10.353 removed=1;23:18:10.354 removed=1;23:19:29.756 removed=2;23:19:29.757 removed=2;23:19:57.167 removed=1;23:19:57.167 removed=1;
+the WR-02 re-arm logs "checking again" at DEBUG only; the bench runs at INFO. No final-pass "the next start checks again" line was logged, so the catch resolved in every start of this window
+times above are local (CEST, +0200) as podman logs prints them; this window holds two starts per instance (round 1 at 23:17:32, round 2 at 23:19:19); the owner ha-a logged its second catch pass about 1 s before the follower ha-b in both starts (23:18:09.328 vs 23:18:10.353, 23:19:56.152 vs 23:19:57.167)

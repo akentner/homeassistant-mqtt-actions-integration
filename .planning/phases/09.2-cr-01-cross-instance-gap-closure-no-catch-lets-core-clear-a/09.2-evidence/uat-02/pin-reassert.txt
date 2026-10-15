@@ -1,0 +1,20 @@
+pin re-assert of plan 09.2-06 before the first run of plan 09.2-07 (D-14, 09.1 D-13, one pinned-SHA session)
+recorded: 2026-10-15T21:09:08Z
+fix_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+build_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+handoff_build_sha: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+planning_excluded_head: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+head_branch: main
+tree_diff_fix_to_head_excluding_planning: 0 files
+status_00-preflight_and_heal-start: 0 changes
+check_preflight_quick: PASS preflight (quick) /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/00-preflight
+check_stale_anchor: PASS stale anchor: custom_components, tests and .github unchanged since the recorded build sha
+started_at_ha-a_handoff: 2026-10-15 23:01:32.942118271 +0200 CEST
+started_at_ha-a_now: 2026-10-15 23:01:32.942118271 +0200 CEST
+started_at_ha-b_handoff: 2026-10-15 23:01:33.123363016 +0200 CEST
+started_at_ha-b_now: 2026-10-15 23:01:33.123363016 +0200 CEST
+started_at_mosq_handoff: 2026-10-15 00:23:51.199036273 +0200 CEST
+started_at_mosq_now: 2026-10-15 00:23:51.199036273 +0200 CEST
+running_ha-c: false
+source: git (read-only), podman inspect (read-only), check scripts under . ~/ha-test/phase9.2.env; preflight.sh not run
+result: PASS

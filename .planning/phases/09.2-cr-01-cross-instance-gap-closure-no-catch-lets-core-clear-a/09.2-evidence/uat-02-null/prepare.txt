@@ -1,0 +1,23 @@
+== restoration of the failing tombstone state (reseed-tombstones.sh) 2026-10-15T21:15:02Z
+ha-a and ha-b stopped; registry files are flushed
+== projection before the restoration 2026-10-15T21:15:08Z
+-- ha-a deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+-- ha-b deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+backup of both core.entity_registry files: /home/akentner/ha-test/_backup-pre-phase9.2-20261015T205830Z/reseed-20261015T211508Z
+precondition holds: zero live mqtt rows on both, exactly one record per regression id on both
+validation passed on both files (valid JSON, entities identical, deleted-entity count unchanged, other records identical, targets differ only in disabled_by)
+== projection after the restoration (files, instances still stopped) 2026-10-15T21:15:08Z
+-- ha-a deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":null}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":null}
+-- ha-b deleted mqtt records of the regression ids (entity_id, unique_id, disabled_by); live mqtt rows: 0
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":null}
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":null}
+both started again on the restored registries
+PASS preflight (quick) /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/00-preflight
+PASS UAT-02 clean /home/akentner/Projects/homeassistant-mqtt-actions-integration/.planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/uat-02
+regression state before UAT-04: ha-a null tombstones switch=1 select=1; ha-b null tombstones switch=1 select=1; live mqtt rows a=0 b=0

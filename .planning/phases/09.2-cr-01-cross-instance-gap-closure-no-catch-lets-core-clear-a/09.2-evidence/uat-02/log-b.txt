@@ -1,0 +1,18 @@
+== round 1 (instance started 2026-10-15 23:09:35.504366963 +0200 CEST) ==
+2026-10-15 23:09:41.781 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-15 23:09:41.789 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-15 23:09:46.771 INFO (MainThread) [custom_components.mqtt_actions] Removed 2 duplicate entities that a replayed legacy discovery created
+2026-10-15 23:09:46.772 INFO (MainThread) [custom_components.mqtt_actions] Removed 2 duplicate entities that a replayed legacy discovery created
+2026-10-15 23:10:13.194 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-15 23:10:13.196 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'
+2026-10-15 23:10:14.196 INFO (MainThread) [custom_components.mqtt_actions] Removed 1 duplicate entities that a replayed legacy discovery created
+2026-10-15 23:10:14.197 INFO (MainThread) [custom_components.mqtt_actions] Removed 1 duplicate entities that a replayed legacy discovery created
+== round 2 (instance started 2026-10-15 23:11:22.400198632 +0200 CEST) ==
+2026-10-15 23:11:30.839 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-15 23:11:30.850 INFO (MainThread) [custom_components.mqtt_actions] Disabled 1 duplicate entities that core MQTT created for native devices
+2026-10-15 23:11:32.653 INFO (MainThread) [custom_components.mqtt_actions] Removed 2 duplicate entities that a replayed legacy discovery created
+2026-10-15 23:11:32.654 INFO (MainThread) [custom_components.mqtt_actions] Removed 2 duplicate entities that a replayed legacy discovery created
+2026-10-15 23:11:59.049 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for 11111111-aaaa-4aaa-8aaa-000000000001, node_id 'None'
+2026-10-15 23:11:59.050 WARNING (MainThread) [homeassistant.components.mqtt.discovery] No device components to cleanup for b6bd2c0e-6d81-49ea-8025-4bd087bd718a, node_id 'None'
+2026-10-15 23:12:00.050 INFO (MainThread) [custom_components.mqtt_actions] Removed 1 duplicate entities that a replayed legacy discovery created
+2026-10-15 23:12:00.050 INFO (MainThread) [custom_components.mqtt_actions] Removed 1 duplicate entities that a replayed legacy discovery created

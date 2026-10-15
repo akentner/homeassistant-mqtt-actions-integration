@@ -1,0 +1,13 @@
+recorded: 2026-10-15T08:37:16Z
+head: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+fix_sha: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+started_at_mosq: 2026-10-15 00:23:51.199036273 +0200 CEST
+running_mosq: true
+started_at_ha-a: 2026-10-15 00:50:11.419510756 +0200 CEST
+running_ha-a: true
+started_at_ha-b: 2026-10-15 00:50:16.432039947 +0200 CEST
+running_ha-b: true
+started_at_ha-c: 2026-10-06 20:13:28.106273455 +0200 CEST
+running_ha-c: false
+source: podman inspect (read-only); no container was started, stopped or restarted
+ha-a and ha-b keep running the process they started on 681c587 until plan 09.1-09 stops them; the next start of either is planned as the heal start on the restored pre-state (owner decision 2)

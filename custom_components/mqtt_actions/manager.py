@@ -551,6 +551,8 @@ class Manager:
         self._replay_catch_retries = 0
         # Set once the start-up catch was armed in this run; only then may an emptied topic arm it again (D-06)
         self._replay_catch_armed = False
+        # Set once a failing kept list was logged at WARNING in this start; every heartbeat builds it (review IN-02)
+        self._kept_failure_logged = False
         # The registry listener that disables an enabled duplicate of a native device; None while the manager is stopped
         self._cancel_duplicate_guard: CALLBACK_TYPE | None = None
         # Set once the settle time has passed; only then does a roster change start a cutover check
@@ -849,7 +851,8 @@ class Manager:
         or when it keeps an enabled legacy row by the predicate the catch uses (`takeover.keeps_enabled_legacy_row`), so
         what this instance announces and what its catch keeps cannot drift. Read from the registry at every call, so
         the first heartbeat of a start is right before any entity loaded; enabled in the registry is a superset of
-        loaded, the safe direction. Empty without an MQTT entry. A failure returns None, which peers read as unknown.
+        loaded, the safe direction. Empty without an MQTT entry. A failure returns None, which peers read as unknown,
+        and logs a WARNING once per start.
         """
         try:
             if (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None:
@@ -866,8 +869,11 @@ class Manager:
                 )
             )
         except Exception as err:  # noqa: BLE001
-            # No registry or broker content in the log; peers keep their rows while the list is unknown (D-03)
-            LOGGER.warning("The list of the devices whose MQTT entities this instance keeps could not be built")
+            # No registry or broker content in the log; peers keep their rows while the list is unknown (D-03). Once
+            # per start at WARNING, since every heartbeat builds the list again (review IN-02)
+            if not self._kept_failure_logged:
+                self._kept_failure_logged = True
+                LOGGER.warning("The list of the devices whose MQTT entities this instance keeps could not be built")
             LOGGER.debug("Building the kept device list failed with %s", type(err).__name__)
             return None
 

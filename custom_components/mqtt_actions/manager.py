@@ -1021,10 +1021,11 @@ class Manager:
         While the discovery settle is not done or still inside its grace, the catch arms itself again for the time that
         is left instead, a bounded number of times per start (WR-02). An owned device that the gate keeps only because
         an instance announced online was not heard since this start (UNHEARD) arms it again too, for the rest of one
-        heartbeat interval plus the expiry margin, so a peer that starts together with the owner no longer keeps the
-        owner from cleaning up in that run (D-04). Both reasons share the same retry counter and bound; with both, the
-        longer wait wins. After the bound the owner keeps the device and logs a count; the next start checks again. A
-        peer that sent no valid kept list (UNKNOWN, an older version) never re-arms: nothing changes in this run.
+        heartbeat interval plus the expiry margin, and after that for one full interval plus the margin per retry, so a
+        peer that starts together with the owner, or whose first heartbeat was lost, no longer keeps the owner from
+        cleaning up in that run (D-04, review WR-03). Both reasons share the same retry counter and bound; with both,
+        the longer wait wins. After the bound the owner keeps the device and logs a count; the next start checks again.
+        A peer that sent no valid kept list (UNKNOWN, an older version) never re-arms: nothing changes in this run.
         """
         async with self._lock:
             if not self._running:
@@ -1129,13 +1130,12 @@ class Manager:
             waits.append(max(settles_in, takeover.REPLAY_RETRY_MIN_SECONDS))
         if unheard:
             # A peer announced online sends its first heartbeat within one interval of this start: check again
-            # once it is due, instead of keeping until the next start (D-04)
-            waits.append(
-                max(
-                    HEARTBEAT_INTERVAL_SECONDS + EXPIRY_MARGIN_SECONDS - self.presence.listening_seconds(),
-                    takeover.REPLAY_RETRY_MIN_SECONDS,
-                )
-            )
+            # once it is due, instead of keeping until the next start (D-04). Past that point a heartbeat was lost
+            # (QoS 0) or the peer is gone, so check once per interval: each retry then waits for one more heartbeat
+            # instead of spending the bound within seconds (review WR-03)
+            heard_by = HEARTBEAT_INTERVAL_SECONDS + EXPIRY_MARGIN_SECONDS
+            elapsed = self.presence.listening_seconds()
+            waits.append(max(heard_by - elapsed if elapsed < heard_by else heard_by, takeover.REPLAY_RETRY_MIN_SECONDS))
         if waits and (
             self._cancel_replay_catch is not None or self._replay_catch_retries < takeover.REPLAY_CATCH_RETRIES
         ):

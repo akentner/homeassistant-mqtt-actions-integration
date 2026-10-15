@@ -374,6 +374,11 @@ Every device gets a random UUID. Its state topic, which is also its command topi
 - Retained legacy Discovery messages and the disabled MQTT duplicates they left stay while an instance that is online
   runs a version older than 1.0.1, because such an instance does not announce which MQTT entities it keeps; they go once
   every online instance runs 1.0.1 or newer. They also stay while the instance that owns the device is offline.
+- A crashed or removed instance whose retained availability still says `online` keeps the retained legacy Discovery
+  messages and the disabled MQTT duplicates on every instance: the owner waits for a heartbeat of every instance
+  announced online, checks again once per heartbeat interval a bounded number of times per start, and then keeps them
+  and logs a count. Clear the retained availability of the dead instance, see
+  [docs/troubleshooting.md](docs/troubleshooting.md).
 - The export is best effort: nothing heals it, and it has no test buttons.
 - A forged tombstone removes the mirrors of a device until the owner publishes it again, and forces a new approval.
 - A follower mirrors at most 100 devices of other instances, and a config document may be at most 256 KiB.

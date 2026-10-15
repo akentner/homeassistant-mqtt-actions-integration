@@ -126,6 +126,25 @@ moment the owner clears the old messages is not protected. The native entity of 
 **What to do:** if you still see an enabled duplicate, disable it in **Settings**, **Devices & services**, **Entities**,
 or set the export prefix back to the default `mqtt_actions_export`, which Home Assistant does not listen to.
 
+### Old Discovery messages stay after an instance crashed or was removed
+
+The owner of a device lets retained legacy Discovery messages go only after it heard a heartbeat of every instance whose
+availability says `online` (see above). A crashed or removed instance never sends a heartbeat again, but its retained
+availability can say `online` for good, because Home Assistant owns the MQTT connection and there is no Last Will. The
+owner then checks again once per heartbeat interval, a bounded number of times per start, keeps the old messages and
+its disabled duplicates, and logs at INFO level that another online instance was not heard yet. This repeats at every
+start, and every follower keeps its disabled duplicates too, because the old messages stay. These checks share one
+bound per start with the check a follower makes after the owner cleared the old messages, so once the bound is spent a
+follower removes its duplicates only at its next start. **What to do:** list the announced instances with
+`mosquitto_sub -v -t 'mqtt_actions/v1/instances/+/availability'` and compare them with the attribute `instances` of the
+sensor **Instances online**. For an instance that says `online` there but is gone for good, publish an empty retained
+payload on its availability topic `mqtt_actions/v1/instances/<instance id>/availability`, for example with
+`mosquitto_pub -r -n -t 'mqtt_actions/v1/instances/<instance id>/availability'`, or with the action `mqtt.publish`,
+`retain: true` and an empty payload. Use your base topic instead of `mqtt_actions` if you changed it. Every instance
+then forgets the dead one, and the next start of the owner clears the old messages. Mirrors of devices that the dead
+instance owned turn unavailable; [adopt](operations.md#adoption) them if you still need them. An instance that comes
+back announces itself again.
+
 ### Entities are missing on an older instance
 
 An instance on 0.1.x that comes online after the others switched keeps running its actions, but it shows no entities

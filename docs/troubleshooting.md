@@ -112,14 +112,19 @@ a duplicate itself right after Home Assistant creates it, on every instance that
 instance publishes the export. An enabled duplicate that you still see therefore points to a row you enabled yourself or
 to a device that the instance does not hold natively. When the export is switched off again, the disabled duplicates
 stay in the entity list until Home Assistant is restarted, and the next start removes them. When old MQTT Discovery
-messages of a device are still retained on the broker, the next start removes the disabled duplicates of that device as
-well, unless a renamed or otherwise customized MQTT entity of that device is still enabled: then the disabled duplicates
-stay, so that the customized entity is kept. The instance that owns the device clears such old messages at its next
-start, unless it still keeps a renamed or otherwise customized MQTT entity of that device.
-Every instance that follows the device then deletes its remaining MQTT entities of that device, including one that you
-renamed or customized in another way. The native entity of the device is not affected. **What to do:** if you still see
-an enabled duplicate, disable it in **Settings**, **Devices & services**, **Entities**, or set the export prefix back to
-the default `mqtt_actions_export`, which Home Assistant does not listen to.
+messages of a device are still retained on the broker, only the instance that owns the device lets them go: at its next
+start it removes its disabled duplicates of that device and clears the old messages, unless a renamed or otherwise
+customized MQTT entity of that device is still enabled on this or on any other instance that is online. Every instance
+announces such entities in its heartbeat, and the owner waits until it has heard every instance that is online. An
+instance that follows the device keeps its disabled duplicates while the old messages are retained and removes them in
+the same run once the owner has cleared them, so the customized entity is kept on every instance. A follower that held a
+renamed MQTT entity of the device moves it to MQTT Actions at its next start, with its entity id that ends in `_2`, and
+removes the unchanged native entity it duplicated, so automations that use the renamed entity keep working. The old
+messages and the disabled duplicates stay as they are while an instance that is online runs a version older than 1.0.1,
+because it does not announce what it keeps, and while the owner is offline. An entity that you customize at the very
+moment the owner clears the old messages is not protected. The native entity of the device is not affected.
+**What to do:** if you still see an enabled duplicate, disable it in **Settings**, **Devices & services**, **Entities**,
+or set the export prefix back to the default `mqtt_actions_export`, which Home Assistant does not listen to.
 
 ### Entities are missing on an older instance
 

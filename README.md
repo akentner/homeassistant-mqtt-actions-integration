@@ -371,6 +371,9 @@ Every device gets a random UUID. Its state topic, which is also its command topi
 - The upgrade from 0.1.x is one-way and has no rollback. An older instance that comes online after the switch keeps
   running its actions but loses the entities of migrated devices without a hint. Adoption between an old and a new
   instance should not run concurrently. See [Upgrading from 0.1.x](#upgrading-from-01x).
+- Retained legacy Discovery messages and the disabled MQTT duplicates they left stay while an instance that is online
+  runs a version older than 1.0.1, because such an instance does not announce which MQTT entities it keeps; they go once
+  every online instance runs 1.0.1 or newer. They also stay while the instance that owns the device is offline.
 - The export is best effort: nothing heals it, and it has no test buttons.
 - A forged tombstone removes the mirrors of a device until the owner publishes it again, and forces a new approval.
 - A follower mirrors at most 100 devices of other instances, and a config document may be at most 256 KiB.

@@ -13,7 +13,7 @@ from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 
 from custom_components.mqtt_actions import sync as sync_module
 from custom_components.mqtt_actions import takeover
-from custom_components.mqtt_actions.const import DOMAIN
+from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN
 from custom_components.mqtt_actions.discovery import DiscoveryContent, DiscoveryPublisher, build_discovery
 from custom_components.mqtt_actions.manager import Manager
 from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
@@ -38,6 +38,7 @@ from tests.test_takeover import (
     PREFIX,
     _discovery_clears,
     _falsy_publishes,
+    _published_payload,
     legacy_entity_ids,
     setup_legacy_device,
 )
@@ -1104,6 +1105,97 @@ async def test_the_owner_reads_the_peer_signal_again_right_before_it_empties_the
         assert _falsy_publishes(mqtt_mock, legacy.topic) == []
     else:
         assert _discovery_clears(mqtt_mock, legacy.topic) == []
+
+
+async def _an_owner_of_two_devices_with_disabled_twins_on_legacy_content(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> list[tuple[str, str, list[str]]]:
+    """
+    Return a restarted native owner of two devices, each with three replayed rows on LEGACY content, no catch run yet.
+
+    Both devices were taken over at an earlier start; a replay then created three rows per device, the switch disabled
+    by the guard. Core's discovery publishes are looped back and the publish mock is reset. Returns, per device in the
+    order the catch visits them, the device id, the core-prefix topic and the replayed entity ids.
+    """
+    subs = [make_switch_subentry("Lamp one"), make_switch_subentry("Lamp two")]
+    entry = make_hub_entry(subs)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    async_fire_mqtt_message(hass, availability_topic(entry.data["base_topic"], entry.data[CONF_INSTANCE_ID]), "online")
+    devices: list[tuple[str, str, str]] = []
+    for sub in subs:
+        device_id = sub["data"][CONF_DEVICE_ID]
+        topic = discovery_topic(PREFIX, device_id)
+        payload = _published_payload(mqtt_mock, topic)
+        async_fire_mqtt_message(hass, topic, payload, retain=True)
+        devices.append((device_id, topic, payload))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _seed_native(hass_storage, pending=[device_id for device_id, _topic, _payload in devices])
+    _loop_back_discovery(hass, mqtt_mock)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    replayed: dict[str, list[str]] = {}
+    for device_id, topic, payload in devices:
+        assert legacy_entity_ids(hass, device_id) == []  # the takeover of the device is done
+        replayed[device_id] = await _replay(hass, topic, payload, device_id)
+        assert len(replayed[device_id]) == 3
+    await _restart(hass, entry)
+    for _device_id, topic, payload in devices:
+        async_fire_mqtt_message(hass, topic, payload, retain=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    mqtt_mock.async_publish.reset_mock()
+    return [(device_id, topic, replayed[device_id]) for device_id, topic, _payload in sorted(devices)]
+
+
+async def test_no_migrate_goes_out_for_a_device_a_peer_announced_during_an_earlier_migrate(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """
+    D-10, T-09.2-08 (WR-01): every migrate is decided from a read taken right before its own publish.
+
+    The owner holds two devices whose disabled twins the gate lets go on LEGACY content. While the migrate of the first
+    device is on its way, a peer comes online and announces a kept row of the second one. No migrate may go out for the
+    second device: it would unload the peer's kept row while the topic stays retained. The first device is cleaned up.
+    """
+    (
+        (first, first_topic, first_replayed),
+        (second, second_topic, second_replayed),
+    ) = await _an_owner_of_two_devices_with_disabled_twins_on_legacy_content(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
+    )
+    deliver = mqtt_mock.async_publish.side_effect
+    announced = [False]
+
+    def _deliver_and_announce(topic: str, payload: Any, *args: Any, **kwargs: Any) -> Any:
+        result = deliver(topic, payload, *args, **kwargs)
+        if topic == first_topic and isinstance(payload, str) and "migrate_discovery" in payload and not announced[0]:
+            announced[0] = True
+            _fire_peer(hass, PEER, [second])
+        return result
+
+    mqtt_mock.async_publish.side_effect = _deliver_and_announce
+
+    await _quiet_period_passes(hass)
+
+    assert announced[0], "the owner sent no migrate for the first device"
+    assert not any(
+        isinstance(payload, str) and "migrate_discovery" in payload
+        for payload, _retain in _publishes(mqtt_mock, second_topic)
+    ), "a migrate went out for a device a peer announced a kept row of during an earlier migrate"
+    assert _falsy_publishes(mqtt_mock, second_topic) == []
+    _assert_disabled_twins_kept(hass, [entity_id for entity_id in second_replayed if entity_id.startswith("switch.")])
+    _assert_clean(hass, first, first_replayed)
 
 
 # --- Phase 9.2 D-04: the owner waits one heartbeat interval for a peer it has not heard yet ---------------------------

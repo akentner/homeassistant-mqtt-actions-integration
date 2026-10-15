@@ -1,0 +1,4 @@
+retained homeassistant/device/# after the heal start (probe_sub -F '%t %r' -W 3; retained flag 1 only)
+recorded_utc: 2026-10-15T09:44:18Z (more than 90 s after started_at_a of build.txt)
+probe rc=27 (0 = message read, 27 = connected and timed out with no retained message)
+retained topics: none

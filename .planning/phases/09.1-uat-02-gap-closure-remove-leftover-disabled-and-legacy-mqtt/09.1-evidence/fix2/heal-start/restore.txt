@@ -1,0 +1,43 @@
+pre-state re-created per owner decision 2026-10-15 (D-09 heal start on the restored state, no override)
+source: /home/akentner/ha-test/_backup-pre-phase9.1-20261014T222425Z (the D-08 backup of plan 09.1-05, taken with ha-a and ha-b stopped before the 681c587 heal start)
+recorded_utc: 2026-10-15T09:42:02Z
+ha-a running: false
+ha-b running: false
+command: cp -p /home/akentner/ha-test/_backup-pre-phase9.1-20261014T222425Z/{a,b}/core.{entity,device}_registry ~/ha-test/{a,b}/.storage/ (the four registry files only)
+current state backed up before the restore: /home/akentner/ha-test/_backup-pre-phase9.1-fix2-20261015T094121Z (00-preflight/backup-phase9.1-fix2.txt)
+
+== StartedAt record (step 1, information; heal-start/bench-before-fix2.txt vs podman inspect before the stop)
+  ha-a: recorded '2026-10-15 00:50:11.419510756 +0200 CEST', found '2026-10-15 00:50:11.419510756 +0200 CEST', equal
+  ha-b: recorded '2026-10-15 00:50:16.432039947 +0200 CEST', found '2026-10-15 00:50:16.432039947 +0200 CEST', equal
+  no start of any tree on the restored registries happens before preflight stage2 (the heal start)
+
+== consistency checks before the restore (owner decision 2, planner checks)
+  (a) sha256 of P against 09.1-evidence/00-preflight/backup-phase9.1.txt
+    a/core.entity_registry 4d4788a69b30e06edf4bd5185dadd7a6200060cd63623d70e14eced40d847894 equal
+    a/core.device_registry 4ca49ef40dd2d041b26bf639f1ed7a47502f6aa6113c2185d2f9746619b652c3 equal
+    b/core.entity_registry 6432e2962022e9c986d39cf6188df7baf75da070aad56f4fe907008ee5f6cf39 equal
+    b/core.device_registry 9b1690cac261149697ff842df277d608c7c3af42792b9edf5ff3cad8885a0a00 equal
+  (b) cmp of P against S1 /home/akentner/ha-test/_backup-pre-phase8-20261014T222456Z/{a,b}/.storage
+    a/core.entity_registry identical
+    a/core.device_registry identical
+    b/core.entity_registry identical
+    b/core.device_registry identical
+  (c) live core.config_entries and mqtt_actions.state against S1 (fixed-field projections, compared in memory)
+    a core.config_entries (mqtt and mqtt_actions entries: 2; entry ids, subentry ids, option keys): equal
+    a mqtt_actions.state (.data.native and the key set of .data.mirrors): equal
+    b core.config_entries (mqtt and mqtt_actions entries: 2; entry ids, subentry ids, option keys): equal
+    b mqtt_actions.state (.data.native and the key set of .data.mirrors): equal
+  result: all checks passed; only the registries needed restoring
+
+== live registry files, sha256 before the restore (681c587 end state, from the backup after the graceful stop)
+  a/core.entity_registry 141c53cc6aef638f9e993838b0f988f0c04f08e9cb9e259a65176b40ebf28857
+  a/core.device_registry ac02b3da18dd14133059fa72841e6ef23f8704c5d371ccf3cc768c77b60f6828
+  b/core.entity_registry 0e43c08ee61de6046b6cf0a5de3999e6c96872dfbdcf8f73985f67560b448ca8
+  b/core.device_registry d2e0a1f0922fae4673516abc056b53ec8b4399ce0b0c4559c39ceaa8fce78d8c
+== live registry files, sha256 after the restore
+  a/core.entity_registry 4d4788a69b30e06edf4bd5185dadd7a6200060cd63623d70e14eced40d847894 (equal to the value of P in 09.1-evidence/00-preflight/backup-phase9.1.txt)
+  a/core.device_registry 4ca49ef40dd2d041b26bf639f1ed7a47502f6aa6113c2185d2f9746619b652c3 (equal to the value of P in 09.1-evidence/00-preflight/backup-phase9.1.txt)
+  b/core.entity_registry 6432e2962022e9c986d39cf6188df7baf75da070aad56f4fe907008ee5f6cf39 (equal to the value of P in 09.1-evidence/00-preflight/backup-phase9.1.txt)
+  b/core.device_registry 9b1690cac261149697ff842df277d608c7c3af42792b9edf5ff3cad8885a0a00 (equal to the value of P in 09.1-evidence/00-preflight/backup-phase9.1.txt)
+
+no registry file was edited by hand; nothing else was restored

@@ -1,0 +1,7 @@
+red gate before the pin (env: . ~/ha-test/phase9.1-fix2.env), check-preflight.sh --quick, first five lines then exit code
+FAIL preflight (quick)
+  - evidence file missing or empty: 00-preflight/build.txt
+  - evidence file missing or empty: 00-preflight/mount-hashes.txt
+  - evidence file missing or empty: 00-preflight/heartbeats.txt
+  - evidence file missing or empty: 00-preflight/retained-snapshot.txt
+rc=1

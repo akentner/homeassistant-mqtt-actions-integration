@@ -1,0 +1,6 @@
+PASS
+build: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+D-09 heal start: the first start of FIX (preflight stage2) on the restored pre-state of pre-state.txt
+judged on the flushed registries after a graceful stop at 2026-10-15T09:44:22Z: zero platform-mqtt rows and zero legacy devices of the two ids on both instances is PASS
+pre-state re-created from ~/ha-test/_backup-pre-phase9.1-20261014T222425Z with both instances stopped (owner decision 2026-10-15)
+no registry file was edited by hand; nothing was restored after the heal start

@@ -1,0 +1,20 @@
+pre-state before the heal start (D-09): fixed-field projections of the live registries of ha-a and ha-b after the owner-decided restore from /home/akentner/ha-test/_backup-pre-phase9.1-20261014T222425Z
+taken with ha-a and ha-b stopped; legacy ids: mqtt_actions_11111111-aaaa-4aaa-8aaa-000000000001, mqtt_actions_b6bd2c0e-6d81-49ea-8025-4bd087bd718a
+
+== ha-a
+mqtt_rows_ha-a: 2
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+legacy_mqtt_devices_ha-a: 2
+  {"identifiers":[["mqtt","mqtt_actions_11111111-aaaa-4aaa-8aaa-000000000001"]],"name":"Lampe Test"}
+  {"identifiers":[["mqtt","mqtt_actions_b6bd2c0e-6d81-49ea-8025-4bd087bd718a"]],"name":"Bar Select"}
+mqtt_deleted_records_ha-a (unique ids of the two regression devices): 0
+
+== ha-b
+mqtt_rows_ha-b: 2
+  {"entity_id":"switch.lampe_test_2","unique_id":"11111111-aaaa-4aaa-8aaa-000000000001","disabled_by":"integration"}
+  {"entity_id":"select.bar_select_2","unique_id":"b6bd2c0e-6d81-49ea-8025-4bd087bd718a","disabled_by":"integration"}
+legacy_mqtt_devices_ha-b: 2
+  {"identifiers":[["mqtt","mqtt_actions_11111111-aaaa-4aaa-8aaa-000000000001"]],"name":"Lampe Test"}
+  {"identifiers":[["mqtt","mqtt_actions_b6bd2c0e-6d81-49ea-8025-4bd087bd718a"]],"name":"Bar Select"}
+mqtt_deleted_records_ha-b (unique ids of the two regression devices): 0

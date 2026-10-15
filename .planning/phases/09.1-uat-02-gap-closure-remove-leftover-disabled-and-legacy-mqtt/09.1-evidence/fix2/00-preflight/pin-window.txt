@@ -1,0 +1,18 @@
+pin window (D-13): HEAD detached at FIX for preflight stage1 and stage2 only
+fix_sha: dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 (fix_sha of fix2/release/push-readiness.txt)
+check before: git diff --name-only dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 main -- . ':(exclude).planning' -> empty
+
+before: HEAD -> refs/heads/main at 0d9603adca004144d75d9a968561e3c724af7032
+detach_utc: 2026-10-15T09:42:28Z
+command: git update-ref --no-deref HEAD dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+during: HEAD (detached) at dc6513c0b4ac54d68fbf5207161508c18cc2a5b6
+stage1_utc: 2026-10-15T09:42:28Z  command: bash -c 'umask 077; . ~/ha-test/phase9.1-fix2.env && ~/ha-test/bin/preflight.sh stage1'  rc=0
+stage2_utc: 2026-10-15T09:42:28Z  command: bash -c '. ~/ha-test/phase9.1-fix2.env && ~/ha-test/bin/preflight.sh stage2'  rc=0
+stage2 is the heal start (D-09): the first start of FIX on the restored pre-state of heal-start/pre-state.txt
+stages_end_utc: 2026-10-15T09:43:31Z
+command: git symbolic-ref HEAD refs/heads/main (EXIT trap)
+restore_utc: 2026-10-15T09:43:31Z
+after: HEAD -> refs/heads/main at 0d9603adca004144d75d9a968561e3c724af7032
+git diff --cached --name-only after restore: empty
+stage1 backup: /home/akentner/ha-test/_backup-pre-phase8-20261015T094228Z (full copy of a, b and mosquitto of the restored state, ha-a and ha-b stopped)
+nothing was committed inside the window

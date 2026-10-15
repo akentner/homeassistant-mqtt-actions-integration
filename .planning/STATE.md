@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: "09.2"
 current_phase_name: CR-01 cross-instance gap closure
 status: executing
-stopped_at: Completed 09.2-06-PLAN.md
-last_updated: "2026-10-15T21:05:49.510Z"
+stopped_at: Completed 09.2-07-PLAN.md
+last_updated: "2026-10-15T21:33:52.518Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 09.2 execution started
-state_head: 816824bd1516815580ccf7c360a1db974ea464b8
+state_head: a5474e37a78bed4e77a634fc17e9daf702028b44
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 26
-  completed_plans: 21
+  completed_plans: 22
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 09.2 (CR-01 cross-instance gap closure) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-10-15 — Phase 09.2 execution started
 
@@ -132,6 +132,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09.2 P04 | 7 min | 3 tasks | 7 files |
 | Phase 09.2 P05 | 12min | 3 tasks | 4 files |
 | Phase 09.2 P06 | 9min | 3 tasks | 22 files |
+| Phase 09.2 P07 | 26min | 2 tasks | 53 files |
 
 ## Accumulated Context
 
@@ -284,6 +285,8 @@ Recent decisions affecting current work:
 - [Phase 09.2]: 09.2-04: FIX = 3dc9093 (IN-01 review-fix commit, supersedes a4d0895); local main fast-forwarded to ae738fe; owner push: git push origin 3dc9093f3cc49900bf76576cb4432d84aa94cd74:refs/heads/main, then dispatch ci.yml and validate.yml
 - [Phase 09.2]: 09.2-05: owner pushed FIX 3dc9093 to main (choice push, kept_legacy acknowledged); CI 38803359122 and Validate 38803379292 green on exactly FIX, all six jobs success
 - [Phase 09.2]: 09.2-06: owner bench choice confirm; heal start on FIX 3dc9093 PASS on the restored pre-state; green gate PASS; handoff.txt for 09.2-07 and 09.2-08
+- [Phase 09.2]: 09.2-07: pin re-assert PASS; UAT-02 PASS on FIX 3dc9093 from integration and from null tombstones; UAT-04 PASS from the restored null-tombstone state; bench clean for the CR-01 gate
+- [Phase 09.2]: 09.2-07 observation only: after the UAT-04 export-off restart the catch removed the 3 disabled mqtt rows per instance (0 left) and ha-b logged 'keeps its MQTT device' for 3 ids; no 09.2 'Kept the MQTT entities' or 'cannot announce' line in any run
 
 ### Pending Todos
 
@@ -320,8 +323,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T21:05:49.436Z
-Stopped at: Completed 09.2-06-PLAN.md
+Last session: 2026-10-15T21:33:52.443Z
+Stopped at: Completed 09.2-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

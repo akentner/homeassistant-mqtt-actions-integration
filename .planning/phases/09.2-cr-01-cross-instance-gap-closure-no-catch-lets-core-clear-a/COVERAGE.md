@@ -1,1 +1,1 @@
-No external API integration: fixes the existing replay catch and heartbeat of this integration and re-runs the release and bench checks; the GitHub, Home Assistant WebSocket and MQTT broker interfaces are only used as existing transports or read as verification tools.
+No external API integration: fixes the existing replay catch and heartbeat; GitHub, HA WebSocket and the MQTT broker are only used as existing transports or as verification tools.

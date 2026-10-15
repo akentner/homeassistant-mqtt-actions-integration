@@ -7,10 +7,12 @@ from typing import TYPE_CHECKING, Any
 
 import attr
 import pytest
+from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
+from custom_components.mqtt_actions import manager as manager_module
 from custom_components.mqtt_actions import sync as sync_module
 from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN
@@ -1113,13 +1115,17 @@ async def _an_owner_of_two_devices_with_disabled_twins_on_legacy_content(
     hass_storage: dict[str, Any],
     make_hub_entry: Callable,
     make_switch_subentry: Callable,
+    *,
+    disable_the_second: bool = False,
 ) -> list[tuple[str, str, list[str]]]:
     """
     Return a restarted native owner of two devices, each with three replayed rows on LEGACY content, no catch run yet.
 
     Both devices were taken over at an earlier start; a replay then created three rows per device, the switch disabled
-    by the guard. Core's discovery publishes are looped back and the publish mock is reset. Returns, per device in the
-    order the catch visits them, the device id, the core-prefix topic and the replayed entity ids.
+    by the guard. With `disable_the_second`, every replayed row of the device the catch visits second is disabled by
+    the integration before the restart, so none of them is loaded and an empty payload on its topic leaves them to the
+    catch. Core's discovery publishes are looped back and the publish mock is reset. Returns, per device in the order
+    the catch visits them, the device id, the core-prefix topic and the replayed entity ids.
     """
     subs = [make_switch_subentry("Lamp one"), make_switch_subentry("Lamp two")]
     entry = make_hub_entry(subs)
@@ -1146,6 +1152,11 @@ async def _an_owner_of_two_devices_with_disabled_twins_on_legacy_content(
         assert legacy_entity_ids(hass, device_id) == []  # the takeover of the device is done
         replayed[device_id] = await _replay(hass, topic, payload, device_id)
         assert len(replayed[device_id]) == 3
+    if disable_the_second:
+        entity_registry = er.async_get(hass)
+        for entity_id in replayed[max(replayed)]:
+            entity_registry.async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+        await hass.async_block_till_done(wait_background_tasks=True)
     await _restart(hass, entry)
     for _device_id, topic, payload in devices:
         async_fire_mqtt_message(hass, topic, payload, retain=True)
@@ -1406,3 +1417,91 @@ async def test_the_follower_rearm_on_an_emptied_topic_is_bounded(
     assert runs[0] == takeover.REPLAY_CATCH_RETRIES
     _assert_disabled_twins_kept(hass, replayed)
     assert _discovery_clears(mqtt_mock, topic) == []
+
+
+# --- Phase 9.2 review WR-02: exactly one pending catch timer ------------------------------------------------------
+
+# A second instance whose retained availability says `online` and that sent no heartbeat yet (UNHEARD)
+LATE_PEER = "instance-late-peer"
+
+
+def _track_catch_timers(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, bool]]:
+    """
+    Record every timer the manager arms for the replay catch; each record says whether it is still pending.
+
+    A record stops being pending when its timer fires or is cancelled. Other timers of the manager pass through.
+    """
+    records: list[dict[str, bool]] = []
+    original = manager_module.async_call_later
+
+    def _tracked(hass: HomeAssistant, delay: float, action: Any) -> Any:
+        if getattr(action, "__func__", None) is not Manager._on_replay_catch_due:
+            return original(hass, delay, action)
+        record = {"pending": True}
+        records.append(record)
+
+        @callback
+        def _due(now: object) -> None:
+            record["pending"] = False
+            action(now)
+
+        cancel = original(hass, delay, _due)
+
+        def _cancel() -> None:
+            record["pending"] = False
+            cancel()
+
+        return _cancel
+
+    monkeypatch.setattr(manager_module, "async_call_later", _tracked)
+    return records
+
+
+async def test_a_catch_that_rearms_while_an_emptied_topic_already_armed_it_keeps_one_timer(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    D-04, D-06, T-09.2-12 (WR-02): a re-arm never drops the handle of a pending catch timer.
+
+    While the start-up catch awaits the migrate of the first device, the topic of the second device turns from LEGACY
+    to EMPTY, which arms the catch again (D-06), and an instance is announced online without a heartbeat, so the first
+    device is kept for an unheard peer and the catch asks for a re-arm at its end (D-04). Exactly one catch timer may
+    be pending afterwards, so a stop cancels every timer and two catch chains never spend the retry bound twice; one
+    run covers both reasons and counts once.
+    """
+    records = _track_catch_timers(monkeypatch)
+    (
+        (_first, first_topic, first_replayed),
+        (second, second_topic, second_replayed),
+    ) = await _an_owner_of_two_devices_with_disabled_twins_on_legacy_content(
+        hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry, disable_the_second=True
+    )
+    manager = _manager(hass.config_entries.async_entries(DOMAIN)[0])
+    deliver = mqtt_mock.async_publish.side_effect
+    fired = [False]
+
+    def _deliver_and_interleave(topic: str, payload: Any, *args: Any, **kwargs: Any) -> Any:
+        result = deliver(topic, payload, *args, **kwargs)
+        if topic == first_topic and isinstance(payload, str) and "migrate_discovery" in payload and not fired[0]:
+            fired[0] = True
+            async_fire_mqtt_message(hass, availability_topic(BASE, LATE_PEER), "online", retain=True)
+            async_fire_mqtt_message(hass, second_topic, "", retain=False)
+        return result
+
+    mqtt_mock.async_publish.side_effect = _deliver_and_interleave
+
+    await _quiet_period_passes(hass)
+
+    assert fired[0], "the owner sent no migrate for the first device"
+    (first_switch,) = [entity_id for entity_id in first_replayed if entity_id.startswith("switch.")]
+    assert er.async_get(hass).async_get(first_switch) is not None, "the owner removed a twin it keeps for a peer"
+    # The emptied topic still lets the second device's twins go in this run (D-06)
+    _assert_clean(hass, second, second_replayed)
+    assert sum(record["pending"] for record in records) == 1, "more than one catch timer is pending"
+    # The start-up arm reset the counter; the emptied topic and the catch's own re-arm are one pending run
+    assert manager._replay_catch_retries == 1

@@ -788,7 +788,8 @@ class SyncManager:
         own delete is never mistaken for a removal elsewhere.
 
         Every message for a held id also records what the topic holds now (`discovery_content`), the latest message
-        winning; the live migrate payload changes nothing retained and is ignored there.
+        winning; the live migrate payload changes nothing retained and is ignored there. When the recorded content turns
+        from LEGACY to EMPTY, the owner cleared the topic, and the manager may arm its catch again (D-06).
         """
         manager = self._manager
         device_id = parse_discovery_topic(self._discovery_prefix, msg.topic)
@@ -797,7 +798,10 @@ class SyncManager:
             and self._holds(device_id)
             and (verdict := classify_discovery(device_id, msg.payload)) is not None
         ):
+            previous = self._discovery_content.get(device_id)
             self._discovery_content[device_id] = verdict
+            if previous is DiscoveryContent.LEGACY and verdict is DiscoveryContent.EMPTY:
+                manager.on_discovery_emptied(device_id)
         if msg.payload:
             return
         if device_id is None or (device := manager.devices.get(device_id)) is None:

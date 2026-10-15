@@ -549,6 +549,8 @@ class Manager:
         # How often the catch of this start checked again, because the discovery settle was not done yet (WR-02) or an
         # online peer was not heard yet (D-04); both reasons share the bound REPLAY_CATCH_RETRIES
         self._replay_catch_retries = 0
+        # Set once the start-up catch was armed in this run; only then may an emptied topic arm it again (D-06)
+        self._replay_catch_armed = False
         # The registry listener that disables an enabled duplicate of a native device; None while the manager is stopped
         self._cancel_duplicate_guard: CALLBACK_TYPE | None = None
         # Set once the settle time has passed; only then does a roster change start a cutover check
@@ -948,6 +950,33 @@ class Manager:
         self._replay_catch_retries = 0
         self._cancel_replay_catch = async_call_later(
             self._hass, takeover.REPLAY_QUIET_SECONDS, self._on_replay_catch_due
+        )
+        self._replay_catch_armed = True
+
+    @callback
+    def on_discovery_emptied(self, device_id: str) -> None:
+        """
+        Arm the catch again when the shared topic of a native device turned from LEGACY to EMPTY in this run (D-06).
+
+        The owner cleared the topic, so a follower's integration-disabled twins that the catch kept on LEGACY content
+        may go now, in this run and not only at the next start. Only while the manager runs, after the start-up catch
+        was armed in this run, with no catch timer pending, for a native id that still has a legacy MQTT device, and
+        within the retry bound that every re-arm of this start shares (T-09.2-12). The owner's own clear comes back as
+        EMPTY too; that extra bounded run only removes leftovers. The catch decides as always, and this never publishes.
+        """
+        if (
+            not self._running
+            or not self._replay_catch_armed
+            or self._cancel_replay_catch is not None
+            or not self.is_native(device_id)
+            or (mqtt_entry_id := self.gateway.mqtt_entry_id()) is None
+            or takeover.legacy_device(self._hass, mqtt_entry_id, device_id) is None
+            or self._replay_catch_retries >= takeover.REPLAY_CATCH_RETRIES
+        ):
+            return
+        self._replay_catch_retries += 1
+        self._cancel_replay_catch = async_call_later(
+            self._hass, takeover.REPLAY_RETRY_MIN_SECONDS, self._on_replay_catch_due
         )
 
     @callback
@@ -1511,6 +1540,7 @@ class Manager:
             if self._cancel_replay_catch is not None:
                 self._cancel_replay_catch()
                 self._cancel_replay_catch = None
+            self._replay_catch_armed = False
             self._disarm_duplicate_guard()
             self.sync.async_stop()
             self.presence.async_stop()

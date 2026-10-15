@@ -99,7 +99,8 @@ async def test_the_owner_cuts_over_and_a_running_follower_follows(
     publishes = await _cut_over(owner, follower, device_id)
 
     assert owner.manager.is_native(device_id)
-    assert publishes == [(MIGRATE, False), ("", True)]
+    # Phase 9.2 D-09: a fresh migrate right before the clear
+    assert publishes == [(MIGRATE, False), (MIGRATE, False), ("", True)]
     assert discovery not in fake_broker.retained
     assert json.loads(fake_broker.retained[config_topic(BASE, device_id)])["entities"] == "native"
     assert follower.manager is not old_follower_manager
@@ -138,7 +139,8 @@ async def test_a_legacy_peer_online_blocks_the_owner_and_going_offline_releases_
     await _settle(owner)
 
     assert owner.manager.is_native(device_id)
-    assert _discovery_publishes(owner, device_id, start) == [(MIGRATE, False), ("", True)]
+    # Phase 9.2 D-09: a fresh migrate right before the clear
+    assert _discovery_publishes(owner, device_id, start) == [(MIGRATE, False), (MIGRATE, False), ("", True)]
     assert discovery_topic(PREFIX, device_id) not in fake_broker.retained
 
 

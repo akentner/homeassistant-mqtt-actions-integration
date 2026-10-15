@@ -167,7 +167,9 @@ async def test_a_legacy_install_without_peers_cuts_over_after_the_settle_time(
     assert device is not None
     assert (device.area_id, device.name_by_user) == ("kitchen", "Stehlampe")
     published = _discovery_publishes(mqtt_mock, device_id)
+    # Phase 9.2 D-09: a fresh migrate right before the clear
     assert [(json.loads(payload) if payload else payload, retain) for payload, retain in published] == [
+        ({"migrate_discovery": True}, False),
         ({"migrate_discovery": True}, False),
         (CLEAR_PAYLOAD, True),
     ]
@@ -420,7 +422,8 @@ async def test_the_cutover_runs_once(
         await _settle(hass)
         assert schedule_reload.call_count == 1
         migrates = [p for p, _retain in _discovery_publishes(mqtt_mock, _device_id(subentry)) if p and "migrate" in p]
-        assert len(migrates) == 1
+        # Phase 9.2 D-09: a fresh migrate right before the clear, so the one pass publishes two
+        assert len(migrates) == 2
 
         # More roster changes and more time change nothing: the flag is set, so no timer and no check is left
         _peer(hass, "legacy-peer", native=False)
@@ -431,7 +434,8 @@ async def test_the_cutover_runs_once(
 
         assert schedule_reload.call_count == 1
     migrates = [p for p, _retain in _discovery_publishes(mqtt_mock, _device_id(subentry)) if p and "migrate" in p]
-    assert len(migrates) == 1
+    # Phase 9.2 D-09: a fresh migrate right before the clear; still the two of the one pass
+    assert len(migrates) == 2
     native = _stored_native(hass_storage)
     assert native is not None
     assert native["instance"] is True

@@ -193,7 +193,9 @@ async def test_an_upgrade_takes_over_the_legacy_entities_and_marks_the_document(
     assert _stored_pending(hass_storage) == []
 
     published = _publishes(mqtt_mock, legacy.topic)
+    # Phase 9.2 D-09: a fresh migrate right before the clear
     assert [(json.loads(payload) if payload else payload, retain) for payload, retain in published] == [
+        ({"migrate_discovery": True}, False),
         ({"migrate_discovery": True}, False),
         (CLEAR_PAYLOAD, True),
     ]
@@ -263,7 +265,9 @@ async def test_a_device_without_legacy_entities_still_gets_the_migrate_and_the_c
     await _setup(hass, make_hub_entry([subentry]))
 
     published = _publishes(mqtt_mock, discovery_topic(PREFIX, device_id))
+    # Phase 9.2 D-09: a fresh migrate right before the clear
     assert [(json.loads(payload) if payload else payload, retain) for payload, retain in published] == [
+        ({"migrate_discovery": True}, False),
         ({"migrate_discovery": True}, False),
         (CLEAR_PAYLOAD, True),
     ]
@@ -507,12 +511,51 @@ async def test_a_failed_retained_clear_after_the_move_keeps_the_device_native_an
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert (CLEAR_PAYLOAD, True) in _publishes(mqtt_mock, legacy.topic)
+    # Phase 9.2 D-09: a fresh migrate right before the clear, on the retry too
+    retried = _publishes(mqtt_mock, legacy.topic)[-2:]
+    assert [(json.loads(payload) if payload else payload, retain) for payload, retain in retried] == [
+        ({"migrate_discovery": True}, False),
+        (CLEAR_PAYLOAD, True),
+    ]
     # The marker goes with the next save, which an unload forces
     assert await hass.config_entries.async_unload(legacy.entry.entry_id)
     assert _stored_pending(hass_storage) == []
     assert await hass.config_entries.async_setup(legacy.entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
     _assert_moved_and_native(hass, legacy, before)
+
+
+async def test_the_takeover_path_passes_no_device_that_may_empty_the_topic(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Phase 9.2 D-05: the takeover pass never lets an integration-disabled twin empty the shared topic.
+
+    The pass passes no content and no may-empty id to the registry step, so core's clear-on-remove hook never fires
+    there; only the start-up catch decides that, with the gate.
+    """
+    legacy, before = await _unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    _loop_back_discovery(hass, mqtt_mock)
+    original = takeover.remove_replay_twins
+    may_empty: list[bool] = []
+
+    def _record(*args: Any, **kwargs: Any) -> int:
+        may_empty.append(kwargs.get("may_empty_topic", False))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(takeover, "remove_replay_twins", _record)
+
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    _assert_moved_and_native(hass, legacy, before)
+    assert may_empty, "the pass did not run the registry step"
+    assert not any(may_empty)
 
 
 async def test_an_error_after_part_of_the_move_keeps_the_device_native(

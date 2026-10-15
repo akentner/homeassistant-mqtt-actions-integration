@@ -289,6 +289,7 @@ Recent decisions affecting current work:
 - [Phase 09.2]: 09.2-07: pin re-assert PASS; UAT-02 PASS on FIX 3dc9093 from integration and from null tombstones; UAT-04 PASS from the restored null-tombstone state; bench clean for the CR-01 gate
 - [Phase 09.2]: 09.2-07 observation only: after the UAT-04 export-off restart the catch removed the 3 disabled mqtt rows per instance (0 left) and ha-b logged 'keeps its MQTT device' for 3 ids; no 09.2 'Kept the MQTT entities' or 'cannot announce' line in any run
 - [Phase 09.2]: CR-01 release gate HOLDS on FIX 3dc9093: v3, v2 (owner-only restart) and v1 hold on ha-a and ha-b, judged by expectations committed before the run (3ef996c); one D-11 hygiene restore after variant 1, never a result
+- [Phase 09.2]: 09.2-09: FIX moved to 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (cross-instance CR-01 fix: owner-only release of the shared legacy topic gated by the heartbeat key kept_legacy, migrate first, follower cleanup on EMPTY); the dc6513c run (09.1-evidence/fix2, ledger blocks 12 to 17) is history; 09-04 and 09-05 read 09.2-evidence
 
 ### Pending Todos
 
@@ -301,7 +302,7 @@ Recent decisions affecting current work:
 - [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
-- [Phase 9.1]: Failing check: CR-01 bench observation (plan 09.1-11) contradicts on fix SHA dc6513c0b4ac54d68fbf5207161508c18cc2a5b6 (the per-instance D-08 keep does not stop another instance from clearing the shared legacy topic); heal start, UAT-02 from integration and null tombstones and UAT-04 pass on that SHA (09-UAT.md blocks 12 to 17); 09-04 and 09-05 are not re-pointed and the release notes are unchanged; owner decides: new decimal phase or decision
+- [Phase 9.2]: CR-01 cross-instance gap closed on fix SHA 3dc9093f3cc49900bf76576cb4432d84aa94cd74 (heal start, UAT-02 from integration and null tombstones and UAT-04 pass; CR-01 release gate holds in variants 3, 2 and 1); run the re-pointed 09-04 (tag, owner decision) and 09-05 (release) next
 
 ### Quick Tasks Completed
 

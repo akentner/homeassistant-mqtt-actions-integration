@@ -1,0 +1,5 @@
+holds
+ha-a: holds; no platform-mqtt row with unique id ID or ID_test_* yes (0 rows), no device with identifier ["mqtt", "mqtt_actions_ID"] yes (0 devices), TOPIC holds no retained payload yes; after one start (restart of ha-a and ha-b together); Removed lines 2, Disabled lines 0, keeps-its-MQTT-device lines 0, another-instance-keeps lines 0, postponed lines 0
+ha-b: holds; no platform-mqtt row with unique id ID or ID_test_* yes (0 rows), no device with identifier ["mqtt", "mqtt_actions_ID"] yes (0 devices), TOPIC holds no retained payload yes; after one start (restart of ha-a and ha-b together); Removed lines 2, Disabled lines 0, keeps-its-MQTT-device lines 1, another-instance-keeps lines 0, postponed lines 0
+release gate (D-15); expectations fixed in 09.2-08-PLAN.md and cr01-gate/expectations.txt before the run
+build: 3dc9093f3cc49900bf76576cb4432d84aa94cd74

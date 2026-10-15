@@ -1,0 +1,10 @@
+bench gate (a) of the CR-01 gate (2026-10-15T21:52:28Z)
+check-uat02.sh clean (suffix unset): exit 0
+  PASS UAT-02 clean .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/uat-02
+retained on homeassistant/device/#: 0 topics
+retained availability on mqtt_actions/v1/instances/+/availability (retained flag, instance id, payload):
+  1 b4cf285b-428f-426b-9500-8e269634356e online
+  1 3851f34f-fa67-4f3c-bba0-122465013c3d online
+online ids: 3851f34f-fa67-4f3c-bba0-122465013c3d b4cf285b-428f-426b-9500-8e269634356e ; expected (ha-a, ha-b): 3851f34f-fa67-4f3c-bba0-122465013c3d b4cf285b-428f-426b-9500-8e269634356e 
+ha-c running: false
+result: PASS

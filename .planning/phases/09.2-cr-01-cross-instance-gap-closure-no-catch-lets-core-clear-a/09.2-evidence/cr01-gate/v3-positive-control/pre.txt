@@ -1,0 +1,6 @@
+pre-variant copy of variant 3 (2026-10-15T21:47:48Z)
+copy: <9.2 backup base>/cr01-v3-pre-20261015T214513Z/{a,b}/ (core.entity_registry, core.device_registry; mode 0700; both stopped)
+started: ha-a 2026-10-15 23:45:19.546532444 +0200 CEST, ha-b 2026-10-15 23:45:19.594923447 +0200 CEST; waited 90 s
+postponed lines of this start: 0
+check-preflight.sh --quick: exit 0
+  PASS preflight (quick) .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/00-preflight

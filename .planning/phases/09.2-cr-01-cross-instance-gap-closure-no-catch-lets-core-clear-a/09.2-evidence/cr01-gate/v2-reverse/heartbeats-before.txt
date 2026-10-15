@@ -1,0 +1,4 @@
+heartbeats on mqtt_actions/v1/instances/+/heartbeat (before), listened 35 s from 2026-10-15T21:55:33Z to 2026-10-15T21:56:09Z
+each payload reduced to {instance_id, kept_legacy}; ha-a is 3851f34f-fa67-4f3c-bba0-122465013c3d, ha-b is b4cf285b-428f-426b-9500-8e269634356e
+{"instance_id":"b4cf285b-428f-426b-9500-8e269634356e","kept_legacy":["11111111-aaaa-4aaa-8aaa-000000000001"]}
+{"instance_id":"3851f34f-fa67-4f3c-bba0-122465013c3d","kept_legacy":[]}

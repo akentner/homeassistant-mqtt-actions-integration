@@ -1,0 +1,4 @@
+ha-b, lines written at or after 2026-10-15 23:48:31 (local log time, the stop of the restart step; ha-a StartedAt 2026-10-15 23:48:38.03231711 +0200 CEST, ha-b StartedAt 2026-10-15 23:48:38.076441266 +0200 CEST) matching the gate patterns (timestamp and text)
+2026-10-15 23:48:44.450 Device '11111111-aaaa-4aaa-8aaa-000000000001' keeps its MQTT device: it has entries this integration did not create
+2026-10-15 23:48:49.462 Removed 2 duplicate entities that a replayed legacy discovery created
+2026-10-15 23:49:16.810 Removed 1 duplicate entities that a replayed legacy discovery created

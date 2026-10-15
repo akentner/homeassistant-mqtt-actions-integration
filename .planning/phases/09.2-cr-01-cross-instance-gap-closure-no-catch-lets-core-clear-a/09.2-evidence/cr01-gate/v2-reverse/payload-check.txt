@@ -1,0 +1,25 @@
+CR-01 gate payload check (A7), variant 2: built with custom_components.mqtt_actions.discovery.build_discovery
+from the retained config document of 11111111-aaaa-4aaa-8aaa-000000000001, instance_id=3851f34f-fa67-4f3c-bba0-122465013c3d, sw_version=0.1.0, base_topic=mqtt_actions
+date: 2026-10-15T21:55:10Z
+build: 3dc9093f3cc49900bf76576cb4432d84aa94cd74
+
+device identifier: mqtt_actions_11111111-aaaa-4aaa-8aaa-000000000001 (expected mqtt_actions_11111111-aaaa-4aaa-8aaa-000000000001): yes
+topic: homeassistant/device/11111111-aaaa-4aaa-8aaa-000000000001/config, device name: Lampe Test
+built unique ids:
+  11111111-aaaa-4aaa-8aaa-000000000001
+  11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806
+  11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725
+registry of ha-a (platform mqtt_actions, unique id = id or id_test_*):
+  11111111-aaaa-4aaa-8aaa-000000000001
+  11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806
+  11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725
+ha-a: built unique ids equal the registry rows: yes
+registry of ha-b (platform mqtt_actions, unique id = id or id_test_*):
+  11111111-aaaa-4aaa-8aaa-000000000001
+  11111111-aaaa-4aaa-8aaa-000000000001_test_b4dc66dde806
+  11111111-aaaa-4aaa-8aaa-000000000001_test_b8d31e852725
+ha-b: built unique ids equal the registry rows: yes
+result: built payload matches the registry unique ids on ha-a and ha-b
+
+live publish: 2026-10-15T21:55:12Z, retained QoS 1 on homeassistant/device/11111111-aaaa-4aaa-8aaa-000000000001/config while ha-a and ha-b run
+read-back: retained flag 1, payload equals the built payload: yes

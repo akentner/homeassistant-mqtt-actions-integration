@@ -1,0 +1,4 @@
+retained read of homeassistant/device/11111111-aaaa-4aaa-8aaa-000000000001/config after the start of variant 3 (2026-10-15T21:50:19Z)
+retained payload present: no
+length: 0
+JSON equals the published payload: no

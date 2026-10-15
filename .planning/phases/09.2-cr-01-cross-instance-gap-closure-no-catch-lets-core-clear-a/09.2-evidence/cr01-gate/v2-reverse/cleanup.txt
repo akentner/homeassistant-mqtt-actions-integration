@@ -1,0 +1,16 @@
+CR-01 gate cleanup, variant 2 (v2-reverse): bench hygiene after the verdict, never a result
+== reset the name (2026-10-15T21:58:42Z)
+ha-a: no live row named "CR-01 kept button"
+ha-b: reset name of button.lampe_test_test_off_2, returned {"entity_id":"button.lampe_test_test_off_2","platform":"mqtt","name":null,"disabled_by":null}
+== clear the topic (2026-10-15T21:58:43Z)
+empty retained publish on homeassistant/device/11111111-aaaa-4aaa-8aaa-000000000001/config; 3 s read of homeassistant/device/#: nothing retained
+== graceful restart of ha-a and ha-b (2026-10-15T21:58:48Z)
+started 2026-10-15T21:59:08Z; waiting 90 s
+== clean checks (2026-10-15T22:00:38Z)
+PASS UAT-02 clean .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/uat-02
+check-uat02.sh clean exit code: 0
+PASS UAT-04 clean .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/uat-04
+check-uat04.sh clean exit code: 0
+PASS preflight (quick) .planning/phases/09.2-cr-01-cross-instance-gap-closure-no-catch-lets-core-clear-a/09.2-evidence/00-preflight
+check-preflight.sh --quick exit code: 0
+clean checks: PASS

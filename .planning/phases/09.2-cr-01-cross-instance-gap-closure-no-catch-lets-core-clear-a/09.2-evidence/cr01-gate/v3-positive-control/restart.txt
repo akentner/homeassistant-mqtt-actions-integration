@@ -1,0 +1,4 @@
+restart of variant 3: graceful podman stop -t 60 and podman start of ha-a ha-b only
+stop issued: 2026-10-15T21:48:31Z (log time 2026-10-15 23:48:31); ports answered: 2026-10-15T21:48:42Z; waited 90 s until 2026-10-15T21:50:12Z
+ha-a StartedAt before: 2026-10-15 23:45:19.546532444 +0200 CEST; after: 2026-10-15 23:48:38.03231711 +0200 CEST; running: true
+ha-b StartedAt before: 2026-10-15 23:45:19.594923447 +0200 CEST; after: 2026-10-15 23:48:38.076441266 +0200 CEST; running: true

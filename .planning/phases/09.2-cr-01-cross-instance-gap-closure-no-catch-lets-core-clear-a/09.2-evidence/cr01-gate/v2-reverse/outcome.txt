@@ -1,0 +1,5 @@
+holds
+ha-a: holds; platform-mqtt row with unique id ID present with disabled_by integration yes, every platform-mqtt row of ID integration-disabled before the start still present by registry id yes (1 rows before), TOPIC retained non-empty and JSON equal to the published payload yes (present yes, length 1203, equal yes), log lines of this start with "another instance keeps" yes (1); restarted alone; Removed lines 1, Disabled lines 0, keeps-its-MQTT-device lines 0, another-instance-keeps lines 1, postponed lines 0
+ha-b: holds; platform-mqtt row named NAME with disabled_by null present yes (button.lampe_test_test_off_2), its state present and not unavailable yes (state unknown), platform-mqtt row with unique id ID present with disabled_by integration yes; kept running; Removed lines 0, Disabled lines 0, keeps-its-MQTT-device lines 0, another-instance-keeps lines 0, postponed lines 0
+release gate (D-15); expectations fixed in 09.2-08-PLAN.md and cr01-gate/expectations.txt before the run
+build: 3dc9093f3cc49900bf76576cb4432d84aa94cd74

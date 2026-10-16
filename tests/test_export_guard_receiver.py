@@ -8,7 +8,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 
-from custom_components.mqtt_actions import discovery
+from custom_components.mqtt_actions import discovery, takeover
 from custom_components.mqtt_actions.const import CONF_DISCOVERY_EXPORT, DOMAIN, SUBENTRY_SELECT
 from custom_components.mqtt_actions.topics import discovery_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
@@ -151,6 +151,20 @@ def _count_disables(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         return real(self, entity_id, **changes)
 
     monkeypatch.setattr(er.EntityRegistry, "async_update_entity", _wrapper)
+    return calls
+
+
+def _spy_disable_duplicates(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, int]]:
+    """Record the device id and the result of every guard pass over a device, and let the pass through."""
+    calls: list[tuple[str, int]] = []
+    real = takeover.disable_duplicates
+
+    def _wrapper(hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str) -> int:
+        result = real(hass, entry_id, device_id, mqtt_entry_id=mqtt_entry_id)
+        calls.append((device_id, result))
+        return result
+
+    monkeypatch.setattr(takeover, "disable_duplicates", _wrapper)
     return calls
 
 
@@ -404,7 +418,12 @@ async def test_an_id_this_instance_holds_nothing_for_is_left_alone_even_when_a_f
 async def test_a_second_pass_a_second_create_event_and_a_restart_change_nothing(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """G4: once nothing is enabled, no pass performs a registry update."""
+    """
+    G4: once nothing is enabled, no pass performs a registry update.
+
+    The row core creates again is born disabled from its record, so the registry alone keeps the old assertions true;
+    the spy on `takeover.disable_duplicates` proves that the guard's listener ran and found nothing (review 1 IN-03).
+    """
     spec = make_spec(name="Foreign lamp")
     entry = await _native_mirror(hass, make_hub_entry, spec)
     registry = er.async_get(hass)
@@ -417,10 +436,12 @@ async def test_a_second_pass_a_second_create_event_and_a_restart_change_nothing(
 
     # A second create event: the row goes, and core creates it again from a record that says integration
     registry.async_remove(duplicate.entity_id)
+    passes = _spy_disable_duplicates(monkeypatch)
     again = _core_creates_the_row(hass, "switch", spec.device_id)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert again.disabled_by is er.RegistryEntryDisabler.INTEGRATION
     assert calls == [duplicate.entity_id]
+    assert passes == [(spec.device_id, 0)], "the guard's listener did not run for the second create event"
 
     # The sweep at the next start finds nothing enabled either
     await restart_entry(hass, entry)

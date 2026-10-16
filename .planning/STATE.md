@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 10
 current_phase_name: Review Findings and Native Migration Extraction
 status: executing
-stopped_at: Completed 10-03-PLAN.md
-last_updated: "2026-10-16T13:03:04.431Z"
+stopped_at: Completed 10-04-PLAN.md
+last_updated: "2026-10-16T13:40:05.324Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 10 execution started
-state_head: 893f229391c0fa4320d68fcbd778a0e6618aed9f
+state_head: dc665eb95dabac9e30d0368865fcfb68988af9cb
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 36
-  completed_plans: 29
+  completed_plans: 30
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 10 (Review Findings and Native Migration Extraction) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 Status: Ready to execute
 Last activity: 2026-10-16 — Phase 10 execution started
 
@@ -143,6 +143,7 @@ Progress: [█████░░░░░] 50%
 | Phase 10 P01 | 8 min | 2 tasks | 4 files |
 | Phase 10 P02 | 12 min | 3 tasks | 14 files |
 | Phase 10 P03 | 19 min | 2 tasks | 1 files |
+| Phase 10 P04 | 34 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -307,6 +308,8 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-02: shared test helpers live in tests/helpers.py with public names (D-11); an ast guard in tests/test_repo_structure.py rejects any import of a tests.test_* module; renames are scoped per module so a consumer's own private helper with an old name stays untouched
 - [Phase 10]: 10-03: the start-up order of an upgrading owner is pinned as an 18-entry (label, lock held) sequence through spies on seams that do not move; tests/test_startup_order.py stays byte-identical through the 10-04 move
 - [Phase 10]: 10-03: pre-move mutation survey killed all 28 moved Manager methods; the one survivor (_disarm_duplicate_guard) is pinned by a registry-listener-count invariant over two load/unload cycles; mutation/mutate.py is the runner for the post-move run
+- [Phase 10]: 10-04: NativeMigration (native_migration.py) owns cutover, takeover pass, replay catch, duplicate guard and per-run sets; Manager reaches it only via self.migration and gives it public accessors (native_state, publisher, async_save_now, schedule_save, test_message_handler)
+- [Phase 10]: 10-04: glue survivors defer_for_run and forget are pre-existing test gaps (same mutant survives at dbfbf81); pins deferred to a later plan (D-10), WINDOWS ids 1-2
 
 ### Pending Todos
 
@@ -341,8 +344,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T13:03:04.211Z
-Stopped at: Completed 10-03-PLAN.md
+Last session: 2026-10-16T13:40:05.111Z
+Stopped at: Completed 10-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

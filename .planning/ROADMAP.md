@@ -187,7 +187,7 @@ Plans:
   4. While customized duplicates are kept enabled (including the WR-03 cases), the user sees one non-fixable Repairs warning that lists them, in English and German; it disappears once none remain, and no registry row is ever removed. (FIX-08)
   5. README and troubleshooting state that a duplicate the user re-enables is disabled again at the next start. (FIX-05)
 
-**Plans:** 3/10 plans executed
+**Plans:** 4/10 plans executed
 
 Plans:
 **Wave 1**
@@ -200,7 +200,7 @@ Plans:
 - [x] 10-03-PLAN.md — Start-up ordering spy test before the move, and the pre-move mutation survey with pins for survivors (FIX-02 preparation)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 10-04-PLAN.md — Pure move of the migration orchestration into native_migration.py (NativeMigration), proven by AST audit and post-move mutation run (FIX-02)
+- [x] 10-04-PLAN.md — Pure move of the migration orchestration into native_migration.py (NativeMigration), proven by AST audit and post-move mutation run (FIX-02)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 10-05-PLAN.md — A row that raises mid-loop in the replay catch leaves no emptied device and keeps the partial count (FIX-06)
@@ -268,7 +268,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | 9. v1.0.1 Release | 5/5 | Complete    | 2026-10-16 |
 | 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
 | 9.2. CR-01 Cross-Instance Gap Closure (INSERTED) | 9/9 | Complete    | 2026-10-16 |
-| 10. Review Findings and Native Migration Extraction | 3/10 | In Progress | - |
+| 10. Review Findings and Native Migration Extraction | 4/10 | In Progress | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |
 

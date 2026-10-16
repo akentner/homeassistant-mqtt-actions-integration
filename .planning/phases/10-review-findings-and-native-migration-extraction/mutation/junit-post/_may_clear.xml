@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="9" time="2.657" timestamp="2026-10-16T15:21:47.264226+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]" time="0.992" /><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[after_the_clear]" time="0.141" /><testcase classname="tests.test_native_replay" name="test_a_replay_after_the_takeover_of_a_native_mirror_leaves_no_duplicate_and_no_publish" time="0.125" /><testcase classname="tests.test_native_replay" name="test_a_replay_before_a_restart_of_a_finished_native_owner_is_cleaned_at_the_next_start" time="0.180" /><testcase classname="tests.test_native_replay" name="test_the_replay_catch_is_armed_only_for_an_instance_with_a_native_device" time="0.118" /><testcase classname="tests.test_native_replay" name="test_a_replay_right_after_the_move_is_removed_before_the_clear" time="0.131" /><testcase classname="tests.test_native_replay" name="test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]" time="0.195" /><testcase classname="tests.test_native_replay" name="test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[null]" time="0.250" /><testcase classname="tests.test_native_replay" name="test_the_owner_clears_the_stale_legacy_discovery_once_after_each_catch" time="0.163"><failure message="assert [] == [True]&#10;  &#10;  Right contains one more item: True&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139821786179168'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [{'area_id': None, 'config_entry_id': '01M5...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f2acbc892d0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f2acbc8b480&gt;
+
+    async def test_the_owner_clears_the_stale_legacy_discovery_once_after_each_catch(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """D-06: after each start-up catch the owner clears the retained legacy discovery once, so no replay can return."""
+        legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        first = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
+        _tombstone_the_replay(hass, legacy.device_id, first, "integration")
+    
+        for _round in range(2):
+            replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
+            assert len(replayed) == 3
+            await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
+            mqtt_mock.async_publish.reset_mock()
+            await quiet_period_passes(hass)
+&gt;           _assert_one_retained_clear(mqtt_mock, legacy.topic)
+
+tests/test_native_replay.py:399: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mqtt_mock = &lt;MagicMock id='139821786179168'&gt;
+topic = 'homeassistant/device/ec3fe0c1-a81a-4ac2-ac34-1ed5e07d59e2/config'
+
+    def _assert_one_retained_clear(mqtt_mock: Any, topic: str) -&gt; None:
+        """Assert that the product published exactly one empty retained payload on the topic (core's own clear is None)."""
+&gt;       assert [call.args[3] for call in discovery_clears(mqtt_mock, topic)] == [True]
+E       assert [] == [True]
+E         
+E         Right contains one more item: True
+E         Use -v to get more diff
+
+tests/test_native_replay.py:378: AssertionError</failure></testcase></testsuite></testsuites>

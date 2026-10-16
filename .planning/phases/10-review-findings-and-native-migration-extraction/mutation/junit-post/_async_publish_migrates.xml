@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="2.162" timestamp="2026-10-16T15:21:43.150502+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]" time="0.952" /><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[after_the_clear]" time="0.135" /><testcase classname="tests.test_native_replay" name="test_a_replay_after_the_takeover_of_a_native_mirror_leaves_no_duplicate_and_no_publish" time="0.124" /><testcase classname="tests.test_native_replay" name="test_a_replay_before_a_restart_of_a_finished_native_owner_is_cleaned_at_the_next_start" time="0.175" /><testcase classname="tests.test_native_replay" name="test_the_replay_catch_is_armed_only_for_an_instance_with_a_native_device" time="0.119" /><testcase classname="tests.test_native_replay" name="test_a_replay_right_after_the_move_is_removed_before_the_clear" time="0.131" /><testcase classname="tests.test_native_replay" name="test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]" time="0.163"><failure message="AssertionError: assert ['switch.lamp_2'] == []&#10;  &#10;  Left contains one more item: 'switch.lamp_2'&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140704752075504'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7ff860bbab90&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7ff860bdba00&gt;
+tombstones = 'integration'
+
+    @pytest.mark.parametrize("tombstones", ["integration", "null"], ids=["integration", "null"])
+    async def test_a_replay_onto_tombstones_is_cleaned_at_the_next_start(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        tombstones: str,
+    ) -&gt; None:
+        """D-02, D-05: with the legacy payload retained, the next start removes the disabled twin and the legacy device."""
+        legacy, before = await unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        loop_back_discovery(hass, mqtt_mock)
+        assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert_moved_and_native(hass, legacy, before)
+        assert legacy_entity_ids(hass, legacy.device_id) == []
+        first = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(first) == 3
+        _tombstone_the_replay(hass, legacy.device_id, first, tombstones)
+        entity_registry = er.async_get(hass)
+    
+        for _round in range(2):
+            replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
+            assert len(replayed) == 3
+            # Core re-enabled or restored the switch and the guard disabled it, so the test cannot go green for the wrong
+            # reason: this is the row the catch used to skip (CR-01)
+            (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+            assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+            await restart_entry(hass, legacy.entry)
+            # The mocked client keeps no retained store: hand the broker's retained legacy payload to the new subscriptions
+            # (core's discovery skips it, it saw a retained message on the topic before)
+            async_fire_mqtt_message(hass, legacy.topic, legacy.payload, retain=True)
+            await hass.async_block_till_done(wait_background_tasks=True)
+            await quiet_period_passes(hass)
+&gt;           _assert_clean(hass, legacy.device_id, replayed)
+
+tests/test_native_replay.py:348: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hass = &lt;HomeAssistant RUNNING&gt;
+device_id = 'ac7d3250-0e71-4773-98fa-4c90ba76dca9'
+replayed = ['switch.lamp_2', 'button.lamp_test_on_2', 'button.lamp_test_off_2']
+
+    def _assert_clean(hass: HomeAssistant, device_id: str, replayed: list[str]) -&gt; None:
+        """Assert that no mqtt entry of the device id is left, the replayed ones are gone for good, and so is the device."""
+        entity_registry = er.async_get(hass)
+&gt;       assert legacy_entity_ids(hass, device_id) == []
+E       AssertionError: assert ['switch.lamp_2'] == []
+E         
+E         Left contains one more item: 'switch.lamp_2'
+E         Use -v to get more diff
+
+tests/test_native_replay.py:66: AssertionError</failure></testcase></testsuite></testsuites>

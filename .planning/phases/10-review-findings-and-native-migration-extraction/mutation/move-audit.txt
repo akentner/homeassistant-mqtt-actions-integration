@@ -1,0 +1,31 @@
+PASS _arm_cutover
+PASS _on_cutover_due
+PASS on_roster_changed
+PASS _start_cutover_check
+PASS _async_cutover_check
+PASS _show_cutover_hint
+PASS _clear_cutover_hint
+PASS _async_native_takeover -> async_takeover
+PASS _async_take_over_one
+PASS _async_finish_takeover
+PASS _async_defer_takeover
+PASS _async_retry_unconfirmed_clears -> async_retry_unconfirmed_clears
+PASS _native_device_ids
+PASS _topic_verdict
+PASS _ids_that_may_empty_the_topic
+PASS _remove_replay_twins
+PASS _arm_replay_catch
+PASS on_discovery_emptied
+PASS _on_replay_catch_due
+PASS _async_replay_catch
+PASS _rearm_or_log_replay_catch
+PASS _async_publish_migrates
+PASS _may_clear
+PASS _duplicate_guard_ids
+PASS _disarm_duplicate_guard
+PASS _arm_duplicate_guard -> arm_duplicate_guard
+PASS _on_duplicate_registry_updated
+PASS _disable_duplicates
+CHECK ok: Manager at HEAD defines none of the moved names except the two delegators
+CHECK ok: every @callback method of NativeMigration is a plain def
+CHECK ok: no moved def became an async def

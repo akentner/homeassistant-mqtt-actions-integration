@@ -40,6 +40,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
 
 - [x] **Phase 9: v1.0.1 Release** - The build whose manifest says 1.0.1 passes UAT-02 and UAT-04 on the bench on exactly that SHA and is published as v1.0.1 (completed 2026-10-16)
 - [x] **Phase 9.1: UAT-02 Gap Closure** (INSERTED) - Replay leaves no disabled or legacy mqtt rows, and UAT-02 and UAT-04 pass on the new SHA (completed 2026-10-16)
+- [x] **Phase 9.2: CR-01 Cross-Instance Gap Closure** (INSERTED) - No catch lets core clear a shared legacy topic under another instance's kept row; bench re-run and 09-04/09-05 re-pointed on the new SHA (completed 2026-10-16)
 - [ ] **Phase 10: Review Findings and Native Migration Extraction** - The Phase 8 info findings are closed, and the start-up migration orchestration lives in its own module outside `manager.py`
 - [ ] **Phase 11: Local Actions on Mirrors** - A follower sets its own actions per trigger of a mirrored device; they run locally under the device's gates and never reach the broker
 - [ ] **Phase 12: Re-verification and v1.1.0 Release** - Every phase has a current verification, the bench checks pass on the final SHA, and v1.1.0 is published
@@ -240,6 +241,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 |-------|----------------|--------|-----------|
 | 9. v1.0.1 Release | 5/5 | Complete    | 2026-10-16 |
 | 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
+| 9.2. CR-01 Cross-Instance Gap Closure (INSERTED) | 9/9 | Complete    | 2026-10-16 |
 | 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |

@@ -52,6 +52,7 @@ NEW_ISSUES = {
     "mirror_blocked": {"device", "owner", "services"},
     "denied_service_call": {"device", "trigger", "service"},
     "native_cutover_waiting": {"instances"},
+    "kept_duplicates": {"count", "customized", "rejected"},
 }
 
 # Fixable issues show their text in the confirm step of the fix flow (hassfest rejects an issue-level description next

@@ -23,6 +23,7 @@ from custom_components.mqtt_actions.const import (
     DOMAIN,
     ISSUE_DEVICE_PREFIXES,
     ISSUE_DISCOVERY_DISABLED,
+    ISSUE_KEPT_DUPLICATES,
     STORE_KEY,
     STORE_PUBLISHED,
     STORE_VERSION,
@@ -228,6 +229,35 @@ async def test_both_modes_remove_store_and_every_issue_prefix(
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert STORE_KEY not in hass_storage
+    assert _own_issues(hass) == []
+
+
+@pytest.mark.parametrize("delete", [False, True], ids=["keep", "delete"])
+async def test_hub_removal_deletes_the_kept_duplicates_warning(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    *,
+    delete: bool,
+) -> None:
+    """The kept-duplicates warning is one issue per instance, so the removal deletes it by its id (FIX-08, D-02)."""
+    options = {CONF_DELETE_DEVICES_ON_REMOVE: True} if delete else {}
+    entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)], options=options))
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        ISSUE_KEPT_DUPLICATES,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=ISSUE_KEPT_DUPLICATES,
+        translation_placeholders={"count": "1", "customized": "switch.lamp", "rejected": "—"},
+    )
+    assert _own_issues(hass) == [ISSUE_KEPT_DUPLICATES]
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
     assert _own_issues(hass) == []
 
 

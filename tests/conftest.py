@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigSubentryData
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mqtt_actions import const
-from custom_components.mqtt_actions import manager as manager_module
+from custom_components.mqtt_actions import native_migration as native_migration_module
 from custom_components.mqtt_actions import sync as sync_module
 from custom_components.mqtt_actions.button import DeviceTestButton
 from custom_components.mqtt_actions.const import (
@@ -66,7 +66,7 @@ def disable_native_cutover(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Only the cutover tests turn the settle timer on, through `enable_native_cutover`.
     """
-    monkeypatch.setattr(manager_module, "CUTOVER_SETTLE_SECONDS", None)
+    monkeypatch.setattr(native_migration_module, "CUTOVER_SETTLE_SECONDS", None)
 
 
 @pytest.fixture
@@ -81,7 +81,7 @@ def enabled_test_buttons() -> Iterator[None]:
 @pytest.fixture
 def enable_native_cutover(disable_native_cutover: None, monkeypatch: pytest.MonkeyPatch) -> None:
     """Restore the real settle time for the tests of the cutover; it depends on the autouse fixture for the order."""
-    monkeypatch.setattr(manager_module, "CUTOVER_SETTLE_SECONDS", const.CUTOVER_SETTLE_SECONDS)
+    monkeypatch.setattr(native_migration_module, "CUTOVER_SETTLE_SECONDS", const.CUTOVER_SETTLE_SECONDS)
 
 
 @pytest.fixture(autouse=True)

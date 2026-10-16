@@ -43,8 +43,6 @@ from .const import (
     CONF_EXPORT_PREFIX,
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
-    CUTOVER_HINT_MAX_NAMES,
-    CUTOVER_SETTLE_SECONDS,
     DEFAULT_EXPORT_PREFIX,
     DOMAIN,
     HEARTBEAT_INTERVAL_SECONDS,
@@ -101,6 +99,7 @@ from .entities import device_info_for
 from .model import DeviceSpec, TriggerSpec, shown, spec_from_subentry, trigger_key
 from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway
+from .native_migration import NativeMigration
 from .portability import subentry_payload
 from .presence import EXPIRY_MARGIN_SECONDS, PresenceManager
 from .retrigger import RetriggerCoordinator
@@ -523,6 +522,7 @@ class Manager:
         self.sync = SyncManager(self)
         self.presence = PresenceManager(self)
         self.retrigger = RetriggerCoordinator(self)
+        self.migration = NativeMigration(self)
         # The integration version, read at the start; announced in the heartbeat
         self._version = ""
         # When the last accepted resync happened on `clock`; None until the first one (D-12)
@@ -541,9 +541,6 @@ class Manager:
         # Owned devices whose entities were moved to this integration but whose retained discovery could not be cleared
         # yet: native for this run, pending in the Store, and the clear is retried on the next republish (WR-02)
         self._clear_unconfirmed: set[str] = set()
-        # The wait before the first cutover check, read once so a test can turn the timer off; None means none (D-09)
-        self.cutover_settle_seconds: float | None = CUTOVER_SETTLE_SECONDS
-        self._cancel_cutover: CALLBACK_TYPE | None = None
         # The timer of the catch for duplicates a replayed legacy discovery creates; None while none is armed (D-05)
         self._cancel_replay_catch: CALLBACK_TYPE | None = None
         # How often the catch of this start checked again, because the discovery settle was not done yet (WR-02) or an
@@ -555,10 +552,6 @@ class Manager:
         self._kept_failure_logged = False
         # The registry listener that disables an enabled duplicate of a native device; None while the manager is stopped
         self._cancel_duplicate_guard: CALLBACK_TYPE | None = None
-        # Set once the settle time has passed; only then does a roster change start a cutover check
-        self._cutover_ready = False
-        # The blocking peers the hint issue shows now, so an unchanged set does not rebuild the issue on every heartbeat
-        self._cutover_hint: tuple[str, ...] | None = None
         # Set once this manager asked for the reload that follows an owner into native entities; one reload is enough
         self._reload_scheduled = False
         # The export option and prefix the topics on the broker reflect now; a change is applied by the reconcile (D-03)
@@ -613,6 +606,15 @@ class Manager:
     def running(self) -> bool:
         """Return whether the manager is started and not stopped."""
         return self._running
+
+    @property
+    def native_state(self) -> NativeState:
+        """Return the persisted native state of this instance itself, not a copy (D-03)."""
+        return self._native
+
+    async def async_save_now(self) -> None:
+        """Write the persisted state to the Store at once, without the delay of a scheduled save."""
+        await self._store.async_save(self._data_to_save())
 
     def online_instance_count(self) -> int:
         """Return how many other instances are currently online, as announced on the availability topics."""
@@ -819,24 +821,10 @@ class Manager:
             self._check_discovery_enabled()
         await self._async_publish_availability(AvailabilityState.ONLINE)
         await self.presence.async_publish_heartbeat()
-        self._arm_cutover()
+        self.migration.arm_timers()
         # Core replays retained discovery at its own pace and the order of its messages is no signal, so the catch for
         # replayed duplicates waits a quiet period instead of a settle event that does not exist (D-05)
         self._arm_replay_catch()
-
-    @callback
-    def _arm_cutover(self) -> None:
-        """Wait the settle time before the first cutover check; a native instance never waits or checks (D-09)."""
-        if self._native.instance or self.cutover_settle_seconds is None:
-            return
-        self._cancel_cutover = async_call_later(self._hass, self.cutover_settle_seconds, self._on_cutover_due)
-
-    @callback
-    def _on_cutover_due(self, _now: object) -> None:
-        """Start trusting the roster once the settle time passed, and check at once (D-09)."""
-        self._cancel_cutover = None
-        self._cutover_ready = True
-        self._start_cutover_check()
 
     def _native_device_ids(self) -> list[str]:
         """Return the sorted ids of the owned devices and mirrors that are native; a deferred device is never one."""
@@ -1295,67 +1283,8 @@ class Manager:
 
     @callback
     def on_roster_changed(self) -> None:
-        """Re-run the cutover check after the roster, an announced presence or the time changed (D-10)."""
-        if self._cutover_ready:
-            self._start_cutover_check()
-
-    @callback
-    def _start_cutover_check(self) -> None:
-        """Start the check in a background task of the entry; it takes the lock, which a callback cannot await."""
-        if not self._running or self._native.instance:
-            return
-        self._entry.async_create_background_task(self._hass, self._async_cutover_check(), name=f"{DOMAIN} cutover")
-
-    async def _async_cutover_check(self) -> None:
-        """
-        Switch this instance to native entities once no online peer is a legacy instance (D-09, D-10, D-12, MIG-02).
-
-        The flag is persisted before the reload and checked first, so the switch happens exactly once (T-5-13). Every
-        owned device that is not native yet becomes pending and the reload runs the takeover pass before the platform
-        forward; nothing is moved or published here. Without such a device the flag alone is enough.
-        """
-        async with self._lock:
-            if not self._running or self._native.instance:
-                return
-            if blocking := self.presence.blocking_peers():
-                self._show_cutover_hint(tuple(blocking))
-                return
-            self._clear_cutover_hint()
-            self._native.instance = True
-            self._native_pending.update(self.devices.keys() - self._native_devices)
-            await self._store.async_save(self._data_to_save())
-            if self._native_pending:
-                self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
-
-    @callback
-    def _show_cutover_hint(self, blocking: tuple[str, ...]) -> None:
-        """
-        Explain in Repairs why this instance still uses MQTT Discovery; only the first names are shown (D-10, T-5-14).
-
-        The names come from the broker, so they are escaped and capped, and they are never logged. The issue is deleted
-        first so that a changed set of peers refreshes the text.
-        """
-        if blocking == self._cutover_hint:
-            return
-        self._cutover_hint = blocking
-        shown = ", ".join(escape_markdown(name) for name in blocking[:CUTOVER_HINT_MAX_NAMES])
-        instances = f"{shown} \u2026" if len(blocking) > CUTOVER_HINT_MAX_NAMES else shown
-        ir.async_delete_issue(self._hass, DOMAIN, ISSUE_NATIVE_CUTOVER_WAITING)
-        ir.async_create_issue(
-            self._hass,
-            DOMAIN,
-            ISSUE_NATIVE_CUTOVER_WAITING,
-            is_fixable=False,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key=ISSUE_NATIVE_CUTOVER_WAITING,
-            translation_placeholders={"instances": instances},
-        )
-
-    @callback
-    def _clear_cutover_hint(self) -> None:
-        """Delete the hint; the cutover proceeds, so there is nothing left to wait for."""
-        self._cutover_hint = None
-        ir.async_delete_issue(self._hass, DOMAIN, ISSUE_NATIVE_CUTOVER_WAITING)
+        """Pass a roster change on to the migration, which re-runs the cutover check once its settle time passed."""
+        self.migration.on_roster_changed()
 
     async def _async_native_takeover(self) -> None:
         """
@@ -1564,10 +1493,7 @@ class Manager:
         """
         async with self._lock:
             self._running = False
-            self._cutover_ready = False
-            if self._cancel_cutover is not None:
-                self._cancel_cutover()
-                self._cancel_cutover = None
+            self.migration.stop()
             if self._cancel_replay_catch is not None:
                 self._cancel_replay_catch()
                 self._cancel_replay_catch = None

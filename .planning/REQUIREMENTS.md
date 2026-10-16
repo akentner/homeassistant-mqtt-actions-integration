@@ -19,7 +19,7 @@ Order is fixed by the owner: release v1.0.1 first, then the review findings, the
 - [x] **FIX-02**: The takeover, replay-catch and duplicate-guard orchestration lives in its own module outside `manager.py`, with unchanged behavior proven by the existing suite and a start-up ordering test (review 1 IN-04)
 - [x] **FIX-03**: Shared test helpers live in one module; no test module imports private helpers from another test module (review 1 IN-02)
 - [x] **FIX-04**: The guard test proves that the listener runs for a second create event and returns 0, not only that the registry restores the state (review 1 IN-03)
-- [ ] **FIX-05**: README and troubleshooting say that a duplicate the user re-enables is disabled again at the next start (review 1 IN-01)
+- [x] **FIX-05**: README and troubleshooting say that a duplicate the user re-enables is disabled again at the next start (review 1 IN-01)
 - [x] **FIX-06**: A row that raises mid-loop in the replay catch leaves no emptied device behind and does not lose the partial count (review 2 IN-01)
 - [x] **FIX-07**: The no-clear guarantee for loaded rows no longer depends silently on the HA-internal eager task in `Entity._async_registry_updated` (made independent, or pinned by a test that fails loudly if core changes it) (review 2 IN-02)
 - [ ] **FIX-08**: The user sees a non-fixable Repairs warning listing customized duplicates kept enabled (including the WR-03 cases); it disappears when none remain; no registry row is removed (review 2 IN-03)
@@ -82,7 +82,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FIX-02 | Phase 10 | Complete |
 | FIX-03 | Phase 10 | Complete |
 | FIX-04 | Phase 10 | Complete |
-| FIX-05 | Phase 10 | Pending |
+| FIX-05 | Phase 10 | Complete |
 | FIX-06 | Phase 10 | Complete |
 | FIX-07 | Phase 10 | Complete |
 | FIX-08 | Phase 10 | Pending |

@@ -22,7 +22,7 @@ Order is fixed by the owner: release v1.0.1 first, then the review findings, the
 - [x] **FIX-05**: README and troubleshooting say that a duplicate the user re-enables is disabled again at the next start (review 1 IN-01)
 - [x] **FIX-06**: A row that raises mid-loop in the replay catch leaves no emptied device behind and does not lose the partial count (review 2 IN-01)
 - [x] **FIX-07**: The no-clear guarantee for loaded rows no longer depends silently on the HA-internal eager task in `Entity._async_registry_updated` (made independent, or pinned by a test that fails loudly if core changes it) (review 2 IN-02)
-- [ ] **FIX-08**: The user sees a non-fixable Repairs warning listing customized duplicates kept enabled (including the WR-03 cases); it disappears when none remain; no registry row is removed (review 2 IN-03)
+- [x] **FIX-08**: The user sees a non-fixable Repairs warning listing customized duplicates kept enabled (including the WR-03 cases); it disappears when none remain; no registry row is removed (review 2 IN-03)
 
 ### Local Actions on Mirrors (backlog 999.1)
 
@@ -85,7 +85,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FIX-05 | Phase 10 | Complete |
 | FIX-06 | Phase 10 | Complete |
 | FIX-07 | Phase 10 | Complete |
-| FIX-08 | Phase 10 | Pending |
+| FIX-08 | Phase 10 | Complete |
 | MIR-01 | Phase 11 | Pending |
 | MIR-02 | Phase 11 | Pending |
 | MIR-03 | Phase 11 | Pending |

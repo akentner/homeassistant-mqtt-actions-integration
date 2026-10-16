@@ -415,6 +415,33 @@ def remove_replay_twins(  # noqa: PLR0913
     return removed
 
 
+def _guard_candidates(
+    hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str
+) -> list[tuple[er.RegistryEntry, er.RegistryEntry]]:
+    """
+    Return the (entry, native twin) pairs of a device that the duplicate guard decides on (FIX-08).
+
+    The switch or select entry of the core MQTT device of the id whose unique id is exactly the id, whose disabled
+    state is None and that has a native twin under this config entry. `disable_duplicates` and `kept_duplicates` both
+    iterate these pairs, so the guard and the warning cannot drift apart: each pair is disabled or reported as kept.
+    Empty without a legacy device. Registry read only.
+    """
+    if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
+        return []
+    entity_registry = er.async_get(hass)
+    candidates: list[tuple[er.RegistryEntry, er.RegistryEntry]] = []
+    for entry in _legacy_entries(hass, device, device_id, mqtt_entry_id):
+        if entry.unique_id != device_id or entry.domain not in EXPORT_DOMAINS or entry.disabled_by is not None:
+            continue
+        twin_id = entity_registry.async_get_entity_id(entry.domain, DOMAIN, entry.unique_id)
+        if twin_id is None:
+            continue
+        twin = entity_registry.entities[twin_id]
+        if twin.config_entry_id == entry_id:
+            candidates.append((entry, twin))
+    return candidates
+
+
 def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str) -> int:
     """
     Disable the enabled core MQTT duplicates of a native device; return the count.
@@ -436,18 +463,10 @@ def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mq
     removes it only when the core-prefix topic holds the legacy payload or nothing (D-02); with an export or unknown
     content it keeps the disabled state `integration` across restarts, and a later export finds it disabled.
     """
-    if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
-        return 0
     entity_registry = er.async_get(hass)
     disabled = 0
-    for entry in _legacy_entries(hass, device, device_id, mqtt_entry_id):
-        if entry.unique_id != device_id or entry.domain not in EXPORT_DOMAINS or entry.disabled_by is not None:
-            continue
-        twin_id = entity_registry.async_get_entity_id(entry.domain, DOMAIN, entry.unique_id)
-        if twin_id is None:
-            continue
-        twin = entity_registry.entities[twin_id]
-        if twin.config_entry_id != entry_id or _is_customized(entry) or _is_turned_off(twin):
+    for entry, twin in _guard_candidates(hass, entry_id, device_id, mqtt_entry_id=mqtt_entry_id):
+        if _is_customized(entry) or _is_turned_off(twin):
             # The entry that holds the user's choices is the one automations and dashboards use (WR-02), and the one
             # left next to a twin the user turned off is the one they kept (WR-03)
             continue
@@ -469,27 +488,16 @@ def kept_duplicates(
     """
     Return the enabled core MQTT duplicates of a native device that the guard keeps, with their reason (FIX-08, D-01).
 
-    A candidate is what `disable_duplicates` looks at: the switch or select entry of the core MQTT device of the id
-    whose unique id is exactly the id, that is enabled and that has a native twin under this config entry. A twin
-    turned off by the user makes it `TWIN_REJECTED` (WR-03), even when the entry is customized too, because the guard
-    keeps it for that reason alone; otherwise an entry that holds the user's choices is `CUSTOMIZED` (WR-02). Any other
-    candidate is the one the guard disables, so it is not listed. A disabled entry, such as the twin the 09.1 D-03 /
-    09.2 D-03 fail-safe leaves behind, is never a candidate (D-03). Registry read only: nothing is written, removed,
-    disabled, enabled or published.
+    The candidates are the ones `disable_duplicates` decides on (`_guard_candidates`), so every candidate is either
+    disabled by the guard or listed here, never both and never neither. A twin turned off by the user makes it
+    `TWIN_REJECTED` (WR-03), even when the entry is customized too, because the guard keeps it for that reason alone;
+    otherwise an entry that holds the user's choices is `CUSTOMIZED` (WR-02). Any other candidate is the one the guard
+    disables, so it is not listed. A disabled entry, such as the twin the 09.1 D-03 / 09.2 D-03 fail-safe leaves
+    behind, is never a candidate (D-03). Registry read only: nothing is written, removed, disabled, enabled or
+    published.
     """
-    if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
-        return []
-    entity_registry = er.async_get(hass)
     kept: list[tuple[str, KeptReason]] = []
-    for entry in _legacy_entries(hass, device, device_id, mqtt_entry_id):
-        if entry.unique_id != device_id or entry.domain not in EXPORT_DOMAINS or entry.disabled_by is not None:
-            continue
-        twin_id = entity_registry.async_get_entity_id(entry.domain, DOMAIN, entry.unique_id)
-        if twin_id is None:
-            continue
-        twin = entity_registry.entities[twin_id]
-        if twin.config_entry_id != entry_id:
-            continue
+    for entry, twin in _guard_candidates(hass, entry_id, device_id, mqtt_entry_id=mqtt_entry_id):
         if _is_turned_off(twin):
             kept.append((entry.entity_id, KeptReason.TWIN_REJECTED))
         elif _is_customized(entry):

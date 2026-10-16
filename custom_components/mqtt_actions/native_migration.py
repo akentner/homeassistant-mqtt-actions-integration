@@ -4,7 +4,8 @@ The migration of this instance from MQTT Discovery entities to native entities (
 `NativeMigration` is a collaborator of the manager, like the sync, presence and retrigger parts: it holds a reference to
 its manager and owns the orchestration of the migration. That is the cutover timer, the cutover check and its hint
 issue, the native takeover pass with its finish, deferral and the retry of unconfirmed clears, the replay catch timer
-and pass with the gate of the shared core-prefix topic, the duplicate guard listener and the per-run sets.
+and pass with the gate of the shared core-prefix topic, the duplicate guard listener, the Repairs warning for the
+duplicates the guard keeps enabled (FIX-08) and the per-run sets.
 
 It never decides a registry question itself: `takeover.py` does, and it is always called through the module, so a test
 that patches a function there keeps intercepting it. The persisted native state stays in the manager, which also keeps
@@ -346,6 +347,7 @@ class NativeMigration:
         cleaning up in that run (D-04, review WR-03). Both reasons share the same retry counter and bound; with both,
         the longer wait wins. After the bound the owner keeps the device and logs a count; the next start checks again.
         A peer that sent no valid kept list (UNKNOWN, an older version) never re-arms: nothing changes in this run.
+        Every run that got past its running check ends with the refresh of the kept-duplicates warning (FIX-08, D-04).
         """
         async with self._manager.lock:
             if not self._manager.running:
@@ -378,6 +380,7 @@ class NativeMigration:
                 # The removal is on disk like the move before it (WR-01), a partial one too (FIX-06)
                 await takeover.async_flush_registries(self._manager.hass)
             if (mqtt_entry_id := self._manager.gateway.mqtt_entry_id()) is None or self._manager.publisher is None:
+                self._refresh_kept_duplicates()
                 return
             kept_for_peers = 0
             unheard = 0
@@ -431,6 +434,8 @@ class NativeMigration:
                 and takeover.legacy_device(self._manager.hass, mqtt_entry_id, device_id) is not None
             )
             self._rearm_or_log_replay_catch(unknown, unheard)
+            # The catch removed or kept rows: the warning follows the list it leaves behind (FIX-08, D-04)
+            self._refresh_kept_duplicates()
 
     @callback
     def _rearm_or_log_replay_catch(self, unknown: int, unheard: int) -> None:
@@ -593,7 +598,11 @@ class NativeMigration:
 
     @callback
     def _disable_duplicates(self, device_ids: Iterable[str]) -> None:
-        """Disable the enabled duplicates of these devices; a failure never keeps the manager from running."""
+        """
+        Disable the enabled duplicates of these devices; a failure never keeps the manager from running.
+
+        After the guard ran, the warning for the duplicates it keeps enabled is refreshed (FIX-08, D-04).
+        """
         if (mqtt_entry_id := self._manager.gateway.mqtt_entry_id()) is None or self._cancel_duplicate_guard is None:
             return
         disabled = 0
@@ -609,6 +618,8 @@ class NativeMigration:
         if disabled:
             # A count only: the ids, names and payloads come from the broker
             LOGGER.info("Disabled %d duplicate entities that core MQTT created for native devices", disabled)
+        # The guard just decided on these rows, so the warning follows what it kept, also when it disabled none (D-04)
+        self._refresh_kept_duplicates()
 
     @callback
     def on_roster_changed(self) -> None:
@@ -682,10 +693,14 @@ class NativeMigration:
         Show the core MQTT duplicates the guard keeps enabled in one Repairs warning, or delete it (FIX-08, D-01, D-02).
 
         The list is read from the registry for every id the guard holds (`takeover.kept_duplicates`): a duplicate the
-        user customized (WR-02) or kept next to a native twin they turned off (WR-03). It is one non-fixable warning
-        per instance with no fix flow; it only reads the registry and never removes, disables or enables a row
-        (CR-01). A changed list deletes the issue first, so an earlier dismissal never hides it (research Pitfall 15);
-        an empty list deletes it. Without an MQTT entry nothing is kept. A failure while building the list leaves the
+        user customized (WR-02) or kept next to a native twin they turned off (WR-03); a disabled twin is never listed
+        (D-03). It is one non-fixable warning per instance with no fix flow; it only reads the registry and never
+        removes, disables or enables a row (CR-01). It runs where the duplicates are evaluated anyway, with no listener
+        of its own: at the end of the start-up takeover pass, after each guard pass and at the end of each replay catch
+        run (D-04). An active issue with the same placeholders is left alone, so a dismissal holds while the list does
+        not change. A changed list, or an issue that Home Assistant restored inactive after its restart without the
+        text, is deleted first and created again, so an earlier dismissal never hides it (research Pitfall 15). An
+        empty list deletes it. Without an MQTT entry nothing is kept. A failure while building the list leaves the
         warning as it is until the next evaluation point and logs no entity data (T-04-14).
         """
         if not self._manager.running:
@@ -702,9 +717,14 @@ class NativeMigration:
             LOGGER.warning("The check for duplicate entities kept enabled raised an unexpected error")
             LOGGER.debug("The check for duplicate entities kept enabled failed with %s", type(err).__name__)
             return
-        ir.async_delete_issue(self._manager.hass, DOMAIN, ISSUE_KEPT_DUPLICATES)
         if not rows:
+            ir.async_delete_issue(self._manager.hass, DOMAIN, ISSUE_KEPT_DUPLICATES)
             return
+        placeholders = kept_duplicates_placeholders(rows)
+        current = ir.async_get(self._manager.hass).async_get_issue(DOMAIN, ISSUE_KEPT_DUPLICATES)
+        if current is not None and current.active and current.translation_placeholders == placeholders:
+            return
+        ir.async_delete_issue(self._manager.hass, DOMAIN, ISSUE_KEPT_DUPLICATES)
         ir.async_create_issue(
             self._manager.hass,
             DOMAIN,
@@ -712,8 +732,10 @@ class NativeMigration:
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key=ISSUE_KEPT_DUPLICATES,
-            translation_placeholders=kept_duplicates_placeholders(rows),
+            translation_placeholders=placeholders,
         )
+        # A count only, never an entity id (T-04-14)
+        LOGGER.info("Kept %d duplicate entities enabled next to native entities; Repairs lists them", len(rows))
 
     async def async_takeover(self) -> None:
         """

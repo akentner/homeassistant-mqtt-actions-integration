@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.278" timestamp="2026-10-16T16:37:46.373468+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_docs" name="test_the_docs_describe_the_kept_duplicates_warning" time="0.128"><failure message="AssertionError: the README export section never says: kept_duplicates&#10;assert 'kept_duplicates' in ' the mqtt discovery export is optional and off by default. home assistant needs no discovery for the devices of this ...e, disable it in **settings**, **devices &amp; services**, **entities**, or switch the export back to the default prefix. '">def test_the_docs_describe_the_kept_duplicates_warning() -&gt; None:
+        """
+        FIX-08 (review 2 IN-03): both duplicate sections name the Repairs warning that lists the duplicates kept enabled.
+    
+        The sections say that MQTT Actions never deletes them and how a dismissal behaves (D-02, plan 10-09: it comes back
+        after a Home Assistant restart while duplicates remain); troubleshooting also says that integration-disabled
+        duplicates are not listed (D-03).
+        """
+        phrases = ("kept_duplicates", "never deletes", "repairs", "dismiss", "after a home assistant restart")
+        export = _normalize(_section(README.read_text(encoding="utf-8"), "mqtt discovery export")).replace("`", "")
+        section = _section(_page(TROUBLESHOOTING), "an enabled duplicate after the export prefix")
+        duplicate = _normalize(section).replace("`", "")
+        for phrase in phrases:
+&gt;           assert phrase in export, f"the README export section never says: {phrase}"
+E           AssertionError: the README export section never says: kept_duplicates
+E           assert 'kept_duplicates' in ' the mqtt discovery export is optional and off by default. home assistant needs no discovery for the devices of this ...e, disable it in **settings**, **devices &amp; services**, **entities**, or switch the export back to the default prefix. '
+
+tests/test_docs.py:483: AssertionError</failure></testcase></testsuite></testsuites>

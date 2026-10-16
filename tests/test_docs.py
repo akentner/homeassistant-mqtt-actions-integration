@@ -467,6 +467,24 @@ def test_troubleshooting_says_a_re_enabled_duplicate_is_disabled_again_at_the_ne
         assert phrase in duplicate, f"the enabled-duplicate section never says: {phrase}"
 
 
+def test_the_docs_describe_the_kept_duplicates_warning() -> None:
+    """
+    FIX-08 (review 2 IN-03): both duplicate sections name the Repairs warning that lists the duplicates kept enabled.
+
+    The sections say that MQTT Actions never deletes them and how a dismissal behaves (D-02, plan 10-09: it comes back
+    after a Home Assistant restart while duplicates remain); troubleshooting also says that integration-disabled
+    duplicates are not listed (D-03).
+    """
+    phrases = ("kept_duplicates", "never deletes", "repairs", "dismiss", "after a home assistant restart")
+    export = _normalize(_section(README.read_text(encoding="utf-8"), "mqtt discovery export")).replace("`", "")
+    section = _section(_page(TROUBLESHOOTING), "an enabled duplicate after the export prefix")
+    duplicate = _normalize(section).replace("`", "")
+    for phrase in phrases:
+        assert phrase in export, f"the README export section never says: {phrase}"
+        assert phrase in duplicate, f"the enabled-duplicate section never says: {phrase}"
+    assert "not listed" in duplicate, "the enabled-duplicate section never says which duplicates are not listed"
+
+
 def test_old_discovery_claims_are_gone() -> None:
     """The pages no longer describe Discovery as the way the entities come into being (D-03)."""
     readme = _normalize(README.read_text(encoding="utf-8"))

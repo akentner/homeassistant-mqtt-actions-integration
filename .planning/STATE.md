@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
-current_phase: "09.1"
-current_phase_name: "UAT-02 gap closure: remove leftover disabled and legacy mqtt rows on replay, then re-run UAT-02 and UAT-04 on a new SHA"
-status: planning
-stopped_at: Phase 09 complete, ready to plan Phase 09.1
-last_updated: "2026-10-16T00:01:49.353Z"
+current_phase: "09.2"
+current_phase_name: "CR-01 cross-instance gap closure: no catch lets core clear a shared legacy topic under another instance's kept row, then re-run the bench and re-point 09-04 and 09-05 on a new SHA"
+status: verifying
+stopped_at: Phase 09.1 complete, ready to verify Phase 09.2
+last_updated: "2026-10-16T10:22:29.988Z"
 last_activity: 2026-10-16
-last_activity_desc: Phase 09 complete, transitioned to Phase 09.1
-state_head: 3e15acab474aa7f76efc16a87fb6602a599e9f0b
+last_activity_desc: Phase 09.1 complete, transitioned to Phase 09.2
+state_head: 2a7d01c370ce2ac2ae516787a17f197dadd59dae
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 26
   completed_plans: 26
-  percent: 20
+  percent: 40
 ---
 
 # Project State
@@ -29,17 +29,17 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 
 ## Current Position
 
-Phase: 09.1 — UAT-02 gap closure: remove leftover disabled and legacy mqtt rows on replay, then re-run UAT-02 and UAT-04 on a new SHA
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-10-16 — Phase 09 complete, transitioned to Phase 09.1
+Phase: 09.2 — CR-01 cross-instance gap closure: no catch lets core clear a shared legacy topic under another instance's kept row, then re-run the bench and re-point 09-04 and 09-05 on a new SHA
+Plan: 9
+Status: Phase complete — ready for verification
+Last activity: 2026-10-16 — Phase 09.1 complete, transitioned to Phase 09.2
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 76
+- Total plans completed: 88
 - Average duration: - min
 - Total execution time: 0.0 hours
 
@@ -56,6 +56,7 @@ Progress: [██░░░░░░░░] 20%
 | 8 | 18 | - | - |
 | 09.2 | 9 | - | - |
 | 09 | 5 | - | - |
+| 09.1 | 12 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -333,7 +334,7 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-10-16
-Stopped at: Phase 09 complete, ready to plan Phase 09.1
+Stopped at: Phase 09.1 complete, ready to verify Phase 09.2
 Resume file: None
 
 ## Operator Next Steps

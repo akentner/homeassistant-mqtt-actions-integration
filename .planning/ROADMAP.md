@@ -39,7 +39,7 @@ Full details: [milestones/v1.0.1-ROADMAP.md](milestones/v1.0.1-ROADMAP.md)
 **Ordering rationale (owner-fixed 2026-10-11):** The v1.0.1 tag must point at bytes that the bench verified, so Phase 9 comes before any IN-04 or MIR-01 commit on `main`. The IN-04 extraction in Phase 10 moves about 330 lines out of `manager.py`; a pure move is only verifiable on a quiet file, so it lands before MIR-01 edits the same file. MIR-01 (Phase 11) is one vertical slice from storage and runner to the options flow and docs (coarse granularity). Phase 12 comes last because any later fix makes the reports stale again (lesson of v1.0 and v1.0.1). TDD mode is on: each fix and feature starts with a failing test commit.
 
 - [x] **Phase 9: v1.0.1 Release** - The build whose manifest says 1.0.1 passes UAT-02 and UAT-04 on the bench on exactly that SHA and is published as v1.0.1 (completed 2026-10-16)
-- [ ] **Phase 9.1: UAT-02 Gap Closure** (INSERTED) - Replay leaves no disabled or legacy mqtt rows, and UAT-02 and UAT-04 pass on the new SHA
+- [x] **Phase 9.1: UAT-02 Gap Closure** (INSERTED) - Replay leaves no disabled or legacy mqtt rows, and UAT-02 and UAT-04 pass on the new SHA (completed 2026-10-16)
 - [ ] **Phase 10: Review Findings and Native Migration Extraction** - The Phase 8 info findings are closed, and the start-up migration orchestration lives in its own module outside `manager.py`
 - [ ] **Phase 11: Local Actions on Mirrors** - A follower sets its own actions per trigger of a mirrored device; they run locally under the device's gates and never reach the broker
 - [ ] **Phase 12: Re-verification and v1.1.0 Release** - Every phase has a current verification, the bench checks pass on the final SHA, and v1.1.0 is published
@@ -91,7 +91,7 @@ Plans:
   4. On the bench, the first start of the fix build cleans the leftover rows (D-09), UAT-02 passes from integration and from null tombstones, and UAT-04 passes, all on exactly the fix SHA (D-10 to D-12). (REL-01)
   5. `09-UAT.md` carries the fix-SHA rows, the release notes name the fixed case, and plans 09-04 and 09-05 read the fix SHA (D-16). (REL-01)
 
-**Plans:** 12/12 plans executed
+**Plans:** 12/12 plans complete
 
 Plans:
 **Wave 1**
@@ -239,7 +239,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. v1.0.1 Release | 5/5 | Complete    | 2026-10-16 |
-| 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | In Progress | - |
+| 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
 | 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |

@@ -7,13 +7,25 @@ from homeassistant.components import mqtt
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 
+from .const import LOGGER
+
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
 # The highest MQTT qos level
 MAX_QOS = 2
+
+
+async def async_attempt(action: Callable[[], Awaitable[None]], description: str) -> bool:
+    """Run one MQTT cleanup step; an unavailable MQTT client is logged and never raised (T-01-14)."""
+    try:
+        await action()
+    except HomeAssistantError as err:
+        LOGGER.warning("MQTT could not %s: %s", description, err)
+        return False
+    return True
 
 
 @dataclass(frozen=True, slots=True)

@@ -12,13 +12,13 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
-from custom_components.mqtt_actions import manager as manager_module
+from custom_components.mqtt_actions import native_migration as native_migration_module
 from custom_components.mqtt_actions import sync as sync_module
 from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, CONF_INSTANCE_ID, DOMAIN
 from custom_components.mqtt_actions.discovery import DiscoveryContent, DiscoveryPublisher, build_discovery
-from custom_components.mqtt_actions.manager import Manager
 from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
+from custom_components.mqtt_actions.native_migration import NativeMigration
 from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, heartbeat_topic
 from tests.documents import FOREIGN_OWNER, heartbeat_payload, make_spec
 from tests.helpers import (
@@ -232,7 +232,7 @@ async def test_the_replay_catch_is_armed_only_for_an_instance_with_a_native_devi
 ) -> None:
     """A legacy instance arms no catch; one with a native device arms the timer."""
     legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
-    assert manager_of(legacy.entry)._cancel_replay_catch is None
+    assert manager_of(legacy.entry).migration._cancel_replay_catch is None
 
     assert await hass.config_entries.async_unload(legacy.entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -240,7 +240,7 @@ async def test_the_replay_catch_is_armed_only_for_an_instance_with_a_native_devi
     assert await hass.config_entries.async_setup(legacy.entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    assert manager_of(legacy.entry)._cancel_replay_catch is not None
+    assert manager_of(legacy.entry).migration._cancel_replay_catch is not None
 
 
 async def test_a_replay_right_after_the_move_is_removed_before_the_clear(
@@ -1385,13 +1385,13 @@ async def test_the_follower_rearm_on_an_emptied_topic_is_bounded(
         hass, mqtt_mock, hass_storage, make_hub_entry
     )
     runs = [0]
-    original = Manager._async_replay_catch
+    original = NativeMigration._async_replay_catch
 
-    async def _counted(manager: Manager) -> None:
+    async def _counted(manager: NativeMigration) -> None:
         runs[0] += 1
         await original(manager)
 
-    monkeypatch.setattr(Manager, "_async_replay_catch", _counted)
+    monkeypatch.setattr(NativeMigration, "_async_replay_catch", _counted)
 
     for _flip in range(7):
         async_fire_mqtt_message(hass, topic, "", retain=False)
@@ -1418,10 +1418,10 @@ def _track_catch_timers(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]
     A record stops being pending when its timer fires or is cancelled. Other timers of the manager pass through.
     """
     records: list[dict[str, Any]] = []
-    original = manager_module.async_call_later
+    original = native_migration_module.async_call_later
 
     def _tracked(hass: HomeAssistant, delay: float, action: Any) -> Any:
-        if getattr(action, "__func__", None) is not Manager._on_replay_catch_due:
+        if getattr(action, "__func__", None) is not NativeMigration._on_replay_catch_due:
             return original(hass, delay, action)
         record: dict[str, Any] = {"pending": True, "delay": delay}
         records.append(record)
@@ -1439,7 +1439,7 @@ def _track_catch_timers(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]
 
         return _cancel
 
-    monkeypatch.setattr(manager_module, "async_call_later", _tracked)
+    monkeypatch.setattr(native_migration_module, "async_call_later", _tracked)
     return records
 
 
@@ -1490,7 +1490,7 @@ async def test_a_catch_that_rearms_while_an_emptied_topic_already_armed_it_keeps
     _assert_clean(hass, second, second_replayed)
     assert sum(record["pending"] for record in records) == 1, "more than one catch timer is pending"
     # The start-up arm reset the counter; the emptied topic and the catch's own re-arm are one pending run
-    assert manager._replay_catch_retries == 1
+    assert manager.migration._replay_catch_retries == 1
 
 
 # --- Phase 9.2 review WR-03: an unheard peer is checked again once per heartbeat interval ------------------------

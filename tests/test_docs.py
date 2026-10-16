@@ -459,6 +459,14 @@ def test_the_readme_says_a_re_enabled_duplicate_is_disabled_again_at_the_next_st
         assert phrase in export, f"the export section never says: {phrase}"
 
 
+def test_troubleshooting_says_a_re_enabled_duplicate_is_disabled_again_at_the_next_start() -> None:
+    """FIX-05: the enabled-duplicate section says the same as the README, next to its advice to disable by hand."""
+    section = _section(_page(TROUBLESHOOTING), "an enabled duplicate after the export prefix")
+    duplicate = _normalize(section).replace("`", "")
+    for phrase in ("disabled again at the next start", "unless you customized it", "turned the native entity off"):
+        assert phrase in duplicate, f"the enabled-duplicate section never says: {phrase}"
+
+
 def test_old_discovery_claims_are_gone() -> None:
     """The pages no longer describe Discovery as the way the entities come into being (D-03)."""
     readme = _normalize(README.read_text(encoding="utf-8"))

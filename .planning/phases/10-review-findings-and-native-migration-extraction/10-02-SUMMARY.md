@@ -91,7 +91,7 @@ completed: 2026-10-16
 
 # Phase 10 Plan 02: Shared Test Helpers Summary
 
-**tests/helpers.py now holds 38 shared test names (4 key sets, 7 constants, LegacyDevice, 26 functions) under public names; an ast guard in tests/test_repo_structure.py fails on any import of a tests.test_* module, and no test module imports another any more (FIX-03, D-11).**
+**tests/helpers.py now holds 38 shared test names (4 key sets, 6 constants, LegacyDevice, 27 functions) under public names; an ast guard in tests/test_repo_structure.py fails on any import of a tests.test_* module, and no test module imports another any more (FIX-03, D-11).**
 
 ## Performance
 

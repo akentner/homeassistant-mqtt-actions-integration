@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 10
 current_phase_name: Review Findings and Native Migration Extraction
 status: executing
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-10-16T12:26:34.514Z"
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-10-16T12:41:46.069Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 10 execution started
-state_head: 6005aaf1d621bb13cda2c90f4d2cc2bdbbe45981
+state_head: eda2974de6e087f9e98b1f011430211c4c23d912
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 36
-  completed_plans: 27
+  completed_plans: 28
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 10 (Review Findings and Native Migration Extraction) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 Status: Ready to execute
 Last activity: 2026-10-16 — Phase 10 execution started
 
@@ -141,6 +141,7 @@ Progress: [█████░░░░░] 50%
 | Phase 09 P04 | 22min | 3 tasks | 3 files |
 | Phase 09 P05 | 5min | 2 tasks | 12 files |
 | Phase 10 P01 | 8 min | 2 tasks | 4 files |
+| Phase 10 P02 | 12 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -302,6 +303,7 @@ Recent decisions affecting current work:
 - [Phase 09]: v1.0.1 released 2026-10-15 on tag v1.0.1 -> 3dc9093 (release run 38824818079 green in all 8 jobs, Latest, hand-written notes applied by Claude); ACCEPTED-GAP-V101 closed for v1.0.1 only, full re-verification stays Phase 12
 - [Phase 10]: 10-01: the behavioral flush pin restores the real Store.async_save on PHACC StoreWithoutWriteLoad (harness stub only); core registry objects stay untouched
 - [Phase 10]: 10-01: core-internals pins live in tests/test_core_contracts.py, never skipped/xfail, no marker (D-08); ci.yml and validate.yml run on branches ["**"]
+- [Phase 10]: 10-02: shared test helpers live in tests/helpers.py with public names (D-11); an ast guard in tests/test_repo_structure.py rejects any import of a tests.test_* module; renames are scoped per module so a consumer's own private helper with an old name stays untouched
 
 ### Pending Todos
 
@@ -336,8 +338,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T12:26:34.384Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-10-16T12:41:45.857Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

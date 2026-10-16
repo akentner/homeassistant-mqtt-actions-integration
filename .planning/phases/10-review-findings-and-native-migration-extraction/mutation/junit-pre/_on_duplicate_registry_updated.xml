@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="2.224" timestamp="2026-10-16T14:56:35.819058+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]" time="0.993" /><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[after_the_clear]" time="0.148" /><testcase classname="tests.test_native_replay" name="test_a_replay_after_the_takeover_of_a_native_mirror_leaves_no_duplicate_and_no_publish" time="0.130" /><testcase classname="tests.test_native_replay" name="test_a_replay_before_a_restart_of_a_finished_native_owner_is_cleaned_at_the_next_start" time="0.189" /><testcase classname="tests.test_native_replay" name="test_the_replay_catch_is_armed_only_for_an_instance_with_a_native_device" time="0.123" /><testcase classname="tests.test_native_replay" name="test_a_replay_right_after_the_move_is_removed_before_the_clear" time="0.135" /><testcase classname="tests.test_native_replay" name="test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]" time="0.144"><failure message="AssertionError: assert None is &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt;&#10; +  where None = RegistryEntry(entity_id='switch.lamp_2', unique_id='a5190e05-86a8-4735-96a0-1cbc5daa3466', platform='mqtt', previous_u...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}).disabled_by&#10; +    where RegistryEntry(entity_id='switch.lamp_2', unique_id='a5190e05-86a8-4735-96a0-1cbc5daa3466', platform='mqtt', previous_u...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}) = async_get('switch.lamp_2')&#10; +      where async_get = &lt;homeassistant.helpers.entity_registry.EntityRegistry object at 0x7f24351259d0&gt;.async_get&#10; +  and   &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; = &lt;enum 'RegistryEntryDisabler'&gt;.INTEGRATION&#10; +    where &lt;enum 'RegistryEntryDisabler'&gt; = er.RegistryEntryDisabler">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139793473669168'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f2434955fe0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f2434722400&gt;
+tombstones = 'integration'
+
+    @pytest.mark.parametrize("tombstones", ["integration", "null"], ids=["integration", "null"])
+    async def test_a_replay_onto_tombstones_is_cleaned_at_the_next_start(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        tombstones: str,
+    ) -&gt; None:
+        """D-02, D-05: with the legacy payload retained, the next start removes the disabled twin and the legacy device."""
+        legacy, before = await unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        loop_back_discovery(hass, mqtt_mock)
+        assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert_moved_and_native(hass, legacy, before)
+        assert legacy_entity_ids(hass, legacy.device_id) == []
+        first = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
+        assert len(first) == 3
+        _tombstone_the_replay(hass, legacy.device_id, first, tombstones)
+        entity_registry = er.async_get(hass)
+    
+        for _round in range(2):
+            replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
+            assert len(replayed) == 3
+            # Core re-enabled or restored the switch and the guard disabled it, so the test cannot go green for the wrong
+            # reason: this is the row the catch used to skip (CR-01)
+            (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+&gt;           assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+E           AssertionError: assert None is &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt;
+E            +  where None = RegistryEntry(entity_id='switch.lamp_2', unique_id='a5190e05-86a8-4735-96a0-1cbc5daa3466', platform='mqtt', previous_u...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}).disabled_by
+E            +    where RegistryEntry(entity_id='switch.lamp_2', unique_id='a5190e05-86a8-4735-96a0-1cbc5daa3466', platform='mqtt', previous_u...eatures=0, translation_key=None, unit_of_measurement=None, compat_aliases=[], original_name_unprefixed=None, _cache={}) = async_get('switch.lamp_2')
+E            +      where async_get = &lt;homeassistant.helpers.entity_registry.EntityRegistry object at 0x7f24351259d0&gt;.async_get
+E            +  and   &lt;RegistryEntryDisabler.INTEGRATION: 'integration'&gt; = &lt;enum 'RegistryEntryDisabler'&gt;.INTEGRATION
+E            +    where &lt;enum 'RegistryEntryDisabler'&gt; = er.RegistryEntryDisabler
+
+tests/test_native_replay.py:341: AssertionError</failure></testcase></testsuite></testsuites>

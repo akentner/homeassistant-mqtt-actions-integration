@@ -1,0 +1,29 @@
+method	mutant	exit	first_failing	verdict	note
+_arm_cutover	return None	1	tests/test_cutover.py::test_a_legacy_install_without_peers_cuts_over_after_the_settle_time	killed	
+_on_cutover_due	return None	1	tests/test_cutover.py::test_a_legacy_install_without_peers_cuts_over_after_the_settle_time	killed	
+on_roster_changed	return None	1	tests/test_cutover.py::test_a_peer_announced_online_without_a_heartbeat_blocks_until_it_was_silent_long_enough	killed	
+_start_cutover_check	return None	1	tests/test_cutover.py::test_a_legacy_install_without_peers_cuts_over_after_the_settle_time	killed	
+_async_cutover_check	return None	1	tests/test_cutover.py::test_a_legacy_install_without_peers_cuts_over_after_the_settle_time	killed	
+_show_cutover_hint	return None	1	tests/test_cutover.py::test_the_hint_names_the_blocking_peers	killed	
+_clear_cutover_hint	return None	1	tests/test_cutover.py::test_the_hint_goes_when_the_cutover_proceeds	killed	
+_async_native_takeover	return None	1	tests/test_native_replay.py::test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]	killed	
+_async_take_over_one	return takeover.TakeoverStatus.NOTHING	1	tests/test_native_replay.py::test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]	killed	
+_async_finish_takeover	return False	1	tests/test_native_replay.py::test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]	killed	
+_async_defer_takeover	return None	1	tests/test_native_start.py::test_a_deferred_mirror_keeps_its_legacy_companion_for_this_run	killed	
+_async_retry_unconfirmed_clears	return None	1	tests/test_native_start.py::test_a_failed_retained_clear_after_the_move_keeps_the_device_native_and_is_retried	killed	
+_native_device_ids	return []	1	tests/test_native_replay.py::test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]	killed	
+_topic_verdict	return takeover.TopicVerdict(remove_disabled=False, may_clear=False, rearm=False)	1	tests/test_native_replay.py::test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]	killed	
+_ids_that_may_empty_the_topic	return frozenset()	1	tests/test_native_replay.py::test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]	killed	
+_remove_replay_twins	return 0	1	tests/test_native_replay.py::test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]	killed	
+_arm_replay_catch	return None	1	tests/test_native_replay.py::test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]	killed	
+on_discovery_emptied	return None	1	tests/test_native_replay.py::test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_topic	killed	
+_on_replay_catch_due	return None	1	tests/test_native_replay.py::test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]	killed	
+_async_replay_catch	return None	1	tests/test_native_replay.py::test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]	killed	
+_rearm_or_log_replay_catch	return None	1	tests/test_native_replay.py::test_a_disabled_twin_stays_while_the_topic_content_is_unknown[unsettled]	killed	
+_async_publish_migrates	return set()	1	tests/test_native_replay.py::test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]	killed	
+_may_clear	return False	1	tests/test_native_replay.py::test_the_owner_clears_the_stale_legacy_discovery_once_after_each_catch	killed	
+_duplicate_guard_ids	return set()	1	tests/test_native_replay.py::test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]	killed	
+_disarm_duplicate_guard	return None	1	tests/test_startup_order.py::test_pin_disarm_duplicate_guard_unload_leaves_no_registry_listener	killed	pinned: survived the survey (subset and full suite), killed by the new pin tests/test_startup_order.py::test_pin_disarm_duplicate_guard_unload_leaves_no_registry_listener
+_arm_duplicate_guard	return None	1	tests/test_native_replay.py::test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]	killed	
+_on_duplicate_registry_updated	return None	1	tests/test_native_replay.py::test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]	killed	
+_disable_duplicates	return None	1	tests/test_native_replay.py::test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]	killed	

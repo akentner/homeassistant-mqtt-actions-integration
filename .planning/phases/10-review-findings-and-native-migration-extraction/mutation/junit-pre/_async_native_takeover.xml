@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.282" timestamp="2026-10-16T14:52:04.669552+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]" time="0.929"><failure message="assert 0 == 1&#10; +  where 0 = len([])">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140324428835744'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at... 'pending': ['55cfc380-9db5-4e44-989f-566a99cb0d60']}}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9fe28b7d70&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f9fe041d170&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f9fe4e3fac0&gt;
+replay_at = 'before_the_clear'
+
+    @pytest.mark.parametrize("replay_at", ["before_the_clear", "after_the_clear"])
+    async def test_a_replay_during_the_pass_leaves_no_duplicate(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        monkeypatch: pytest.MonkeyPatch,
+        replay_at: str,
+    ) -&gt; None:
+        """D-04, D-05, D-06: the replay lands around the retained clear; after the quiet period only moved entries stay."""
+        legacy, before = await unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        if replay_at == "after_the_clear":
+            loop_back_discovery(hass, mqtt_mock)
+        # Before the clear the default mock is used on purpose: the retained clear that it loops back is dropped by core,
+        # so core does not clean a replay that came before it (Pitfall 2)
+        replayed: list[list[str]] = []
+        real_clear = DiscoveryPublisher.async_clear_device
+    
+        async def _clear_with_a_replay(self: DiscoveryPublisher, device_id: str) -&gt; None:
+            # Only around the takeover's clear: the owner clears the stale topic again after the quiet-period catch (D-06)
+            first = not replayed
+            if replay_at == "before_the_clear" and first:
+                replayed.append(await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id))
+            await real_clear(self, device_id)
+            if replay_at == "after_the_clear" and first:
+                replayed.append(await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id))
+    
+        monkeypatch.setattr(DiscoveryPublisher, "async_clear_device", _clear_with_a_replay)
+    
+        assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+        # The replay really landed, so the test cannot go green for the wrong reason
+&gt;       assert len(replayed) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_native_replay.py:147: AssertionError</failure></testcase></testsuite></testsuites>

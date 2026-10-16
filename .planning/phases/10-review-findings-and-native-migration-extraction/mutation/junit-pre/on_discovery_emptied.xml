@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="34" time="6.803" timestamp="2026-10-16T14:53:11.932352+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]" time="0.987" /><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[after_the_clear]" time="0.137" /><testcase classname="tests.test_native_replay" name="test_a_replay_after_the_takeover_of_a_native_mirror_leaves_no_duplicate_and_no_publish" time="0.122" /><testcase classname="tests.test_native_replay" name="test_a_replay_before_a_restart_of_a_finished_native_owner_is_cleaned_at_the_next_start" time="0.177" /><testcase classname="tests.test_native_replay" name="test_the_replay_catch_is_armed_only_for_an_instance_with_a_native_device" time="0.115" /><testcase classname="tests.test_native_replay" name="test_a_replay_right_after_the_move_is_removed_before_the_clear" time="0.131" /><testcase classname="tests.test_native_replay" name="test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[integration]" time="0.195" /><testcase classname="tests.test_native_replay" name="test_a_replay_onto_tombstones_is_cleaned_at_the_next_start[null]" time="0.259" /><testcase classname="tests.test_native_replay" name="test_the_owner_clears_the_stale_legacy_discovery_once_after_each_catch" time="0.200" /><testcase classname="tests.test_native_replay" name="test_the_owner_clears_a_retained_legacy_discovery_even_when_nothing_was_removed" time="0.157" /><testcase classname="tests.test_native_replay" name="test_a_follower_keeps_its_disabled_twins_on_legacy_content_and_publishes_nothing" time="0.143" /><testcase classname="tests.test_native_replay" name="test_cross_instance_a_follower_keeps_its_disabled_twins_on_legacy_content_while_the_owner_keeps_a_row" time="0.153" /><testcase classname="tests.test_native_replay" name="test_cross_instance_the_owner_neither_removes_nor_clears_while_a_peer_keeps_a_row" time="0.167" /><testcase classname="tests.test_native_replay" name="test_the_owner_keeps_a_customized_duplicate_and_its_device_and_clears_nothing" time="0.158" /><testcase classname="tests.test_native_replay" name="test_a_disabled_leftover_is_removed_at_a_start_with_an_empty_topic" time="0.151" /><testcase classname="tests.test_native_replay" name="test_a_disabled_twin_stays_while_the_topic_content_is_unknown[unsettled]" time="0.182" /><testcase classname="tests.test_native_replay" name="test_a_disabled_twin_stays_while_the_topic_content_is_unknown[foreign_shape]" time="0.263" /><testcase classname="tests.test_native_replay" name="test_the_catch_keeps_an_enabled_customized_button_next_to_a_disabled_twin_on_legacy_content" time="0.156" /><testcase classname="tests.test_native_replay" name="test_core_deletes_a_loaded_renamed_row_when_a_hooked_disabled_row_leaves_without_a_migrate" time="0.139" /><testcase classname="tests.test_native_replay" name="test_core_keeps_a_loaded_renamed_row_when_the_migrate_comes_before_the_hooked_clear" time="0.137" /><testcase classname="tests.test_native_replay" name="test_a_catch_that_runs_before_the_settle_checks_again_once_the_grace_has_passed" time="0.156" /><testcase classname="tests.test_native_replay" name="test_the_first_heartbeat_after_a_start_lists_a_device_with_a_kept_customized_row[renamed]" time="0.147" /><testcase classname="tests.test_native_replay" name="test_the_first_heartbeat_after_a_start_lists_a_device_with_a_kept_customized_row[untouched]" time="0.145" /><testcase classname="tests.test_native_replay" name="test_a_heartbeat_lists_a_held_device_that_is_not_native_in_this_run" time="0.092" /><testcase classname="tests.test_native_replay" name="test_the_owner_sends_the_migrate_payload_before_it_lets_the_topic_go_empty[hooked]" time="0.157" /><testcase classname="tests.test_native_replay" name="test_the_owner_sends_the_migrate_payload_before_it_lets_the_topic_go_empty[not_hooked]" time="0.161" /><testcase classname="tests.test_native_replay" name="test_no_migrate_goes_out_while_the_gate_keeps_the_device[peer_keeps]" time="0.253" /><testcase classname="tests.test_native_replay" name="test_no_migrate_goes_out_while_the_gate_keeps_the_device[local_keep]" time="0.155" /><testcase classname="tests.test_native_replay" name="test_the_owner_reads_the_peer_signal_again_right_before_it_empties_the_topic[before_the_removal]" time="0.159" /><testcase classname="tests.test_native_replay" name="test_the_owner_reads_the_peer_signal_again_right_before_it_empties_the_topic[before_the_clear]" time="0.161" /><testcase classname="tests.test_native_replay" name="test_no_migrate_goes_out_for_a_device_a_peer_announced_during_an_earlier_migrate" time="0.199" /><testcase classname="tests.test_native_replay" name="test_the_owner_waits_for_a_peer_that_is_online_but_not_heard_yet" time="0.171" /><testcase classname="tests.test_native_replay" name="test_the_owner_keeps_when_a_peer_stays_unheard_until_the_retries_are_spent" time="0.193" /><testcase classname="tests.test_native_replay" name="test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_topic" time="0.149"><failure message="AssertionError: assert ['switch.fore...p_test_off_2'] == []&#10;  &#10;  Left contains 3 more items, first extra item: 'switch.foreign_lamp_2'&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140431664183488'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fb8cb826cf0&gt;
+
+    async def test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_topic(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+    ) -&gt; None:
+        """
+        D-06: the owner's clear reaches a follower whose catch already kept its twins; the follower cleans up in this run.
+    
+        The start-up catch saw LEGACY content and kept the integration-disabled twins (D-05). The owner then clears the
+        shared topic; once the follower sees it empty, its catch runs again and removes the twins and the emptied legacy
+        device, without waiting for the next start. The follower publishes nothing.
+        """
+        spec, topic, _discovery, replayed = await _a_restarted_follower_on_legacy_content(
+            hass, mqtt_mock, hass_storage, make_hub_entry
+        )
+    
+        # The owner's clear arrives live
+        async_fire_mqtt_message(hass, topic, "", retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        await quiet_period_passes(hass)
+    
+&gt;       _assert_clean(hass, spec.device_id, replayed)
+
+tests/test_native_replay.py:1365: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hass = &lt;HomeAssistant RUNNING&gt;
+device_id = '8c738724-d5ea-4253-8a1b-ed5327b1ac5f'
+replayed = ['switch.foreign_lamp_2', 'button.foreign_lamp_test_on_2', 'button.foreign_lamp_test_off_2']
+
+    def _assert_clean(hass: HomeAssistant, device_id: str, replayed: list[str]) -&gt; None:
+        """Assert that no mqtt entry of the device id is left, the replayed ones are gone for good, and so is the device."""
+        entity_registry = er.async_get(hass)
+&gt;       assert legacy_entity_ids(hass, device_id) == []
+E       AssertionError: assert ['switch.fore...p_test_off_2'] == []
+E         
+E         Left contains 3 more items, first extra item: 'switch.foreign_lamp_2'
+E         Use -v to get more diff
+
+tests/test_native_replay.py:66: AssertionError</failure></testcase></testsuite></testsuites>

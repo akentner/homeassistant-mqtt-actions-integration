@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.039" timestamp="2026-10-16T14:46:14.109922+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_startup_order" name="test_the_start_up_order_of_an_upgrading_owner_is_fixed" time="0.940"><failure message="AssertionError: assert [('discovery_...', True), ...] == [('discovery_...', True), ...]&#10;  &#10;  At index 12 diff: ('config', True) != ('guard', True)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140193711117312'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f8164fd47d0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f81644009e0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f81672cc270&gt;
+
+    async def test_the_start_up_order_of_an_upgrading_owner_is_fixed(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -&gt; None:
+        """
+        An owner whose device waits for the takeover starts in exactly this order, with the lock held where shown.
+    
+        Lock held from the sync start to the second discovery check; not held for the first discovery check, the online
+        availability and the heartbeat (research Pitfall 8). The duplicate guard is armed before the owned devices are
+        published, and the takeover pass runs migrate, takeover, replay-twin removal, flush, fresh migrate, clear.
+        """
+        legacy, _before = await unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        loop_back_discovery(hass, mqtt_mock)
+        calls = _record_start_up(monkeypatch, legacy.entry)
+    
+        assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+&gt;       assert _up_to_first_heartbeat(calls) == [
+            ("discovery_check", False),
+            ("sync", True),
+            ("presence", True),
+            ("retrigger", True),
+            ("orphans", True),
+            ("reconcile", True),
+            ("migrate", True),
+            ("take_over", True),
+            ("replay_twins", True),
+            ("flush", True),
+            ("migrate", True),
+            ("clear", True),
+            ("guard", True),
+            ("config", True),
+            ("discovery", True),
+            ("discovery_check", True),
+            ("availability", False),
+            ("heartbeat", False),
+        ]
+E       AssertionError: assert [('discovery_...', True), ...] == [('discovery_...', True), ...]
+E         
+E         At index 12 diff: ('config', True) != ('guard', True)
+E         Use -v to get more diff
+
+tests/test_startup_order.py:143: AssertionError</failure></testcase></testsuite></testsuites>

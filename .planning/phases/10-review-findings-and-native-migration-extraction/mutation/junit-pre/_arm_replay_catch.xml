@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.325" timestamp="2026-10-16T14:53:08.714672+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_replay_during_the_pass_leaves_no_duplicate[before_the_clear]" time="0.956"><failure message="assert False&#10; +  where False = all(&lt;generator object _assert_no_working_duplicate.&lt;locals&gt;.&lt;genexpr&gt; at 0x7f819ca13760&gt;)">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140194676370672'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f81a4b93a00&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f819dedfb60&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f81a727bac0&gt;
+replay_at = 'before_the_clear'
+
+    @pytest.mark.parametrize("replay_at", ["before_the_clear", "after_the_clear"])
+    async def test_a_replay_during_the_pass_leaves_no_duplicate(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        monkeypatch: pytest.MonkeyPatch,
+        replay_at: str,
+    ) -&gt; None:
+        """D-04, D-05, D-06: the replay lands around the retained clear; after the quiet period only moved entries stay."""
+        legacy, before = await unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+        if replay_at == "after_the_clear":
+            loop_back_discovery(hass, mqtt_mock)
+        # Before the clear the default mock is used on purpose: the retained clear that it loops back is dropped by core,
+        # so core does not clean a replay that came before it (Pitfall 2)
+        replayed: list[list[str]] = []
+        real_clear = DiscoveryPublisher.async_clear_device
+    
+        async def _clear_with_a_replay(self: DiscoveryPublisher, device_id: str) -&gt; None:
+            # Only around the takeover's clear: the owner clears the stale topic again after the quiet-period catch (D-06)
+            first = not replayed
+            if replay_at == "before_the_clear" and first:
+                replayed.append(await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id))
+            await real_clear(self, device_id)
+            if replay_at == "after_the_clear" and first:
+                replayed.append(await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id))
+    
+        monkeypatch.setattr(DiscoveryPublisher, "async_clear_device", _clear_with_a_replay)
+    
+        assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+        # The replay really landed, so the test cannot go green for the wrong reason
+        assert len(replayed) == 1
+        assert len(replayed[0]) == 3
+        assert set(legacy_entity_ids(hass, legacy.device_id)) == set(replayed[0])  # the catch waits for the quiet period
+        await quiet_period_passes(hass)
+&gt;       _assert_no_working_duplicate(hass, legacy.device_id, replayed[0])
+
+tests/test_native_replay.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hass = &lt;HomeAssistant RUNNING&gt;
+device_id = '90e533d7-39a7-4f2b-9c74-f6eb7b3cd3ea'
+replayed = ['switch.lamp_2', 'button.lamp_test_on_2', 'button.lamp_test_off_2']
+
+    def _assert_no_working_duplicate(hass: HomeAssistant, device_id: str, replayed: list[str]) -&gt; None:
+        """
+        Assert that no replayed entry works: each one is gone or stays disabled by the integration, without a state.
+    
+        The duplicate guard disables the replayed switch before the quiet period ends. The catch removes such an entry only
+        when the core-prefix topic is seen to hold the legacy payload or nothing (D-02), because core MQTT clears the
+        retained topic when a row it discovered while disabled leaves the registry (CR-01). Otherwise the entry stays
+        disabled, and so does the MQTT device it sits on.
+        """
+        entity_registry = er.async_get(hass)
+        left = legacy_entity_ids(hass, device_id)
+        assert set(left) &lt;= set(replayed)
+&gt;       assert all(
+            entity_registry.async_get(entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION for entity_id in left
+        )
+E       assert False
+E        +  where False = all(&lt;generator object _assert_no_working_duplicate.&lt;locals&gt;.&lt;genexpr&gt; at 0x7f819ca13760&gt;)
+
+tests/test_native_replay.py:85: AssertionError</failure></testcase></testsuite></testsuites>

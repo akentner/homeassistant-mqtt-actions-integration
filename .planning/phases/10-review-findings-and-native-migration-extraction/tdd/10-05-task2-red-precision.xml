@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.059" timestamp="2026-10-16T15:46:30.227639+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_takeover" name="test_remove_replay_twins_counts_only_rows_whose_removal_returned" time="0.914"><failure message="AssertionError: assert 2 == 1&#10; +  where 2 = ReplayTwinsError('The removal of a replayed duplicate raised').removed&#10; +    where ReplayTwinsError('The removal of a replayed duplicate raised') = &lt;ExceptionInfo ReplayTwinsError('The removal of a replayed duplicate raised') tblen=3&gt;.value">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139847262057008'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f30c91dda60&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f30ba4d5d20&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f30cb4d8380&gt;
+
+    async def test_remove_replay_twins_counts_only_rows_whose_removal_returned(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -&gt; None:
+        """
+        FIX-06 precision: the count is the number of rows whose removal returned; the row that raised is never counted.
+    
+        The second removal raises before the registry removed the row: that row was disabled first and stays disabled, the
+        third row is never touched and stays enabled, and the device keeps both.
+        """
+        legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+        called = _fail_a_removal(monkeypatch, replayed, 2, after_the_removal=False)
+    
+        with pytest.raises(ReplayTwinsError) as raised:
+            _remove_replay_twins_of(hass, legacy)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+&gt;       assert raised.value.removed == 1
+E       AssertionError: assert 2 == 1
+E        +  where 2 = ReplayTwinsError('The removal of a replayed duplicate raised').removed
+E        +    where ReplayTwinsError('The removal of a replayed duplicate raised') = &lt;ExceptionInfo ReplayTwinsError('The removal of a replayed duplicate raised') tblen=3&gt;.value
+
+tests/test_takeover.py:1020: AssertionError</failure></testcase></testsuite></testsuites>

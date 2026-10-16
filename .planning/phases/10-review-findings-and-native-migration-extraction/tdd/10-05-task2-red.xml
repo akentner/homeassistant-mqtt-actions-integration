@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.092" timestamp="2026-10-16T15:46:10.593587+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_raise_on_the_first_row_still_flushes_and_keeps_the_device" time="0.959"><failure message="AssertionError: the catch skipped the registry flush after a device raised&#10;assert []">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140175156228656'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f7d211ab110&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7f7d200e5940&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f7d23380490&gt;
+
+    async def test_a_raise_on_the_first_row_still_flushes_and_keeps_the_device(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -&gt; None:
+        """
+        FIX-06 boundary: a raise on the first row, before its removal, counts nothing, still flushes and keeps the device.
+    
+        Nothing was removed, so no count line is logged; the device keeps all three rows, each still disabled by the
+        integration, and the catch flushes because a device raised (`TwinRemoval.errored`).
+        """
+        spec, topic, _discovery, replayed = await _a_restarted_follower_on_legacy_content(
+            hass, mqtt_mock, hass_storage, make_hub_entry
+        )
+        async_fire_mqtt_message(hass, topic, "", retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        _fail_a_replayed_removal(monkeypatch, replayed, 1, after_the_removal=False)
+        flushes = _count_flushes(monkeypatch)
+        caplog.set_level(logging.DEBUG, logger=OWN_LOGGER)
+        caplog.clear()
+    
+        await quiet_period_passes(hass)
+    
+        assert not any(
+            record.name.startswith(OWN_LOGGER) and record.getMessage().startswith("Removed") for record in caplog.records
+        )
+        warnings = _own_records(
+            caplog, logging.WARNING, "The check for duplicate entities of a device raised an unexpected error"
+        )
+        assert len(warnings) == 1
+&gt;       assert flushes, "the catch skipped the registry flush after a device raised"
+E       AssertionError: the catch skipped the registry flush after a device raised
+E       assert []
+
+tests/test_native_replay.py:1497: AssertionError</failure></testcase></testsuite></testsuites>

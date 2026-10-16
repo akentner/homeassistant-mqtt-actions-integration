@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.068" timestamp="2026-10-16T15:46:27.283431+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_takeover" name="test_remove_replay_twins_raises_with_the_partial_count_after_removing_the_emptied_device" time="0.925"><failure message="AssertionError: assert 3 == 2&#10; +  where 3 = ReplayTwinsError('The removal of a replayed duplicate raised').removed&#10; +    where ReplayTwinsError('The removal of a replayed duplicate raised') = &lt;ExceptionInfo ReplayTwinsError('The removal of a replayed duplicate raised') tblen=3&gt;.value">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140026720204320'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f5a89b59c70&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f5a82d95f30&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7f5a889cda90&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f5a8ae60380&gt;
+
+    async def test_remove_replay_twins_raises_with_the_partial_count_after_removing_the_emptied_device(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -&gt; None:
+        """
+        FIX-06: a raise after the removal of the last row leaves no emptied device and reports the rows before it.
+    
+        The error surfaces as `ReplayTwinsError` chained from the original error, never as a return value (Pitfall 16).
+        """
+        legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+        _fail_a_removal(monkeypatch, replayed, 3, after_the_removal=True)
+        caplog.set_level(logging.INFO, logger=OWN_LOGGER)
+        caplog.clear()
+    
+        with pytest.raises(ReplayTwinsError) as raised:
+            _remove_replay_twins_of(hass, legacy)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+&gt;       assert raised.value.removed == 2
+E       AssertionError: assert 3 == 2
+E        +  where 3 = ReplayTwinsError('The removal of a replayed duplicate raised').removed
+E        +    where ReplayTwinsError('The removal of a replayed duplicate raised') = &lt;ExceptionInfo ReplayTwinsError('The removal of a replayed duplicate raised') tblen=3&gt;.value
+
+tests/test_takeover.py:981: AssertionError</failure></testcase></testsuite></testsuites>

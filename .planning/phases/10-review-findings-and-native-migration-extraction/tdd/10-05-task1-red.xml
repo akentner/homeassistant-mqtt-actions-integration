@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.085" timestamp="2026-10-16T15:43:16.480782+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_native_replay" name="test_a_row_that_raises_mid_loop_in_the_catch_leaves_no_emptied_device_and_keeps_the_count" time="0.954"><failure message="AssertionError: assert DeviceEntry(config_entry_id='01M52F7RWSKN45A8C9Q5GBVPNP', area_id=None, config_subentry_id=None, created_at=datetime.d...number=None, _suggested_area=None, sw_version=None, via_device_id=None, _pending_move=None, _composite_subentries=None) is None&#10; +  where DeviceEntry(config_entry_id='01M52F7RWSKN45A8C9Q5GBVPNP', area_id=None, config_subentry_id=None, created_at=datetime.d...number=None, _suggested_area=None, sw_version=None, via_device_id=None, _pending_move=None, _composite_subentries=None) = mqtt_device_of(&lt;HomeAssistant RUNNING&gt;, '0a670912-3365-45f5-aee9-156669ff2d3b')&#10; +    where '0a670912-3365-45f5-aee9-156669ff2d3b' = DeviceSpec(kind='switch', device_id='0a670912-3365-45f5-aee9-156669ff2d3b', name='Foreign lamp', run_on_startup=False,... 'b4dc66dde806': TriggerSpec(value='OFF', key='b4dc66dde806', label='onChangeToOff', friendly_name='OFF', actions=[])}).device_id">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139954061177392'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f499bc92da0&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7f499abc17f0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f499ce9c270&gt;
+
+    async def test_a_row_that_raises_mid_loop_in_the_catch_leaves_no_emptied_device_and_keeps_the_count(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -&gt; None:
+        """
+        FIX-06: a row that raises after its removal leaves no emptied MQTT device, keeps the count of the rows before it.
+    
+        The scenario of `test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_topic`: the catch on the
+        emptied topic removes three integration-disabled twins. The third removal raises once the registry removed the row,
+        so nothing is left on the core MQTT device. The device still goes, the two rows before the raise are reported, one
+        count-free warning is logged and the partial removal is flushed to disk (review 2 IN-01, research Pitfall 16).
+        """
+        spec, topic, _discovery, replayed = await _a_restarted_follower_on_legacy_content(
+            hass, mqtt_mock, hass_storage, make_hub_entry
+        )
+        async_fire_mqtt_message(hass, topic, "", retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        _fail_a_replayed_removal(monkeypatch, replayed, 3, after_the_removal=True)
+        flushes = _count_flushes(monkeypatch)
+        caplog.set_level(logging.DEBUG, logger=OWN_LOGGER)
+        caplog.clear()
+    
+        await quiet_period_passes(hass)
+    
+&gt;       assert mqtt_device_of(hass, spec.device_id) is None
+E       AssertionError: assert DeviceEntry(config_entry_id='01M52F7RWSKN45A8C9Q5GBVPNP', area_id=None, config_subentry_id=None, created_at=datetime.d...number=None, _suggested_area=None, sw_version=None, via_device_id=None, _pending_move=None, _composite_subentries=None) is None
+E        +  where DeviceEntry(config_entry_id='01M52F7RWSKN45A8C9Q5GBVPNP', area_id=None, config_subentry_id=None, created_at=datetime.d...number=None, _suggested_area=None, sw_version=None, via_device_id=None, _pending_move=None, _composite_subentries=None) = mqtt_device_of(&lt;HomeAssistant RUNNING&gt;, '0a670912-3365-45f5-aee9-156669ff2d3b')
+E        +    where '0a670912-3365-45f5-aee9-156669ff2d3b' = DeviceSpec(kind='switch', device_id='0a670912-3365-45f5-aee9-156669ff2d3b', name='Foreign lamp', run_on_startup=False,... 'b4dc66dde806': TriggerSpec(value='OFF', key='b4dc66dde806', label='onChangeToOff', friendly_name='OFF', actions=[])}).device_id
+
+tests/test_native_replay.py:1449: AssertionError</failure></testcase></testsuite></testsuites>

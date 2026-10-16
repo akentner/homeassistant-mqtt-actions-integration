@@ -33,6 +33,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.mqtt_actions.const import DOMAIN
 from custom_components.mqtt_actions.discovery import DiscoveryContent, build_discovery
 from custom_components.mqtt_actions.takeover import (
+    KeptReason,
     ReplayTwinsError,
     TakeoverStatus,
     TakeoverTarget,
@@ -40,6 +41,7 @@ from custom_components.mqtt_actions.takeover import (
     disable_duplicates,
     is_legacy_entity,
     keeps_enabled_legacy_row,
+    kept_duplicates,
     legacy_device,
     remove_replay_twins,
 )
@@ -1521,6 +1523,127 @@ async def test_disable_duplicates_still_disables_an_entry_whose_only_option_is_t
     assert _disable_duplicates_of(hass, legacy) == 1
 
     assert entity_registry.async_get(switch.entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+
+
+def _kept_duplicates_of(hass: HomeAssistant, legacy: LegacyDevice) -> list[tuple[str, KeptReason]]:
+    return kept_duplicates(hass, legacy.entry.entry_id, legacy.device_id, mqtt_entry_id=core_mqtt_entry_id(hass))
+
+
+async def test_kept_duplicates_names_customized_and_rejected_rows_and_nothing_else(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    """
+    FIX-08, D-01, D-03: the rows the guard keeps enabled, with their reason, and never a row it disables or ignores.
+
+    A twin the user turned off makes the legacy entry rejected even when it is customized too (planner decision). Test
+    buttons, disabled entries and entries without a twin are never listed. The function only reads the registry.
+    """
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    entity_registry = er.async_get(hass)
+    switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
+    buttons = [old.entity_id for old in before.values() if old.domain == "button"]
+    twin = natives[("switch", legacy.device_id)]
+
+    # An untouched entry next to an untouched twin is the duplicate the guard disables
+    assert _kept_duplicates_of(hass, legacy) == []
+    entity_registry.async_update_entity(switch.entity_id, name="Kitchen")
+    for button in buttons:
+        entity_registry.async_update_entity(button, name="My button")
+    assert _kept_duplicates_of(hass, legacy) == [(switch.entity_id, KeptReason.CUSTOMIZED)]
+    entity_registry.async_update_entity(twin.entity_id, disabled_by=er.RegistryEntryDisabler.USER)
+    assert _kept_duplicates_of(hass, legacy) == [(switch.entity_id, KeptReason.TWIN_REJECTED)]
+    entity_registry.async_update_entity(switch.entity_id, name=None)
+    assert _kept_duplicates_of(hass, legacy) == [(switch.entity_id, KeptReason.TWIN_REJECTED)]
+    unchanged = entity_registry.async_get(switch.entity_id)
+    assert _kept_duplicates_of(hass, legacy) == [(switch.entity_id, KeptReason.TWIN_REJECTED)]
+    assert entity_registry.async_get(switch.entity_id) == unchanged
+    entity_registry.async_update_entity(switch.entity_id, disabled_by=er.RegistryEntryDisabler.USER)
+    assert _kept_duplicates_of(hass, legacy) == []
+    entity_registry.async_update_entity(switch.entity_id, name="Kitchen", disabled_by=None)
+    entity_registry.async_remove(twin.entity_id)
+    assert _kept_duplicates_of(hass, legacy) == []
+
+
+def _on_the_twin(change: Customize) -> Callable[[er.EntityRegistry, str, str], object]:
+    return lambda registry, _legacy_id, twin_id: change(registry, twin_id)
+
+
+def _on_the_legacy_entry(change: Customize) -> Callable[[er.EntityRegistry, str, str], object]:
+    return lambda registry, legacy_id, _twin_id: change(registry, legacy_id)
+
+
+# Every case the guard decides on: each change of CUSTOMIZATIONS on the legacy entry, a name, the twin turned off with
+# and without a name on the legacy entry, a legacy entry the user hid, and nothing changed
+GUARD_CASES = [
+    *(pytest.param(_on_the_legacy_entry(case.values[0]), id=f"legacy_{case.id}") for case in CUSTOMIZATIONS),
+    pytest.param(
+        _on_the_legacy_entry(lambda registry, entity_id: registry.async_update_entity(entity_id, name="Kitchen")),
+        id="legacy_name",
+    ),
+    pytest.param(
+        _on_the_legacy_entry(
+            lambda registry, entity_id: registry.async_update_entity(entity_id, hidden_by=er.RegistryEntryHider.USER)
+        ),
+        id="legacy_hidden_by_user",
+    ),
+    pytest.param(
+        _on_the_twin(
+            lambda registry, entity_id: registry.async_update_entity(
+                entity_id, disabled_by=er.RegistryEntryDisabler.USER
+            )
+        ),
+        id="twin_disabled_by_user",
+    ),
+    pytest.param(
+        _on_the_twin(
+            lambda registry, entity_id: registry.async_update_entity(entity_id, hidden_by=er.RegistryEntryHider.USER)
+        ),
+        id="twin_hidden_by_user",
+    ),
+    pytest.param(
+        lambda registry, legacy_id, twin_id: (
+            registry.async_update_entity(legacy_id, name="Kitchen"),
+            registry.async_update_entity(twin_id, disabled_by=er.RegistryEntryDisabler.USER),
+        ),
+        id="named_legacy_and_twin_disabled",
+    ),
+    pytest.param(lambda _registry, _legacy_id, _twin_id: None, id="untouched"),
+]
+
+
+@pytest.mark.parametrize("change", GUARD_CASES)
+async def test_disable_duplicates_and_kept_duplicates_split_the_guard_candidates(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    change: Callable[[er.EntityRegistry, str, str], object],
+) -> None:
+    """FIX-08: every candidate of the guard is either disabled or reported as kept, never both and never neither."""
+    legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+    entity_registry = er.async_get(hass)
+    switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
+    change(entity_registry, switch.entity_id, natives[("switch", legacy.device_id)].entity_id)
+    # A rename changes the entity id of the candidate; the unique id finds it
+    candidate = entity_registry.async_get_entity_id("switch", "mqtt", legacy.device_id)
+    enabled = [
+        entity_id
+        for entity_id in legacy_entity_ids(hass, legacy.device_id)
+        if entity_registry.async_get(entity_id).disabled_by is None
+    ]
+
+    kept = {entity_id for entity_id, _reason in _kept_duplicates_of(hass, legacy)}
+    _disable_duplicates_of(hass, legacy)
+
+    disabled = {
+        entity_id
+        for entity_id in enabled
+        if entity_registry.async_get(entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    }
+    assert kept & disabled == set(), "a candidate was both disabled and reported as kept"
+    assert kept | disabled == {candidate}, "a candidate was neither disabled nor reported, or a non-candidate was"
 
 
 async def test_remove_replay_twins_never_touches_a_foreign_mqtt_entity(

@@ -18,6 +18,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
@@ -202,3 +203,43 @@ async def test_the_cutover_check_waits_for_the_settle_time(
     async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=SETTLE_PASSED))
     await hass.async_block_till_done(wait_background_tasks=True)
     assert checks
+
+
+# --- Pins the pre-move mutation survey asked for (mutation/pre-move.tsv) ------------------------------------------
+
+
+def _registry_listeners(hass: HomeAssistant) -> int:
+    return hass.bus.async_listeners().get(er.EVENT_ENTITY_REGISTRY_UPDATED, 0)
+
+
+async def test_pin_disarm_duplicate_guard_unload_leaves_no_registry_listener(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """
+    An unload stops the duplicate guard: a load and unload cycle leaves no entity registry listener behind.
+
+    The guard of a native owner listens to every entity registry update while the manager runs. The stop has to end
+    that listener, or every unload and reload leaves one more listener on the bus that holds the stopped manager. The
+    first cycle takes the device over; the second cycle starts and stops a native owner with the guard armed.
+    """
+    legacy, _before = await unloaded_legacy_device(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
+    loop_back_discovery(hass, mqtt_mock)
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert await hass.config_entries.async_unload(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    after_first_cycle = _registry_listeners(hass)
+
+    assert await hass.config_entries.async_setup(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    # Premise: the device is native, so the guard is armed and listens while the entry is loaded
+    assert legacy.entry.runtime_data.is_native(legacy.device_id) is True
+    assert _registry_listeners(hass) > after_first_cycle
+
+    assert await hass.config_entries.async_unload(legacy.entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _registry_listeners(hass) == after_first_cycle

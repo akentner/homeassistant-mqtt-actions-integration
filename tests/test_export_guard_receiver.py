@@ -12,11 +12,22 @@ from custom_components.mqtt_actions import discovery
 from custom_components.mqtt_actions.const import CONF_DISCOVERY_EXPORT, DOMAIN, SUBENTRY_SELECT
 from custom_components.mqtt_actions.topics import discovery_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
-from tests.helpers import legacy_mirror, restart_entry
+from tests.helpers import (
+    BASE,
+    CORE_PREFIX,
+    announce_presence,
+    create_mqtt_row,
+    deliver_config,
+    legacy_mirror,
+    manager_of,
+    mqtt_device_of,
+    native_entity_id,
+    quiet_period_passes,
+    restart_entry,
+    setup_entry,
+    topic_publishes_with_qos,
+)
 from tests.log_helpers import OWN_LOGGER
-from tests.test_discovery_export import CORE_PREFIX, _mqtt_row
-from tests.test_native_entities import BASE, _deliver, _entity_id, _manager, _presence, _publishes, _setup
-from tests.test_native_replay import _quiet_period_passes
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -32,16 +43,10 @@ FOREIGN_SW_VERSION = "0.1.0"
 
 async def _native_mirror(hass: HomeAssistant, make_hub_entry: Callable, spec: DeviceSpec) -> MockConfigEntry:
     """Set up a hub entry with default options and deliver the marked document of a foreign owner that is online."""
-    entry = await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
     return entry
-
-
-def _mqtt_device(hass: HomeAssistant, device_id: str) -> dr.DeviceEntry | None:
-    """Return the core MQTT device that the discovery payload of a device id names."""
-    mqtt_entry = hass.config_entries.async_entries("mqtt")[0]
-    return dr.async_get(hass).async_get_device_by_identifier(("mqtt", f"{DOMAIN}_{device_id}"), mqtt_entry.entry_id)
 
 
 def _foreign_export(spec: DeviceSpec) -> tuple[str, str]:
@@ -85,14 +90,14 @@ async def test_a_receiver_disables_the_duplicate_that_a_foreign_core_prefix_expo
 
     # Premises: no export here, a native mirror with its native row, the core MQTT device and a null tombstone
     assert not entry.options.get(CONF_DISCOVERY_EXPORT)
-    assert _manager(entry).is_native(spec.device_id)
-    native = _entity_id(hass, "switch", spec.device_id)
+    assert manager_of(entry).is_native(spec.device_id)
+    native = native_entity_id(hass, "switch", spec.device_id)
     assert native is not None
     # One synchronous step without an await: an enabled row on the MQTT device of the id is created and removed
-    registry.async_remove(_mqtt_row(hass, "switch", spec.device_id, device=True))
+    registry.async_remove(create_mqtt_row(hass, "switch", spec.device_id, device=True))
     assert registry.deleted_entities[("switch", "mqtt", spec.device_id)].disabled_by is None
     assert registry.async_get_entity_id("switch", "mqtt", spec.device_id) is None
-    assert _mqtt_device(hass, spec.device_id) is not None
+    assert mqtt_device_of(hass, spec.device_id) is not None
     published = list(mqtt_mock.async_publish.call_args_list)
 
     await _receive_foreign_export(hass, spec)
@@ -106,7 +111,7 @@ async def test_a_receiver_disables_the_duplicate_that_a_foreign_core_prefix_expo
     assert duplicates[0].disabled_by is er.RegistryEntryDisabler.INTEGRATION
     assert registry.async_get(native).disabled_by is None
     assert _enabled_rows(hass, spec.device_id) == [native]
-    assert _publishes(mqtt_mock, discovery_topic(CORE_PREFIX, spec.device_id)) == []
+    assert topic_publishes_with_qos(mqtt_mock, discovery_topic(CORE_PREFIX, spec.device_id)) == []
     assert list(mqtt_mock.async_publish.call_args_list) == published
 
 
@@ -159,14 +164,14 @@ async def test_a_row_without_a_native_twin_is_no_duplicate_and_stays_enabled(
     spec = make_spec(name="Foreign lamp")
     entry = await _native_mirror(hass, make_hub_entry, spec)
     registry = er.async_get(hass)
-    assert _manager(entry).is_native(spec.device_id)
-    native = _entity_id(hass, "switch", spec.device_id)
+    assert manager_of(entry).is_native(spec.device_id)
+    native = native_entity_id(hass, "switch", spec.device_id)
     assert native is not None
     registry.async_remove(native)
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert _entity_id(hass, "switch", spec.device_id) is None
+    assert native_entity_id(hass, "switch", spec.device_id) is None
 
-    row = _mqtt_row(hass, "switch", spec.device_id, device=True)
+    row = create_mqtt_row(hass, "switch", spec.device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert registry.async_get(row).disabled_by is None
@@ -177,18 +182,18 @@ async def test_a_duplicate_that_exists_before_the_device_is_held_is_disabled_whe
 ) -> None:
     """E2, R-3: the order does not matter; the native twin that appears later is a trigger as well."""
     spec = make_spec(name="Foreign lamp")
-    entry = await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
     registry = er.async_get(hass)
-    row = _mqtt_row(hass, "switch", spec.device_id, device=True)
+    row = create_mqtt_row(hass, "switch", spec.device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert not _manager(entry).is_native(spec.device_id)
-    assert _entity_id(hass, "switch", spec.device_id) is None
+    assert not manager_of(entry).is_native(spec.device_id)
+    assert native_entity_id(hass, "switch", spec.device_id) is None
     assert registry.async_get(row).disabled_by is None
 
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
 
-    native = _entity_id(hass, "switch", spec.device_id)
+    native = native_entity_id(hass, "switch", spec.device_id)
     assert native is not None
     assert registry.async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
     assert registry.async_get(native).disabled_by is None
@@ -227,7 +232,7 @@ async def test_a_pass_that_disables_something_logs_one_line_with_a_count_and_not
     logger.setLevel(logging.INFO)
     logger.addHandler(lines)
     try:
-        row = _mqtt_row(hass, "switch", spec.device_id, device=True)
+        row = create_mqtt_row(hass, "switch", spec.device_id, device=True)
         await hass.async_block_till_done(wait_background_tasks=True)
 
         assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
@@ -257,9 +262,9 @@ async def test_a_receiver_disables_the_duplicate_of_a_select_device_as_well(
     entry = await _native_mirror(hass, make_hub_entry, spec)
     registry = er.async_get(hass)
     assert not entry.options.get(CONF_DISCOVERY_EXPORT)
-    native = _entity_id(hass, "select", spec.device_id)
+    native = native_entity_id(hass, "select", spec.device_id)
     assert native is not None
-    registry.async_remove(_mqtt_row(hass, "select", spec.device_id, device=True))
+    registry.async_remove(create_mqtt_row(hass, "select", spec.device_id, device=True))
     assert registry.deleted_entities[("select", "mqtt", spec.device_id)].disabled_by is None
 
     await _receive_foreign_export(hass, spec)
@@ -276,7 +281,7 @@ async def test_the_rows_of_a_legacy_mirror_are_left_alone(
     """G3, T-08-48: an unmarked mirror runs on its core MQTT entities, which are live entities and no duplicates."""
     spec = make_spec(name="Foreign lamp")
     entry, _topic = await legacy_mirror(hass, make_hub_entry, spec)
-    assert not _manager(entry).is_native(spec.device_id)
+    assert not manager_of(entry).is_native(spec.device_id)
     registry = er.async_get(hass)
     before = {row.entity_id: row.disabled_by for row in _mqtt_rows_of_the_device(hass, spec.device_id)}
     assert before
@@ -290,7 +295,7 @@ async def test_the_rows_of_a_legacy_mirror_are_left_alone(
 
 def _mqtt_rows_of_the_device(hass: HomeAssistant, device_id: str) -> list[er.RegistryEntry]:
     """Return every registry row on the core MQTT device of a device id."""
-    device = _mqtt_device(hass, device_id)
+    device = mqtt_device_of(hass, device_id)
     assert device is not None
     return er.async_entries_for_device(er.async_get(hass), device.id, include_disabled_entities=True)
 
@@ -371,7 +376,7 @@ async def test_the_native_rows_are_never_touched(hass: HomeAssistant, mqtt_mock:
     native_before = {row.entity_id: row.disabled_by for row in registry.entities.values() if row.platform == DOMAIN}
     assert native_before
 
-    row = _mqtt_row(hass, "switch", spec.device_id, device=True)
+    row = create_mqtt_row(hass, "switch", spec.device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert registry.async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
@@ -387,8 +392,8 @@ async def test_an_id_this_instance_holds_nothing_for_is_left_alone_even_when_a_f
     stranger = make_spec(name="Stranger")
     entry = await _native_mirror(hass, make_hub_entry, held)
     registry = er.async_get(hass)
-    assert stranger.device_id not in _manager(entry).mirrors
-    registry.async_remove(_mqtt_row(hass, "switch", stranger.device_id, device=True))
+    assert stranger.device_id not in manager_of(entry).mirrors
+    registry.async_remove(create_mqtt_row(hass, "switch", stranger.device_id, device=True))
 
     await _receive_foreign_export(hass, stranger)
 
@@ -403,7 +408,7 @@ async def test_a_second_pass_a_second_create_event_and_a_restart_change_nothing(
     spec = make_spec(name="Foreign lamp")
     entry = await _native_mirror(hass, make_hub_entry, spec)
     registry = er.async_get(hass)
-    registry.async_remove(_mqtt_row(hass, "switch", spec.device_id, device=True))
+    registry.async_remove(create_mqtt_row(hass, "switch", spec.device_id, device=True))
     calls = _count_disables(monkeypatch)
     await _receive_foreign_export(hass, spec)
     (duplicate,) = _mqtt_rows(hass, spec.device_id)
@@ -458,7 +463,7 @@ async def test_the_export_off_cycle_removes_the_disabled_row_at_the_next_start(
     spec = make_spec(name="Foreign lamp")
     entry = await _native_mirror(hass, make_hub_entry, spec)
     registry = er.async_get(hass)
-    registry.async_remove(_mqtt_row(hass, "switch", spec.device_id, device=True))
+    registry.async_remove(create_mqtt_row(hass, "switch", spec.device_id, device=True))
     await _receive_foreign_export(hass, spec)
     (duplicate,) = _mqtt_rows(hass, spec.device_id)
     assert duplicate.disabled_by is er.RegistryEntryDisabler.INTEGRATION
@@ -472,7 +477,7 @@ async def test_the_export_off_cycle_removes_the_disabled_row_at_the_next_start(
     # The next start finds the topic settled empty and removes the disabled row; nothing clears the topic
     published = len(mqtt_mock.async_publish.call_args_list)
     await restart_entry(hass, entry)
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
     assert _mqtt_rows(hass, spec.device_id) == []
     clears = [call for call in mqtt_mock.async_publish.call_args_list[published:] if call.args[0] == topic]
     assert [call.args[1:4] for call in clears if not call.args[1]] == []
@@ -507,7 +512,7 @@ async def test_a_row_a_foreign_export_created_disabled_survives_the_restart_and_
     await restart_entry(hass, entry)
     # The broker hands the retained export to the new subscriptions (the mocked client keeps no retained store)
     await _receive_foreign_export(hass, spec)
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     clears = [call for call in mqtt_mock.async_publish.call_args_list[published:] if call.args[0] == topic]
     assert [call.args[1:4] for call in clears if not call.args[1]] == []

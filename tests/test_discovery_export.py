@@ -9,7 +9,6 @@ import probatio
 import pytest
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 
@@ -29,6 +28,10 @@ from custom_components.mqtt_actions.model import spec_from_data
 from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
 from custom_components.mqtt_actions.topics import availability_topic, discovery_topic, state_topic
 from tests.documents import make_spec
+from tests.helpers import (
+    CORE_PREFIX,
+    create_mqtt_row,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -37,7 +40,6 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-CORE_PREFIX = "homeassistant"
 EXPORT_ON = {CONF_DISCOVERY_EXPORT: True}
 
 
@@ -419,22 +421,6 @@ def test_the_option_strings_exist_in_both_languages() -> None:
 CORE_EXPORT = {CONF_DISCOVERY_EXPORT: True, CONF_EXPORT_PREFIX: CORE_PREFIX}
 
 
-def _mqtt_row(hass: HomeAssistant, domain: str, unique_id: str, *, device: bool = False) -> str:
-    """Create an enabled registry row of core MQTT, optionally on the MQTT device the export payload names."""
-    mqtt_entry = hass.config_entries.async_entries("mqtt")[0]
-    device_id = None
-    if device:
-        mqtt_device = dr.async_get(hass).async_get_or_create(
-            config_entry_id=mqtt_entry.entry_id, identifiers={("mqtt", f"mqtt_actions_{unique_id}")}
-        )
-        device_id = mqtt_device.id
-    row = er.async_get(hass).async_get_or_create(
-        domain, "mqtt", unique_id, config_entry=mqtt_entry, device_id=device_id
-    )
-    assert row.disabled_by is None
-    return row.entity_id
-
-
 def _leave_tombstone(hass: HomeAssistant, domain: str, unique_id: str) -> None:
     """
     Remove an enabled mqtt row of the device id, which leaves the deleted-entity record that core restores from.
@@ -444,7 +430,7 @@ def _leave_tombstone(hass: HomeAssistant, domain: str, unique_id: str) -> None:
     """
     registry = er.async_get(hass)
     if (existing := registry.async_get_entity_id(domain, "mqtt", unique_id)) is None:
-        existing = _mqtt_row(hass, domain, unique_id)
+        existing = create_mqtt_row(hass, domain, unique_id)
     registry.async_update_entity(existing, disabled_by=None)
     registry.async_remove(existing)
     assert registry.async_get_entity_id(domain, "mqtt", unique_id) is None
@@ -506,7 +492,7 @@ async def test_an_enabled_row_that_exists_when_the_instance_starts_is_disabled(
     assert er.async_get(hass).async_get_entity_id("switch", DOMAIN, device_id) is not None
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
-    row = _mqtt_row(hass, "switch", device_id, device=True)
+    row = create_mqtt_row(hass, "switch", device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert er.async_get(hass).async_get(row).disabled_by is None
 
@@ -536,7 +522,7 @@ async def test_the_guard_does_not_depend_on_the_export_option(
     _leave_tombstone(hass, "switch", device_id)
     assert er.async_get(hass).deleted_entities[("switch", "mqtt", device_id)].disabled_by is None
 
-    row = _mqtt_row(hass, "switch", device_id, device=True)
+    row = create_mqtt_row(hass, "switch", device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
@@ -560,7 +546,7 @@ async def test_switching_the_export_off_leaves_the_guard_armed(
     assert entry.options == {}
     _leave_tombstone(hass, "switch", device_id)
     assert er.async_get(hass).deleted_entities[("switch", "mqtt", device_id)].disabled_by is None
-    row = _mqtt_row(hass, "switch", device_id, device=True)
+    row = create_mqtt_row(hass, "switch", device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
@@ -578,7 +564,7 @@ async def test_the_guard_never_touches_a_row_that_is_no_exported_device(
     subentry = make_switch_subentry("Lamp")
     await _setup(hass, make_hub_entry([subentry], options=CORE_EXPORT))
 
-    foreign = _mqtt_row(hass, "switch", "someone-elses-switch", device=True)
+    foreign = create_mqtt_row(hass, "switch", "someone-elses-switch", device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert er.async_get(hass).async_get(foreign).disabled_by is None
@@ -599,7 +585,7 @@ async def test_the_guard_publishes_nothing_and_stops_with_the_manager(
     _leave_tombstone(hass, "switch", device_id)
     published = list(mqtt_mock.async_publish.call_args_list)
 
-    row = _mqtt_row(hass, "switch", device_id, device=True)
+    row = create_mqtt_row(hass, "switch", device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
     assert er.async_get(hass).async_get(row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
@@ -608,6 +594,6 @@ async def test_the_guard_publishes_nothing_and_stops_with_the_manager(
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
     _leave_tombstone(hass, "switch", device_id)
-    again = _mqtt_row(hass, "switch", device_id, device=True)
+    again = create_mqtt_row(hass, "switch", device_id, device=True)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert er.async_get(hass).async_get(again).disabled_by is None

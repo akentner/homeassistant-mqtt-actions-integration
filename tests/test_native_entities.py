@@ -29,8 +29,17 @@ from custom_components.mqtt_actions.const import (
 )
 from custom_components.mqtt_actions.discovery import build_discovery
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY, trigger_key
-from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
+from custom_components.mqtt_actions.topics import discovery_topic, state_topic
 from tests.documents import FOREIGN_OWNER, FOREIGN_OWNER_NAME, document_payload, make_spec
+from tests.helpers import (
+    BASE,
+    announce_presence,
+    deliver_config,
+    manager_of,
+    native_entity_id,
+    setup_entry,
+    topic_publishes_with_qos,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,9 +48,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-    from custom_components.mqtt_actions.manager import Manager
 
-BASE = "mqtt_actions"
 # The literal Store key, pinned here so a rename of the constant cannot go unnoticed
 STORE_PREVIOUS_STATES = "previous_states"
 ON_ACTIONS = [{"action": "test.on"}]
@@ -58,17 +65,6 @@ def _seed_native(hass_storage: dict[str, Any], *, instance: bool = True, devices
     }
 
 
-async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> MockConfigEntry:
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done(wait_background_tasks=True)
-    return entry
-
-
-def _manager(entry: MockConfigEntry) -> Manager:
-    return entry.runtime_data
-
-
 def _device_id(subentry: ConfigSubentryData) -> str:
     return subentry["data"][CONF_DEVICE_ID]
 
@@ -78,17 +74,8 @@ async def _state(hass: HomeAssistant, device_id: str, payload: str, *, retain: b
     await hass.async_block_till_done(wait_background_tasks=True)
 
 
-def _entity_id(hass: HomeAssistant, domain: str, unique_id: str) -> str | None:
-    return er.async_get(hass).async_get_entity_id(domain, DOMAIN, unique_id)
-
-
-def _publishes(mqtt_mock: Any, topic: str) -> list[tuple]:
-    """Return the (payload, qos, retain) tuples published on a topic, in order."""
-    return [call.args[1:4] for call in mqtt_mock.async_publish.call_args_list if call.args[0] == topic]
-
-
 def _switch_state(hass: HomeAssistant, device_id: str) -> str:
-    entity_id = _entity_id(hass, "switch", device_id)
+    entity_id = native_entity_id(hass, "switch", device_id)
     assert entity_id is not None
     state = hass.states.get(entity_id)
     assert state is not None
@@ -106,7 +93,7 @@ async def _native_switch(
     """Set up a native instance with one Switch device that has on and off actions."""
     _seed_native(hass_storage)
     subentry = make_switch_subentry(name, on=ON_ACTIONS, off=OFF_ACTIONS)
-    entry = await _setup(hass, make_hub_entry([subentry]))
+    entry = await setup_entry(hass, make_hub_entry([subentry]))
     return entry, _device_id(subentry)
 
 
@@ -123,7 +110,7 @@ async def test_native_switch_is_registered_under_the_subentry(
     """D-03, ENT-01: the entity is the integration's own, on the subentry, with the id the legacy entity had."""
     entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
 
-    entity_id = _entity_id(hass, "switch", device_id)
+    entity_id = native_entity_id(hass, "switch", device_id)
     assert entity_id is not None
     registered = er.async_get(hass).async_get(entity_id)
     assert registered is not None
@@ -176,7 +163,7 @@ async def test_a_disabled_device_still_shows_its_state(
     """The value is recorded before the disabled gate; disabled only stops the actions."""
     on_calls = async_mock_service(hass, "test", "on")
     entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
-    await _manager(entry).async_set_device_mode(device_id, "disabled")
+    await manager_of(entry).async_set_device_mode(device_id, "disabled")
 
     await _state(hass, device_id, "ON")
 
@@ -193,12 +180,12 @@ async def test_turn_on_publishes_the_exact_value_retained_at_qos_1(
 ) -> None:
     """D-07, ENT-02, STA-01: the command goes retained at QoS 1 and the state waits for the echo."""
     entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
-    entity_id = _entity_id(hass, "switch", device_id)
+    entity_id = native_entity_id(hass, "switch", device_id)
     assert entity_id is not None
     topic = state_topic(BASE, device_id)
 
     # The mocked MQTT client loops a publish back, so the first command is held at the gateway to see the state wait
-    with patch.object(_manager(entry).gateway, "async_publish", new=AsyncMock()) as publish:
+    with patch.object(manager_of(entry).gateway, "async_publish", new=AsyncMock()) as publish:
         await hass.services.async_call("switch", "turn_on", {"entity_id": entity_id}, blocking=True)
         await hass.async_block_till_done(wait_background_tasks=True)
     publish.assert_awaited_once_with(topic, "ON", retain=True, qos=1)
@@ -210,7 +197,7 @@ async def test_turn_on_publishes_the_exact_value_retained_at_qos_1(
     # Through the real gateway the publish reaches the MQTT client with the same flags
     await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert _publishes(mqtt_mock, topic) == [("OFF", 1, True)]
+    assert topic_publishes_with_qos(mqtt_mock, topic) == [("OFF", 1, True)]
 
 
 async def test_the_echo_runs_the_actions_once(
@@ -242,9 +229,9 @@ async def test_native_device_publishes_no_legacy_discovery_and_shares_one_device
     """D-03, D-08: no discovery topic is written, and the mode select sits on the device of the switch."""
     _entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
 
-    assert _publishes(mqtt_mock, discovery_topic("homeassistant", device_id)) == []
-    switch_id = _entity_id(hass, "switch", device_id)
-    mode_id = _entity_id(hass, "select", f"{device_id}_mode")
+    assert topic_publishes_with_qos(mqtt_mock, discovery_topic("homeassistant", device_id)) == []
+    switch_id = native_entity_id(hass, "switch", device_id)
+    mode_id = native_entity_id(hass, "select", f"{device_id}_mode")
     assert switch_id is not None
     assert mode_id is not None
     registry = er.async_get(hass)
@@ -264,10 +251,10 @@ async def test_an_instance_without_the_native_flag_keeps_the_legacy_path(
 ) -> None:
     """D-03: with no `native` Store key the discovery is published and the integration has no switch entity."""
     subentry = make_switch_subentry("Lamp", on=ON_ACTIONS)
-    await _setup(hass, make_hub_entry([subentry]))
+    await setup_entry(hass, make_hub_entry([subentry]))
 
-    assert len(_publishes(mqtt_mock, discovery_topic("homeassistant", _device_id(subentry)))) == 1
-    assert _entity_id(hass, "switch", _device_id(subentry)) is None
+    assert len(topic_publishes_with_qos(mqtt_mock, discovery_topic("homeassistant", _device_id(subentry)))) == 1
+    assert native_entity_id(hass, "switch", _device_id(subentry)) is None
     assert not [
         entry for entry in er.async_get(hass).entities.values() if entry.platform == DOMAIN and entry.domain == "switch"
     ]
@@ -291,12 +278,12 @@ async def _native_select(
     """Set up a native instance with one Select device."""
     _seed_native(hass_storage)
     subentry = make_select_subentry("Mode", SELECT_OPTIONS)
-    entry = await _setup(hass, make_hub_entry([subentry]))
+    entry = await setup_entry(hass, make_hub_entry([subentry]))
     return entry, _device_id(subentry)
 
 
 def _select_entity_id(hass: HomeAssistant, device_id: str) -> str:
-    entity_id = _entity_id(hass, "select", device_id)
+    entity_id = native_entity_id(hass, "select", device_id)
     assert entity_id is not None
     return entity_id
 
@@ -366,12 +353,12 @@ async def test_choosing_an_option_publishes_the_state_value_not_the_friendly_nam
     )
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == [("Mixed Case", 1, True)]
+    assert topic_publishes_with_qos(mqtt_mock, state_topic(BASE, device_id)) == [("Mixed Case", 1, True)]
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             "select", "select_option", {"entity_id": entity_id, "option": "Delta"}, blocking=True
         )
-    assert len(_publishes(mqtt_mock, state_topic(BASE, device_id))) == 1
+    assert len(topic_publishes_with_qos(mqtt_mock, state_topic(BASE, device_id))) == 1
 
 
 async def test_renaming_an_option_is_followed_live(
@@ -430,7 +417,7 @@ async def test_the_mode_select_shares_the_device_of_the_native_entities(
     entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
     registry = er.async_get(hass)
     native = registry.async_get(_select_entity_id(hass, device_id))
-    mode_id = _entity_id(hass, "select", f"{device_id}_mode")
+    mode_id = native_entity_id(hass, "select", f"{device_id}_mode")
     assert mode_id is not None
     mode = registry.async_get(mode_id)
     assert native is not None
@@ -440,14 +427,14 @@ async def test_the_mode_select_shares_the_device_of_the_native_entities(
     assert device is not None
     assert (DOMAIN, device_id) in device.identifiers
     assert device.model == "Select device"
-    assert _manager(entry).device_mode(device_id) == "run"
+    assert manager_of(entry).device_mode(device_id) == "run"
 
 
 # --- Task 3: native test buttons -------------------------------------------------------------------------------------
 
 
 def _button_id(hass: HomeAssistant, device_id: str, key: str) -> str | None:
-    return _entity_id(hass, "button", f"{device_id}_test_{key}")
+    return native_entity_id(hass, "button", f"{device_id}_test_{key}")
 
 
 async def _press(hass: HomeAssistant, device_id: str, key: str) -> None:
@@ -503,7 +490,7 @@ async def test_pressing_a_test_button_runs_that_trigger_once_and_changes_nothing
     off_calls = async_mock_service(hass, "test", "off")
     entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
     await _state(hass, device_id, "OFF", retain=True)
-    device = _manager(entry).devices[device_id]
+    device = manager_of(entry).devices[device_id]
     mqtt_mock.async_publish.reset_mock()
 
     await _press(hass, device_id, SWITCH_ON_KEY)
@@ -526,7 +513,7 @@ async def test_observe_and_disabled_modes_block_the_press(
     """D-14: a press runs no actions in observe or disabled mode and runs them again in run mode."""
     on_calls = async_mock_service(hass, "test", "on")
     entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
-    manager = _manager(entry)
+    manager = manager_of(entry)
 
     await manager.async_set_device_mode(device_id, "observe")
     await _press(hass, device_id, SWITCH_ON_KEY)
@@ -574,9 +561,9 @@ async def test_a_native_device_subscribes_no_test_topic(
     if native:
         _seed_native(hass_storage)
     subentry = make_switch_subentry("Lamp", on=ON_ACTIONS)
-    entry = await _setup(hass, make_hub_entry([subentry]))
+    entry = await setup_entry(hass, make_hub_entry([subentry]))
 
-    device = _manager(entry).devices[_device_id(subentry)]
+    device = manager_of(entry).devices[_device_id(subentry)]
 
     assert (device.unsubscribe_test is None) is native
     assert device.unsubscribe is not None
@@ -593,7 +580,7 @@ async def test_press_of_an_unknown_trigger_does_nothing(
     on_calls = async_mock_service(hass, "test", "on")
     off_calls = async_mock_service(hass, "test", "off")
     entry, device_id = await _native_switch(hass, hass_storage, make_hub_entry, make_switch_subentry)
-    manager = _manager(entry)
+    manager = manager_of(entry)
 
     await manager.async_press_test("no-such-device", SWITCH_ON_KEY)
     await manager.async_press_test(device_id, "no-such-key")
@@ -603,16 +590,6 @@ async def test_press_of_an_unknown_trigger_does_nothing(
 
 
 # --- Plan 05-04: native mirrors of a marked document ---------------------------------------------------------------
-
-
-async def _deliver(hass: HomeAssistant, device_id: str, payload: str, *, retain: bool = True) -> None:
-    async_fire_mqtt_message(hass, config_topic(BASE, device_id), payload, retain=retain)
-    await hass.async_block_till_done(wait_background_tasks=True)
-
-
-async def _presence(hass: HomeAssistant, status: str, owner: str = FOREIGN_OWNER, *, retain: bool = True) -> None:
-    async_fire_mqtt_message(hass, availability_topic(BASE, owner), status, retain=retain)
-    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 def _native_platform_entries(hass: HomeAssistant, domain: str) -> list[er.RegistryEntry]:
@@ -630,12 +607,12 @@ async def test_a_marked_mirror_is_a_native_entity_directly_under_the_entry(
 ) -> None:
     """D-07, D-09, ENT-01, STA-01: a marked foreign document is a native switch on a device of the entry itself."""
     spec = make_spec(name="Foreign lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
-    entry = await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
 
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
 
-    entity_id = _entity_id(hass, "switch", spec.device_id)
+    entity_id = native_entity_id(hass, "switch", spec.device_id)
     assert entity_id is not None
     registered = er.async_get(hass).async_get(entity_id)
     assert registered is not None
@@ -647,7 +624,7 @@ async def test_a_marked_mirror_is_a_native_entity_directly_under_the_entry(
     assert companion.config_subentry_id is None
     assert companion.model == f"Switch device (mirror of {FOREIGN_OWNER_NAME})"
     assert registered.device_id == companion.id
-    mode = er.async_get(hass).async_get(_entity_id(hass, "select", f"{spec.device_id}_mode"))
+    mode = er.async_get(hass).async_get(native_entity_id(hass, "select", f"{spec.device_id}_mode"))
     assert mode is not None
     assert mode.device_id == companion.id
 
@@ -656,7 +633,7 @@ async def test_a_marked_mirror_is_a_native_entity_directly_under_the_entry(
 
     await hass.services.async_call("switch", "turn_off", {"entity_id": entity_id}, blocking=True)
     await hass.async_block_till_done(wait_background_tasks=True)
-    assert _publishes(mqtt_mock, state_topic(BASE, spec.device_id)) == [("OFF", 1, True)]
+    assert topic_publishes_with_qos(mqtt_mock, state_topic(BASE, spec.device_id)) == [("OFF", 1, True)]
 
 
 async def test_an_unmarked_mirror_stays_on_the_legacy_path(
@@ -664,9 +641,9 @@ async def test_an_unmarked_mirror_stays_on_the_legacy_path(
 ) -> None:
     """D-09: a document without the marker creates no native entity and keeps its legacy companion device."""
     spec = make_spec(name="Foreign lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
-    entry = await _setup(hass, make_hub_entry())
+    entry = await setup_entry(hass, make_hub_entry())
 
-    await _deliver(hass, spec.device_id, document_payload(spec))
+    await deliver_config(hass, spec.device_id, document_payload(spec))
 
     assert _native_platform_entries(hass, "switch") == []
     companion = _companion(hass, entry, spec.device_id)
@@ -680,9 +657,9 @@ async def test_a_native_mirror_has_test_buttons_that_run_locally_once_approved(
     """MIG-03: the buttons of a native mirror run the trigger here, behind the approval, and publish nothing."""
     on_calls = async_mock_service(hass, "test", "on")
     spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
-    entry = await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
 
     on_button = _button_id(hass, spec.device_id, SWITCH_ON_KEY)
     assert on_button is not None
@@ -691,14 +668,14 @@ async def test_a_native_mirror_has_test_buttons_that_run_locally_once_approved(
     assert registered is not None
     assert registered.config_subentry_id is None
     assert registered.device_id == _companion(hass, entry, spec.device_id).id
-    assert _manager(entry).mirrors[spec.device_id].unsubscribe_test is None
+    assert manager_of(entry).mirrors[spec.device_id].unsubscribe_test is None
 
     await _press(hass, spec.device_id, SWITCH_ON_KEY)
     assert on_calls == []
 
-    info = _manager(entry).mirrors[spec.device_id].mirror
+    info = manager_of(entry).mirrors[spec.device_id].mirror
     assert info is not None
-    assert await _manager(entry).async_approve(spec.device_id, info.actions_hash)
+    assert await manager_of(entry).async_approve(spec.device_id, info.actions_hash)
     await _press(hass, spec.device_id, SWITCH_ON_KEY)
     assert len(on_calls) == 1
     assert _all_publishes(mqtt_mock, spec.device_id) == []
@@ -720,16 +697,16 @@ async def test_a_native_mirror_is_unavailable_until_its_owner_is_online(
 ) -> None:
     """D-07: availability is the owner's announced presence, like the legacy discovery availability."""
     spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
-    await _setup(hass, make_hub_entry())
+    await setup_entry(hass, make_hub_entry())
 
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
     assert _mirror_state(hass, spec.device_id) == "unavailable"
 
-    await _presence(hass, "online")
+    await announce_presence(hass, "online")
     assert _mirror_state(hass, spec.device_id) == "unknown"
 
     # Core drops a second retained message per subscription, so the later change is a live one
-    await _presence(hass, "offline", retain=False)
+    await announce_presence(hass, "offline", retain=False)
     assert _mirror_state(hass, spec.device_id) == "unavailable"
 
     # An owned native entity needs no announcement: it is available while the manager runs
@@ -742,18 +719,18 @@ async def test_an_availability_change_reaches_the_entity_without_a_heartbeat(
 ) -> None:
     """D-05: a live message flips the entity at once, although the owner never sent a heartbeat."""
     spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
-    await _setup(hass, make_hub_entry())
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    await setup_entry(hass, make_hub_entry())
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
 
-    await _presence(hass, "online", retain=False)
+    await announce_presence(hass, "online", retain=False)
     assert _mirror_state(hass, spec.device_id) == "unknown"
 
-    await _presence(hass, "offline", retain=False)
+    await announce_presence(hass, "offline", retain=False)
     assert _mirror_state(hass, spec.device_id) == "unavailable"
 
     # A cleared announcement is an unknown owner, which is not online either
-    await _presence(hass, "online", retain=False)
-    await _presence(hass, "", retain=False)
+    await announce_presence(hass, "online", retain=False)
+    await announce_presence(hass, "", retain=False)
     assert _mirror_state(hass, spec.device_id) == "unavailable"
 
 
@@ -763,13 +740,13 @@ async def test_an_unmarked_document_never_reverts_a_native_mirror(
     """T-5-11: a later document of the same owner without the marker updates the content and keeps the entity native."""
     spec = make_spec(name="Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
     changed = make_spec(device_id=spec.device_id, name="Floor lamp", on=OFF_ACTIONS, off=ON_ACTIONS)
-    entry = await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True, rev=1), retain=False)
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True, rev=1), retain=False)
 
-    await _deliver(hass, spec.device_id, document_payload(changed, rev=2), retain=False)
+    await deliver_config(hass, spec.device_id, document_payload(changed, rev=2), retain=False)
 
-    manager = _manager(entry)
+    manager = manager_of(entry)
     assert manager.is_native(spec.device_id)
     assert manager.mirrors[spec.device_id].spec.name == "Floor lamp"
     assert _switch_state(hass, spec.device_id) == "unknown"
@@ -785,15 +762,15 @@ async def test_a_marker_appearing_on_an_unchanged_document_makes_a_legacy_mirror
 ) -> None:
     """D-07: an owner that switches to native republishes the same content with the marker; the mirror follows."""
     spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS)
-    entry = await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
-    await _deliver(hass, spec.device_id, document_payload(spec, rev=1), retain=False)
-    assert _entity_id(hass, "switch", spec.device_id) is None
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
+    await deliver_config(hass, spec.device_id, document_payload(spec, rev=1), retain=False)
+    assert native_entity_id(hass, "switch", spec.device_id) is None
 
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True, rev=2), retain=False)
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True, rev=2), retain=False)
 
-    assert _manager(entry).is_native(spec.device_id)
-    assert _entity_id(hass, "switch", spec.device_id) is not None
+    assert manager_of(entry).is_native(spec.device_id)
+    assert native_entity_id(hass, "switch", spec.device_id) is not None
     assert _companion(hass, entry, spec.device_id).model == f"Switch device (mirror of {FOREIGN_OWNER_NAME})"
 
 
@@ -804,12 +781,12 @@ async def test_a_marker_of_a_competing_owner_changes_nothing(
     """T-5-03: native-ness follows the pinned owner; another owner's claim is the owner conflict and nothing else."""
     spec = make_spec(name="Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
     other = make_spec(device_id=spec.device_id, name="Hijacked", on=OFF_ACTIONS, off=ON_ACTIONS)
-    entry = await _setup(hass, make_hub_entry())
-    await _deliver(hass, spec.device_id, document_payload(spec, native=pinned_native), retain=False)
-    mirror = _manager(entry).mirrors[spec.device_id]
+    entry = await setup_entry(hass, make_hub_entry())
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=pinned_native), retain=False)
+    mirror = manager_of(entry).mirrors[spec.device_id]
     spec_before, info_before = mirror.spec, mirror.mirror
 
-    await _deliver(
+    await deliver_config(
         hass,
         spec.device_id,
         document_payload(other, owner="instance-other", owner_name="Other", native=not pinned_native),
@@ -818,8 +795,8 @@ async def test_a_marker_of_a_competing_owner_changes_nothing(
 
     assert mirror.spec is spec_before
     assert mirror.mirror is info_before
-    assert _manager(entry).is_native(spec.device_id) is pinned_native
-    assert (_entity_id(hass, "switch", spec.device_id) is not None) is pinned_native
+    assert manager_of(entry).is_native(spec.device_id) is pinned_native
+    assert (native_entity_id(hass, "switch", spec.device_id) is not None) is pinned_native
     issue_id = f"{ISSUE_OWNER_CONFLICT_PREFIX}{spec.device_id}"
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
 
@@ -829,20 +806,20 @@ async def test_removing_a_native_mirror_removes_its_device_and_entities(
 ) -> None:
     """D-09, SYN-05: a tombstone removes everything native and leaves the core MQTT device and entities alone."""
     spec = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS, name="Foreign lamp")
-    entry = await _setup(hass, make_hub_entry())
+    entry = await setup_entry(hass, make_hub_entry())
     discovery = discovery_topic("homeassistant", spec.device_id)
     payload = build_discovery(spec=spec, base_topic=BASE, instance_id=FOREIGN_OWNER, sw_version="1.2.3")
     async_fire_mqtt_message(hass, discovery, json.dumps(payload), retain=True)
     await hass.async_block_till_done(wait_background_tasks=True)
-    await _presence(hass, "online")
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True), retain=False)
+    await announce_presence(hass, "online")
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True), retain=False)
     await hass.services.async_call(
         "select",
         "select_option",
-        {"entity_id": _entity_id(hass, "select", f"{spec.device_id}_mode"), "option": "observe"},
+        {"entity_id": native_entity_id(hass, "select", f"{spec.device_id}_mode"), "option": "observe"},
         blocking=True,
     )
-    manager = _manager(entry)
+    manager = manager_of(entry)
     assert manager.device_mode(spec.device_id) == "observe"
 
     (mqtt_entry,) = hass.config_entries.async_entries("mqtt")
@@ -855,16 +832,16 @@ async def test_removing_a_native_mirror_removes_its_device_and_entities(
     mqtt_entities = er.async_entries_for_device(entity_registry, mqtt_device.id)
     assert mqtt_entities
     assert _companion(hass, entry, spec.device_id) is not None
-    assert _entity_id(hass, "switch", spec.device_id) is not None
+    assert native_entity_id(hass, "switch", spec.device_id) is not None
     assert _button_id(hass, spec.device_id, SWITCH_ON_KEY) is not None
 
-    await _deliver(hass, spec.device_id, "", retain=False)
+    await deliver_config(hass, spec.device_id, "", retain=False)
 
     assert _companion(hass, entry, spec.device_id) is None
-    assert _entity_id(hass, "switch", spec.device_id) is None
+    assert native_entity_id(hass, "switch", spec.device_id) is None
     assert _button_id(hass, spec.device_id, SWITCH_ON_KEY) is None
     assert _button_id(hass, spec.device_id, SWITCH_OFF_KEY) is None
-    assert _entity_id(hass, "select", f"{spec.device_id}_mode") is None
+    assert native_entity_id(hass, "select", f"{spec.device_id}_mode") is None
     assert spec.device_id not in manager.mirrors
     assert manager.device_mode(spec.device_id) == "run"
     assert spec.device_id not in manager._data_to_save()[STORE_MIRRORS]
@@ -881,14 +858,14 @@ async def test_a_renamed_native_mirror_renames_its_device(
     """D-13: a new name of the pinned owner renames the device, unless the user gave it a name of their own."""
     spec = make_spec(name="Lamp", on=ON_ACTIONS)
     renamed = make_spec(device_id=spec.device_id, name="Floor lamp", on=ON_ACTIONS)
-    entry = await _setup(hass, make_hub_entry())
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True, rev=1), retain=False)
+    entry = await setup_entry(hass, make_hub_entry())
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True, rev=1), retain=False)
     companion = _companion(hass, entry, spec.device_id)
     assert companion is not None
     if user_name is not None:
         dr.async_get(hass).async_update_device(companion.id, name_by_user=user_name)
 
-    await _deliver(hass, spec.device_id, document_payload(renamed, native=True, rev=2), retain=False)
+    await deliver_config(hass, spec.device_id, document_payload(renamed, native=True, rev=2), retain=False)
 
     companion = _companion(hass, entry, spec.device_id)
     assert companion is not None
@@ -908,18 +885,18 @@ async def test_a_cached_native_mirror_is_native_again_after_a_restart(
         "data": {STORE_MIRRORS: {spec.device_id: document_payload(spec, native=True)}},
     }
 
-    entry = await _setup(hass, make_hub_entry())
+    entry = await setup_entry(hass, make_hub_entry())
 
-    assert _manager(entry).is_native(spec.device_id)
-    assert _entity_id(hass, "switch", spec.device_id) is not None
-    assert _manager(entry).mirrors[spec.device_id].unsubscribe_test is None
+    assert manager_of(entry).is_native(spec.device_id)
+    assert native_entity_id(hass, "switch", spec.device_id) is not None
+    assert manager_of(entry).mirrors[spec.device_id].unsubscribe_test is None
 
 
 # --- Quick 261003-rmy: restore previous state ------------------------------------------------------------------------
 
 
 def _restore_id(hass: HomeAssistant, device_id: str) -> str | None:
-    return _entity_id(hass, "button", f"{device_id}_restore_previous")
+    return native_entity_id(hass, "button", f"{device_id}_restore_previous")
 
 
 async def _press_restore(hass: HomeAssistant, device_id: str) -> None:
@@ -984,7 +961,7 @@ async def test_the_restore_button_publishes_the_previous_state_value(
 
     await _press_restore(hass, device_id)
 
-    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == [("a", 1, True)]
+    assert topic_publishes_with_qos(mqtt_mock, state_topic(BASE, device_id)) == [("a", 1, True)]
     await _state(hass, device_id, "a")
     assert _select_state(hass, device_id) == "Alpha"
 
@@ -1000,12 +977,12 @@ async def test_the_restore_button_does_nothing_without_a_previous_state(
     entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
 
     await _press_restore(hass, device_id)
-    assert _manager(entry).previous_value(device_id) is None
-    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == []
+    assert manager_of(entry).previous_value(device_id) is None
+    assert topic_publishes_with_qos(mqtt_mock, state_topic(BASE, device_id)) == []
 
     await _state(hass, device_id, "a", retain=True)
     await _press_restore(hass, device_id)
-    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == []
+    assert topic_publishes_with_qos(mqtt_mock, state_topic(BASE, device_id)) == []
 
 
 async def test_the_history_tracks_changes_only(
@@ -1017,7 +994,7 @@ async def test_the_history_tracks_changes_only(
 ) -> None:
     """Q-02: a repeated value and an unknown or empty payload leave the history alone."""
     entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
-    manager = _manager(entry)
+    manager = manager_of(entry)
 
     await _state(hass, device_id, "a", retain=True)
     assert manager.previous_value(device_id) is None
@@ -1050,7 +1027,7 @@ async def _seeded_select(
     _seed_native(hass_storage)
     _seed_previous(hass_storage, previous_states(device_id) if callable(previous_states) else previous_states)
     subentry = make_select_subentry("Mode", SELECT_OPTIONS, device_id=device_id)
-    return await _setup(hass, make_hub_entry([subentry])), device_id
+    return await setup_entry(hass, make_hub_entry([subentry])), device_id
 
 
 def _previous_state(hass: HomeAssistant, device_id: str) -> str | None:
@@ -1091,7 +1068,7 @@ async def test_the_select_shows_the_previous_state_and_follows_renames_and_remov
     await hass.async_block_till_done(wait_background_tasks=True)
     assert _previous_state(hass, device_id) is None
     await _press_restore(hass, device_id)
-    assert _publishes(mqtt_mock, state_topic(BASE, device_id)) == []
+    assert topic_publishes_with_qos(mqtt_mock, state_topic(BASE, device_id)) == []
 
 
 async def test_the_previous_states_are_persisted_only_when_there_is_history(
@@ -1103,7 +1080,7 @@ async def test_the_previous_states_are_persisted_only_when_there_is_history(
 ) -> None:
     """P-01: an additive key with last and previous, absent without history, for a Switch and for the legacy path."""
     entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
-    manager = _manager(entry)
+    manager = manager_of(entry)
     await _state(hass, device_id, "a", retain=True)
     assert STORE_PREVIOUS_STATES not in manager._data_to_save()
     await _state(hass, device_id, "Mixed Case")
@@ -1122,7 +1099,7 @@ async def test_a_native_switch_has_no_history(
     await _state(hass, device_id, "ON", retain=True)
     await _state(hass, device_id, "OFF")
 
-    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+    assert STORE_PREVIOUS_STATES not in manager_of(entry)._data_to_save()
 
 
 async def test_a_legacy_select_has_no_history(
@@ -1130,14 +1107,14 @@ async def test_a_legacy_select_has_no_history(
 ) -> None:
     """The legacy path is untouched: no native flag, no history, no key."""
     subentry = make_select_subentry("Mode", SELECT_OPTIONS)
-    entry = await _setup(hass, make_hub_entry([subentry]))
+    entry = await setup_entry(hass, make_hub_entry([subentry]))
     device_id = _device_id(subentry)
     await _state(hass, device_id, "a", retain=True)
     await _state(hass, device_id, "Mixed Case")
     await _state(hass, device_id, "c")
 
-    assert not _manager(entry).is_native(device_id)
-    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+    assert not manager_of(entry).is_native(device_id)
+    assert STORE_PREVIOUS_STATES not in manager_of(entry)._data_to_save()
 
 
 async def test_a_stored_history_survives_a_restart_and_keeps_its_previous_value(
@@ -1159,7 +1136,7 @@ async def test_a_stored_history_survives_a_restart_and_keeps_its_previous_value(
 
     await _state(hass, device_id, "Mixed Case", retain=True)
 
-    assert _manager(entry).previous_value(device_id) == "a"
+    assert manager_of(entry).previous_value(device_id) == "a"
     assert _previous_state(hass, device_id) == "Alpha"
 
 
@@ -1181,9 +1158,9 @@ async def test_a_change_during_downtime_makes_the_old_last_the_previous_value(
 
     await _state(hass, device_id, "c", retain=True)
 
-    assert _manager(entry).previous_value(device_id) == "Mixed Case"
+    assert manager_of(entry).previous_value(device_id) == "Mixed Case"
     assert _previous_state(hass, device_id) == "Bravo"
-    assert _manager(entry)._data_to_save()[STORE_PREVIOUS_STATES] == {
+    assert manager_of(entry)._data_to_save()[STORE_PREVIOUS_STATES] == {
         device_id: {"last": "c", "previous": "Mixed Case"}
     }
 
@@ -1232,9 +1209,9 @@ async def test_a_malformed_stored_history_is_ignored(
 
     entry, device_id = await _seeded_select(hass, hass_storage, make_hub_entry, make_select_subentry, build)
 
-    assert _manager(entry).previous_value(device_id) is None
+    assert manager_of(entry).previous_value(device_id) is None
     assert _previous_state(hass, device_id) is None
-    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+    assert STORE_PREVIOUS_STATES not in manager_of(entry)._data_to_save()
 
 
 async def test_deleting_a_device_drops_its_history(
@@ -1248,13 +1225,13 @@ async def test_deleting_a_device_drops_its_history(
     entry, device_id = await _native_select(hass, hass_storage, make_hub_entry, make_select_subentry)
     await _state(hass, device_id, "a", retain=True)
     await _state(hass, device_id, "Mixed Case")
-    assert STORE_PREVIOUS_STATES in _manager(entry)._data_to_save()
+    assert STORE_PREVIOUS_STATES in manager_of(entry)._data_to_save()
 
     (subentry_id,) = entry.subentries
     assert hass.config_entries.async_remove_subentry(entry, subentry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+    assert STORE_PREVIOUS_STATES not in manager_of(entry)._data_to_save()
 
 
 async def test_a_local_release_drops_the_history(
@@ -1269,9 +1246,9 @@ async def test_a_local_release_drops_the_history(
     await _state(hass, device_id, "a", retain=True)
     await _state(hass, device_id, "Mixed Case")
 
-    assert await _manager(entry).async_release_locally([device_id]) == [device_id]
+    assert await manager_of(entry).async_release_locally([device_id]) == [device_id]
 
-    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+    assert STORE_PREVIOUS_STATES not in manager_of(entry)._data_to_save()
 
 
 def _select_mirror_spec(*, actions: bool = True) -> Any:
@@ -1284,17 +1261,17 @@ async def test_a_native_select_mirror_tracks_and_restores_like_a_choice(
 ) -> None:
     """P-03, T-261003-01: an unapproved mirror in observe mode publishes exactly what select_option publishes."""
     spec = _select_mirror_spec()
-    entry = await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
-    await _manager(entry).async_set_device_mode(spec.device_id, "observe")
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
+    await manager_of(entry).async_set_device_mode(spec.device_id, "observe")
     await _state(hass, spec.device_id, "a", retain=True)
     await _state(hass, spec.device_id, "Mixed Case")
     assert _previous_state(hass, spec.device_id) == "Alpha"
     topic = state_topic(BASE, spec.device_id)
 
     await _press_restore(hass, spec.device_id)
-    assert _publishes(mqtt_mock, topic) == [("a", 1, True)]
+    assert topic_publishes_with_qos(mqtt_mock, topic) == [("a", 1, True)]
 
     await hass.services.async_call(
         "select",
@@ -1302,7 +1279,7 @@ async def test_a_native_select_mirror_tracks_and_restores_like_a_choice(
         {"entity_id": _select_entity_id(hass, spec.device_id), "option": "Alpha"},
         blocking=True,
     )
-    assert _publishes(mqtt_mock, topic) == [("a", 1, True), ("a", 1, True)]
+    assert topic_publishes_with_qos(mqtt_mock, topic) == [("a", 1, True), ("a", 1, True)]
 
 
 async def test_the_restore_button_of_a_mirror_is_unavailable_while_its_owner_is_offline(
@@ -1310,14 +1287,14 @@ async def test_the_restore_button_of_a_mirror_is_unavailable_while_its_owner_is_
 ) -> None:
     """The availability of the mirror entities is the one of its owner."""
     spec = _select_mirror_spec()
-    await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
     entity_id = _restore_id(hass, spec.device_id)
     assert entity_id is not None
     assert hass.states.get(entity_id).state != "unavailable"
 
-    await _presence(hass, "offline", retain=False)
+    await announce_presence(hass, "offline", retain=False)
 
     assert hass.states.get(entity_id).state == "unavailable"
 
@@ -1327,16 +1304,16 @@ async def test_the_tombstone_of_a_mirror_drops_its_history(
 ) -> None:
     """The history of a mirror ends with the mirror."""
     spec = _select_mirror_spec()
-    entry = await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
     await _state(hass, spec.device_id, "a", retain=True)
     await _state(hass, spec.device_id, "Mixed Case")
-    assert STORE_PREVIOUS_STATES in _manager(entry)._data_to_save()
+    assert STORE_PREVIOUS_STATES in manager_of(entry)._data_to_save()
 
-    await _deliver(hass, spec.device_id, "", retain=False)
+    await deliver_config(hass, spec.device_id, "", retain=False)
 
-    assert STORE_PREVIOUS_STATES not in _manager(entry)._data_to_save()
+    assert STORE_PREVIOUS_STATES not in manager_of(entry)._data_to_save()
 
 
 async def test_an_adoption_keeps_the_history_of_a_native_mirror(
@@ -1344,18 +1321,18 @@ async def test_an_adoption_keeps_the_history_of_a_native_mirror(
 ) -> None:
     """P-01: the map is keyed by device id, so the owned device that replaces the mirror keeps it."""
     spec = _select_mirror_spec(actions=False)
-    entry = await _setup(hass, make_hub_entry())
-    await _presence(hass, "online")
-    await _deliver(hass, spec.device_id, document_payload(spec, native=True))
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "online")
+    await deliver_config(hass, spec.device_id, document_payload(spec, native=True))
     await _state(hass, spec.device_id, "a", retain=True)
     await _state(hass, spec.device_id, "Mixed Case")
-    assert STORE_PREVIOUS_STATES in _manager(entry)._data_to_save()
+    assert STORE_PREVIOUS_STATES in manager_of(entry)._data_to_save()
 
-    await _manager(entry).async_adopt(spec.device_id, force=True)
+    await manager_of(entry).async_adopt(spec.device_id, force=True)
     await hass.async_block_till_done(wait_background_tasks=True)
 
-    assert spec.device_id in _manager(entry).devices
-    assert _manager(entry)._data_to_save()[STORE_PREVIOUS_STATES] == {
+    assert spec.device_id in manager_of(entry).devices
+    assert manager_of(entry)._data_to_save()[STORE_PREVIOUS_STATES] == {
         spec.device_id: {"last": "Mixed Case", "previous": "a"}
     }
 
@@ -1375,10 +1352,10 @@ async def test_every_new_test_button_is_diagnostic_and_disabled_and_the_restore_
     _seed_native(hass_storage)
     switch = make_switch_subentry("Lamp", on=ON_ACTIONS, off=OFF_ACTIONS)
     select = make_select_subentry("Mode", SELECT_OPTIONS)
-    await _setup(hass, make_hub_entry([switch, select]))
+    await setup_entry(hass, make_hub_entry([switch, select]))
     mirror = make_spec(on=ON_ACTIONS, off=OFF_ACTIONS, name="Foreign lamp")
-    await _presence(hass, "online")
-    await _deliver(hass, mirror.device_id, document_payload(mirror, native=True))
+    await announce_presence(hass, "online")
+    await deliver_config(hass, mirror.device_id, document_payload(mirror, native=True))
 
     registry = er.async_get(hass)
     test_buttons = [entry for entry in _native_platform_entries(hass, "button") if "_test_" in entry.unique_id]

@@ -34,6 +34,8 @@ from tests.helpers import (
     loop_back_discovery,
     manager_of,
     mqtt_device_of,
+    quiet_period_passes,
+    replay_discovery,
     restart_entry,
     seed_native_pending,
     setup_legacy_device,
@@ -48,9 +50,6 @@ if TYPE_CHECKING:
 
     from homeassistant.core import HomeAssistant
 
-# Longer than the production quiet period, and a literal on purpose: a RED run against code without the production
-# constant must fail on an assertion about the duplicates, not on a missing name
-QUIET_PERIOD_PASSED = 10.0
 # Another instance on the broker, next to the owner of a mirror (FOREIGN_OWNER)
 PEER = "instance-peer"
 
@@ -59,19 +58,6 @@ PEER = "instance-peer"
 def fast_takeover(monkeypatch: pytest.MonkeyPatch) -> None:
     """Poll quickly; the default wait is long only because production waits for a real broker round trip."""
     monkeypatch.setattr(takeover, "TAKEOVER_RETRY_INTERVAL", 0.01)
-
-
-async def _replay(hass: HomeAssistant, topic: str, payload: str, device_id: str) -> list[str]:
-    """Play a legacy Discovery payload live (core ignores a second retained message per topic) and return the ids."""
-    async_fire_mqtt_message(hass, topic, payload, retain=False)
-    await hass.async_block_till_done(wait_background_tasks=True)
-    return legacy_entity_ids(hass, device_id)
-
-
-async def _quiet_period_passes(hass: HomeAssistant) -> None:
-    """Let the quiet period pass for the timers of the integration and run what they start."""
-    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=QUIET_PERIOD_PASSED))
-    await hass.async_block_till_done(wait_background_tasks=True)
 
 
 def _assert_clean(hass: HomeAssistant, device_id: str, replayed: list[str]) -> None:
@@ -147,10 +133,10 @@ async def test_a_replay_during_the_pass_leaves_no_duplicate(
         # Only around the takeover's clear: the owner clears the stale topic again after the quiet-period catch (D-06)
         first = not replayed
         if replay_at == "before_the_clear" and first:
-            replayed.append(await _replay(hass, legacy.topic, legacy.payload, legacy.device_id))
+            replayed.append(await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id))
         await real_clear(self, device_id)
         if replay_at == "after_the_clear" and first:
-            replayed.append(await _replay(hass, legacy.topic, legacy.payload, legacy.device_id))
+            replayed.append(await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id))
 
     monkeypatch.setattr(DiscoveryPublisher, "async_clear_device", _clear_with_a_replay)
 
@@ -161,7 +147,7 @@ async def test_a_replay_during_the_pass_leaves_no_duplicate(
     assert len(replayed) == 1
     assert len(replayed[0]) == 3
     assert set(legacy_entity_ids(hass, legacy.device_id)) == set(replayed[0])  # the catch waits for the quiet period
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
     _assert_no_working_duplicate(hass, legacy.device_id, replayed[0])
     assert_moved_and_native(hass, legacy, before)
 
@@ -190,7 +176,7 @@ async def test_a_replay_after_the_takeover_of_a_native_mirror_leaves_no_duplicat
 
     async def _take_over_then_replay(*args: Any, **kwargs: Any) -> Any:
         status = await real_take_over(*args, **kwargs)
-        replayed.append(await _replay(hass, topic, discovery, spec.device_id))
+        replayed.append(await replay_discovery(hass, topic, discovery, spec.device_id))
         return status
 
     monkeypatch.setattr(takeover, "async_take_over", _take_over_then_replay)
@@ -200,7 +186,7 @@ async def test_a_replay_after_the_takeover_of_a_native_mirror_leaves_no_duplicat
 
     assert len(replayed) == 1
     assert len(replayed[0]) == 3
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
     _assert_clean(hass, spec.device_id, replayed[0])
     for entity_id, old in before.items():
         moved = entity_registry.async_get(entity_id)
@@ -229,10 +215,10 @@ async def test_a_replay_before_a_restart_of_a_finished_native_owner_is_cleaned_a
 
     for _restart_number in range(2):
         # A running instance has no catch that listens, so the duplicates stay until the next start
-        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
         assert len(replayed) == 3
         await restart_entry(hass, legacy.entry)
-        await _quiet_period_passes(hass)
+        await quiet_period_passes(hass)
         _assert_no_working_duplicate(hass, legacy.device_id, replayed)
         assert_moved_and_native(hass, legacy, before)
 
@@ -275,7 +261,7 @@ async def test_a_replay_right_after_the_move_is_removed_before_the_clear(
 
     async def _take_over_then_replay(*args: Any, **kwargs: Any) -> Any:
         status = await real_take_over(*args, **kwargs)
-        replayed.append(await _replay(hass, legacy.topic, legacy.payload, legacy.device_id))
+        replayed.append(await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id))
         return status
 
     async def _clear_after_a_look(self: DiscoveryPublisher, device_id: str) -> None:
@@ -341,13 +327,13 @@ async def test_a_replay_onto_tombstones_is_cleaned_at_the_next_start(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert_moved_and_native(hass, legacy, before)
     assert legacy_entity_ids(hass, legacy.device_id) == []
-    first = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    first = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(first) == 3
     _tombstone_the_replay(hass, legacy.device_id, first, tombstones)
     entity_registry = er.async_get(hass)
 
     for _round in range(2):
-        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
         assert len(replayed) == 3
         # Core re-enabled or restored the switch and the guard disabled it, so the test cannot go green for the wrong
         # reason: this is the row the catch used to skip (CR-01)
@@ -358,7 +344,7 @@ async def test_a_replay_onto_tombstones_is_cleaned_at_the_next_start(
         # (core's discovery skips it, it saw a retained message on the topic before)
         async_fire_mqtt_message(hass, legacy.topic, legacy.payload, retain=True)
         await hass.async_block_till_done(wait_background_tasks=True)
-        await _quiet_period_passes(hass)
+        await quiet_period_passes(hass)
         _assert_clean(hass, legacy.device_id, replayed)
         assert_moved_and_native(hass, legacy, before)
 
@@ -401,15 +387,15 @@ async def test_the_owner_clears_the_stale_legacy_discovery_once_after_each_catch
 ) -> None:
     """D-06: after each start-up catch the owner clears the retained legacy discovery once, so no replay can return."""
     legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
-    first = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    first = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     _tombstone_the_replay(hass, legacy.device_id, first, "integration")
 
     for _round in range(2):
-        replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+        replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
         assert len(replayed) == 3
         await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
         mqtt_mock.async_publish.reset_mock()
-        await _quiet_period_passes(hass)
+        await quiet_period_passes(hass)
         _assert_one_retained_clear(mqtt_mock, legacy.topic)
         _assert_clean(hass, legacy.device_id, replayed)
         assert_moved_and_native(hass, legacy, before)
@@ -431,7 +417,7 @@ async def test_the_owner_clears_a_retained_legacy_discovery_even_when_nothing_wa
     mqtt_mock.async_publish.reset_mock()
     caplog.clear()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     _assert_one_retained_clear(mqtt_mock, legacy.topic)
     assert not any("Removed" in record.getMessage() for record in caplog.records)
@@ -460,7 +446,7 @@ async def _a_follower_with_disabled_twins_rediscovered(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert legacy_entity_ids(hass, spec.device_id) == []  # the takeover of the mirror is done
     discovery = json.dumps(build_discovery(spec=spec, base_topic=BASE, instance_id=FOREIGN_OWNER, sw_version="1.2.3"))
-    replayed = await _replay(hass, topic, discovery, spec.device_id)
+    replayed = await replay_discovery(hass, topic, discovery, spec.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -507,7 +493,7 @@ async def test_a_follower_keeps_its_disabled_twins_on_legacy_content_and_publish
     await hass.async_block_till_done(wait_background_tasks=True)
     mqtt_mock.async_publish.reset_mock()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     _assert_disabled_twins_kept(hass, replayed)
     assert mqtt_device_of(hass, spec.device_id) is not None
@@ -539,7 +525,7 @@ async def test_cross_instance_a_follower_keeps_its_disabled_twins_on_legacy_cont
     await _announce_peer(hass, FOREIGN_OWNER, [spec.device_id])
     mqtt_mock.async_publish.reset_mock()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     _assert_disabled_twins_kept(hass, replayed)
     assert falsy_publishes(mqtt_mock, topic) == []
@@ -563,7 +549,7 @@ async def test_cross_instance_the_owner_neither_removes_nor_clears_while_a_peer_
     do the same: neither happens, the content stays LEGACY, and one INFO line names only a count (T-04-14).
     """
     legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -577,7 +563,7 @@ async def test_cross_instance_the_owner_neither_removes_nor_clears_while_a_peer_
     caplog.set_level(logging.INFO, logger=OWN_LOGGER)
     caplog.clear()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     kept = entity_registry.async_get(switch)
     assert kept is not None, "the owner removed its disabled twin while a peer keeps a row"
@@ -608,7 +594,7 @@ async def test_the_owner_keeps_a_customized_duplicate_and_its_device_and_clears_
 ) -> None:
     """D-04, D-08: a customized duplicate stays with its MQTT device, so the owner does not clear the topic."""
     legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -617,7 +603,7 @@ async def test_the_owner_keeps_a_customized_duplicate_and_its_device_and_clears_
     await _restart_with_the_retained_payload(hass, legacy, legacy.payload)
     mqtt_mock.async_publish.reset_mock()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     kept = entity_registry.async_get(switch)
     assert kept is not None
@@ -639,7 +625,7 @@ async def test_a_disabled_leftover_is_removed_at_a_start_with_an_empty_topic(
 ) -> None:
     """D-02, D-03, D-09: with nothing retained on the topic, the settled start removes the disabled twin and device."""
     legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -649,7 +635,7 @@ async def test_a_disabled_leftover_is_removed_at_a_start_with_an_empty_topic(
     await restart_entry(hass, legacy.entry)
     mqtt_mock.async_publish.reset_mock()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     _assert_clean(hass, legacy.device_id, replayed)
     assert_moved_and_native(hass, legacy, before)
@@ -680,7 +666,7 @@ async def test_a_disabled_twin_stays_while_the_topic_content_is_unknown(
     if content == "foreign_shape":
         request.getfixturevalue("discovery_settled")
     legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -694,7 +680,7 @@ async def test_a_disabled_twin_stays_while_the_topic_content_is_unknown(
     caplog.set_level(logging.INFO, logger=OWN_LOGGER)
     caplog.clear()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     assert entity_registry.async_get(switch) is not None
     assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION
@@ -731,7 +717,7 @@ async def test_the_catch_keeps_an_enabled_customized_button_next_to_a_disabled_t
     of the device, the renamed button the catch keeps on purpose included. The discovery publishes are looped back.
     """
     legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -747,7 +733,7 @@ async def test_the_catch_keeps_an_enabled_customized_button_next_to_a_disabled_t
     assert hass.states.get(button) is not None  # the kept button is loaded, so a clear would delete it
     mqtt_mock.async_publish.reset_mock()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     kept = entity_registry.async_get(button)
     assert kept is not None, "the customized, kept test button was deleted"
@@ -777,7 +763,7 @@ async def _a_renamed_loaded_button_next_to_a_hooked_disabled_switch(
     legacy, _before = await _a_finished_native_owner(
         hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
     )
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -864,7 +850,7 @@ async def test_a_catch_that_runs_before_the_settle_checks_again_once_the_grace_h
 
     monkeypatch.setattr(MqttGateway, "async_on_subscribed", _watch)
     legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -876,14 +862,14 @@ async def test_a_catch_that_runs_before_the_settle_checks_again_once_the_grace_h
     manager_of(legacy.entry).clock = lambda: now[0]
     mqtt_mock.async_publish.reset_mock()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     # The settle is not in yet, so the content is unknown and the twin stays for now
     assert entity_registry.async_get(switch) is not None
     settles[-1]()
     await hass.async_block_till_done(wait_background_tasks=True)
     now[0] += 2.0
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     _assert_clean(hass, legacy.device_id, replayed)
     assert_moved_and_native(hass, legacy, before)
@@ -917,7 +903,7 @@ async def test_the_first_heartbeat_after_a_start_lists_a_device_with_a_kept_cust
     legacy, _before = await _a_finished_native_owner(
         hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
     )
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     if row == "renamed":
         button, *_others = sorted(entity_id for entity_id in replayed if entity_id.startswith("button."))
@@ -983,7 +969,7 @@ async def _an_owner_with_a_disabled_twin_on_legacy_content(
     The discovery publishes are looped back, and the publish mock is reset; no catch ran yet.
     """
     legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -1021,7 +1007,7 @@ async def test_the_owner_sends_the_migrate_payload_before_it_lets_the_topic_go_e
         hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry, hooked=hook == "hooked"
     )
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     _assert_clean(hass, legacy.device_id, replayed)
     assert_moved_and_native(hass, legacy, before)
@@ -1058,7 +1044,7 @@ async def test_no_migrate_goes_out_while_the_gate_keeps_the_device(
         await _announce_peer(hass, PEER, [legacy.device_id])
         mqtt_mock.async_publish.reset_mock()
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     assert not any(
         isinstance(payload, str) and "migrate_discovery" in payload
@@ -1098,7 +1084,7 @@ async def test_the_owner_reads_the_peer_signal_again_right_before_it_empties_the
 
     mqtt_mock.async_publish.side_effect = _deliver_and_announce
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     if moment == "before_the_removal":
         kept = er.async_get(hass).async_get(switch)
@@ -1150,7 +1136,7 @@ async def _an_owner_of_two_devices_with_disabled_twins_on_legacy_content(
     replayed: dict[str, list[str]] = {}
     for device_id, topic, payload in devices:
         assert legacy_entity_ids(hass, device_id) == []  # the takeover of the device is done
-        replayed[device_id] = await _replay(hass, topic, payload, device_id)
+        replayed[device_id] = await replay_discovery(hass, topic, payload, device_id)
         assert len(replayed[device_id]) == 3
     if disable_the_second:
         entity_registry = er.async_get(hass)
@@ -1197,7 +1183,7 @@ async def test_no_migrate_goes_out_for_a_device_a_peer_announced_during_an_earli
 
     mqtt_mock.async_publish.side_effect = _deliver_and_announce
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     assert announced[0], "the owner sent no migrate for the first device"
     assert not any(
@@ -1238,7 +1224,7 @@ async def _an_owner_that_has_not_heard_an_online_peer(
     ids, the switch and the clock.
     """
     legacy, before = await _a_finished_native_owner(hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry)
-    replayed = await _replay(hass, legacy.topic, legacy.payload, legacy.device_id)
+    replayed = await replay_discovery(hass, legacy.topic, legacy.payload, legacy.device_id)
     assert len(replayed) == 3
     entity_registry = er.async_get(hass)
     (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
@@ -1272,7 +1258,7 @@ async def test_the_owner_waits_for_a_peer_that_is_online_but_not_heard_yet(
         hass, mqtt_mock, hass_storage, make_hub_entry, make_switch_subentry
     )
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     assert er.async_get(hass).async_get(switch) is not None, "the owner removed its twin before it heard the peer"
     assert discovery_clears(mqtt_mock, legacy.topic) == []
@@ -1348,7 +1334,7 @@ async def _a_restarted_follower_on_legacy_content(
     async_fire_mqtt_message(hass, topic, discovery, retain=True)
     await hass.async_block_till_done(wait_background_tasks=True)
     mqtt_mock.async_publish.reset_mock()
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
     _assert_disabled_twins_kept(hass, replayed)
     assert manager_of(entry).sync.discovery_content(spec.device_id) is DiscoveryContent.LEGACY
     return spec, topic, discovery, replayed
@@ -1374,7 +1360,7 @@ async def test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_
     # The owner's clear arrives live
     async_fire_mqtt_message(hass, topic, "", retain=False)
     await hass.async_block_till_done(wait_background_tasks=True)
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     _assert_clean(hass, spec.device_id, replayed)
     assert discovery_clears(mqtt_mock, topic) == []
@@ -1412,7 +1398,7 @@ async def test_the_follower_rearm_on_an_emptied_topic_is_bounded(
         await hass.async_block_till_done(wait_background_tasks=True)
         async_fire_mqtt_message(hass, topic, discovery, retain=False)
         await hass.async_block_till_done(wait_background_tasks=True)
-        await _quiet_period_passes(hass)
+        await quiet_period_passes(hass)
 
     assert runs[0] == takeover.REPLAY_CATCH_RETRIES
     _assert_disabled_twins_kept(hass, replayed)
@@ -1495,7 +1481,7 @@ async def test_a_catch_that_rearms_while_an_emptied_topic_already_armed_it_keeps
 
     mqtt_mock.async_publish.side_effect = _deliver_and_interleave
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
 
     assert fired[0], "the owner sent no migrate for the first device"
     (first_switch,) = [entity_id for entity_id in first_replayed if entity_id.startswith("switch.")]
@@ -1536,7 +1522,7 @@ async def test_the_owner_checks_an_unheard_peer_again_once_per_heartbeat_interva
     listening_since = now[0]
     first_rearm = len(records)
 
-    await _quiet_period_passes(hass)
+    await quiet_period_passes(hass)
     heard = False
     for _step in range(takeover.REPLAY_CATCH_RETRIES):
         pending = [record for record in records if record["pending"]]

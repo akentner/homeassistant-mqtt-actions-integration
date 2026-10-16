@@ -7,13 +7,15 @@ Test modules import shared helpers only from here, never from each other.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, NamedTuple
 from unittest.mock import DEFAULT
 
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component import plugins
-from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
+from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_fire_time_changed
 
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
@@ -48,6 +50,10 @@ PREFIX = "homeassistant"
 MIGRATE_PAYLOAD = json.dumps({"migrate_discovery": True})
 CLEAR_PAYLOAD = ""
 BASE = "mqtt_actions"
+CORE_PREFIX = "homeassistant"
+# Longer than the production quiet period, and a literal on purpose: a RED run against code without the production
+# constant must fail on an assertion about the duplicates, not on a missing name
+QUIET_PERIOD_PASSED = 10.0
 
 
 class LegacyDevice(NamedTuple):
@@ -252,3 +258,53 @@ def assert_moved_and_native(hass: HomeAssistant, legacy: Any, before: dict[str, 
         state = hass.states.get(entity_id)
         assert state is not None
         assert not state.attributes.get("restored")
+
+
+def native_entity_id(hass: HomeAssistant, domain: str, unique_id: str) -> str | None:
+    return er.async_get(hass).async_get_entity_id(domain, DOMAIN, unique_id)
+
+
+def topic_publishes_with_qos(mqtt_mock: Any, topic: str) -> list[tuple]:
+    """Return the (payload, qos, retain) tuples published on a topic, in order."""
+    return [call.args[1:4] for call in mqtt_mock.async_publish.call_args_list if call.args[0] == topic]
+
+
+async def deliver_config(hass: HomeAssistant, device_id: str, payload: str, *, retain: bool = True) -> None:
+    async_fire_mqtt_message(hass, config_topic(BASE, device_id), payload, retain=retain)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def announce_presence(
+    hass: HomeAssistant, status: str, owner: str = FOREIGN_OWNER, *, retain: bool = True
+) -> None:
+    async_fire_mqtt_message(hass, availability_topic(BASE, owner), status, retain=retain)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def create_mqtt_row(hass: HomeAssistant, domain: str, unique_id: str, *, device: bool = False) -> str:
+    """Create an enabled registry row of core MQTT, optionally on the MQTT device the export payload names."""
+    mqtt_entry = hass.config_entries.async_entries("mqtt")[0]
+    device_id = None
+    if device:
+        mqtt_device = dr.async_get(hass).async_get_or_create(
+            config_entry_id=mqtt_entry.entry_id, identifiers={("mqtt", f"mqtt_actions_{unique_id}")}
+        )
+        device_id = mqtt_device.id
+    row = er.async_get(hass).async_get_or_create(
+        domain, "mqtt", unique_id, config_entry=mqtt_entry, device_id=device_id
+    )
+    assert row.disabled_by is None
+    return row.entity_id
+
+
+async def replay_discovery(hass: HomeAssistant, topic: str, payload: str, device_id: str) -> list[str]:
+    """Play a legacy Discovery payload live (core ignores a second retained message per topic) and return the ids."""
+    async_fire_mqtt_message(hass, topic, payload, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    return legacy_entity_ids(hass, device_id)
+
+
+async def quiet_period_passes(hass: HomeAssistant) -> None:
+    """Let the quiet period pass for the timers of the integration and run what they start."""
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=QUIET_PERIOD_PASSED))
+    await hass.async_block_till_done(wait_background_tasks=True)

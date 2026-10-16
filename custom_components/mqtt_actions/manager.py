@@ -51,6 +51,7 @@ from .const import (
     ISSUE_DEVICE_PREFIXES,
     ISSUE_DISCOVERY_DISABLED,
     ISSUE_DUPLICATE_INSTANCE_ID,
+    ISSUE_KEPT_DUPLICATES,
     ISSUE_NATIVE_CUTOVER_WAITING,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
@@ -412,12 +413,16 @@ async def async_remove_local_state(hass: HomeAssistant, entry: ConfigEntry, *, s
     parameters: production passes nothing.
     """
     await Store(hass, STORE_VERSION, store_key).async_remove()
+    # One issue per instance each, so they go by id; the per-device families go by prefix
+    instance_issues = {
+        ISSUE_DISCOVERY_DISABLED,
+        ISSUE_DUPLICATE_INSTANCE_ID,
+        ISSUE_KEPT_DUPLICATES,
+        ISSUE_NATIVE_CUTOVER_WAITING,
+    }
     registry = ir.async_get(hass)
     for domain, issue_id in list(registry.issues):
-        if domain == DOMAIN and (
-            issue_id.startswith(ISSUE_DEVICE_PREFIXES)
-            or issue_id in {ISSUE_DISCOVERY_DISABLED, ISSUE_DUPLICATE_INSTANCE_ID, ISSUE_NATIVE_CUTOVER_WAITING}
-        ):
+        if domain == DOMAIN and (issue_id.startswith(ISSUE_DEVICE_PREFIXES) or issue_id in instance_issues):
             ir.async_delete_issue(hass, domain, issue_id)
 
 

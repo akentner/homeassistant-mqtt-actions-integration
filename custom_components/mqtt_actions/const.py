@@ -180,6 +180,10 @@ CUTOVER_SETTLE_SECONDS: Final = 5.0
 # One warning issue on the waiting instance names the peers that keep it from switching; at most this many are named
 ISSUE_NATIVE_CUTOVER_WAITING: Final = "native_cutover_waiting"
 CUTOVER_HINT_MAX_NAMES: Final = 5
+# One warning issue per instance, not a per-device prefix, lists the core MQTT duplicates the guard keeps enabled next
+# to a native entity, with their reason; at most this many entity ids are listed per reason (FIX-08, D-01, D-02)
+ISSUE_KEPT_DUPLICATES: Final = "kept_duplicates"
+KEPT_DUPLICATES_MAX_SHOWN: Final = 10
 
 # Per-device and per-instance mode (D-14): run is normal, observe tracks the baseline and logs what would have run, and
 # disabled ignores the state topic completely. The effective mode is the most restrictive of the two. The existing

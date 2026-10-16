@@ -201,6 +201,16 @@ those instances disappear. **What to do:** update MQTT Actions on the named inst
 instance switches on its own within a heartbeat or a few seconds after the last of them is updated or offline; the
 issue then disappears. Nothing is lost while it waits.
 
+### `kept_duplicates`
+
+**Meaning:** MQTT entities stay enabled next to the native entity of their device. The issue lists their entity ids by
+reason: the ones you customized, and the ones kept because you disabled or hid the native entity. There is one issue
+per instance. **Why:** MQTT Actions keeps such a duplicate enabled on purpose (see An enabled duplicate after the export
+prefix was set to the core prefix above) and never deletes or disables it. **What to do:** disable a duplicate you do
+not need in **Settings**, **Devices & services**, **Entities**, but do not delete it: deleting an MQTT entity can make
+Home Assistant clear a Discovery message that other instances still use. The issue is updated at the next start and
+disappears once no such duplicate is left.
+
 ### `circuit_breaker_tripped`
 
 **Meaning:** a device ran its actions more often than its limit allows within the window, by default more than 5 times

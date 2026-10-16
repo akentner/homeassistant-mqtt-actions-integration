@@ -27,7 +27,9 @@ from .const import (
     CUTOVER_SETTLE_SECONDS,
     DOMAIN,
     HEARTBEAT_INTERVAL_SECONDS,
+    ISSUE_KEPT_DUPLICATES,
     ISSUE_NATIVE_CUTOVER_WAITING,
+    KEPT_DUPLICATES_MAX_SHOWN,
     LOGGER,
 )
 from .discovery import DiscoveryContent
@@ -54,6 +56,34 @@ class TwinRemoval(NamedTuple):
 
     removed: int
     errored: bool
+
+
+# The placeholder of a reason without a kept duplicate, the empty-value convention of the dialogs
+NONE_SHOWN = "—"
+
+
+def kept_duplicates_placeholders(rows: Iterable[tuple[str, takeover.KeptReason]]) -> dict[str, str]:
+    """
+    Return the placeholders of the kept-duplicates warning: the total and the entity ids per reason (FIX-08, D-01).
+
+    The ids are local registry data, never broker content; they are still sorted, escaped for Markdown and capped at
+    KEPT_DUPLICATES_MAX_SHOWN per reason, followed by an ellipsis when more are kept. A reason without a row shows a
+    dash. The reason labels are translated text, so they stay out of the placeholders.
+    """
+    rows = list(rows)
+
+    def _shown(reason: takeover.KeptReason) -> str:
+        entity_ids = sorted(entity_id for entity_id, kept in rows if kept is reason)
+        if not entity_ids:
+            return NONE_SHOWN
+        shown = ", ".join(escape_markdown(entity_id) for entity_id in entity_ids[:KEPT_DUPLICATES_MAX_SHOWN])
+        return f"{shown} …" if len(entity_ids) > KEPT_DUPLICATES_MAX_SHOWN else shown
+
+    return {
+        "count": str(len(rows)),
+        "customized": _shown(takeover.KeptReason.CUSTOMIZED),
+        "rejected": _shown(takeover.KeptReason.TWIN_REJECTED),
+    }
 
 
 class NativeMigration:
@@ -646,6 +676,45 @@ class NativeMigration:
         self._cutover_hint = None
         ir.async_delete_issue(self._manager.hass, DOMAIN, ISSUE_NATIVE_CUTOVER_WAITING)
 
+    @callback
+    def _refresh_kept_duplicates(self) -> None:
+        """
+        Show the core MQTT duplicates the guard keeps enabled in one Repairs warning, or delete it (FIX-08, D-01, D-02).
+
+        The list is read from the registry for every id the guard holds (`takeover.kept_duplicates`): a duplicate the
+        user customized (WR-02) or kept next to a native twin they turned off (WR-03). It is one non-fixable warning
+        per instance with no fix flow; it only reads the registry and never removes, disables or enables a row
+        (CR-01). A changed list deletes the issue first, so an earlier dismissal never hides it (research Pitfall 15);
+        an empty list deletes it. Without an MQTT entry nothing is kept. A failure while building the list leaves the
+        warning as it is until the next evaluation point and logs no entity data (T-04-14).
+        """
+        if not self._manager.running:
+            return
+        rows: list[tuple[str, takeover.KeptReason]] = []
+        try:
+            if (mqtt_entry_id := self._manager.gateway.mqtt_entry_id()) is not None:
+                for device_id in sorted(self._duplicate_guard_ids()):
+                    rows += takeover.kept_duplicates(
+                        self._manager.hass, self._manager.entry.entry_id, device_id, mqtt_entry_id=mqtt_entry_id
+                    )
+        except Exception as err:  # noqa: BLE001
+            # No registry or broker content in the log: this check must never keep the manager from running
+            LOGGER.warning("The check for duplicate entities kept enabled raised an unexpected error")
+            LOGGER.debug("The check for duplicate entities kept enabled failed with %s", type(err).__name__)
+            return
+        ir.async_delete_issue(self._manager.hass, DOMAIN, ISSUE_KEPT_DUPLICATES)
+        if not rows:
+            return
+        ir.async_create_issue(
+            self._manager.hass,
+            DOMAIN,
+            ISSUE_KEPT_DUPLICATES,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=ISSUE_KEPT_DUPLICATES,
+            translation_placeholders=kept_duplicates_placeholders(rows),
+        )
+
     async def async_takeover(self) -> None:
         """
         Move the legacy MQTT entities of pending owned devices and native mirrors here (D-05, D-09, D-12, MIG-01).
@@ -656,7 +725,7 @@ class NativeMigration:
         after the clear. A device whose legacy entities stay loaded is deferred: nothing moves, nothing is cleared, it
         stays pending and runs on the legacy path for this run (T-5-08). Only ids that are owned devices are ever
         published for (T-5-02). A follower publishes nothing. The caller holds the lock; the platforms are not
-        forwarded yet.
+        forwarded yet. Every path ends with the refresh of the warning for duplicates kept enabled (FIX-08, D-04).
         """
         assert self._manager.publisher is not None  # noqa: S101
         owned = sorted(self._manager.native_state.pending & self._manager.devices.keys())
@@ -674,6 +743,8 @@ class NativeMigration:
         if not owned and not mirrors:
             if stale:
                 await self._manager.async_save_now()
+            # The pass is done: the duplicates the guard keeps enabled are listed now, at every start (D-04)
+            self._refresh_kept_duplicates()
             return
         # Published for every pending device, even without a legacy device of our own: another instance's core MQTT
         # may have its entities loaded, and the clear alone would delete their registry entries
@@ -718,6 +789,7 @@ class NativeMigration:
                 # Store so the next start and the next republish retry the clear (WR-02)
                 self._clear_unconfirmed.add(target.device_id)
         await self._manager.async_save_now()
+        self._refresh_kept_duplicates()
 
     async def _async_take_over_one(
         self, target: takeover.TakeoverTarget, mqtt_entry_id: str | None, *, skip: set[str]

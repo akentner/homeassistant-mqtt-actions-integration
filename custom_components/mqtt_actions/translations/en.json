@@ -304,6 +304,10 @@
       "title": "This instance still uses MQTT Discovery",
       "description": "These instances run an older version of MQTT Actions that cannot use native entities yet: {instances}. This instance keeps using MQTT Discovery for its entities until they are updated or go offline, and then switches to native entities on its own. Nothing is lost while it waits: the devices, their names and their areas stay as they are."
     },
+    "kept_duplicates": {
+      "title": "Duplicate MQTT entities stay enabled",
+      "description": "{count} MQTT entities stay enabled next to the native entity of their device.\n\n- Customized by you: {customized}\n- Kept because you disabled or hid the native entity: {rejected}\n\nMQTT Actions never deletes or disables these entities. If you do not need one, disable it under **Settings**, **Devices & services**, **Entities**, but do not delete it: deleting an MQTT entity can make Home Assistant clear a Discovery message that other instances still use. This warning is updated at the next start."
+    },
     "circuit_breaker_tripped": {
       "title": "A device was paused by the circuit breaker",
       "description": "{device} ran its actions more than {max_runs} times within {window} seconds. This usually means an action changes the state of its own device and keeps triggering itself, so MQTT Actions stopped the running actions and paused the device. Changes on the state topic still update the entity, but no actions run until the device is released. To release it, change the settings of the device or reload the integration. Saving the device without changing anything does not release it."

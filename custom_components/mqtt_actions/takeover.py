@@ -456,6 +456,47 @@ def disable_duplicates(hass: HomeAssistant, entry_id: str, device_id: str, *, mq
     return disabled
 
 
+class KeptReason(StrEnum):
+    """Why the guard keeps an enabled core MQTT duplicate: the user customized it, or turned the native twin off."""
+
+    CUSTOMIZED = "customized"
+    TWIN_REJECTED = "twin_rejected"
+
+
+def kept_duplicates(
+    hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str
+) -> list[tuple[str, KeptReason]]:
+    """
+    Return the enabled core MQTT duplicates of a native device that the guard keeps, with their reason (FIX-08, D-01).
+
+    A candidate is what `disable_duplicates` looks at: the switch or select entry of the core MQTT device of the id
+    whose unique id is exactly the id, that is enabled and that has a native twin under this config entry. A twin
+    turned off by the user makes it `TWIN_REJECTED` (WR-03), even when the entry is customized too, because the guard
+    keeps it for that reason alone; otherwise an entry that holds the user's choices is `CUSTOMIZED` (WR-02). Any other
+    candidate is the one the guard disables, so it is not listed. A disabled entry, such as the twin the 09.1 D-03 /
+    09.2 D-03 fail-safe leaves behind, is never a candidate (D-03). Registry read only: nothing is written, removed,
+    disabled, enabled or published.
+    """
+    if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
+        return []
+    entity_registry = er.async_get(hass)
+    kept: list[tuple[str, KeptReason]] = []
+    for entry in _legacy_entries(hass, device, device_id, mqtt_entry_id):
+        if entry.unique_id != device_id or entry.domain not in EXPORT_DOMAINS or entry.disabled_by is not None:
+            continue
+        twin_id = entity_registry.async_get_entity_id(entry.domain, DOMAIN, entry.unique_id)
+        if twin_id is None:
+            continue
+        twin = entity_registry.entities[twin_id]
+        if twin.config_entry_id != entry_id:
+            continue
+        if _is_turned_off(twin):
+            kept.append((entry.entity_id, KeptReason.TWIN_REJECTED))
+        elif _is_customized(entry):
+            kept.append((entry.entity_id, KeptReason.CUSTOMIZED))
+    return kept
+
+
 def has_moved_entities(hass: HomeAssistant, entry: ConfigEntry, device_id: str) -> bool:
     """
     Return whether an entity of the device already sits under this integration in the entity registry.

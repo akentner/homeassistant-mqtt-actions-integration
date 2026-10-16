@@ -187,7 +187,33 @@ Plans:
   4. While customized duplicates are kept enabled (including the WR-03 cases), the user sees one non-fixable Repairs warning that lists them, in English and German; it disappears once none remain, and no registry row is ever removed. (FIX-08)
   5. README and troubleshooting state that a duplicate the user re-enables is disabled again at the next start. (FIX-05)
 
-**Plans**: TBD
+**Plans:** 10 plans
+
+Plans:
+**Wave 1**
+- [ ] 10-01-PLAN.md — Loud pin of the private registry flush API (FIX-01, tracer) and CI/Validate on branch pushes again (folded todo)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 10-02-PLAN.md — Shared test helpers in tests/helpers.py and a guard against imports between test modules (FIX-03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 10-03-PLAN.md — Start-up ordering spy test before the move, and the pre-move mutation survey with pins for survivors (FIX-02 preparation)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 10-04-PLAN.md — Pure move of the migration orchestration into native_migration.py (NativeMigration), proven by AST audit and post-move mutation run (FIX-02)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 10-05-PLAN.md — A row that raises mid-loop in the replay catch leaves no emptied device and keeps the partial count (FIX-06)
+- [ ] 10-06-PLAN.md — The guard test proves the listener ran and returned 0 for a second create event and after a restart (FIX-04)
+- [ ] 10-07-PLAN.md — Loud pins of the eager-task no-clear guarantee on the takeover path and in the replay catch (FIX-07)
+- [ ] 10-08-PLAN.md — README and troubleshooting: a re-enabled duplicate is disabled again at the next start (FIX-05)
+
+**Wave 6** *(blocked on 10-05)*
+- [ ] 10-09-PLAN.md — One non-fixable Repairs warning lists the duplicates kept enabled, en and de, never touching a row (FIX-08 runtime)
+
+**Wave 7** *(blocked on 10-08 and 10-09)*
+- [ ] 10-10-PLAN.md — Hub removal deletes the warning, placeholders pinned, docs describe it (FIX-08 cleanup and docs)
+
 **Notes**:
 - Plan order: the loud registry-API test (FIX-01) and the shared test helpers (FIX-03) first, then the start-up ordering spy test, then the pure move (FIX-02) as a plan of its own. FIX-04 to FIX-08 build on the moved module in separate plans. Never mix the move and a fix in one plan.
 - Pure-move discipline (research ARCHITECTURE and PITFALLS 8, 9): keep `@callback` methods synchronous, grep `patch(` targets after the move, run a mutation check per moved function; the only test edit allowed in the move plan is the `_cancel_replay_catch` access.
@@ -242,7 +268,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | 9. v1.0.1 Release | 5/5 | Complete    | 2026-10-16 |
 | 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
 | 9.2. CR-01 Cross-Instance Gap Closure (INSERTED) | 9/9 | Complete    | 2026-10-16 |
-| 10. Review Findings and Native Migration Extraction | 0/TBD | Not started | - |
+| 10. Review Findings and Native Migration Extraction | 0/10 | Planned | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |
 

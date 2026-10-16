@@ -19,8 +19,14 @@ from custom_components.mqtt_actions.discovery import (
 from custom_components.mqtt_actions.mqtt_gateway import MqttGateway
 from custom_components.mqtt_actions.topics import discovery_topic, discovery_wildcard
 from tests.documents import FOREIGN_OWNER, make_spec
-from tests.test_native_start import _legacy_mirror, _manager, _restart, _seed_native
-from tests.test_takeover import MIGRATE_PAYLOAD, PREFIX
+from tests.helpers import (
+    MIGRATE_PAYLOAD,
+    PREFIX,
+    legacy_mirror,
+    manager_of,
+    restart_entry,
+    seed_native_pending,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -137,7 +143,7 @@ async def _owned(
     make_switch_subentry: Callable,
 ) -> tuple[MockConfigEntry, DeviceSpec]:
     """Set up a native owner of one switch; native, so an empty discovery payload does not start the legacy heal."""
-    _seed_native(hass_storage, pending=[])
+    seed_native_pending(hass_storage, pending=[])
     sub = make_switch_subentry("Lamp")
     entry = make_hub_entry([sub])
     entry.add_to_hass(hass)
@@ -149,7 +155,7 @@ async def _owned(
 async def _mirrored(hass: HomeAssistant, make_hub_entry: Callable) -> tuple[MockConfigEntry, DeviceSpec]:
     """Set up a follower with a mirror of a foreign device."""
     spec = make_spec(name="Foreign lamp")
-    entry, _topic = await _legacy_mirror(hass, make_hub_entry, spec)
+    entry, _topic = await legacy_mirror(hass, make_hub_entry, spec)
     return entry, spec
 
 
@@ -185,7 +191,7 @@ async def test_the_sync_records_the_latest_verdict_for_a_held_id_and_ignores_the
 ) -> None:
     """The latest message wins; the live migrate payload leaves the retained content as it was."""
     entry, spec = await _held(held, hass, hass_storage, make_hub_entry, make_switch_subentry)
-    sync = _manager(entry).sync
+    sync = manager_of(entry).sync
 
     await _send(hass, spec.device_id, _foreign_legacy(spec))
     assert sync.discovery_content(spec.device_id) is DiscoveryContent.LEGACY
@@ -206,7 +212,7 @@ async def test_the_sync_records_nothing_for_an_id_it_does_not_hold_and_reads_unk
 ) -> None:
     """T-09.1-04: only held ids are recorded, and an id without any message seen is UNKNOWN."""
     entry, spec = await _owned(hass, hass_storage, make_hub_entry, make_switch_subentry)
-    sync = _manager(entry).sync
+    sync = manager_of(entry).sync
     stranger = make_spec(name="Stranger")
 
     assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
@@ -225,7 +231,7 @@ async def test_the_sync_forgets_every_verdict_on_a_reconnect(
 ) -> None:
     """After a reconnect the broker replays what is retained; until then nothing is known about the topic."""
     entry, spec = await _owned(hass, hass_storage, make_hub_entry, make_switch_subentry)
-    sync = _manager(entry).sync
+    sync = manager_of(entry).sync
     await _send(hass, spec.device_id, _foreign_legacy(spec))
     assert sync.discovery_content(spec.device_id) is DiscoveryContent.LEGACY
 
@@ -257,7 +263,7 @@ class _Settle:
         monkeypatch.setattr(MqttGateway, "async_on_subscribed", _watch)
 
     def use_clock_of(self, entry: MockConfigEntry) -> None:
-        _manager(entry).clock = lambda: self.now
+        manager_of(entry).clock = lambda: self.now
 
     def settle(self) -> None:
         """Report the most recent watch as done, as core does after the SUBACK."""
@@ -280,7 +286,7 @@ async def test_an_unseen_owned_id_is_empty_only_once_the_grace_after_the_settle_
     """D-03: UNKNOWN before the settle and inside the grace, EMPTY from the end of the grace on."""
     entry, spec = await _owned(hass, hass_storage, make_hub_entry, make_switch_subentry)
     settle.use_clock_of(entry)
-    sync = _manager(entry).sync
+    sync = manager_of(entry).sync
     assert settle.watches == [(discovery_wildcard(PREFIX), 1)]
 
     assert sync.discovery_content(spec.device_id) is DiscoveryContent.UNKNOWN
@@ -308,7 +314,7 @@ async def test_a_recorded_verdict_wins_over_the_settle(
     settle.settle()
     settle.now += 10 * GRACE
 
-    assert _manager(entry).sync.discovery_content(spec.device_id) is DiscoveryContent.LEGACY
+    assert manager_of(entry).sync.discovery_content(spec.device_id) is DiscoveryContent.LEGACY
 
 
 async def test_a_mirror_created_after_the_subscription_stays_unknown_until_a_message_for_it_arrives(
@@ -317,7 +323,7 @@ async def test_a_mirror_created_after_the_subscription_stays_unknown_until_a_mes
     """D-03: the retained message of a mirror created later was dropped, so its unseen topic is never empty."""
     entry, spec = await _mirrored(hass, make_hub_entry)
     settle.use_clock_of(entry)
-    sync = _manager(entry).sync
+    sync = manager_of(entry).sync
     settle.settle()
     settle.now += 10 * GRACE
 
@@ -331,13 +337,13 @@ async def test_a_mirror_held_when_the_subscription_was_made_is_in_scope(
 ) -> None:
     """D-03: after a restart the mirror is held at subscribe time, so its unseen topic is empty after the grace."""
     entry, spec = await _mirrored(hass, make_hub_entry)
-    await _restart(hass, entry)
-    assert spec.device_id in _manager(entry).mirrors
+    await restart_entry(hass, entry)
+    assert spec.device_id in manager_of(entry).mirrors
     settle.use_clock_of(entry)
     settle.settle()
     settle.now += GRACE
 
-    assert _manager(entry).sync.discovery_content(spec.device_id) is DiscoveryContent.EMPTY
+    assert manager_of(entry).sync.discovery_content(spec.device_id) is DiscoveryContent.EMPTY
 
 
 async def test_a_reconnect_makes_every_unseen_id_unknown_until_the_next_settle(
@@ -351,7 +357,7 @@ async def test_a_reconnect_makes_every_unseen_id_unknown_until_the_next_settle(
     """D-03: the reconnect resets the settle; the resubscribe settles again and the grace starts over."""
     entry, spec = await _owned(hass, hass_storage, make_hub_entry, make_switch_subentry)
     settle.use_clock_of(entry)
-    sync = _manager(entry).sync
+    sync = manager_of(entry).sync
     settle.settle()
     settle.now += GRACE
     assert sync.discovery_content(spec.device_id) is DiscoveryContent.EMPTY

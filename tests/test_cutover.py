@@ -35,13 +35,15 @@ from custom_components.mqtt_actions.manager import async_remove_local_state
 from custom_components.mqtt_actions.presence import parse_heartbeat
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, heartbeat_topic
 from tests.documents import document_payload, make_spec
-from tests.test_native_start import _legacy_mirror, _loop_back_discovery, _mqtt_device_of
-from tests.test_takeover import (
+from tests.helpers import (
     CLEAR_PAYLOAD,
     MIGRATE_PAYLOAD,
     PREFIX,
     customize_mqtt_device,
     legacy_entity_ids,
+    legacy_mirror,
+    loop_back_discovery,
+    mqtt_device_of,
     setup_legacy_device,
 )
 
@@ -150,7 +152,7 @@ async def test_a_legacy_install_without_peers_cuts_over_after_the_settle_time(
     assert len(legacy_ids) == 3  # the switch and the two test buttons
     assert _stored_native(hass_storage) is None
     mqtt_mock.async_publish.reset_mock()
-    _loop_back_discovery(hass, mqtt_mock)
+    loop_back_discovery(hass, mqtt_mock)
 
     await _settle(hass)
 
@@ -194,7 +196,7 @@ async def test_the_cutover_reload_keeps_the_customizations_of_the_entities(
     before = entity_registry.async_get("switch.my_lamp")
     assert before is not None
     assert (before.name, before.area_id) == ("Reading lamp", area.id)
-    _loop_back_discovery(hass, mqtt_mock)
+    loop_back_discovery(hass, mqtt_mock)
 
     # The cutover schedules the real reload; nothing is patched, so the takeover runs in the new setup
     await _settle(hass)
@@ -678,13 +680,13 @@ async def test_a_marker_for_a_running_legacy_mirror_flips_it_after_a_reload(
 ) -> None:
     """D-09, D-12, MIG-02: the marker, with the content unchanged or changed, flips the mirror and reloads once."""
     spec = make_spec(name="Foreign lamp")
-    entry, topic = await _legacy_mirror(hass, make_hub_entry, spec)
+    entry, topic = await legacy_mirror(hass, make_hub_entry, spec)
     entity_registry = er.async_get(hass)
     customize_mqtt_device(hass, spec.device_id, area_id="kitchen", name_by_user="Stehlampe")
     legacy_ids = legacy_entity_ids(hass, spec.device_id)
     before = {entity_id: entity_registry.async_get(entity_id) for entity_id in legacy_ids}
     switch_id = entity_registry.async_get_entity_id("switch", "mqtt", spec.device_id)
-    mqtt_device = _mqtt_device_of(hass, spec.device_id)
+    mqtt_device = mqtt_device_of(hass, spec.device_id)
     assert switch_id is not None
     assert mqtt_device is not None
     async_fire_mqtt_message(hass, topic, MIGRATE_PAYLOAD, retain=False)

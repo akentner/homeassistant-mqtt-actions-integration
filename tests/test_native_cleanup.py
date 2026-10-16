@@ -28,13 +28,14 @@ from custom_components.mqtt_actions.const import (
 from custom_components.mqtt_actions.sync import SyncManager
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
-from tests.test_native_start import (
-    _block_discovery_delivery,
-    _legacy_mirror,
-    _loop_back_discovery,
-    _store_the_mirror_as_native,
+from tests.helpers import (
+    MIGRATE_PAYLOAD,
+    PREFIX,
+    block_discovery_delivery,
+    legacy_mirror,
+    loop_back_discovery,
+    store_the_mirror_as_native,
 )
-from tests.test_takeover import MIGRATE_PAYLOAD, PREFIX
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -153,7 +154,7 @@ async def test_the_takeover_clear_is_not_a_foreign_removal(
     subentry = make_switch_subentry("Lamp")
     device_id = _device_id(subentry)
     _seed_native(hass_storage, pending=[device_id])
-    _loop_back_discovery(hass, mqtt_mock)
+    loop_back_discovery(hass, mqtt_mock)
     heard: list[str] = []
     real = SyncManager._on_discovery_message
 
@@ -258,19 +259,19 @@ async def test_a_native_mirror_subscribes_no_test_topic_but_a_deferred_one_does(
 ) -> None:
     """MIG-03: a native mirror has a test button that runs the trigger here; one kept legacy needs the topic."""
     spec = make_spec(name="Foreign lamp", on=ON_ACTIONS)
-    entry, topic = await _legacy_mirror(hass, make_hub_entry, spec)
+    entry, topic = await legacy_mirror(hass, make_hub_entry, spec)
     if migrated:
         # The owner upgraded: its migrate payload unloaded the discovered entities, so the takeover can move them
         async_fire_mqtt_message(hass, topic, MIGRATE_PAYLOAD, retain=False)
         await hass.async_block_till_done(wait_background_tasks=True)
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
-    _store_the_mirror_as_native(hass_storage, spec)
+    store_the_mirror_as_native(hass_storage, spec)
     monkeypatch.setattr(takeover, "TAKEOVER_RETRY_INTERVAL", 0.01)
     if not migrated:
         # A broker that has not delivered the migrate payload: the legacy entities stay loaded and the mirror waits
         monkeypatch.setattr(takeover, "TAKEOVER_UNLOAD_TIMEOUT", 0.05)
-        _block_discovery_delivery(monkeypatch)
+        block_discovery_delivery(monkeypatch)
 
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)

@@ -12,11 +12,11 @@ from custom_components.mqtt_actions import discovery
 from custom_components.mqtt_actions.const import CONF_DISCOVERY_EXPORT, DOMAIN, SUBENTRY_SELECT
 from custom_components.mqtt_actions.topics import discovery_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
+from tests.helpers import legacy_mirror, restart_entry
 from tests.log_helpers import OWN_LOGGER
 from tests.test_discovery_export import CORE_PREFIX, _mqtt_row
 from tests.test_native_entities import BASE, _deliver, _entity_id, _manager, _presence, _publishes, _setup
 from tests.test_native_replay import _quiet_period_passes
-from tests.test_native_start import _legacy_mirror, _restart
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -239,7 +239,7 @@ async def test_a_pass_that_disables_something_logs_one_line_with_a_count_and_not
             assert secret not in line.getMessage()
 
         lines.records.clear()
-        await _restart(hass, entry)
+        await restart_entry(hass, entry)
         assert lines.duplicate_lines() == []
     finally:
         logger.removeHandler(lines)
@@ -275,7 +275,7 @@ async def test_the_rows_of_a_legacy_mirror_are_left_alone(
 ) -> None:
     """G3, T-08-48: an unmarked mirror runs on its core MQTT entities, which are live entities and no duplicates."""
     spec = make_spec(name="Foreign lamp")
-    entry, _topic = await _legacy_mirror(hass, make_hub_entry, spec)
+    entry, _topic = await legacy_mirror(hass, make_hub_entry, spec)
     assert not _manager(entry).is_native(spec.device_id)
     registry = er.async_get(hass)
     before = {row.entity_id: row.disabled_by for row in _mqtt_rows_of_the_device(hass, spec.device_id)}
@@ -418,7 +418,7 @@ async def test_a_second_pass_a_second_create_event_and_a_restart_change_nothing(
     assert calls == [duplicate.entity_id]
 
     # The sweep at the next start finds nothing enabled either
-    await _restart(hass, entry)
+    await restart_entry(hass, entry)
     assert calls == [duplicate.entity_id]
 
 
@@ -471,7 +471,7 @@ async def test_the_export_off_cycle_removes_the_disabled_row_at_the_next_start(
 
     # The next start finds the topic settled empty and removes the disabled row; nothing clears the topic
     published = len(mqtt_mock.async_publish.call_args_list)
-    await _restart(hass, entry)
+    await restart_entry(hass, entry)
     await _quiet_period_passes(hass)
     assert _mqtt_rows(hass, spec.device_id) == []
     clears = [call for call in mqtt_mock.async_publish.call_args_list[published:] if call.args[0] == topic]
@@ -504,7 +504,7 @@ async def test_a_row_a_foreign_export_created_disabled_survives_the_restart_and_
     topic, _payload = _foreign_export(spec)
     published = len(mqtt_mock.async_publish.call_args_list)
 
-    await _restart(hass, entry)
+    await restart_entry(hass, entry)
     # The broker hands the retained export to the new subscriptions (the mocked client keeps no retained store)
     await _receive_foreign_export(hass, spec)
     await _quiet_period_passes(hass)

@@ -25,8 +25,10 @@ from custom_components.mqtt_actions.manager import Manager
 from custom_components.mqtt_actions.presence import MAX_HEARTBEAT_KEPT_DEVICES, Heartbeat, Roster, parse_heartbeat
 from custom_components.mqtt_actions.takeover import PeerKeep
 from custom_components.mqtt_actions.topics import availability_topic, heartbeat_topic
+from tests.helpers import (
+    seed_native_pending,
+)
 from tests.log_helpers import OWN_LOGGER, own_warnings
-from tests.test_native_start import _seed_native
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -85,7 +87,7 @@ async def test_heartbeat_is_published_non_retained_with_qos_0(
     instance is native, so no legacy discovery creates a legacy MQTT device (a legacy instance lists its devices as
     soon as core created their legacy device, which races the first heartbeat on the mocked broker).
     """
-    _seed_native(hass_storage, pending=[])
+    seed_native_pending(hass_storage, pending=[])
     sub = make_switch_subentry("Lamp", on=[{"action": "test.on"}])
     entry = await _setup(hass, make_hub_entry([sub]))
     instance_id = entry.data[CONF_INSTANCE_ID]

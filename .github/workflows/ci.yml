@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: ["**"]
     # A version tag runs these checks once, through release.yml
     tags-ignore:
       - "v*.*.*"

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.222" timestamp="2026-10-16T14:21:18.117682+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_core_contracts" name="test_the_registry_flush_writes_both_registries_ahead_of_the_scheduled_save" time="0.137"><failure message="AssertionError: Home Assistant changed the private registry flush API (registry._store / registry._data_to_save): takeover.async_flush_registries no longer writes ahead of the schedule. The documented fallback is the scheduled registry save about 10 s later (see the docstring of takeover.async_flush_registries); update the flush or accept the fallback and change this pin on purpose.&#10;assert False is True">hass = &lt;HomeAssistant RUNNING&gt;, hass_storage = {}
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f10187c0c00&gt;
+
+    async def test_the_registry_flush_writes_both_registries_ahead_of_the_scheduled_save(
+        hass: HomeAssistant, hass_storage: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -&gt; None:
+        """D-06: the flush puts a new row of both registries on disk at once, without waiting for the scheduled save."""
+        _restore_real_registry_saves(monkeypatch)
+        entity_id, device_id = _create_rows(hass)
+        assert entity_id not in _stored_entity_ids(hass_storage), "premise: the entity row is not on disk yet"
+        assert device_id not in _stored_device_ids(hass_storage), "premise: the device row is not on disk yet"
+    
+&gt;       assert await takeover.async_flush_registries(hass) is True, FLUSH_FALLBACK_HINT
+E       AssertionError: Home Assistant changed the private registry flush API (registry._store / registry._data_to_save): takeover.async_flush_registries no longer writes ahead of the schedule. The documented fallback is the scheduled registry save about 10 s later (see the docstring of takeover.async_flush_registries); update the flush or accept the fallback and change this pin on purpose.
+E       assert False is True
+
+tests/test_core_contracts.py:85: AssertionError</failure></testcase></testsuite></testsuites>

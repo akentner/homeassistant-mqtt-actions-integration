@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="4" time="0.371" timestamp="2026-10-16T14:22:14.445219+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_repo_structure" name="test_push_trigger_runs_branch_pushes_and_skips_version_tags[validate.yml]" time="0.128"><failure message="AssertionError: validate.yml never runs for a branch push&#10;assert None == ['**']&#10; +  where None = &lt;built-in method get of dict object at 0x7fd384130c80&gt;('branches')&#10; +    where &lt;built-in method get of dict object at 0x7fd384130c80&gt; = {'tags-ignore': ['v*.*.*']}.get">filename = 'validate.yml'
+
+    @workflow_files
+    def test_push_trigger_runs_branch_pushes_and_skips_version_tags(filename: str) -&gt; None:
+        """
+        Contract changed on purpose by Phase 10 (todo 2026-10-12-ci-push-trigger-branches): branch pushes run CI again.
+    
+        A push filter with only tags-ignore never runs for a branch push, so ci.yml and validate.yml name every branch
+        next to the version-tag exclusion; release.yml stays on version tags only.
+        """
+        triggers = _triggers(_load_workflow(filename))
+        assert "push" in triggers
+        push = triggers["push"] or {}
+        assert "branches-ignore" not in push
+        if filename == "release.yml":
+            assert "branches" not in push
+            assert "v*.*.*" in push["tags"]
+        else:
+&gt;           assert push.get("branches") == ["**"], f"{filename} never runs for a branch push"
+E           AssertionError: validate.yml never runs for a branch push
+E           assert None == ['**']
+E            +  where None = &lt;built-in method get of dict object at 0x7fd384130c80&gt;('branches')
+E            +    where &lt;built-in method get of dict object at 0x7fd384130c80&gt; = {'tags-ignore': ['v*.*.*']}.get
+
+tests/test_repo_structure.py:275: AssertionError</failure></testcase><testcase classname="tests.test_repo_structure" name="test_push_trigger_runs_branch_pushes_and_skips_version_tags[ci.yml]" time="0.021"><failure message="AssertionError: ci.yml never runs for a branch push&#10;assert None == ['**']&#10; +  where None = &lt;built-in method get of dict object at 0x7fd3842c7a40&gt;('branches')&#10; +    where &lt;built-in method get of dict object at 0x7fd3842c7a40&gt; = {'tags-ignore': ['v*.*.*']}.get">filename = 'ci.yml'
+
+    @workflow_files
+    def test_push_trigger_runs_branch_pushes_and_skips_version_tags(filename: str) -&gt; None:
+        """
+        Contract changed on purpose by Phase 10 (todo 2026-10-12-ci-push-trigger-branches): branch pushes run CI again.
+    
+        A push filter with only tags-ignore never runs for a branch push, so ci.yml and validate.yml name every branch
+        next to the version-tag exclusion; release.yml stays on version tags only.
+        """
+        triggers = _triggers(_load_workflow(filename))
+        assert "push" in triggers
+        push = triggers["push"] or {}
+        assert "branches-ignore" not in push
+        if filename == "release.yml":
+            assert "branches" not in push
+            assert "v*.*.*" in push["tags"]
+        else:
+&gt;           assert push.get("branches") == ["**"], f"{filename} never runs for a branch push"
+E           AssertionError: ci.yml never runs for a branch push
+E           assert None == ['**']
+E            +  where None = &lt;built-in method get of dict object at 0x7fd3842c7a40&gt;('branches')
+E            +    where &lt;built-in method get of dict object at 0x7fd3842c7a40&gt; = {'tags-ignore': ['v*.*.*']}.get
+
+tests/test_repo_structure.py:275: AssertionError</failure></testcase><testcase classname="tests.test_repo_structure" name="test_push_trigger_runs_branch_pushes_and_skips_version_tags[release.yml]" time="0.018" /><testcase classname="tests.test_repo_structure" name="test_ci_and_validate_are_reusable_and_skip_tag_pushes" time="0.021"><failure message="AssertionError: ci.yml never runs for a branch push&#10;assert None == ['**']&#10; +  where None = &lt;built-in method get of dict object at 0x7fd3842b4280&gt;('branches')&#10; +    where &lt;built-in method get of dict object at 0x7fd3842b4280&gt; = {'tags-ignore': ['v*.*.*']}.get">def test_ci_and_validate_are_reusable_and_skip_tag_pushes() -&gt; None:
+        """
+        Contract changed on purpose by Phase 10 (todo 2026-10-12-ci-push-trigger-branches): branch pushes run CI again.
+    
+        A push filter with only tags-ignore never runs for a branch push, so both workflows declare branches ["**"]; a
+        version tag still runs them once, through release.yml.
+        """
+        for filename in ("ci.yml", "validate.yml"):
+            triggers = _triggers(_load_workflow(filename))
+            assert "workflow_call" in triggers, f"{filename} is not reusable"
+            push = triggers["push"] or {}
+            assert "v*.*.*" in push.get("tags-ignore", []), f"{filename} runs a second time on a version tag"
+&gt;           assert push.get("branches") == ["**"], f"{filename} never runs for a branch push"
+E           AssertionError: ci.yml never runs for a branch push
+E           assert None == ['**']
+E            +  where None = &lt;built-in method get of dict object at 0x7fd3842b4280&gt;('branches')
+E            +    where &lt;built-in method get of dict object at 0x7fd3842b4280&gt; = {'tags-ignore': ['v*.*.*']}.get
+
+tests/test_repo_structure.py:421: AssertionError</failure></testcase></testsuite></testsuites>

@@ -105,8 +105,14 @@ instance has the export switched on itself. When the export is switched off agai
 entity list until Home Assistant is restarted, and the next start removes them. A duplicate that you enable again
 yourself is disabled again at the next start of MQTT Actions, for example after a restart or a reload of the
 integration, unless you customized it, for example gave it a name or an area, or turned the native entity off: MQTT
-Actions then keeps that duplicate enabled. If you still find an enabled duplicate, disable it in **Settings**,
-**Devices & services**, **Entities**, or switch the export back to the default prefix.
+Actions then keeps that duplicate enabled. MQTT Actions lists every duplicate it keeps enabled in one Repairs warning
+(`kept_duplicates`), with the entity ids grouped by reason: customized by you, or kept because you turned the native
+entity off. It never deletes or disables them. If you do not need one, disable it instead of deleting it: deleting an
+MQTT entity can make Home Assistant clear a Discovery message that other instances still use. The warning goes away at
+the next start once none is left. If you dismiss it, it stays dismissed while its list does not change, but it shows
+again when the list changes, and it comes back after a Home Assistant restart while duplicates remain, because Home
+Assistant does not keep the text of this warning across a restart. If you still find an enabled duplicate, disable it in
+**Settings**, **Devices & services**, **Entities**, or switch the export back to the default prefix.
 
 ## Select devices
 

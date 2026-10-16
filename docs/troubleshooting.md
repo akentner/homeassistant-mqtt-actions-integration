@@ -113,8 +113,15 @@ instance publishes the export. An enabled duplicate that you still see therefore
 to a device that the instance does not hold natively. A duplicate that you enable again yourself is
 disabled again at the next start of MQTT Actions, for example after a restart or a reload of the integration, unless you
 customized it, for example gave it a name or an area, or turned the native entity off: MQTT Actions then keeps that
-duplicate enabled. When the export is switched off again, the disabled duplicates stay in the entity list until Home
-Assistant is restarted, and the next start removes them. When old MQTT Discovery
+duplicate enabled. MQTT Actions lists every duplicate it keeps enabled in one Repairs warning (`kept_duplicates`), with
+the entity ids grouped by reason: customized by you, or kept because you turned the native entity off. It never deletes
+or disables them. If you do not need one, disable it instead of deleting it: deleting an MQTT entity can make Home
+Assistant clear a Discovery message that other instances still use. The warning goes away at the next start once none is
+left. If you dismiss it, it stays dismissed while its list does not change, but it shows again when the list changes,
+and it comes back after a Home Assistant restart while duplicates remain, because Home Assistant does not keep the text
+of this warning across a restart. Duplicates that MQTT Actions disabled itself are not listed: they do not run anything
+and are removed at a later start, as described below. When the export is switched off again, the disabled duplicates
+stay in the entity list until Home Assistant is restarted, and the next start removes them. When old MQTT Discovery
 messages of a device are still retained on the broker, only the instance that owns the device lets them go: at its next
 start it removes its disabled duplicates of that device and clears the old messages, unless a renamed or otherwise
 customized MQTT entity of that device is still enabled on this or on any other instance that is online. Every instance

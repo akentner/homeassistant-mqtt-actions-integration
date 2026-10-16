@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 10
 current_phase_name: Review Findings and Native Migration Extraction
 status: executing
-stopped_at: Completed 10-08-PLAN.md
-last_updated: "2026-10-16T14:12:19.451Z"
+stopped_at: Completed 10-09-PLAN.md
+last_updated: "2026-10-16T14:32:06.762Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 10 execution started
-state_head: 9739f6399270ddf37cca510d5c8080b1fbc4dce5
+state_head: a2283743d6741947b9b912b06a625d01c0021cce
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 36
-  completed_plans: 34
+  completed_plans: 35
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 10 (Review Findings and Native Migration Extraction) — EXECUTING
-Plan: 9 of 10
+Plan: 10 of 10
 Status: Ready to execute
 Last activity: 2026-10-16 — Phase 10 execution started
 
@@ -148,6 +148,7 @@ Progress: [█████░░░░░] 50%
 | Phase 10 P06 | 5 min | 2 tasks | 1 files |
 | Phase 10 P07 | 5 min | 2 tasks | 5 files |
 | Phase 10 P08 | 5 min | 2 tasks | 3 files |
+| Phase 10 P09 | 17 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -318,6 +319,9 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-06: FIX-04 pins the duplicate guard with a spy on the module seam takeover.disable_duplicates (records device id and result): a second create event must record exactly [(device_id, 0)], the restart sweep at least one (device_id, 0) and only 0 results; proven against a listener-skip mutant and a sweep-removed mutant
 - [Phase 10]: 10-07: FIX-07 pins record the DiscoveryContent passed to takeover.remove_replay_twins (UNKNOWN = takeover path, a read content = catch), because NativeMigration always passes content= since 10-04
 - [Phase 10]: 10-08: FIX-05 docs say a re-enabled duplicate is disabled again at the next start (restart or reload), except a customized row or a turned-off native entity; advice stays disable, never delete
+- [Phase 10]: 10-09: FIX-08 shows one non-fixable Repairs warning kept_duplicates per instance. It lists the enabled core MQTT duplicates the guard keeps (customized, or next to a native twin the user turned off), escaped and capped at 10 per reason. It never touches a registry row
+- [Phase 10]: 10-09: the refresh leaves an active issue with equal placeholders alone, so a dismissal holds. A changed list or an issue restored inactive is deleted and created again, and an empty list deletes it. A dismissed warning comes back once after a Home Assistant restart while duplicates remain
+- [Phase 10]: 10-09: disable_duplicates and kept_duplicates iterate the shared takeover._guard_candidates. The warning is refreshed after the takeover pass, after each guard pass and after each replay catch run, with no new listener (D-04)
 
 ### Pending Todos
 
@@ -352,8 +356,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T14:12:19.234Z
-Stopped at: Completed 10-08-PLAN.md
+Last session: 2026-10-16T14:31:54.083Z
+Stopped at: Completed 10-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

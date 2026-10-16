@@ -187,7 +187,7 @@ Plans:
   4. While customized duplicates are kept enabled (including the WR-03 cases), the user sees one non-fixable Repairs warning that lists them, in English and German; it disappears once none remain, and no registry row is ever removed. (FIX-08)
   5. README and troubleshooting state that a duplicate the user re-enables is disabled again at the next start. (FIX-05)
 
-**Plans:** 8/10 plans executed
+**Plans:** 9/10 plans executed
 
 Plans:
 **Wave 1**
@@ -209,7 +209,7 @@ Plans:
 - [x] 10-08-PLAN.md — README and troubleshooting: a re-enabled duplicate is disabled again at the next start (FIX-05)
 
 **Wave 6** *(blocked on 10-05)*
-- [ ] 10-09-PLAN.md — One non-fixable Repairs warning lists the duplicates kept enabled, en and de, never touching a row (FIX-08 runtime)
+- [x] 10-09-PLAN.md — One non-fixable Repairs warning lists the duplicates kept enabled, en and de, never touching a row (FIX-08 runtime)
 
 **Wave 7** *(blocked on 10-08 and 10-09)*
 - [ ] 10-10-PLAN.md — Hub removal deletes the warning, placeholders pinned, docs describe it (FIX-08 cleanup and docs)
@@ -268,7 +268,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | 9. v1.0.1 Release | 5/5 | Complete    | 2026-10-16 |
 | 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
 | 9.2. CR-01 Cross-Instance Gap Closure (INSERTED) | 9/9 | Complete    | 2026-10-16 |
-| 10. Review Findings and Native Migration Extraction | 8/10 | In Progress | - |
+| 10. Review Findings and Native Migration Extraction | 9/10 | In Progress | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |
 

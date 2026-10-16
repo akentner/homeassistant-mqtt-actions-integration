@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 10
 current_phase_name: Review Findings and Native Migration Extraction
 status: executing
-stopped_at: Completed 10-05-PLAN.md
-last_updated: "2026-10-16T13:50:29.836Z"
+stopped_at: Completed 10-06-PLAN.md
+last_updated: "2026-10-16T13:57:53.882Z"
 last_activity: 2026-10-16
 last_activity_desc: Phase 10 execution started
-state_head: b9a05caef3454be3649f0c33180be10ec1a9477c
+state_head: fc235d1e2acbf7f5d6bf6e2b28998581a090df32
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 36
-  completed_plans: 31
+  completed_plans: 32
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 ## Current Position
 
 Phase: 10 (Review Findings and Native Migration Extraction) — EXECUTING
-Plan: 6 of 10
+Plan: 7 of 10
 Status: Ready to execute
 Last activity: 2026-10-16 — Phase 10 execution started
 
@@ -145,6 +145,7 @@ Progress: [█████░░░░░] 50%
 | Phase 10 P03 | 19 min | 2 tasks | 1 files |
 | Phase 10 P04 | 34 min | 3 tasks | 5 files |
 | Phase 10 P05 | 7 min | 2 tasks | 4 files |
+| Phase 10 P06 | 5 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -312,6 +313,7 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-04: NativeMigration (native_migration.py) owns cutover, takeover pass, replay catch, duplicate guard and per-run sets; Manager reaches it only via self.migration and gives it public accessors (native_state, publisher, async_save_now, schedule_save, test_message_handler)
 - [Phase 10]: 10-04: glue survivors defer_for_run and forget are pre-existing test gaps (same mutant survives at dbfbf81); pins deferred to a later plan (D-10), WINDOWS ids 1-2
 - [Phase 10]: 10-05: remove_replay_twins finishes the emptied-device cleanup and count line, then raises ReplayTwinsError(removed) from the failing row error; the replay catch flushes on TwinRemoval(removed, errored) (FIX-06)
+- [Phase 10]: 10-06: FIX-04 pins the duplicate guard with a spy on the module seam takeover.disable_duplicates (records device id and result): a second create event must record exactly [(device_id, 0)], the restart sweep at least one (device_id, 0) and only 0 results; proven against a listener-skip mutant and a sweep-removed mutant
 
 ### Pending Todos
 
@@ -346,8 +348,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T13:50:29.618Z
-Stopped at: Completed 10-05-PLAN.md
+Last session: 2026-10-16T13:57:53.648Z
+Stopped at: Completed 10-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

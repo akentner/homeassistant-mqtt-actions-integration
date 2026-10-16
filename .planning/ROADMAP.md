@@ -187,7 +187,7 @@ Plans:
   4. While customized duplicates are kept enabled (including the WR-03 cases), the user sees one non-fixable Repairs warning that lists them, in English and German; it disappears once none remain, and no registry row is ever removed. (FIX-08)
   5. README and troubleshooting state that a duplicate the user re-enables is disabled again at the next start. (FIX-05)
 
-**Plans:** 5/10 plans executed
+**Plans:** 6/10 plans executed
 
 Plans:
 **Wave 1**
@@ -204,7 +204,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [x] 10-05-PLAN.md — A row that raises mid-loop in the replay catch leaves no emptied device and keeps the partial count (FIX-06)
-- [ ] 10-06-PLAN.md — The guard test proves the listener ran and returned 0 for a second create event and after a restart (FIX-04)
+- [x] 10-06-PLAN.md — The guard test proves the listener ran and returned 0 for a second create event and after a restart (FIX-04)
 - [ ] 10-07-PLAN.md — Loud pins of the eager-task no-clear guarantee on the takeover path and in the replay catch (FIX-07)
 - [ ] 10-08-PLAN.md — README and troubleshooting: a re-enabled duplicate is disabled again at the next start (FIX-05)
 
@@ -268,7 +268,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | 9. v1.0.1 Release | 5/5 | Complete    | 2026-10-16 |
 | 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
 | 9.2. CR-01 Cross-Instance Gap Closure (INSERTED) | 9/9 | Complete    | 2026-10-16 |
-| 10. Review Findings and Native Migration Extraction | 5/10 | In Progress | - |
+| 10. Review Findings and Native Migration Extraction | 6/10 | In Progress | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |
 

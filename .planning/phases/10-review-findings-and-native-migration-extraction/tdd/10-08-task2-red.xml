@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.248" timestamp="2026-10-16T16:08:17.819009+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_docs" name="test_troubleshooting_says_a_re_enabled_duplicate_is_disabled_again_at_the_next_start" time="0.102"><failure message="AssertionError: the enabled-duplicate section never says: disabled again at the next start&#10;assert 'disabled again at the next start' in ' a device shows a second switch or select with the suffix _2 that is **enabled**, next to the native entity. this can...ntities**, or set the export prefix back to the default mqtt_actions_export, which home assistant does not listen to. '">def test_troubleshooting_says_a_re_enabled_duplicate_is_disabled_again_at_the_next_start() -&gt; None:
+        """FIX-05: the enabled-duplicate section says the same as the README, next to its advice to disable by hand."""
+        section = _section(_page(TROUBLESHOOTING), "an enabled duplicate after the export prefix")
+        duplicate = _normalize(section).replace("`", "")
+        for phrase in ("disabled again at the next start", "unless you customized it", "turned the native entity off"):
+&gt;           assert phrase in duplicate, f"the enabled-duplicate section never says: {phrase}"
+E           AssertionError: the enabled-duplicate section never says: disabled again at the next start
+E           assert 'disabled again at the next start' in ' a device shows a second switch or select with the suffix _2 that is **enabled**, next to the native entity. this can...ntities**, or set the export prefix back to the default mqtt_actions_export, which home assistant does not listen to. '
+
+tests/test_docs.py:467: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.270" timestamp="2026-10-16T16:07:13.023481+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_docs" name="test_the_readme_says_a_re_enabled_duplicate_is_disabled_again_at_the_next_start" time="0.119"><failure message="AssertionError: the export section never says: disabled again at the next start&#10;assert 'disabled again at the next start' in ' the mqtt discovery export is optional and off by default. home assistant needs no discovery for the devices of this ...e, disable it in **settings**, **devices &amp; services**, **entities**, or switch the export back to the default prefix. '">def test_the_readme_says_a_re_enabled_duplicate_is_disabled_again_at_the_next_start() -&gt; None:
+        """
+        FIX-05 (review 1 IN-01): the export section says that enabling a duplicate is undone at the next start.
+    
+        The start-up sweep of the duplicate guard disables the duplicate again, except a customized row or one whose native
+        entity is turned off (WR-02, WR-03), so the README names both exceptions.
+        """
+        export = _normalize(_section(README.read_text(encoding="utf-8"), "mqtt discovery export")).replace("`", "")
+        for phrase in ("disabled again at the next start", "unless you customized it", "turned the native entity off"):
+&gt;           assert phrase in export, f"the export section never says: {phrase}"
+E           AssertionError: the export section never says: disabled again at the next start
+E           assert 'disabled again at the next start' in ' the mqtt discovery export is optional and off by default. home assistant needs no discovery for the devices of this ...e, disable it in **settings**, **devices &amp; services**, **entities**, or switch the export back to the default prefix. '
+
+tests/test_docs.py:459: AssertionError</failure></testcase></testsuite></testsuites>

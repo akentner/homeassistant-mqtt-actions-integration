@@ -187,11 +187,11 @@ Plans:
   4. While customized duplicates are kept enabled (including the WR-03 cases), the user sees one non-fixable Repairs warning that lists them, in English and German; it disappears once none remain, and no registry row is ever removed. (FIX-08)
   5. README and troubleshooting state that a duplicate the user re-enables is disabled again at the next start. (FIX-05)
 
-**Plans:** 10 plans
+**Plans:** 1/10 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 10-01-PLAN.md — Loud pin of the private registry flush API (FIX-01, tracer) and CI/Validate on branch pushes again (folded todo)
+- [x] 10-01-PLAN.md — Loud pin of the private registry flush API (FIX-01, tracer) and CI/Validate on branch pushes again (folded todo)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 10-02-PLAN.md — Shared test helpers in tests/helpers.py and a guard against imports between test modules (FIX-03)
@@ -268,7 +268,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | 9. v1.0.1 Release | 5/5 | Complete    | 2026-10-16 |
 | 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
 | 9.2. CR-01 Cross-Instance Gap Closure (INSERTED) | 9/9 | Complete    | 2026-10-16 |
-| 10. Review Findings and Native Migration Extraction | 0/10 | Planned | - |
+| 10. Review Findings and Native Migration Extraction | 1/10 | In Progress | - |
 | 11. Local Actions on Mirrors | 0/TBD | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |
 

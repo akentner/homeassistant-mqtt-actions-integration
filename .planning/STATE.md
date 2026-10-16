@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 10
 current_phase_name: Review Findings and Native Migration Extraction
 status: executing
-stopped_at: Phase 10 context gathered
-last_updated: "2026-10-16T11:40:42.325Z"
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-10-16T12:26:34.514Z"
 last_activity: 2026-10-16
-last_activity_desc: Phase 09.2 complete, transitioned to Phase 10
-state_head: 6263692c7fb1369154445a2e9b7a8b93757117bc
+last_activity_desc: Phase 10 execution started
+state_head: 6005aaf1d621bb13cda2c90f4d2cc2bdbbe45981
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 36
-  completed_plans: 26
+  completed_plans: 27
   percent: 50
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-11)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 9 — v1.0.1 Release
+**Current focus:** Phase 10 — Review Findings and Native Migration Extraction
 
 ## Current Position
 
-Phase: 10 (Review Findings and Native Migration Extraction) — READY TO EXECUTE
-Plan: Not started
+Phase: 10 (Review Findings and Native Migration Extraction) — EXECUTING
+Plan: 2 of 10
 Status: Ready to execute
-Last activity: 2026-10-16 — Phase 09.2 complete, transitioned to Phase 10
+Last activity: 2026-10-16 — Phase 10 execution started
 
 Progress: [█████░░░░░] 50%
 
@@ -140,6 +140,7 @@ Progress: [█████░░░░░] 50%
 | Phase 09.2 P09 | 9min | 2 tasks | 6 files |
 | Phase 09 P04 | 22min | 3 tasks | 3 files |
 | Phase 09 P05 | 5min | 2 tasks | 12 files |
+| Phase 10 P01 | 8 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -299,6 +300,8 @@ Recent decisions affecting current work:
 - [Phase 09]: Phase 9-04: v1.0.1 lightweight tag on FIX 3dc9093 pushed by the owner; owner chose push-tag-claude-notes (Claude applies release notes in 09-05)
 - [Phase 09]: Phase 9-04: REL-01 stays pending until 09-05 verifies release workflow, hassfest and HACS green
 - [Phase 09]: v1.0.1 released 2026-10-15 on tag v1.0.1 -> 3dc9093 (release run 38824818079 green in all 8 jobs, Latest, hand-written notes applied by Claude); ACCEPTED-GAP-V101 closed for v1.0.1 only, full re-verification stays Phase 12
+- [Phase 10]: 10-01: the behavioral flush pin restores the real Store.async_save on PHACC StoreWithoutWriteLoad (harness stub only); core registry objects stay untouched
+- [Phase 10]: 10-01: core-internals pins live in tests/test_core_contracts.py, never skipped/xfail, no marker (D-08); ci.yml and validate.yml run on branches ["**"]
 
 ### Pending Todos
 
@@ -333,9 +336,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T10:46:41.058Z
-Stopped at: Phase 10 context gathered
-Resume file: .planning/phases/10-review-findings-and-native-migration-extraction/10-CONTEXT.md
+Last session: 2026-10-16T12:26:34.384Z
+Stopped at: Completed 10-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

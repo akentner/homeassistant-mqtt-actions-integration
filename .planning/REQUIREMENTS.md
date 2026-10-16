@@ -15,7 +15,7 @@ Order is fixed by the owner: release v1.0.1 first, then the review findings, the
 
 ### Review Findings (Phase 8 info findings)
 
-- [ ] **FIX-01**: A test fails loudly if the private registry API used for the immediate flush (`registry._store`, `registry._data_to_save`) disappears or stops writing (review 1 IN-04)
+- [x] **FIX-01**: A test fails loudly if the private registry API used for the immediate flush (`registry._store`, `registry._data_to_save`) disappears or stops writing (review 1 IN-04)
 - [ ] **FIX-02**: The takeover, replay-catch and duplicate-guard orchestration lives in its own module outside `manager.py`, with unchanged behavior proven by the existing suite and a start-up ordering test (review 1 IN-04)
 - [ ] **FIX-03**: Shared test helpers live in one module; no test module imports private helpers from another test module (review 1 IN-02)
 - [ ] **FIX-04**: The guard test proves that the listener runs for a second create event and returns 0, not only that the registry restores the state (review 1 IN-03)
@@ -78,7 +78,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | REL-01 | Phase 9 | Complete |
-| FIX-01 | Phase 10 | Pending |
+| FIX-01 | Phase 10 | Complete |
 | FIX-02 | Phase 10 | Pending |
 | FIX-03 | Phase 10 | Pending |
 | FIX-04 | Phase 10 | Pending |

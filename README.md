@@ -102,8 +102,11 @@ replay of old Discovery messages created and the integration removed again. MQTT
 itself as soon as Home Assistant creates it, on every instance that holds the device natively: on the instance that
 exports it and on every instance that only follows it, whichever instance publishes the export and whether or not that
 instance has the export switched on itself. When the export is switched off again, the disabled duplicates stay in the
-entity list until Home Assistant is restarted, and the next start removes them. If you still find an enabled duplicate,
-disable it in **Settings**, **Devices & services**, **Entities**, or switch the export back to the default prefix.
+entity list until Home Assistant is restarted, and the next start removes them. A duplicate that you enable again
+yourself is disabled again at the next start of MQTT Actions, for example after a restart or a reload of the
+integration, unless you customized it, for example gave it a name or an area, or turned the native entity off: MQTT
+Actions then keeps that duplicate enabled. If you still find an enabled duplicate, disable it in **Settings**,
+**Devices & services**, **Entities**, or switch the export back to the default prefix.
 
 ## Select devices
 

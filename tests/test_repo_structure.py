@@ -257,12 +257,23 @@ def test_hacs_action_has_category_and_no_ignore() -> None:
 
 
 @workflow_files
-def test_push_trigger_has_no_branch_filter(filename: str) -> None:
-    workflow = _load_workflow(filename)
-    triggers = _triggers(workflow)
+def test_push_trigger_runs_branch_pushes_and_skips_version_tags(filename: str) -> None:
+    """
+    Contract changed on purpose by Phase 10 (todo 2026-10-12-ci-push-trigger-branches): branch pushes run CI again.
+
+    A push filter with only tags-ignore never runs for a branch push, so ci.yml and validate.yml name every branch
+    next to the version-tag exclusion; release.yml stays on version tags only.
+    """
+    triggers = _triggers(_load_workflow(filename))
     assert "push" in triggers
-    assert "branches" not in (triggers["push"] or {})
-    assert "branches-ignore" not in (triggers["push"] or {})
+    push = triggers["push"] or {}
+    assert "branches-ignore" not in push
+    if filename == "release.yml":
+        assert "branches" not in push
+        assert "v*.*.*" in push["tags"]
+    else:
+        assert push.get("branches") == ["**"], f"{filename} never runs for a branch push"
+        assert "v*.*.*" in push.get("tags-ignore", []), f"{filename} runs a second time on a version tag"
 
 
 def test_ci_runs_locked_sync_lint_format_and_pytest() -> None:
@@ -396,12 +407,18 @@ def _all_jobs() -> list[tuple[str, str, dict[str, Any]]]:
 
 
 def test_ci_and_validate_are_reusable_and_skip_tag_pushes() -> None:
+    """
+    Contract changed on purpose by Phase 10 (todo 2026-10-12-ci-push-trigger-branches): branch pushes run CI again.
+
+    A push filter with only tags-ignore never runs for a branch push, so both workflows declare branches ["**"]; a
+    version tag still runs them once, through release.yml.
+    """
     for filename in ("ci.yml", "validate.yml"):
         triggers = _triggers(_load_workflow(filename))
         assert "workflow_call" in triggers, f"{filename} is not reusable"
         push = triggers["push"] or {}
         assert "v*.*.*" in push.get("tags-ignore", []), f"{filename} runs a second time on a version tag"
-        assert "branches" not in push
+        assert push.get("branches") == ["**"], f"{filename} never runs for a branch push"
         assert "branches-ignore" not in push
 
 

@@ -1366,6 +1366,101 @@ async def test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_
     assert discovery_clears(mqtt_mock, topic) == []
 
 
+def _fail_a_replayed_removal(
+    monkeypatch: pytest.MonkeyPatch, replayed: list[str], nth: int, *, after_the_removal: bool
+) -> None:
+    """Make the nth registry removal of a replayed row raise, after or before the real removal ran (FIX-06)."""
+    real_remove = er.EntityRegistry.async_remove
+    calls = 0
+
+    @callback
+    def async_remove(self: er.EntityRegistry, entity_id: str) -> None:
+        nonlocal calls
+        if entity_id in replayed:
+            calls += 1
+            if calls == nth:
+                if after_the_removal:
+                    real_remove(self, entity_id)
+                msg = "injected"
+                raise RuntimeError(msg)
+        real_remove(self, entity_id)
+
+    monkeypatch.setattr(er.EntityRegistry, "async_remove", async_remove)
+
+
+def _count_flushes(monkeypatch: pytest.MonkeyPatch) -> list[None]:
+    """Count the awaits of the registry flush; the real flush still runs."""
+    real_flush = takeover.async_flush_registries
+    awaited: list[None] = []
+
+    async def counting_flush(hass: HomeAssistant) -> bool:
+        awaited.append(None)
+        return await real_flush(hass)
+
+    monkeypatch.setattr(takeover, "async_flush_registries", counting_flush)
+    return awaited
+
+
+def _own_records(caplog: pytest.LogCaptureFixture, level: int, message: str) -> list[logging.LogRecord]:
+    return [
+        record
+        for record in caplog.records
+        if record.name.startswith(OWN_LOGGER) and record.levelno == level and record.getMessage() == message
+    ]
+
+
+def _assert_no_entity_data_logged(caplog: pytest.LogCaptureFixture, replayed: list[str]) -> None:
+    """T-04-14: counts and type names only; neither an entity id nor the registry's error message is logged."""
+    for record in caplog.records:
+        text = record.getMessage()
+        assert "injected" not in text
+        if record.name.startswith(OWN_LOGGER):
+            assert not any(entity_id in text for entity_id in replayed)
+
+
+async def test_a_row_that_raises_mid_loop_in_the_catch_leaves_no_emptied_device_and_keeps_the_count(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    FIX-06: a row that raises after its removal leaves no emptied MQTT device, keeps the count of the rows before it.
+
+    The scenario of `test_a_follower_removes_its_disabled_twins_once_the_owner_cleared_the_topic`: the catch on the
+    emptied topic removes three integration-disabled twins. The third removal raises once the registry removed the row,
+    so nothing is left on the core MQTT device. The device still goes, the two rows before the raise are reported, one
+    count-free warning is logged and the partial removal is flushed to disk (review 2 IN-01, research Pitfall 16).
+    """
+    spec, topic, _discovery, replayed = await _a_restarted_follower_on_legacy_content(
+        hass, mqtt_mock, hass_storage, make_hub_entry
+    )
+    async_fire_mqtt_message(hass, topic, "", retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _fail_a_replayed_removal(monkeypatch, replayed, 3, after_the_removal=True)
+    flushes = _count_flushes(monkeypatch)
+    caplog.set_level(logging.DEBUG, logger=OWN_LOGGER)
+    caplog.clear()
+
+    await quiet_period_passes(hass)
+
+    assert mqtt_device_of(hass, spec.device_id) is None
+    assert legacy_entity_ids(hass, spec.device_id) == []
+    removed_lines = _own_records(
+        caplog, logging.INFO, "Removed 2 duplicate entities that a replayed legacy discovery created"
+    )
+    assert len(removed_lines) == 1
+    warnings = _own_records(
+        caplog, logging.WARNING, "The check for duplicate entities of a device raised an unexpected error"
+    )
+    assert len(warnings) == 1
+    assert flushes, "the catch skipped the registry flush after a partial removal"
+    _assert_no_entity_data_logged(caplog, replayed)
+    assert discovery_clears(mqtt_mock, topic) == []
+
+
 async def test_the_follower_rearm_on_an_emptied_topic_is_bounded(
     hass: HomeAssistant,
     mqtt_mock: Any,

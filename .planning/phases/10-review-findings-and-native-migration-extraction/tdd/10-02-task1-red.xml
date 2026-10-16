@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.677" timestamp="2026-10-16T14:28:53.511850+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_repo_structure" name="test_no_test_module_imports_from_another_test_module" time="0.525"><failure message="AssertionError: test modules import from other test modules:&#10;  tests/test_cutover.py -&gt; tests.test_native_start&#10;  tests/test_cutover.py -&gt; tests.test_takeover&#10;  tests/test_discovery_content.py -&gt; tests.test_native_start&#10;  tests/test_discovery_content.py -&gt; tests.test_takeover&#10;  tests/test_docs.py -&gt; tests.test_diagnostics&#10;  tests/test_export_guard_receiver.py -&gt; tests.test_discovery_export&#10;  tests/test_export_guard_receiver.py -&gt; tests.test_native_entities&#10;  tests/test_export_guard_receiver.py -&gt; tests.test_native_replay&#10;  tests/test_export_guard_receiver.py -&gt; tests.test_native_start&#10;  tests/test_native_cleanup.py -&gt; tests.test_native_start&#10;  tests/test_native_cleanup.py -&gt; tests.test_takeover&#10;  tests/test_native_replay.py -&gt; tests.test_native_start&#10;  tests/test_native_replay.py -&gt; tests.test_takeover&#10;  tests/test_native_start.py -&gt; tests.test_takeover&#10;  tests/test_presence.py -&gt; tests.test_native_start&#10;assert not ['tests/test_cutover.py -&gt; tests.test_native_start', 'tests/test_cutover.py -&gt; tests.test_takeover', 'tests/test_disco...sts/test_docs.py -&gt; tests.test_diagnostics', 'tests/test_export_guard_receiver.py -&gt; tests.test_discovery_export', ...]">def test_no_test_module_imports_from_another_test_module() -&gt; None:
+        """
+        FIX-03 (D-11): shared test helpers live in tests/helpers.py; a test module never imports from another test module.
+    
+        Renaming a private helper of one test module must not break the collection of another.
+        """
+        violations = [
+            f"{path.relative_to(ROOT)} -&gt; {module}"
+            for path in sorted(TESTS.rglob("*.py"))
+            for module in _test_module_imports(path)
+        ]
+&gt;       assert not violations, "test modules import from other test modules:\n" + "\n".join(violations)
+E       AssertionError: test modules import from other test modules:
+E         tests/test_cutover.py -&gt; tests.test_native_start
+E         tests/test_cutover.py -&gt; tests.test_takeover
+E         tests/test_discovery_content.py -&gt; tests.test_native_start
+E         tests/test_discovery_content.py -&gt; tests.test_takeover
+E         tests/test_docs.py -&gt; tests.test_diagnostics
+E         tests/test_export_guard_receiver.py -&gt; tests.test_discovery_export
+E         tests/test_export_guard_receiver.py -&gt; tests.test_native_entities
+E         tests/test_export_guard_receiver.py -&gt; tests.test_native_replay
+E         tests/test_export_guard_receiver.py -&gt; tests.test_native_start
+E         tests/test_native_cleanup.py -&gt; tests.test_native_start
+E         tests/test_native_cleanup.py -&gt; tests.test_takeover
+E         tests/test_native_replay.py -&gt; tests.test_native_start
+E         tests/test_native_replay.py -&gt; tests.test_takeover
+E         tests/test_native_start.py -&gt; tests.test_takeover
+E         tests/test_presence.py -&gt; tests.test_native_start
+E       assert not ['tests/test_cutover.py -&gt; tests.test_native_start', 'tests/test_cutover.py -&gt; tests.test_takeover', 'tests/test_disco...sts/test_docs.py -&gt; tests.test_diagnostics', 'tests/test_export_guard_receiver.py -&gt; tests.test_discovery_export', ...]
+
+tests/test_repo_structure.py:536: AssertionError</failure></testcase></testsuite></testsuites>

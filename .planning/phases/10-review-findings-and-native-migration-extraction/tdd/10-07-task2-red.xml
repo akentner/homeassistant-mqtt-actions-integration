@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.044" timestamp="2026-10-16T16:02:01.895143+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_core_contracts" name="test_the_replay_catch_removes_a_loaded_enabled_row_without_a_clear_on_the_shared_topic" time="0.930"><failure message="AssertionError: Home Assistant changed Entity._async_registry_updated (homeassistant/helpers/entity.py): a loaded MQTT entity that is disabled and removed in one synchronous step now makes core MQTT publish its clear-on-remove on the shared discovery topic, which deletes the rows other instances keep (CR-01). The no-clear guarantee relied on the eager task that unsubscribes the entity before the remove event. Next step: let takeover.remove_replay_twins wait until the disabled entity has left entity_sources before removing it, or publish the migrate payload first (review 2 IN-02, research Pitfall 9).&#10;assert [(None, True), (None, True)] == []&#10;  &#10;  Left contains 2 more items, first extra item: (None, True)&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140403290609984'&gt;
+hass_storage = {'core.device_registry': {'data': {'child_devices': [], 'deleted_devices': [], 'devices': [{'area_id': None, 'composit...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fb231ff1dd0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7fb23412c270&gt;
+
+    async def test_the_replay_catch_removes_a_loaded_enabled_row_without_a_clear_on_the_shared_topic(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -&gt; None:
+        """
+        FIX-07 (D-07): on a running follower the catch removes loaded, enabled replay rows without any clear.
+    
+        The guard disables the replayed switch, which stays as an integration-disabled twin on LEGACY content (09.2 D-05);
+        the two test buttons stay loaded and enabled until the catch removes them. A follower publishes nothing on the
+        shared core-prefix topic, so any publish there is core's own clear-on-remove.
+        """
+        spec = make_spec(name="Foreign lamp")
+        entry, topic = await legacy_mirror(hass, make_hub_entry, spec)
+        async_fire_mqtt_message(hass, topic, MIGRATE_PAYLOAD, retain=False)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        store_the_mirror_as_native(hass_storage, spec)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert legacy_entity_ids(hass, spec.device_id) == [], "premise: the takeover of the mirror is not done"
+        calls = _record_loaded_at_removal(monkeypatch, hass)
+        mqtt_mock.async_publish.reset_mock()
+        discovery = json.dumps(build_discovery(spec=spec, base_topic=BASE, instance_id=FOREIGN_OWNER, sw_version="1.2.3"))
+    
+        replayed = await replay_discovery(hass, topic, discovery, spec.device_id)
+    
+        assert len(replayed) == 3, "premise: the replay created the three legacy rows"
+        entity_registry = er.async_get(hass)
+        (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+        buttons = [entity_id for entity_id in replayed if entity_id != switch]
+        assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION, (
+            "premise: the guard did not disable the replayed switch"
+        )
+        assert calls == [], "premise: a removal ran before the quiet period passed"
+    
+        await quiet_period_passes(hass)
+    
+        catch_calls = [flags for content, flags in calls if content is not DiscoveryContent.UNKNOWN]
+        assert catch_calls, "premise: the catch did not call takeover.remove_replay_twins with the content of the topic"
+        assert any(catch_calls[0]), "premise: no replayed row was loaded and enabled when the catch removed it"
+        for button in buttons:
+            assert entity_registry.async_get(button) is None, EAGER_TASK_HINT
+        kept = entity_registry.async_get(switch)
+        assert kept is not None, "the integration-disabled switch twin left the registry on LEGACY content (09.2 D-05)"
+        assert kept.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+&gt;       assert topic_publishes(mqtt_mock, topic) == [], EAGER_TASK_HINT
+E       AssertionError: Home Assistant changed Entity._async_registry_updated (homeassistant/helpers/entity.py): a loaded MQTT entity that is disabled and removed in one synchronous step now makes core MQTT publish its clear-on-remove on the shared discovery topic, which deletes the rows other instances keep (CR-01). The no-clear guarantee relied on the eager task that unsubscribes the entity before the remove event. Next step: let takeover.remove_replay_twins wait until the disabled entity has left entity_sources before removing it, or publish the migrate payload first (review 2 IN-02, research Pitfall 9).
+E       assert [(None, True), (None, True)] == []
+E         
+E         Left contains 2 more items, first extra item: (None, True)
+E         Use -v to get more diff
+
+tests/test_core_contracts.py:295: AssertionError</failure></testcase></testsuite></testsuites>

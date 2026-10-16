@@ -12,12 +12,14 @@ takeover module tests of the later plans.
 
 import asyncio
 import json
+import logging
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import pytest
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import Platform
+from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -31,6 +33,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.mqtt_actions.const import DOMAIN
 from custom_components.mqtt_actions.discovery import DiscoveryContent, build_discovery
 from custom_components.mqtt_actions.takeover import (
+    ReplayTwinsError,
     TakeoverStatus,
     TakeoverTarget,
     async_take_over,
@@ -54,6 +57,7 @@ from tests.helpers import (
     legacy_entity_ids,
     setup_legacy_device,
 )
+from tests.log_helpers import OWN_LOGGER
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -927,6 +931,109 @@ async def test_remove_replay_twins_removes_the_loaded_duplicates_and_the_emptied
             ("mqtt", f"{DOMAIN}_{legacy.device_id}"), core_mqtt_entry_id(hass)
         )
         is None
+    )
+
+
+def _fail_a_removal(
+    monkeypatch: pytest.MonkeyPatch, replayed: list[str], nth: int, *, after_the_removal: bool
+) -> list[str]:
+    """Make the nth registry removal of a replayed row raise, after or before the real removal; return the calls."""
+    real_remove = er.EntityRegistry.async_remove
+    called: list[str] = []
+
+    @callback
+    def async_remove(self: er.EntityRegistry, entity_id: str) -> None:
+        if entity_id in replayed:
+            called.append(entity_id)
+            if len(called) == nth:
+                if after_the_removal:
+                    real_remove(self, entity_id)
+                msg = "injected"
+                raise RuntimeError(msg)
+        real_remove(self, entity_id)
+
+    monkeypatch.setattr(er.EntityRegistry, "async_remove", async_remove)
+    return called
+
+
+async def test_remove_replay_twins_raises_with_the_partial_count_after_removing_the_emptied_device(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    FIX-06: a raise after the removal of the last row leaves no emptied device and reports the rows before it.
+
+    The error surfaces as `ReplayTwinsError` chained from the original error, never as a return value (Pitfall 16).
+    """
+    legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    _fail_a_removal(monkeypatch, replayed, 3, after_the_removal=True)
+    caplog.set_level(logging.INFO, logger=OWN_LOGGER)
+    caplog.clear()
+
+    with pytest.raises(ReplayTwinsError) as raised:
+        _remove_replay_twins_of(hass, legacy)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert raised.value.removed == 2
+    assert isinstance(raised.value.__cause__, RuntimeError)
+    assert legacy_entity_ids(hass, legacy.device_id) == []
+    assert (
+        dr.async_get(hass).async_get_device_by_identifier(
+            ("mqtt", f"{DOMAIN}_{legacy.device_id}"), core_mqtt_entry_id(hass)
+        )
+        is None
+    )
+    counted = [
+        record
+        for record in caplog.records
+        if record.name.startswith(OWN_LOGGER)
+        and record.levelno == logging.INFO
+        and record.getMessage() == "Removed 2 duplicate entities that a replayed legacy discovery created"
+    ]
+    assert len(counted) == 1
+
+
+async def test_remove_replay_twins_counts_only_rows_whose_removal_returned(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    FIX-06 precision: the count is the number of rows whose removal returned; the row that raised is never counted.
+
+    The second removal raises before the registry removed the row: that row was disabled first and stays disabled, the
+    third row is never touched and stays enabled, and the device keeps both.
+    """
+    legacy, _moved, replayed = await _moved_and_replayed(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+    called = _fail_a_removal(monkeypatch, replayed, 2, after_the_removal=False)
+
+    with pytest.raises(ReplayTwinsError) as raised:
+        _remove_replay_twins_of(hass, legacy)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert raised.value.removed == 1
+    assert len(called) == 2
+    first, second = called
+    (third,) = [entity_id for entity_id in replayed if entity_id not in called]
+    entity_registry = er.async_get(hass)
+    assert entity_registry.async_get(first) is None
+    failed = entity_registry.async_get(second)
+    assert failed is not None
+    assert failed.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    untouched = entity_registry.async_get(third)
+    assert untouched is not None
+    assert untouched.disabled_by is None
+    assert (
+        dr.async_get(hass).async_get_device_by_identifier(
+            ("mqtt", f"{DOMAIN}_{legacy.device_id}"), core_mqtt_entry_id(hass)
+        )
+        is not None
     )
 
 

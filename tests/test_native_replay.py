@@ -1461,6 +1461,46 @@ async def test_a_row_that_raises_mid_loop_in_the_catch_leaves_no_emptied_device_
     assert discovery_clears(mqtt_mock, topic) == []
 
 
+async def test_a_raise_on_the_first_row_still_flushes_and_keeps_the_device(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    FIX-06 boundary: a raise on the first row, before its removal, counts nothing, still flushes and keeps the device.
+
+    Nothing was removed, so no count line is logged; the device keeps all three rows, each still disabled by the
+    integration, and the catch flushes because a device raised (`TwinRemoval.errored`).
+    """
+    spec, topic, _discovery, replayed = await _a_restarted_follower_on_legacy_content(
+        hass, mqtt_mock, hass_storage, make_hub_entry
+    )
+    async_fire_mqtt_message(hass, topic, "", retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _fail_a_replayed_removal(monkeypatch, replayed, 1, after_the_removal=False)
+    flushes = _count_flushes(monkeypatch)
+    caplog.set_level(logging.DEBUG, logger=OWN_LOGGER)
+    caplog.clear()
+
+    await quiet_period_passes(hass)
+
+    assert not any(
+        record.name.startswith(OWN_LOGGER) and record.getMessage().startswith("Removed") for record in caplog.records
+    )
+    warnings = _own_records(
+        caplog, logging.WARNING, "The check for duplicate entities of a device raised an unexpected error"
+    )
+    assert len(warnings) == 1
+    assert flushes, "the catch skipped the registry flush after a device raised"
+    assert mqtt_device_of(hass, spec.device_id) is not None
+    assert sorted(legacy_entity_ids(hass, spec.device_id)) == sorted(replayed)
+    _assert_disabled_twins_kept(hass, replayed)
+    _assert_no_entity_data_logged(caplog, replayed)
+
+
 async def test_the_follower_rearm_on_an_emptied_topic_is_bounded(
     hass: HomeAssistant,
     mqtt_mock: Any,

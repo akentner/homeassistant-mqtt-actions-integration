@@ -110,8 +110,11 @@ again. This happens when an enabled MQTT entity with the device ID as unique ID 
 duplicate that a replay of old Discovery messages created and the integration removed again. MQTT Actions disables such
 a duplicate itself right after Home Assistant creates it, on every instance that holds the device natively, whichever
 instance publishes the export. An enabled duplicate that you still see therefore points to a row you enabled yourself or
-to a device that the instance does not hold natively. When the export is switched off again, the disabled duplicates
-stay in the entity list until Home Assistant is restarted, and the next start removes them. When old MQTT Discovery
+to a device that the instance does not hold natively. A duplicate that you enable again yourself is
+disabled again at the next start of MQTT Actions, for example after a restart or a reload of the integration, unless you
+customized it, for example gave it a name or an area, or turned the native entity off: MQTT Actions then keeps that
+duplicate enabled. When the export is switched off again, the disabled duplicates stay in the entity list until Home
+Assistant is restarted, and the next start removes them. When old MQTT Discovery
 messages of a device are still retained on the broker, only the instance that owns the device lets them go: at its next
 start it removes its disabled duplicates of that device and clears the old messages, unless a renamed or otherwise
 customized MQTT entity of that device is still enabled on this or on any other instance that is online. Every instance

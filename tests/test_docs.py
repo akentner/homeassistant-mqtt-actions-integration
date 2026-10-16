@@ -447,6 +447,18 @@ def test_readme_documents_the_discovery_export() -> None:
     )
 
 
+def test_the_readme_says_a_re_enabled_duplicate_is_disabled_again_at_the_next_start() -> None:
+    """
+    FIX-05 (review 1 IN-01): the export section says that enabling a duplicate is undone at the next start.
+
+    The start-up sweep of the duplicate guard disables the duplicate again, except a customized row or one whose native
+    entity is turned off (WR-02, WR-03), so the README names both exceptions.
+    """
+    export = _normalize(_section(README.read_text(encoding="utf-8"), "mqtt discovery export")).replace("`", "")
+    for phrase in ("disabled again at the next start", "unless you customized it", "turned the native entity off"):
+        assert phrase in export, f"the export section never says: {phrase}"
+
+
 def test_old_discovery_claims_are_gone() -> None:
     """The pages no longer describe Discovery as the way the entities come into being (D-03)."""
     readme = _normalize(README.read_text(encoding="utf-8"))

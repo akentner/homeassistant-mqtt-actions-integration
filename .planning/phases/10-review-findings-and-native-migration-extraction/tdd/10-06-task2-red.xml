@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.014" timestamp="2026-10-16T15:54:26.019565+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_export_guard_receiver" name="test_a_second_pass_a_second_create_event_and_a_restart_change_nothing" time="0.914"><failure message="AssertionError: the guard's sweep did not run for the device at the next start&#10;assert ('c0aed0e6-435c-4ddf-b0b0-2f4596ded40d', 0) in []">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140000124232640'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f54597fbcc0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f545aa18380&gt;
+
+    async def test_a_second_pass_a_second_create_event_and_a_restart_change_nothing(
+        hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, monkeypatch: pytest.MonkeyPatch
+    ) -&gt; None:
+        """
+        G4: once nothing is enabled, no pass performs a registry update.
+    
+        The row core creates again is born disabled from its record, so the registry alone keeps the old assertions true;
+        the spy on `takeover.disable_duplicates` proves that the guard's listener ran and found nothing (review 1 IN-03).
+        The same holds for the restart: the spy proves that the sweep at the next start ran for the device and returned 0.
+        """
+        spec = make_spec(name="Foreign lamp")
+        entry = await _native_mirror(hass, make_hub_entry, spec)
+        registry = er.async_get(hass)
+        registry.async_remove(create_mqtt_row(hass, "switch", spec.device_id, device=True))
+        calls = _count_disables(monkeypatch)
+        await _receive_foreign_export(hass, spec)
+        (duplicate,) = _mqtt_rows(hass, spec.device_id)
+        assert duplicate.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert calls == [duplicate.entity_id]
+    
+        # A second create event: the row goes, and core creates it again from a record that says integration
+        registry.async_remove(duplicate.entity_id)
+        passes = _spy_disable_duplicates(monkeypatch)
+        again = _core_creates_the_row(hass, "switch", spec.device_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert again.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert calls == [duplicate.entity_id]
+        assert passes == [(spec.device_id, 0)], "the guard's listener did not run for the second create event"
+    
+        # The sweep at the next start finds nothing enabled either
+        passes.clear()
+        await restart_entry(hass, entry)
+        assert calls == [duplicate.entity_id]
+&gt;       assert (spec.device_id, 0) in passes, "the guard's sweep did not run for the device at the next start"
+E       AssertionError: the guard's sweep did not run for the device at the next start
+E       assert ('c0aed0e6-435c-4ddf-b0b0-2f4596ded40d', 0) in []
+
+tests/test_export_guard_receiver.py:451: AssertionError</failure></testcase></testsuite></testsuites>

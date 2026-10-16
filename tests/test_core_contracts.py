@@ -35,6 +35,7 @@ from tests.helpers import (
     falsy_publishes,
     legacy_entity_ids,
     legacy_mirror,
+    quiet_period_passes,
     replay_discovery,
     store_the_mirror_as_native,
     topic_publishes,
@@ -240,3 +241,55 @@ async def test_the_takeover_path_removes_a_loaded_enabled_row_without_a_clear_on
     assert legacy_entity_ids(hass, spec.device_id) == [], EAGER_TASK_HINT
     assert topic_publishes(mqtt_mock, topic) == [], EAGER_TASK_HINT
     assert falsy_publishes(mqtt_mock, topic) == [], EAGER_TASK_HINT
+
+
+async def test_the_replay_catch_removes_a_loaded_enabled_row_without_a_clear_on_the_shared_topic(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    FIX-07 (D-07): on a running follower the catch removes loaded, enabled replay rows without any clear.
+
+    The guard disables the replayed switch, which stays as an integration-disabled twin on LEGACY content (09.2 D-05);
+    the two test buttons stay loaded and enabled until the catch removes them. A follower publishes nothing on the
+    shared core-prefix topic, so any publish there is core's own clear-on-remove.
+    """
+    spec = make_spec(name="Foreign lamp")
+    entry, topic = await legacy_mirror(hass, make_hub_entry, spec)
+    async_fire_mqtt_message(hass, topic, MIGRATE_PAYLOAD, retain=False)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    store_the_mirror_as_native(hass_storage, spec)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert legacy_entity_ids(hass, spec.device_id) == [], "premise: the takeover of the mirror is not done"
+    calls = _record_loaded_at_removal(monkeypatch, hass)
+    mqtt_mock.async_publish.reset_mock()
+    discovery = json.dumps(build_discovery(spec=spec, base_topic=BASE, instance_id=FOREIGN_OWNER, sw_version="1.2.3"))
+
+    replayed = await replay_discovery(hass, topic, discovery, spec.device_id)
+
+    assert len(replayed) == 3, "premise: the replay created the three legacy rows"
+    entity_registry = er.async_get(hass)
+    (switch,) = [entity_id for entity_id in replayed if entity_id.startswith("switch.")]
+    buttons = [entity_id for entity_id in replayed if entity_id != switch]
+    assert entity_registry.async_get(switch).disabled_by is er.RegistryEntryDisabler.INTEGRATION, (
+        "premise: the guard did not disable the replayed switch"
+    )
+    assert calls == [], "premise: a removal ran before the quiet period passed"
+
+    await quiet_period_passes(hass)
+
+    catch_calls = [flags for content, flags in calls if content is not DiscoveryContent.UNKNOWN]
+    assert catch_calls, "premise: the catch did not call takeover.remove_replay_twins with the content of the topic"
+    assert any(catch_calls[0]), "premise: no replayed row was loaded and enabled when the catch removed it"
+    for button in buttons:
+        assert entity_registry.async_get(button) is None, EAGER_TASK_HINT
+    kept = entity_registry.async_get(switch)
+    assert kept is not None, "the integration-disabled switch twin left the registry on LEGACY content (09.2 D-05)"
+    assert kept.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert topic_publishes(mqtt_mock, topic) == [], EAGER_TASK_HINT

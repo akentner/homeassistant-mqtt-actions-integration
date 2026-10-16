@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
-current_phase: 9
-current_phase_name: v1.0.1 Release
-status: verifying
-stopped_at: Completed 09-05-PLAN.md
-last_updated: "2026-10-15T23:43:11.986Z"
+current_phase: "09.1"
+current_phase_name: "UAT-02 gap closure: remove leftover disabled and legacy mqtt rows on replay, then re-run UAT-02 and UAT-04 on a new SHA"
+status: planning
+stopped_at: Phase 09 complete, ready to plan Phase 09.1
+last_updated: "2026-10-16T00:01:49.353Z"
 last_activity: 2026-10-16
-last_activity_desc: 09-05 complete, v1.0.1 released and ACCEPTED-GAP-V101 closed
-state_head: f6ec105f2b01f8b336ee2b9aa419e671eba4f725
+last_activity_desc: Phase 09 complete, transitioned to Phase 09.1
+state_head: 3e15acab474aa7f76efc16a87fb6602a599e9f0b
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 26
   completed_plans: 26
-  percent: 17
+  percent: 20
 ---
 
 # Project State
@@ -29,17 +29,17 @@ See: .planning/PROJECT.md (updated 2026-10-11)
 
 ## Current Position
 
-Phase: 9 (v1.0.1 Release) — EXECUTING
-Plan: 5 of 5 (09-01 to 09-05 complete)
-Status: Phase complete — ready for verification
-Last activity: 2026-10-16 — 09-05 complete: v1.0.1 released (run 38824818079 green, Latest, notes applied), ACCEPTED-GAP-V101 closed
+Phase: 09.1 — UAT-02 gap closure: remove leftover disabled and legacy mqtt rows on replay, then re-run UAT-02 and UAT-04 on a new SHA
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-16 — Phase 09 complete, transitioned to Phase 09.1
 
-Progress: [██░░░░░░░░] 17%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 71
+- Total plans completed: 76
 - Average duration: - min
 - Total execution time: 0.0 hours
 
@@ -55,6 +55,7 @@ Progress: [██░░░░░░░░] 17%
 | 6 | 2 | - | - |
 | 8 | 18 | - | - |
 | 09.2 | 9 | - | - |
+| 09 | 5 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -331,8 +332,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-15T23:43:11.889Z
-Stopped at: Completed 09-05-PLAN.md
+Last session: 2026-10-16
+Stopped at: Phase 09 complete, ready to plan Phase 09.1
 Resume file: None
 
 ## Operator Next Steps

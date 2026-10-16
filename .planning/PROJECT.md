@@ -42,11 +42,11 @@ v1.0.1 Hardening closed 2026-10-11 with an accepted verification gap (owner deci
 - ✓ The takeover survives a boot-time retained Discovery replay without a duplicate entity (IN-03, MIG-05) — v1.0.1
 - ✓ CI and release on a pinned runner, flaky test fixed at its cause (QLT-02, QLT-03) — v1.0.1 (per Phase 7 verification; not ticked, see accepted gap)
 - ✓ Phase 5 UAT debt closed on real instances (UAT-01 to UAT-04) — v1.0.1
+- ✓ v1.0.1 released after a bench re-run of UAT-02 and UAT-04 on the tagged SHA 3dc9093 (REL-01) — Phase 9
 - ✓ Core-prefix duplicates are disabled, never removed, on every native instance; user-customized rows are kept — v1.0.1 (unit tests only for the final review fixes)
 
 ### Active
 
-- [ ] Release v1.0.1 after a bench re-run of UAT-02 and UAT-04 on the v1.0.1 build — v1.1
 - [ ] Info findings of the Phase 8 reviews (IN-01 to IN-04, IN-01 to IN-03, incl. Repairs hint and manager extraction) — v1.1
 - [ ] Per-instance local actions on mirrored devices, additive or replacing per trigger, no approval needed (MIR-01, backlog 999.1, relates to MAP-01) — v1.1
 - [ ] Current verification of all phases on the final build (QLT-01 carried over) and release v1.1.0 — v1.1
@@ -112,4 +112,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-11 after starting milestone v1.1*
+*Last updated: 2026-10-16 after Phase 9*

@@ -1,7 +1,7 @@
 ---
 phase: 09-v1-0-1-release
 verified: 2026-10-15T23:50:14Z
-status: human_needed
+status: passed
 score: 3/3 must-haves verified (roadmap success criteria; 27/27 plan truths verified or superseded by the re-pointed 09-04/09-05 truths)
 covered_files:
   - ".github/workflows/release.yml"
@@ -45,16 +45,18 @@ human_verification:
   - test: "Owner confirms that every push and workflow action of Phase 9 was the owner's: the refspec push of 7baec98 to main (09-02), the push of tag v1.0.1 on 3dc9093 (09-04), and that Claude issued no git push, no gh workflow run and no gh run rerun (judgment-tier prohibitions 09-01 P2, 09-02 P1, 09-04 P2, 09-05 P1)"
     expected: "Owner states yes. Supporting evidence (non-authoritative): push-main.txt and tag-push.txt read pushed_by: owner, claude_push: none; release run 38824818079 is attempt 1; gh run list --commit 3dc9093 shows exactly one Release, one CI and one Validate run"
     why_human: "Who typed a push or dispatch cannot be proven from git or GitHub state; ADR-550 D4 requires human resolution of judgment-tier prohibitions"
+    result: "confirmed by owner 2026-10-16 (/gsd-verify-work 9)"
   - test: "Owner acknowledges the remaining judgment-tier prohibitions of Phase 9 (09-01 P1 and P3, 09-02 P2, 09-03 P1 to P3, 09-04 P1, 09-05 P2 and P3) as held, per the Prohibitions table in this report"
     expected: "Owner agrees with the verifier's read: only 7baec98 touched a non-planning file among the 09-0x commits; no commit touches the archived Phase 8 tree after f3c375d (2026-10-11); the 7baec98 UAT-02 FAIL and UAT-04 BLOCKED stand unchanged (one commit each); every 9.2 verdict file has exactly one commit; tag v1.0.1 == FIX on origin and was never moved; the ledger and release notes claim no UAT-01, UAT-03, P1-5 or full re-verification"
     why_human: "Judgment-tier prohibitions; the verifier's read is non-authoritative (ADR-550 D4, never a silent pass)"
+    result: "confirmed by owner 2026-10-16 (/gsd-verify-work 9)"
 ---
 
 # Phase 9: v1.0.1 Release Verification Report
 
 **Phase Goal:** v1.0.1 becomes a real release: the commit whose manifest says 1.0.1 passes UAT-02 and UAT-04 on the bench on exactly that SHA and is tagged, which closes ACCEPTED-GAP-V101 for that release.
 **Verified:** 2026-10-15T23:50:14Z
-**Status:** human_needed (all truths verified; two owner confirmations of judgment-tier prohibitions remain)
+**Status:** passed (all truths verified; both owner confirmations given on 2026-10-16)
 **Re-verification:** No, initial verification
 
 Context: plans 09-04 and 09-05 were re-pointed by Phase 9.2 from the bump commit 7baec98 to FIX
@@ -169,16 +171,30 @@ No orphaned requirements: REQUIREMENTS.md maps only REL-01 to Phase 9.
 **Test:** Confirm that you pushed 7baec98 to main and the tag v1.0.1 on 3dc9093 yourself, and that Claude ran no `git push`, `gh workflow run` or `gh run rerun` in Phase 9.
 **Expected:** Yes. Evidence consistent: `push-main.txt`, `tag-push.txt` (`pushed_by: owner`, `claude_push: none`), release run attempt 1.
 **Why human:** Who issued a push cannot be proven from repository or GitHub state (judgment-tier prohibitions 09-01 P2, 09-02 P1, 09-04 P2, 09-05 P1).
+**Result:** Confirmed by the owner on 2026-10-16.
 
 ### 2. Remaining judgment-tier prohibitions
 
 **Test:** Review the Prohibitions table above.
 **Expected:** You agree that each one held.
 **Why human:** ADR-550 D4: judgment-tier prohibitions are never a silent pass.
+**Result:** Confirmed by the owner on 2026-10-16.
 
 ### Gaps Summary
 
 No gaps. The phase goal is achieved in live state: tag v1.0.1 on origin points at 3dc9093, whose manifest says 1.0.1; UAT-02 (integration and null tombstones), UAT-04 and the CR-01 gate passed on exactly that SHA with an independently re-checked mount pin; release run 38824818079 is green in all eight jobs; v1.0.1 is Latest with the hand-written notes; ACCEPTED-GAP-V101 is closed for v1.0.1 in the ledger, PROJECT.md and MILESTONES.md. The status is `human_needed` only for the owner confirmations of the judgment-tier prohibitions.
+
+## Acknowledged Gaps
+
+Acknowledged by the owner on 2026-10-16 during `/gsd-verify-work 9`. `09-UAT.md` is left unchanged on purpose (09-03 P1: the
+7baec98 FAIL and BLOCKED stand), so `phase uat-passed 09` keeps reporting these two rows:
+
+- Test 3 (UAT-02 on 7baec98, `result: issue`): superseded by blocks 21 and 22 (UAT-02 from integration and null tombstones)
+  on the tagged FIX 3dc9093. Its gap reads `status: resolved`, but the fix plans live in Phases 9.1 and 9.2, so the
+  `resolved_by` cross-check of the predicate (a plan in this phase directory) cannot match.
+- Test 4 (UAT-04 on 7baec98, `result: blocked`): superseded by block 23 (UAT-04) on 3dc9093.
+
+The phase is closed by owner decision despite these two historical rows.
 
 ---
 

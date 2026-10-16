@@ -137,6 +137,21 @@ class TakeoverTarget:
     subentry_id: str | None
 
 
+class ReplayTwinsError(Exception):
+    """
+    Raised by `remove_replay_twins` when the removal of a row raised (FIX-06, review 2 IN-01).
+
+    `removed` counts the rows whose removal returned before the failure; the row that raised is never counted, even
+    when the registry removed it. The emptied core MQTT device is already gone and the count is already logged when
+    this is raised. The original error is the `__cause__`. The message carries no entity data (T-04-14).
+    """
+
+    def __init__(self, removed: int) -> None:
+        """Keep the count of the rows removed before the failure."""
+        super().__init__("The removal of a replayed duplicate raised")
+        self.removed = removed
+
+
 def legacy_device(hass: HomeAssistant, mqtt_entry_id: str, device_id: str) -> dr.DeviceEntry | None:
     """Return the core MQTT device the legacy discovery payload created for a device id, or None."""
     return dr.async_get(hass).async_get_device_by_identifier((MQTT_DOMAIN, f"{DOMAIN}_{device_id}"), mqtt_entry_id)
@@ -301,6 +316,26 @@ def keeps_enabled_legacy_row(hass: HomeAssistant, entry_id: str, device_id: str,
     )
 
 
+def _remove_planned(
+    entity_registry: er.EntityRegistry, plan: list[tuple[er.RegistryEntry, bool]]
+) -> tuple[int, Exception | None]:
+    """Remove the planned rows in order; return how many removals returned and the error that stopped the loop."""
+    removed = 0
+    try:
+        for legacy, disable_first in plan:
+            if disable_first:
+                # Disabled first, so core unloads the entity and clears nothing on removal, and the deleted record
+                # carries the disabled state that a later restore of the same row inherits (WR-01)
+                entity_registry.async_update_entity(legacy.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
+            entity_registry.async_remove(legacy.entity_id)
+            removed += 1
+    except Exception as err:  # noqa: BLE001
+        # The row that raised may have left the registry anyway and is not counted: the caller still removes an emptied
+        # device and learns the count and the failure from the raise after it (FIX-06)
+        return removed, err
+    return removed, None
+
+
 def remove_replay_twins(  # noqa: PLR0913
     hass: HomeAssistant,
     entry_id: str,
@@ -336,7 +371,9 @@ def remove_replay_twins(  # noqa: PLR0913
     deleted record of an enabled entry would restore as enabled (WR-01). Disabling and removing run in one synchronous
     step, so core cannot discover the row in between. Registry logic only: nothing is published here, and core
     publishes nothing for an enabled row removed this way. The emptied MQTT device goes too, unless an entry remains on
-    it, whether this integration created it or not.
+    it, whether this integration created it or not. A row whose removal raises stops the loop: the emptied device
+    still goes, the rows removed before it are logged, and `ReplayTwinsError` with that count is raised from the error
+    (FIX-06).
     """
     if (device := legacy_device(hass, mqtt_entry_id, device_id)) is None:
         return 0
@@ -362,23 +399,19 @@ def remove_replay_twins(  # noqa: PLR0913
         # retained payload would delete every loaded legacy row of the device, the kept ones included (D-08). A kept
         # row that is disabled is not loaded, and core's clear leaves it in the registry
         plan = [(legacy, disable_first) for legacy, disable_first in plan if disable_first]
-    removed = 0
-    for legacy, disable_first in plan:
-        if disable_first:
-            # Disabled first, so core unloads the entity and clears nothing on removal, and the deleted record carries
-            # the disabled state that a later restore of the same row inherits (WR-01)
-            entity_registry.async_update_entity(legacy.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION)
-        entity_registry.async_remove(legacy.entity_id)
-        removed += 1
-    if not removed:
+    if not plan:
         return 0
+    removed, failure = _remove_planned(entity_registry, plan)
     # Removing a device removes the entries on it, so it goes only when nothing at all is left on it
     if not er.async_entries_for_device(entity_registry, device.id, include_disabled_entities=True):
         device_registry = dr.async_get(hass)
         # Removing the entities may have dropped the device already
         if device_registry.async_get(device.id) is not None:
             device_registry.async_remove_device(device.id)
-    LOGGER.info("Removed %d duplicate entities that a replayed legacy discovery created", removed)
+    if removed:
+        LOGGER.info("Removed %d duplicate entities that a replayed legacy discovery created", removed)
+    if failure is not None:
+        raise ReplayTwinsError(removed) from failure
     return removed
 
 

@@ -13,7 +13,7 @@ the list of kept legacy devices that the heartbeat announces. Every `@callback` 
 
 import asyncio
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
@@ -42,6 +42,18 @@ if TYPE_CHECKING:
     from homeassistant.core import CALLBACK_TYPE, Event
 
     from .manager import Manager
+
+
+class TwinRemoval(NamedTuple):
+    """
+    The result of one pass of the duplicate removal over a set of devices (FIX-06).
+
+    `removed` counts the rows whose removal returned, including those of a device that raised later; `errored` says
+    that at least one device raised, so the caller flushes even when nothing was counted.
+    """
+
+    removed: int
+    errored: bool
 
 
 class NativeMigration:
@@ -177,20 +189,22 @@ class NativeMigration:
         device_ids: Iterable[str],
         content: Mapping[str, DiscoveryContent] | None = None,
         may_empty_topic: Collection[str] = frozenset(),
-    ) -> int:
+    ) -> TwinRemoval:
         """
-        Remove the duplicates a replayed legacy discovery created for these devices; return how many went (D-04, D-05).
+        Remove the duplicates a replayed legacy discovery created for these devices; return the count and errors (D-05).
 
         `content` maps a device id to what its core-prefix discovery topic holds. An id without an entry, and every id
         when it is None as on the takeover path, is UNKNOWN: an integration-disabled twin stays (CR-01). It goes for
         EMPTY content, and for LEGACY content only when the id is in `may_empty_topic`, the ids whose shared topic may
         go empty (D-02, D-05): the takeover path passes none, so a follower, and an owner whose peers keep a row, never
         lets core clear the shared topic there. Registry logic only: nothing is published and no migrate payload is
-        sent for a mirror (T-5-02). One device that raises must not keep the others, or the start, from finishing.
+        sent for a mirror (T-5-02). One device that raises must not keep the others, or the start, from finishing. The
+        rows a device removed before it raised still count, and `errored` reports the failure (FIX-06).
         """
         if (mqtt_entry_id := self._manager.gateway.mqtt_entry_id()) is None:
-            return 0
+            return TwinRemoval(0, errored=False)
         removed = 0
+        errored = False
         for device_id in device_ids:
             try:
                 removed += takeover.remove_replay_twins(
@@ -201,11 +215,18 @@ class NativeMigration:
                     content=(content or {}).get(device_id, DiscoveryContent.UNKNOWN),
                     may_empty_topic=device_id in may_empty_topic,
                 )
+            except takeover.ReplayTwinsError as err:
+                # The rows removed before the failure are gone and counted; the emptied device went with them (FIX-06)
+                removed += err.removed
+                errored = True
+                LOGGER.warning("The check for duplicate entities of a device raised an unexpected error")
+                LOGGER.debug("The check for duplicate entities failed with %s", type(err.__cause__).__name__)
             except Exception as err:  # noqa: BLE001
                 # No registry or broker content in the log: this check must never keep the manager from running
+                errored = True
                 LOGGER.warning("The check for duplicate entities of a device raised an unexpected error")
                 LOGGER.debug("The check for duplicate entities failed with %s", type(err).__name__)
-        return removed
+        return TwinRemoval(removed, errored=errored)
 
     @callback
     def _arm_replay_catch(self) -> None:
@@ -322,8 +343,9 @@ class NativeMigration:
                 )
             # The last read and the removal in one synchronous step: no await in between, so no message can change the
             # decision (WR-01)
-            if self._remove_replay_twins(device_ids, content, may_empty):
-                # The removal is on disk like the move before it (WR-01)
+            removal = self._remove_replay_twins(device_ids, content, may_empty)
+            if removal.removed or removal.errored:
+                # The removal is on disk like the move before it (WR-01), a partial one too (FIX-06)
                 await takeover.async_flush_registries(self._manager.hass)
             if (mqtt_entry_id := self._manager.gateway.mqtt_entry_id()) is None or self._manager.publisher is None:
                 return

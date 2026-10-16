@@ -423,6 +423,7 @@ async def test_a_second_pass_a_second_create_event_and_a_restart_change_nothing(
 
     The row core creates again is born disabled from its record, so the registry alone keeps the old assertions true;
     the spy on `takeover.disable_duplicates` proves that the guard's listener ran and found nothing (review 1 IN-03).
+    The same holds for the restart: the spy proves that the sweep at the next start ran for the device and returned 0.
     """
     spec = make_spec(name="Foreign lamp")
     entry = await _native_mirror(hass, make_hub_entry, spec)
@@ -444,8 +445,11 @@ async def test_a_second_pass_a_second_create_event_and_a_restart_change_nothing(
     assert passes == [(spec.device_id, 0)], "the guard's listener did not run for the second create event"
 
     # The sweep at the next start finds nothing enabled either
+    passes.clear()
     await restart_entry(hass, entry)
     assert calls == [duplicate.entity_id]
+    assert (spec.device_id, 0) in passes, "the guard's sweep did not run for the device at the next start"
+    assert all(result == 0 for _device_id, result in passes), passes
 
 
 async def test_on_a_fresh_install_core_disables_the_row_and_the_guard_does_nothing(

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.999" timestamp="2026-10-16T16:24:23.258933+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_kept_duplicates" name="test_a_duplicate_kept_because_the_native_twin_was_turned_off_is_listed_as_rejected" time="0.908"><failure message="AssertionError: assert {'count': '1'...ejected': '—'} == {'count': '1'...'switch.mqtt'}&#10;  &#10;  Omitting 1 identical items, use -vv to show&#10;  Differing items:&#10;  {'customized': 'switch.mqtt'} != {'customized': '—'}&#10;  {'rejected': '—'} != {'rejected': 'switch.mqtt'}&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139805082541696'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f26e8fe9bc0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f26e830a350&gt;
+
+    async def test_a_duplicate_kept_because_the_native_twin_was_turned_off_is_listed_as_rejected(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """D-01, WR-03: an uncustomized duplicate next to a native switch the user disabled is listed as rejected."""
+        _seed_native_instance(hass_storage)
+        subentry = make_switch_subentry("Lamp")
+        entry, (row,) = await _native_owner_with_a_guarded_row(hass, make_hub_entry, [subentry])
+        entity_registry = er.async_get(hass)
+        twin = native_entity_id(hass, "switch", subentry["data"][CONF_DEVICE_ID])
+        entity_registry.async_update_entity(twin, disabled_by=er.RegistryEntryDisabler.USER)
+        entity_registry.async_update_entity(row, disabled_by=None)
+    
+        await restart_entry(hass, entry)
+    
+        issue = _kept_issue(hass)
+        assert issue is not None
+&gt;       assert issue.translation_placeholders == {"count": "1", "customized": NONE_SHOWN, "rejected": escape_markdown(row)}
+E       AssertionError: assert {'count': '1'...ejected': '—'} == {'count': '1'...'switch.mqtt'}
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing items:
+E         {'customized': 'switch.mqtt'} != {'customized': '—'}
+E         {'rejected': '—'} != {'rejected': 'switch.mqtt'}
+E         Use -v to get more diff
+
+tests/test_kept_duplicates.py:125: AssertionError</failure></testcase></testsuite></testsuites>

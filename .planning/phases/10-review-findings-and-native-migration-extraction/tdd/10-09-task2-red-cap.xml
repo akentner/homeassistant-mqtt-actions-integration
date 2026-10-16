@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.206" timestamp="2026-10-16T16:25:44.361321+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_kept_duplicates" name="test_the_placeholders_cap_and_escape_the_entity_ids" time="0.118"><failure message="AssertionError: assert {'count': '13....hall\\_mode'} == {'count': '13....hall\\_mode'}&#10;  &#10;  Omitting 2 identical items, use -vv to show&#10;  Differing items:&#10;  {'customized': 'switch.kitchen\\_lamp\\_01, switch.kitchen\\_lamp\\_02, switch.kitchen\\_lamp\\_03, switch.kitchen\\_l...\\_08, switch.kitchen\\_lamp\\_09, switch.kitchen\\_lamp\\_10, switch.kitchen\\_lamp\\_11, switch.kitchen\\_lamp\\_12'} != {'customized': 'switch.kitchen\\_lamp\\_01, switch.kitchen\\_lamp\\_02, switch.kitchen\\_lamp\\_03, switch.kitchen\\_l..._06, switch.kitchen\\_lamp\\_07, switch.kitchen\\_lamp\\_08, switch.kitchen\\_lamp\\_09, switch.kitchen\\_lamp\\_10 …'}&#10;  Use -v to get more diff">def test_the_placeholders_cap_and_escape_the_entity_ids() -&gt; None:
+        """D-01, T-10-13: sorted, escaped for Markdown, at most KEPT_DUPLICATES_MAX_SHOWN per reason, a dash for none."""
+        customized = [f"switch.kitchen_lamp_{number:02d}" for number in range(12, 0, -1)]
+        rows = [(entity_id, KeptReason.CUSTOMIZED) for entity_id in customized]
+        rows.append(("select.hall_mode", KeptReason.TWIN_REJECTED))
+    
+        placeholders = kept_duplicates_placeholders(rows)
+    
+        shown = ", ".join(escape_markdown(entity_id) for entity_id in sorted(customized)[:10])
+&gt;       assert placeholders == {
+            "count": "13",
+            "customized": f"{shown} …",
+            "rejected": escape_markdown("select.hall_mode"),
+        }
+E       AssertionError: assert {'count': '13....hall\\_mode'} == {'count': '13....hall\\_mode'}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'customized': 'switch.kitchen\\_lamp\\_01, switch.kitchen\\_lamp\\_02, switch.kitchen\\_lamp\\_03, switch.kitchen\\_l...\\_08, switch.kitchen\\_lamp\\_09, switch.kitchen\\_lamp\\_10, switch.kitchen\\_lamp\\_11, switch.kitchen\\_lamp\\_12'} != {'customized': 'switch.kitchen\\_lamp\\_01, switch.kitchen\\_lamp\\_02, switch.kitchen\\_lamp\\_03, switch.kitchen\\_l..._06, switch.kitchen\\_lamp\\_07, switch.kitchen\\_lamp\\_08, switch.kitchen\\_lamp\\_09, switch.kitchen\\_lamp\\_10 …'}
+E         Use -v to get more diff
+
+tests/test_kept_duplicates.py:235: AssertionError</failure></testcase></testsuite></testsuites>

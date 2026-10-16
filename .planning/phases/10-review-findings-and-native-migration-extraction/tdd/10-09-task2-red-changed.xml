@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.036" timestamp="2026-10-16T16:25:24.198897+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_kept_duplicates" name="test_a_changed_list_shows_the_warning_again_after_a_dismissal" time="0.947"><failure message="AssertionError: the changed list stayed hidden behind the earlier dismissal&#10;assert '2026.9.4' is None&#10; +  where '2026.9.4' = IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 16, 14, 25, 25, 119517, tzinfo=...pt_duplicates', translation_placeholders={'count': '2', 'customized': 'switch.mqtt, switch.mqtt\\_2', 'rejected': '—'}).dismissed_version">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140587032288560'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fdcf8d51fe0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7fdcf826a400&gt;
+
+    async def test_a_changed_list_shows_the_warning_again_after_a_dismissal(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """D-02, research Pitfall 15: a changed list deletes the dismissed issue and creates it again, active."""
+        _seed_native_instance(hass_storage)
+        entry, (first, second) = await _native_owner_with_a_guarded_row(
+            hass, make_hub_entry, [make_switch_subentry("Lamp"), make_switch_subentry("Fan")]
+        )
+        entity_registry = er.async_get(hass)
+        entity_registry.async_update_entity(first, name="Kitchen lamp", disabled_by=None)
+        await restart_entry(hass, entry)
+        assert _kept_issue(hass).translation_placeholders["count"] == "1"
+        ir.async_ignore_issue(hass, DOMAIN, ISSUE_ID, True)
+        entity_registry.async_update_entity(second, name="Ceiling fan", disabled_by=None)
+    
+        await restart_entry(hass, entry)
+    
+        issue = _kept_issue(hass)
+        assert issue is not None
+        assert issue.active is True
+&gt;       assert issue.dismissed_version is None, "the changed list stayed hidden behind the earlier dismissal"
+E       AssertionError: the changed list stayed hidden behind the earlier dismissal
+E       assert '2026.9.4' is None
+E        +  where '2026.9.4' = IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 16, 14, 25, 25, 119517, tzinfo=...pt_duplicates', translation_placeholders={'count': '2', 'customized': 'switch.mqtt, switch.mqtt\\_2', 'rejected': '—'}).dismissed_version
+
+tests/test_kept_duplicates.py:196: AssertionError</failure></testcase></testsuite></testsuites>

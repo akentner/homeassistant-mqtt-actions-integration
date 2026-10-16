@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.042" timestamp="2026-10-16T16:24:59.367321+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_kept_duplicates" name="test_the_warning_goes_away_once_no_kept_duplicate_remains_and_no_row_is_touched" time="0.948"><failure message="AssertionError: assert IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 16, 14, 25, 0, 296518, tzinfo=d...anslation_key='kept_duplicates', translation_placeholders={'count': '1', 'customized': 'switch.mqtt', 'rejected': '—'}) is None&#10; +  where IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 16, 14, 25, 0, 296518, tzinfo=d...anslation_key='kept_duplicates', translation_placeholders={'count': '1', 'customized': 'switch.mqtt', 'rejected': '—'}) = _kept_issue(&lt;HomeAssistant RUNNING&gt;)">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140052506238592'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f60919f9fe0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f6083ca2400&gt;
+
+    async def test_the_warning_goes_away_once_no_kept_duplicate_remains_and_no_row_is_touched(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+    ) -&gt; None:
+        """D-02, CR-01: the refresh only reads the registry; once the user disabled the row the warning is gone."""
+        entry, row = await _a_customized_duplicate_kept_enabled(hass, hass_storage, make_hub_entry, make_switch_subentry)
+        entity_registry = er.async_get(hass)
+        kept = entity_registry.async_get(row)
+    
+        await restart_entry(hass, entry)
+    
+        assert _kept_issue(hass) is not None
+        assert entity_registry.async_get(row) == kept
+        disabled = entity_registry.async_update_entity(row, disabled_by=er.RegistryEntryDisabler.USER)
+    
+        await restart_entry(hass, entry)
+    
+&gt;       assert _kept_issue(hass) is None
+E       AssertionError: assert IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 16, 14, 25, 0, 296518, tzinfo=d...anslation_key='kept_duplicates', translation_placeholders={'count': '1', 'customized': 'switch.mqtt', 'rejected': '—'}) is None
+E        +  where IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 16, 14, 25, 0, 296518, tzinfo=d...anslation_key='kept_duplicates', translation_placeholders={'count': '1', 'customized': 'switch.mqtt', 'rejected': '—'}) = _kept_issue(&lt;HomeAssistant RUNNING&gt;)
+
+tests/test_kept_duplicates.py:149: AssertionError</failure></testcase></testsuite></testsuites>

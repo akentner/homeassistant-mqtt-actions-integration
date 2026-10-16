@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.044" timestamp="2026-10-16T16:26:03.611762+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_takeover" name="test_disable_duplicates_and_kept_duplicates_split_the_guard_candidates[untouched]" time="0.901"><failure message="AssertionError: a candidate was both disabled and reported as kept&#10;assert {'switch.lamp'} == set()&#10;  &#10;  Extra items in the left set:&#10;  'switch.lamp'&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140259202856816'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f90b2c2dbc0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f90a3e599b0&gt;
+change = &lt;function &lt;lambda&gt; at 0x7f90b4e04bf0&gt;
+
+    @pytest.mark.parametrize("change", GUARD_CASES)
+    async def test_disable_duplicates_and_kept_duplicates_split_the_guard_candidates(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        change: Callable[[er.EntityRegistry, str, str], object],
+    ) -&gt; None:
+        """FIX-08: every candidate of the guard is either disabled or reported as kept, never both and never neither."""
+        legacy = await setup_legacy_device(hass, mqtt_mock, make_hub_entry, make_switch_subentry)
+        natives, before, _mqtt_device_entry, _native_device = await _legacy_with_native_twins(hass, legacy)
+        entity_registry = er.async_get(hass)
+        switch = next(old for old in before.values() if (old.domain, old.unique_id) == ("switch", legacy.device_id))
+        change(entity_registry, switch.entity_id, natives[("switch", legacy.device_id)].entity_id)
+        # A rename changes the entity id of the candidate; the unique id finds it
+        candidate = entity_registry.async_get_entity_id("switch", "mqtt", legacy.device_id)
+        enabled = [
+            entity_id
+            for entity_id in legacy_entity_ids(hass, legacy.device_id)
+            if entity_registry.async_get(entity_id).disabled_by is None
+        ]
+    
+        kept = {entity_id for entity_id, _reason in _kept_duplicates_of(hass, legacy)}
+        _disable_duplicates_of(hass, legacy)
+    
+        disabled = {
+            entity_id
+            for entity_id in enabled
+            if entity_registry.async_get(entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        }
+&gt;       assert kept &amp; disabled == set(), "a candidate was both disabled and reported as kept"
+E       AssertionError: a candidate was both disabled and reported as kept
+E       assert {'switch.lamp'} == set()
+E         
+E         Extra items in the left set:
+E         'switch.lamp'
+E         Use -v to get more diff
+
+tests/test_takeover.py:1645: AssertionError</failure></testcase></testsuite></testsuites>

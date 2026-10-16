@@ -500,3 +500,37 @@ def test_workflow_runners_skip_caller_jobs_and_read_every_yaml_file(tmp_path: Pa
     (tmp_path / "b.yaml").write_text("jobs:\n  test:\n    runs-on: ubuntu-24.04\n", encoding="utf-8")
     (tmp_path / "c.yml").write_text("name: no jobs here\n", encoding="utf-8")
     assert workflow_runners(tmp_path) == {("a.yml", "build"): "ubuntu-24.04", ("b.yaml", "test"): "ubuntu-24.04"}
+
+
+def _is_test_module(module: str) -> bool:
+    parts = module.split(".")
+    return parts[0] == "tests" and any(part.startswith("test_") for part in parts[1:])
+
+
+def _test_module_imports(path: Path) -> list[str]:
+    """Return every `tests.test_*` module that the module at `path` imports."""
+    imported: list[str] = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            imported.extend(alias.name for alias in node.names if _is_test_module(alias.name))
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            if _is_test_module(node.module):
+                imported.append(node.module)
+            elif node.module.split(".")[0] == "tests":
+                names = (f"{node.module}.{alias.name}" for alias in node.names)
+                imported.extend(name for name in names if _is_test_module(name))
+    return imported
+
+
+def test_no_test_module_imports_from_another_test_module() -> None:
+    """
+    FIX-03 (D-11): shared test helpers live in tests/helpers.py; a test module never imports from another test module.
+
+    Renaming a private helper of one test module must not break the collection of another.
+    """
+    violations = [
+        f"{path.relative_to(ROOT)} -> {module}"
+        for path in sorted(TESTS.rglob("*.py"))
+        for module in _test_module_imports(path)
+    ]
+    assert not violations, "test modules import from other test modules:\n" + "\n".join(violations)

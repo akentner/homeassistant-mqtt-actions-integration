@@ -11,7 +11,7 @@ from custom_components.mqtt_actions import const
 from custom_components.mqtt_actions.button import RestorePreviousButton, ResyncButton
 from custom_components.mqtt_actions.select import DeviceModeSelect, InstanceModeSelect
 from custom_components.mqtt_actions.sensor import RosterSensor
-from tests.test_diagnostics import DEVICE_KEYS, HUB_KEYS, ROSTER_KEYS, TOP_KEYS
+from tests.helpers import DEVICE_KEYS, HUB_KEYS, ROSTER_KEYS, TOP_KEYS
 
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"

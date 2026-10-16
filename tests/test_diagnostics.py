@@ -24,6 +24,7 @@ from custom_components.mqtt_actions.const import (
 from custom_components.mqtt_actions.document import build_content, content_hash
 from custom_components.mqtt_actions.topics import config_topic, heartbeat_topic, state_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
+from tests.helpers import DEVICE_KEYS, HUB_KEYS, ROSTER_KEYS, TOP_KEYS
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -168,11 +169,6 @@ async def test_sentinel_strings_never_appear_in_the_output(
         assert short_id in text
 
 
-# The documented key sets; an unknown key fails the test, which is the point (D-17)
-TOP_KEYS = {"integration_version", "hub", "roster", "devices"}
-HUB_KEYS = {"base_topic", "instance_name", "instance_id", "instance_mode"}
-ROSTER_KEYS = {"id", "name", "version", "last_seen", "online"}
-DEVICE_KEYS = {"uuid", "kind", "origin", "owner", "mode", "effective_mode", "approval", "breaker", "rev", "hash"}
 ALTERNATING = ["ON", "OFF", "ON", "OFF", "ON", "OFF"]
 
 

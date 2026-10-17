@@ -2,44 +2,44 @@
 gsd_state_version: "1.0"
 milestone: v1.1
 milestone_name: Local Actions on Mirrors
-current_phase: 10
-current_phase_name: Review Findings and Native Migration Extraction
-status: verifying
-stopped_at: Completed 10-10-PLAN.md
-last_updated: "2026-10-16T14:42:05.145Z"
-last_activity: 2026-10-16
-last_activity_desc: Phase 10 execution started
-state_head: 5c6861cc8c216689ce76665b02c96c7df4e3c41b
+current_phase: 11
+current_phase_name: Local Actions on Mirrors
+status: planning
+stopped_at: Phase 10 complete, ready to plan Phase 11
+last_updated: "2026-10-17T15:15:51.447Z"
+last_activity: 2026-10-17
+last_activity_desc: Phase 10 complete, transitioned to Phase 11
+state_head: b1bba9581b3ba71eae98077520ca8b23e602d2d3
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 36
   completed_plans: 36
-  percent: 50
+  percent: 67
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-10-11)
+See: .planning/PROJECT.md (updated 2026-10-17)
 
 **Core value:** A state change on one MQTT-backed device reliably triggers the configured actions on every connected HA instance, each executing them locally.
-**Current focus:** Phase 10 — Review Findings and Native Migration Extraction
+**Current focus:** Phase 11 — Local Actions on Mirrors
 
 ## Current Position
 
-Phase: 10 (Review Findings and Native Migration Extraction) — EXECUTING
-Plan: 10 of 10
-Status: Phase complete — ready for verification
-Last activity: 2026-10-16 — Phase 10 execution started
+Phase: 11 — Local Actions on Mirrors
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-17 — Phase 10 complete, transitioned to Phase 11
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 88
+- Total plans completed: 98
 - Average duration: - min
 - Total execution time: 0.0 hours
 
@@ -57,6 +57,7 @@ Progress: [█████░░░░░] 50%
 | 09.2 | 9 | - | - |
 | 09 | 5 | - | - |
 | 09.1 | 12 | - | - |
+| 10 | 10 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -324,14 +325,16 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-09: the refresh leaves an active issue with equal placeholders alone, so a dismissal holds. A changed list or an issue restored inactive is deleted and created again, and an empty list deletes it. A dismissed warning comes back once after a Home Assistant restart while duplicates remain
 - [Phase 10]: 10-09: disable_duplicates and kept_duplicates iterate the shared takeover._guard_candidates. The warning is refreshed after the takeover pass, after each guard pass and after each replay catch run, with no new listener (D-04)
 - [Phase 10]: 10-10: async_remove_local_state deletes ISSUE_KEPT_DUPLICATES by id from a named per-instance set; it stays out of ISSUE_DEVICE_PREFIXES (D-02)
+- [Phase 10]: Verify: UAT 2/2 passed (WR-01 kept non-persistent, Repairs dialog en/de); Nyquist gaps closed in 7e7a5ca (defer_for_run and forget pinned, WR-02 branches, call_soon deferral); SECURITY 17/17 closed; VERIFICATION passed 5/5, 53/53
 - [Phase 10]: 10-10: README and troubleshooting carry the same kept_duplicates paragraph (never deletes, disable instead of delete, dismissal comes back after a HA restart); troubleshooting adds that integration-disabled duplicates are not listed (D-03)
 
 ### Pending Todos
 
-- [CI, after the v1.0.1 tag]: add branches: ["**"] under on.push in ci.yml and validate.yml (.planning/todos/pending/2026-10-12-ci-push-trigger-branches.md)
+None.
 
 ### Blockers/Concerns
 
+- [Phase 10 follow-up]: All 10 findings in 10-REVIEW-DISPOSITION.md are still `open`. WR-01: record the non-persistent decision and drop the "Home Assistant does not keep the text" rationale (README.md:111-114, docs/troubleshooting.md:120-122); WR-02 is fixed in substance by 7e7a5ca; triage IN-02/IN-03 (native_migration.py) before MIR-01 edits it
 - [Phase 11]: Open for discuss-phase: storage location of local actions (separate Store file or main Store key, which a v1.0.x downgrade drops) and the stored trigger identity; `parallel` pin test against core 2026.9.4 before relying on the owner's topology decision
 - [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
@@ -359,10 +362,10 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T14:42:04.921Z
-Stopped at: Completed 10-10-PLAN.md
+Last session: 2026-10-17T15:20:00Z
+Stopped at: Phase 10 complete, ready to plan Phase 11
 Resume file: None
 
 ## Operator Next Steps
 
-- Review the roadmap, then start Phase 9 with /gsd-discuss-phase 9 or /gsd-plan-phase 9
+- Start Phase 11 with /gsd-discuss-phase 11 (storage location and trigger identity are open)

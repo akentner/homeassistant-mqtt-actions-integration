@@ -44,10 +44,10 @@ v1.0.1 Hardening closed 2026-10-11 with an accepted verification gap (owner deci
 - ✓ Phase 5 UAT debt closed on real instances (UAT-01 to UAT-04) — v1.0.1
 - ✓ v1.0.1 released after a bench re-run of UAT-02 and UAT-04 on the tagged SHA 3dc9093 (REL-01) — Phase 9
 - ✓ Core-prefix duplicates are disabled, never removed, on every native instance; user-customized rows are kept — v1.0.1 (unit tests only for the final review fixes)
+- ✓ Info findings of the Phase 8 reviews closed (FIX-01 to FIX-08): takeover, replay catch and duplicate guard moved to `NativeMigration`, loud core-contract pins, partial-count replay errors, kept-duplicates Repairs warning — Phase 10
 
 ### Active
 
-- [ ] Info findings of the Phase 8 reviews (IN-01 to IN-04, IN-01 to IN-03, incl. Repairs hint and manager extraction) — v1.1
 - [ ] Per-instance local actions on mirrored devices, additive or replacing per trigger, no approval needed (MIR-01, backlog 999.1, relates to MAP-01) — v1.1
 - [ ] Current verification of all phases on the final build (QLT-01 carried over) and release v1.1.0 — v1.1
 - [ ] Authenticate or ACL-protect the cutover gate (WR-03) — with the EMQX migration
@@ -112,4 +112,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-16 after Phase 9*
+*Last updated: 2026-10-17 after Phase 10*

@@ -1,5 +1,6 @@
 """The duplicate guard on an instance that only receives an export (UAT-04 clause 2, UAT04-RECEIVER-GUARD, D-08)."""
 
+import asyncio
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -450,6 +451,51 @@ async def test_a_second_pass_a_second_create_event_and_a_restart_change_nothing(
     assert calls == [duplicate.entity_id]
     assert (spec.device_id, 0) in passes, "the guard's sweep did not run for the device at the next start"
     assert all(result == 0 for _device_id, result in passes), passes
+
+
+async def test_two_create_events_in_one_loop_iteration_schedule_two_passes_and_never_nest(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FIX-04: each create event defers its pass to the next loop iteration; no pass runs inside a registry create."""
+    lamp, fan = make_spec(name="Foreign lamp"), make_spec(name="Foreign fan")
+    entry = await _native_mirror(hass, make_hub_entry, lamp)
+    await deliver_config(hass, fan.device_id, document_payload(fan, native=True))
+    assert manager_of(entry).is_native(lamp.device_id)
+    assert manager_of(entry).is_native(fan.device_id)
+    creating = 0
+    nested: list[str] = []
+    real_create = er.EntityRegistry.async_get_or_create
+    real_pass = takeover.disable_duplicates
+
+    def _create(self: er.EntityRegistry, *args: Any, **kwargs: Any) -> er.RegistryEntry:
+        nonlocal creating
+        creating += 1
+        try:
+            return real_create(self, *args, **kwargs)
+        finally:
+            creating -= 1
+
+    def _pass(hass: HomeAssistant, entry_id: str, device_id: str, *, mqtt_entry_id: str) -> int:
+        if creating:
+            nested.append(device_id)
+        return real_pass(hass, entry_id, device_id, mqtt_entry_id=mqtt_entry_id)
+
+    monkeypatch.setattr(er.EntityRegistry, "async_get_or_create", _create)
+    monkeypatch.setattr(takeover, "disable_duplicates", _pass)
+    passes = _spy_disable_duplicates(monkeypatch)
+
+    # Both rows in the same loop iteration, with no await in between
+    lamp_row = create_mqtt_row(hass, "switch", lamp.device_id, device=True)
+    fan_row = create_mqtt_row(hass, "switch", fan.device_id, device=True)
+    assert passes == [], "a pass ran inside the create event instead of on the next loop iteration"
+
+    await asyncio.sleep(0)
+
+    assert sorted(passes) == sorted([(lamp.device_id, 1), (fan.device_id, 1)])
+    assert nested == []
+    registry = er.async_get(hass)
+    assert registry.async_get(lamp_row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    assert registry.async_get(fan_row).disabled_by is er.RegistryEntryDisabler.INTEGRATION
 
 
 async def test_on_a_fresh_install_core_disables_the_row_and_the_guard_does_nothing(

@@ -536,6 +536,55 @@ async def test_an_unexpected_error_in_the_takeover_defers_the_device_and_the_int
     assert [json.loads(payload) for payload, retain in published if not retain] == [{"migrate_discovery": True}]
 
 
+async def test_a_running_mirror_whose_owner_turns_native_stays_legacy_until_the_reload(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-12, T-5-09: the marked document only schedules the reload; the mirror reads legacy until that reload runs."""
+    spec = make_spec(name="Foreign lamp")
+    entry, _topic = await legacy_mirror(hass, make_hub_entry, spec)
+    reloads: list[str] = []
+    # The reload is captured, not run, so the state between the switch and the reload stays observable
+    monkeypatch.setattr(hass.config_entries, "async_schedule_reload", reloads.append)
+
+    await _deliver_document(hass, spec.device_id, document_payload(spec, rev=2, native=True))
+
+    manager = manager_of(entry)
+    assert reloads == [entry.entry_id]
+    assert manager.is_native(spec.device_id) is False
+    assert er.async_get(hass).async_get_entity_id("switch", DOMAIN, spec.device_id) is None
+    assert len(legacy_entity_ids(hass, spec.device_id)) == 3
+
+
+async def test_a_deferred_device_released_here_starts_clean_in_the_same_run(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A released id loses its per-run deferral, so a native mirror that follows under the same id is native at once."""
+    subentry = make_switch_subentry("Lamp")
+    device_id = subentry["data"][CONF_DEVICE_ID]
+    seed_native_pending(hass_storage, pending=[device_id])
+    monkeypatch.setattr(takeover, "async_take_over", AsyncMock(side_effect=RuntimeError("registry surprise")))
+    monkeypatch.setattr(takeover, "legacy_device", lambda *_args: object())
+    entry = await setup_entry(hass, make_hub_entry([subentry]))
+    manager = manager_of(entry)
+    assert manager.migration.is_deferred(device_id) is True
+
+    assert await manager.async_release_locally([device_id]) == [device_id]
+    await hass.async_block_till_done(wait_background_tasks=True)
+    spec = make_spec(device_id=device_id, name="Lamp")
+    await _deliver_document(hass, device_id, document_payload(spec, native=True))
+
+    assert device_id in manager.mirrors
+    assert manager.is_native(device_id) is True
+
+
 # --- Task 3: adoption between native and legacy devices ------------------------------------------------------------
 
 ON_ACTIONS = [{"action": "test.on"}]

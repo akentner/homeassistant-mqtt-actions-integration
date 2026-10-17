@@ -6,28 +6,34 @@ turned the twin off (WR-03). One non-fixable warning per instance lists those ro
 and goes away once none remains. It never removes, disables or enables a registry row.
 """
 
+import dataclasses
+import logging
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
+from custom_components.mqtt_actions import takeover
 from custom_components.mqtt_actions.const import CONF_DEVICE_ID, DOMAIN
 from custom_components.mqtt_actions.document import escape_markdown
 from custom_components.mqtt_actions.native_migration import NativeMigration, kept_duplicates_placeholders
 from custom_components.mqtt_actions.takeover import KeptReason
 from tests.helpers import (
     create_mqtt_row,
+    manager_of,
     native_entity_id,
     quiet_period_passes,
     restart_entry,
     seed_store,
     setup_entry,
 )
+from tests.log_helpers import OWN_LOGGER
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    import pytest
     from homeassistant.core import HomeAssistant
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -221,6 +227,78 @@ async def test_the_warning_is_refreshed_after_a_guard_pass_and_after_the_catch(
         await quiet_period_passes(hass)
 
         assert spy.call_count > after_restart, "the replay catch did not refresh the warning"
+
+
+async def test_an_issue_restored_inactive_and_dismissed_is_created_again_active_and_undismissed(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """Research Pitfall 15: an issue HA restored inactive after its restart is rebuilt even with the same list."""
+    entry, row = await _a_customized_duplicate_kept_enabled(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    placeholders = _kept_issue(hass).translation_placeholders
+    ir.async_ignore_issue(hass, DOMAIN, ISSUE_ID, True)
+    # What the issue registry restores from its Store after a restart of Home Assistant: inactive, dismissal kept
+    registry = ir.async_get(hass)
+    registry.issues[(DOMAIN, ISSUE_ID)] = dataclasses.replace(_kept_issue(hass), active=False)
+
+    manager_of(entry).migration._refresh_kept_duplicates()
+
+    issue = _kept_issue(hass)
+    assert issue is not None
+    assert issue.active is True
+    assert issue.dismissed_version is None, "the restored dismissal hid the warning"
+    assert issue.translation_placeholders == placeholders
+    assert issue.is_persistent is False
+    assert escape_markdown(row) == placeholders["customized"]
+
+
+async def test_a_list_that_raises_leaves_the_warning_alone_and_logs_no_entity_id(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """T-04-14: a raise while building the list keeps the issue as it is and logs a fixed warning and the type only."""
+    entry, row = await _a_customized_duplicate_kept_enabled(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    before = _kept_issue(hass)
+    caplog.clear()
+
+    with (
+        caplog.at_level(logging.DEBUG, logger=OWN_LOGGER),
+        patch.object(takeover, "kept_duplicates", side_effect=RuntimeError(row)),
+    ):
+        manager_of(entry).migration._refresh_kept_duplicates()
+
+    assert _kept_issue(hass) == before
+    own = [record for record in caplog.records if record.name == OWN_LOGGER]
+    assert [record.levelno for record in own] == [logging.WARNING, logging.DEBUG]
+    assert "RuntimeError" in own[1].getMessage()
+    for record in own:
+        assert row not in record.getMessage()
+        assert row not in str(record.args)
+
+
+async def test_no_mqtt_entry_means_nothing_is_kept_and_the_warning_is_deleted(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-02: without an MQTT config entry the list is empty, so the refresh deletes the warning."""
+    entry, _row = await _a_customized_duplicate_kept_enabled(hass, hass_storage, make_hub_entry, make_switch_subentry)
+    manager = manager_of(entry)
+    monkeypatch.setattr(manager.gateway, "mqtt_entry_id", lambda: None)
+
+    manager.migration._refresh_kept_duplicates()
+
+    assert _kept_issue(hass) is None
 
 
 def test_the_placeholders_cap_and_escape_the_entity_ids() -> None:

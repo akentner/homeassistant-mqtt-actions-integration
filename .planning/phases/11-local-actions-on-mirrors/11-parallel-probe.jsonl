@@ -1,0 +1,10 @@
+{"case": "owner_failure", "events": ["owner_fail", "local_finished"], "exception": "HomeAssistantError:OWNER_FAILURE", "response": null, "variables": null, "errors": {"0": ["OWNER_FAILURE"], "0/parallel/0/sequence/0": ["OWNER_FAILURE"]}}
+{"case": "both_fail", "events": ["owner_fail", "local_fail"], "exception": "HomeAssistantError:OWNER_FAILURE", "response": null, "variables": null, "errors": {"0": ["OWNER_FAILURE"], "0/parallel/0/sequence/0": ["OWNER_FAILURE"], "0/parallel/1/sequence/0": ["LOCAL_FAILURE"]}}
+{"case": "stop", "events": ["local_finished"], "exception": null, "response": null, "variables": {}, "errors": {}}
+{"case": "error_stop", "events": ["local_finished"], "exception": null, "response": null, "variables": {}, "errors": {"0": ["error stop"], "0/parallel/0/sequence/0": ["error stop"]}}
+{"case": "continue_homeassistant_error", "events": ["owner_fail", "after", "local_finished", "after"], "exception": null, "response": null, "variables": {}, "errors": {"0/parallel/0/sequence/0": ["OWNER_FAILURE"]}}
+{"case": "stop_response", "events": ["local_finished"], "exception": null, "response": {"branch": "owner"}, "variables": {"answer": {"branch": "owner"}}, "errors": {}}
+{"case": "distinct_response_variables", "events": ["after"], "exception": null, "response": null, "variables": {"owner_reply": {"answer": "owner"}, "local_reply": {"answer": "local"}}, "errors": {}}
+{"case": "same_response_variable", "events": ["after"], "exception": null, "response": null, "variables": {"reply": {"answer": "local"}}, "errors": {}}
+{"case": "owner_stop_local_failure", "events": ["local_fail"], "exception": null, "response": null, "variables": {}, "errors": {"0/parallel/1/sequence/0": ["LOCAL_FAILURE"]}}
+{"case": "owner_guard_local_unrestricted", "events": ["local_denied_service_ran"], "exception": "DeniedServiceCallError:service mqtt.publish is not allowed for mirrored actions", "response": null, "variables": null, "errors": {"0": ["service mqtt.publish is not allowed for mirrored actions"], "0/parallel/0/sequence/0": ["service mqtt.publish is not allowed for mirrored actions"]}}

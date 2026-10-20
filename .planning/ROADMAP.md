@@ -231,7 +231,44 @@ Plans:
   4. Nothing local leaves the instance: the central config, actions hash, export, diagnostics content and adoption payload are byte-identical with and without local actions, existing approvals stay valid, and no new re-trigger status or reason word appears on the broker. Diagnostics show only counts of local actions (per device, orphaned). The approval issue says how many triggers are replaced locally, while the approval stays pending and adoption stays refused. (MIR-04, MIR-10, MIR-12, MIR-14)
   5. Local actions survive owner content changes, renames, rev bumps, restarts and an owner re-pin. Local actions of a Select option the owner removed stay inactive, are listed as orphaned in the options where the user can remove them, and re-attach when the same StateValue returns. A tombstone or an adoption discards them with a log entry and `adopt_device` reports it; start-up and transient prunes discard nothing. The README documents modes, mute, parallel semantics, this lifecycle, downgrade behavior and the `{{ state }}` template caveat. (MIR-06, MIR-07, MIR-08, MIR-15)
 
-**Plans**: TBD
+**Plans**: 13 plans
+
+Plans:
+**Wave 1**
+- [ ] 11-01-PLAN.md — Establish invariant-first owner-byte, broker-leakage, gate-matrix and Core parallel contracts
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 11-02-PLAN.md — Prove section plus ActionSelector rendering on the real pinned frontend
+- [ ] 11-03-PLAN.md — Build the HA-free overlay model and one-Script runner tracer with branch outcomes
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 11-04-PLAN.md — Add the separate versioned local-actions Store and migration seam
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 11-05-PLAN.md — Load, mutate and schedule local overlays through locked Manager APIs and safe policy
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 11-06-PLAN.md — Preserve/discard overlays correctly across owner changes, prune, tombstone and adoption
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 11-07-PLAN.md — Unify test/re-trigger entry points and add independent local Repairs/approval notices
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 11-08-PLAN.md — Deliver the bilingual hub options menu, editor and confirmations
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 11-09-PLAN.md — Complete hub cleanup with a bilingual device-count warning and count-only diagnostics
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 11-10-PLAN.md — Prove multi-instance isolation and all-publication/native-migration invariants
+- [ ] 11-12-PLAN.md — Document local actions (README, operations, troubleshooting) and draft unpublished release notes
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 11-11-PLAN.md — Run the milestone-wide cross-file review and route every product finding into a bounded Phase 11 gap
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 11-13-PLAN.md — Run the complete Phase 11 quality/security gate on the fixed code and freeze the Phase 12 handoff
+
 **UI hint**: yes
 **Research**: needed (`/gsd-plan-phase 11` with research): pin test of `parallel` branch semantics in core 2026.9.4 (`stop`, `continue_on_error`, response variables, re-raise of the first exception after both branches); validating and guarding the owner part (static denylist, `GuardedTemplate`) apart from the unguarded local part before assembly; Store skeleton with its own migrate function; `section` plus `ActionSelector` rendering in an options flow on the 2026.9 frontend (check on the bench early).
 **Notes**:
@@ -239,7 +276,10 @@ Plans:
 - Still open for discuss-phase: storage location (separate Store file, research recommendation, or an additive key in the main Store, which a v1.0.x downgrade drops on its first save; either way the downgrade behavior goes into README and release notes) and the stored trigger identity (StateValue plus device kind recommended). If the `parallel` pin test shows surprises, the owner decides before any fallback to a sequential owner-then-local sequence.
 - Plan order: invariant tests first (hash equality, adoption bytes, the 4x3x2 gate matrix of approval state x local mode x owner trigger has actions, a "never published" check across all fake-broker publishes), then the HA-free overlay module and the plan-based runner build (owned devices and overlay-free mirrors assemble byte-identically to today), then the manager wiring (overlays loaded before mirrors are restored, writes under the lock with an immediate save, no start-up garbage collection), then the options flow, texts, approval issue text and README. The flow is a thin client of the manager API.
 - Security: add a threat entry "trust-level mixing in one Script" for `/gsd-secure-phase`; `_refuse_denied` and the static denylist apply to the owner part only.
-- End the phase with a milestone-wide cross-file review, so every product fix lands before Phase 12.
+- End the phase with a milestone-wide cross-file review, so every product fix lands before Phase 12. The flow is fixed in the plans:
+  - 11-11 reviews and routes each finding into a bounded Phase 11 gap-closure plan (`/gsd-plan-phase 11 --gaps`).
+  - Those plans run next.
+  - 11-13 runs the final gate only when no finding is OPEN or ROUTED.
 
 ### Phase 12: Re-verification and v1.1.0 Release
 
@@ -269,7 +309,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
 | 9.2. CR-01 Cross-Instance Gap Closure (INSERTED) | 9/9 | Complete    | 2026-10-16 |
 | 10. Review Findings and Native Migration Extraction | 10/10 | Complete    | 2026-10-17 |
-| 11. Local Actions on Mirrors | 0/TBD | Not started | - |
+| 11. Local Actions on Mirrors | 0/13 | Not started | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |
 
 ## Backlog

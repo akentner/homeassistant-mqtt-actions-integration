@@ -23,9 +23,12 @@ from .document import DocumentRejectedError, analyze_actions, escape_markdown
 from .trust import DeniedServiceCallError, guard_actions
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
+    from .local_actions import EffectiveTriggerPlan
     from .model import DeviceSpec, TriggerSpec
 
 
@@ -85,6 +88,17 @@ class ActionRunner:
                 self._restricted.discard(spec.device_id)
         if previous is not None:
             await previous.async_unload()
+
+    async def async_build_effective(self, spec: DeviceSpec, plans: Sequence[EffectiveTriggerPlan]) -> None:
+        """RED skeleton: build today's owner-only mirror Script and ignore every local branch."""
+        if any(plan.owner_actions is not None for plan in plans):
+            await self.async_build_device(spec, restricted=True)
+        else:
+            await self.async_unload(spec.device_id)
+
+    def plan_for(self, device_id: str, key: str) -> EffectiveTriggerPlan | None:  # noqa: ARG002
+        """RED skeleton: no effective plan is recorded yet."""
+        return None
 
     @staticmethod
     def _refuse_denied(trigger: TriggerSpec) -> None:

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.301" timestamp="2026-10-21T01:55:49.988129+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_parallel" name="test_one_additive_approved_trigger_runs_owner_and_local_branches_in_one_script" time="0.131"><failure message="AssertionError: the local branch ran 0 times, expected 1&#10;assert 0 == 1&#10; +  where 0 = len([])">hass = &lt;HomeAssistant RUNNING&gt;
+
+    async def test_one_additive_approved_trigger_runs_owner_and_local_branches_in_one_script(hass: HomeAssistant) -&gt; None:
+        """D-01: the approved owner branch 0 and the trusted local branch 1 both complete inside the one device Script."""
+        owner_calls = async_mock_service(hass, "test", "owner_on")
+        local_calls = async_mock_service(hass, "test", "local_on")
+        spec = make_spec(on=OWNER_ON, off=OWNER_OFF)
+        runner = _bare_runner(hass)
+    
+        await runner.async_build_effective(
+            spec, build_effective_trigger_plans(spec, "approved", [_additive_on(spec, LOCAL_ON)])
+        )
+        await _enqueue(hass, runner, spec)
+    
+&gt;       assert len(local_calls) == 1, f"the local branch ran {len(local_calls)} times, expected 1"
+E       AssertionError: the local branch ran 0 times, expected 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_local_parallel.py:646: AssertionError</failure></testcase></testsuite></testsuites>

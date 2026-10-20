@@ -20,15 +20,37 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Context, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
 from homeassistant.helpers.trace import trace_get
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
 
 from custom_components.mqtt_actions.actions import async_validate_actions
+from custom_components.mqtt_actions.const import (
+    CONF_BASE_TOPIC,
+    CONF_INSTANCE_ID,
+    CONF_INSTANCE_NAME,
+    DOMAIN,
+    ISSUE_DENIED_CALL_PREFIX,
+    PAYLOAD_ON,
+    SUBENTRY_SWITCH,
+)
+from custom_components.mqtt_actions.local_actions import (
+    LocalActionMode,
+    build_effective_trigger_plans,
+    make_local_record,
+)
+from custom_components.mqtt_actions.model import SWITCH_ON_KEY
+from custom_components.mqtt_actions.runner import ActionRunner
 from custom_components.mqtt_actions.trust import DeniedServiceCallError, GuardedTemplate, guard_actions
+from tests.documents import make_spec
+from tests.helpers import BASE
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
+
+    from custom_components.mqtt_actions.model import DeviceSpec
 
 CORE = "Home Assistant Core 2026.9.4"
 HINT = (
@@ -567,3 +589,137 @@ async def test_different_trigger_and_owner_only_runs_never_reach_the_local_branc
     assert _reached(trace, local_prefix), HINT
     assert local_outcome(trace, local_completed=True, prefix=local_prefix) == SUCCESS, HINT
     await script.async_unload()
+
+
+# --- the production runner slice (Plan 11-03): one Script, owner branch 0, local branch 1 ---------------------------
+
+OWNER_ON = [{"action": "test.owner_on"}]
+OWNER_OFF = [{"action": "test.owner_off"}]
+LOCAL_ON = [{"action": "test.local_on", "data": {"source": "local"}}]
+# Trace and config paths of the one-trigger dispatcher: choose option 0, its sequence step 0 is the parallel
+DISPATCH_OWNER = "0/choose/0/sequence/0/parallel/0/sequence"
+DISPATCH_LOCAL = "0/choose/0/sequence/0/parallel/1/sequence"
+
+
+def _bare_runner(hass: HomeAssistant) -> ActionRunner:
+    """Return a real runner on a config entry that is not set up, for tests below the manager."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_BASE_TOPIC: BASE, CONF_INSTANCE_NAME: "Runner", CONF_INSTANCE_ID: "runner"},
+    )
+    entry.add_to_hass(hass)
+    return ActionRunner(hass, entry)
+
+
+def _additive_on(spec: DeviceSpec, actions: list[dict[str, Any]]) -> Any:
+    return make_local_record(
+        spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON, label="On", mode=LocalActionMode.ADDITIVE, actions=actions
+    )
+
+
+async def _enqueue(hass: HomeAssistant, runner: ActionRunner, spec: DeviceSpec, key: str = SWITCH_ON_KEY) -> None:
+    trigger = spec.triggers[key]
+    runner.enqueue(spec.device_id, spec.name, trigger.label, key, {"device_id": spec.device_id})
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _subtree(sequence: list[dict[str, Any]], path: str) -> Any:
+    """Return the node of a validated Script sequence at a trace path; trace paths are config paths."""
+    node: Any = sequence
+    for part in path.split("/"):
+        node = node[int(part)] if isinstance(node, list) else node[part]
+    return node
+
+
+async def test_one_additive_approved_trigger_runs_owner_and_local_branches_in_one_script(hass: HomeAssistant) -> None:
+    """D-01: the approved owner branch 0 and the trusted local branch 1 both complete inside the one device Script."""
+    owner_calls = async_mock_service(hass, "test", "owner_on")
+    local_calls = async_mock_service(hass, "test", "local_on")
+    spec = make_spec(on=OWNER_ON, off=OWNER_OFF)
+    runner = _bare_runner(hass)
+
+    await runner.async_build_effective(
+        spec, build_effective_trigger_plans(spec, "approved", [_additive_on(spec, LOCAL_ON)])
+    )
+    await _enqueue(hass, runner, spec)
+
+    assert len(local_calls) == 1, f"the local branch ran {len(local_calls)} times, expected 1"
+    assert local_calls[0].data == {"source": "local"}
+    assert len(owner_calls) == 1, f"the approved owner branch ran {len(owner_calls)} times, expected 1"
+    assert runner.script_count(spec.device_id) == 1
+    plan = runner.plan_for(spec.device_id, SWITCH_ON_KEY)
+    assert plan is not None
+    assert (plan.owner_path, plan.local_path) == (DISPATCH_OWNER, DISPATCH_LOCAL)
+    script = runner.script_for(spec.device_id, SWITCH_ON_KEY)
+    assert script is not None
+    assert len(_subtree(script.sequence, "0/choose/0/sequence/0/parallel")) == 2
+
+
+async def test_one_additive_pending_trigger_runs_only_the_local_branch(hass: HomeAssistant) -> None:
+    """D-02: a pending mirror runs its trusted local branch alone; the unapproved owner branch is never built."""
+    owner_calls = async_mock_service(hass, "test", "owner_on")
+    local_calls = async_mock_service(hass, "test", "local_on")
+    spec = make_spec(on=OWNER_ON, off=OWNER_OFF)
+    runner = _bare_runner(hass)
+
+    await runner.async_build_effective(
+        spec, build_effective_trigger_plans(spec, "pending", [_additive_on(spec, LOCAL_ON)])
+    )
+    await _enqueue(hass, runner, spec)
+
+    assert len(local_calls) == 1, f"the local branch of the pending mirror ran {len(local_calls)} times, expected 1"
+    assert owner_calls == [], "the unapproved owner branch must never run"
+    assert runner.script_count(spec.device_id) == 1
+    plan = runner.plan_for(spec.device_id, SWITCH_ON_KEY)
+    assert plan is not None
+    assert (plan.owner_path, plan.local_path) == (None, "0/choose/0/sequence")
+
+
+async def test_one_additive_runner_applies_the_owner_only_guard_and_leaves_local_unwrapped(
+    hass: HomeAssistant,
+) -> None:
+    """D-02, T-11-05: the same templated denied call is refused on the owner branch and runs on the local branch."""
+    published = async_mock_service(hass, "mqtt", "publish")
+    templated = "{{ 'mqtt.publish' }}"
+    spec = make_spec(on=[{"action": templated, "continue_on_error": True}], off=OWNER_OFF)
+    runner = _bare_runner(hass)
+
+    await runner.async_build_effective(
+        spec, build_effective_trigger_plans(spec, "approved", [_additive_on(spec, [{"action": templated}])])
+    )
+    await _enqueue(hass, runner, spec)
+
+    assert len(published) == 1, "the trusted local call must run exactly once"
+    script = runner.script_for(spec.device_id, SWITCH_ON_KEY)
+    assert script is not None
+    owner_tree = _subtree(script.sequence, DISPATCH_OWNER)
+    local_tree = _subtree(script.sequence, DISPATCH_LOCAL)
+    assert any(isinstance(item, GuardedTemplate) for item in _templates(owner_tree))
+    assert _templates(local_tree)
+    assert not any(isinstance(item, GuardedTemplate) for item in _templates(local_tree))
+    assert ir.async_get(hass).async_get_issue(DOMAIN, f"{ISSUE_DENIED_CALL_PREFIX}{spec.device_id}") is not None
+
+
+async def test_one_additive_overlay_free_mirror_build_is_identical_to_the_direct_dispatcher(
+    hass: HomeAssistant,
+) -> None:
+    """D-21: without a customization the effective build is today's restricted dispatcher, equal node for node."""
+    spec = make_spec(on=[{"action": "{{ 'test.owner_on' }}"}], off=OWNER_OFF)
+    direct = _bare_runner(hass)
+    effective = _bare_runner(hass)
+
+    await direct.async_build_device(spec, restricted=True)
+    await effective.async_build_effective(spec, build_effective_trigger_plans(spec, "approved", []))
+
+    direct_script = direct.script_for(spec.device_id, SWITCH_ON_KEY)
+    effective_script = effective.script_for(spec.device_id, SWITCH_ON_KEY)
+    assert direct_script is not None
+    assert effective_script is not None
+    assert effective_script.sequence == direct_script.sequence
+    assert [type(item) for item in _templates(effective_script.sequence)] == [
+        type(item) for item in _templates(direct_script.sequence)
+    ]
+    # An unapproved mirror without a customization keeps today's gate: no Script at all
+    pending = _bare_runner(hass)
+    await pending.async_build_effective(spec, build_effective_trigger_plans(spec, "pending", []))
+    assert pending.script_count(spec.device_id) == 0

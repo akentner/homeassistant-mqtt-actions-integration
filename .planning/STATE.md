@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Phase 11 context gathered
-last_updated: "2026-10-20T23:18:17.004Z"
-last_activity: 2026-10-17
-last_activity_desc: Phase 10 complete, transitioned to Phase 11
-state_head: bf03b1161948cac091f811149a05ef13c1dd924e
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-10-20T23:45:01.431Z"
+last_activity: 2026-10-21
+last_activity_desc: Phase 11 execution started
+state_head: 4d0bb5e00a9165cba21c9c3745ca1a0b872ff3f7
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 49
-  completed_plans: 36
+  completed_plans: 37
   percent: 67
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 
 ## Current Position
 
-Phase: 11 (Local Actions on Mirrors) — READY TO EXECUTE
-Plan: Not started
+Phase: 11 (Local Actions on Mirrors) — EXECUTING
+Plan: 2 of 13
 Status: Ready to execute
-Last activity: 2026-10-17 — Phase 10 complete, transitioned to Phase 11
+Last activity: 2026-10-21 — Phase 11 execution started
 
 Progress: [███████░░░] 67%
 
@@ -151,6 +151,7 @@ Progress: [███████░░░] 67%
 | Phase 10 P08 | 5 min | 2 tasks | 3 files |
 | Phase 10 P09 | 17 min | 2 tasks | 8 files |
 | Phase 10 P10 | 8min | 2 tasks | 6 files |
+| Phase 11 P01 | 15 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -327,6 +328,8 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-10: async_remove_local_state deletes ISSUE_KEPT_DUPLICATES by id from a named per-instance set; it stays out of ISSUE_DEVICE_PREFIXES (D-02)
 - [Phase 10]: Verify: UAT 2/2 passed (WR-01 kept non-persistent, Repairs dialog en/de); Nyquist gaps closed in 7e7a5ca (defer_for_run and forget pinned, WR-02 branches, call_soon deferral); SECURITY 17/17 closed; VERIFICATION passed 5/5, 53/53
 - [Phase 10]: 10-10: README and troubleshooting carry the same kept_duplicates paragraph (never deletes, disable instead of delete, dismissal comes back after a HA restart); troubleshooting adds that integration-disabled duplicates are not listed (D-03)
+- [Phase 11]: Phase 11 invariant tests seed the local Store under mqtt_actions.local_actions plus Instance.local_store_key; v1 record shape {device_id, kind, state_value, label, mode additive|replacement, actions} is the shape Plan 11-04 adopts
+- [Phase 11]: tests/test_local_invariants.py runs in the multi_instance tier (uses make_instance); the only expected-RED node is tests/test_local_actions_manager.py::test_pending_mirror_with_persisted_additive_record_gains_local_branch until Plan 11-05 Task 1
 
 ### Pending Todos
 
@@ -362,9 +365,9 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-17T19:19:04.892Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-local-actions-on-mirrors/11-CONTEXT.md
+Last session: 2026-10-20T23:45:01.192Z
+Stopped at: Completed 11-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

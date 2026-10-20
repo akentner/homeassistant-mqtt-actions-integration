@@ -1,5 +1,6 @@
 """Execution of configured action sequences: one Script per device, failures surfaced in the log and Repairs."""
 
+import copy
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Context
@@ -23,13 +24,34 @@ from .document import DocumentRejectedError, analyze_actions, escape_markdown
 from .trust import DeniedServiceCallError, guard_actions
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
     from .local_actions import EffectiveTriggerPlan
     from .model import DeviceSpec, TriggerSpec
+
+
+def _branch_sequence(plan: EffectiveTriggerPlan) -> list[dict[str, Any]]:
+    """Return the raw dispatch sequence of one effective plan, from copies; both branches become one `parallel`."""
+    owner = copy.deepcopy(plan.owner_actions)
+    local = copy.deepcopy(plan.local_actions)
+    if owner is not None and local is not None:
+        return [{"parallel": [{"sequence": owner}, {"sequence": local}]}]
+    sequence = owner if owner is not None else local
+    return sequence if sequence is not None else []
+
+
+def _replace_at(node: Any, parts: list[str], replace: Callable[[Any], Any]) -> Any:
+    """Return a copy of a validated tree with the node at a config path replaced; the containers on the path are new."""
+    if not parts:
+        return replace(node)
+    head, rest = parts[0], parts[1:]
+    if isinstance(node, list):
+        index = int(head)
+        return [*node[:index], _replace_at(node[index], rest, replace), *node[index + 1 :]]
+    return {**node, head: _replace_at(node[head], rest, replace)}
 
 
 class ActionRunner:
@@ -47,6 +69,8 @@ class ActionRunner:
         self._generation: dict[str, int] = {}
         # Devices whose current Script was built restricted (mirrors); their broker-supplied text is escaped in issues
         self._restricted: set[str] = set()
+        # device id -> trigger key -> the effective plan its current Script was built with; only customized mirrors
+        self._plans: dict[str, dict[str, EffectiveTriggerPlan]] = {}
 
     async def async_build_device(self, spec: DeviceSpec, *, restricted: bool = False) -> None:
         """
@@ -76,6 +100,7 @@ class ActionRunner:
             runnable.append(trigger)
         script = await self._async_build_script(spec, runnable, restricted=restricted) if runnable else None
         previous = self._scripts.pop(spec.device_id, None)
+        self._plans.pop(spec.device_id, None)
         if script is None:
             self._runnable.pop(spec.device_id, None)
             self._restricted.discard(spec.device_id)
@@ -90,21 +115,118 @@ class ActionRunner:
             await previous.async_unload()
 
     async def async_build_effective(self, spec: DeviceSpec, plans: Sequence[EffectiveTriggerPlan]) -> None:
-        """RED skeleton: build today's owner-only mirror Script and ignore every local branch."""
-        if any(plan.owner_actions is not None for plan in plans):
-            await self.async_build_device(spec, restricted=True)
-        else:
-            await self.async_unload(spec.device_id)
+        """
+        Build the one Script of a mirror from the effective plans of its triggers and replace the previous one.
 
-    def plan_for(self, device_id: str, key: str) -> EffectiveTriggerPlan | None:  # noqa: ARG002
-        """RED skeleton: no effective plan is recorded yet."""
-        return None
+        Without any local customization this is exactly today's mirror build: the restricted dispatcher when the owner
+        actions are eligible, no Script otherwise (D-21). With one, every trigger's owner and local actions are
+        validated on their own, so an invalid branch never removes the other (D-01). The static denylist and the
+        GuardedTemplate apply to the owner actions only, after the final validation; trusted local actions keep
+        owned-device trust (D-02, T-11-05). Both branches of a trigger run as one native `parallel`, owner first,
+        inside the single device Script; there is no second Script and no step is patched.
+        """
+        if all(plan.customization is None for plan in plans):
+            if any(plan.owner_eligible for plan in plans):
+                await self.async_build_device(spec, restricted=True)
+            else:
+                await self.async_unload(spec.device_id)
+            return
+        built: list[EffectiveTriggerPlan] = []
+        for plan in plans:
+            checked = await self._async_check_branches(spec, plan)
+            if checked.runnable:
+                built.append(checked.at_dispatch(f"0/choose/{len(built)}/sequence"))
+        script = await self._async_build_effective_script(spec, built) if built else None
+        previous = self._scripts.pop(spec.device_id, None)
+        if script is None:
+            self._runnable.pop(spec.device_id, None)
+            self._plans.pop(spec.device_id, None)
+            self._restricted.discard(spec.device_id)
+        else:
+            self._scripts[spec.device_id] = script
+            self._runnable[spec.device_id] = frozenset(plan.trigger_key for plan in built)
+            self._plans[spec.device_id] = {plan.trigger_key: plan for plan in built}
+            self._restricted.add(spec.device_id)
+        if previous is not None:
+            await previous.async_unload()
+
+    async def _async_check_branches(self, spec: DeviceSpec, plan: EffectiveTriggerPlan) -> EffectiveTriggerPlan:
+        """Validate the owner and the local actions of one trigger separately; drop a branch that fails."""
+        owner = plan.owner_eligible
+        if plan.owner_actions is not None:
+            try:
+                self._refuse_denied_actions(plan.owner_actions)
+                await async_validate_actions(self._hass, plan.owner_actions)
+            except ActionsInvalid as err:
+                self._report_setup_error(spec, plan.label, err, restricted=True)
+                owner = False
+        local = plan.local_eligible
+        if plan.local_actions is not None:
+            try:
+                await async_validate_actions(self._hass, plan.local_actions)
+            except ActionsInvalid as err:
+                # Local actions are validated when they are saved; this only catches what changed since then
+                LOGGER.error(
+                    "Invalid local actions for %s of device %s: %s",
+                    plan.label,
+                    spec.name,
+                    str(err)[:MAX_ISSUE_ERROR_LENGTH],
+                )
+                local = False
+        return plan.restricted_to(owner=owner, local=local)
+
+    async def _async_build_effective_script(self, spec: DeviceSpec, built: list[EffectiveTriggerPlan]) -> Script | None:
+        """Assemble the dispatcher of the effective plans, validate it, guard the owner subtrees, build the Script."""
+        # Only the hashed hex key enters a template, never option names or user text (T-02-07)
+        sequence = [
+            {
+                "choose": [
+                    {
+                        "conditions": [
+                            {
+                                "condition": "template",
+                                "value_template": f"{{{{ trigger_key == '{plan.trigger_key}' }}}}",
+                            }
+                        ],
+                        "sequence": _branch_sequence(plan),
+                    }
+                    for plan in built
+                ]
+            }
+        ]
+        try:
+            validated = await async_validate_actions(self._hass, sequence)
+        except ActionsInvalid as err:
+            self._report_setup_error(spec, TRIGGER_SETUP, err, restricted=True)
+            return None
+        for plan in built:
+            if plan.owner_path is not None:
+                validated = _replace_at(validated, plan.owner_path.split("/"), guard_actions)
+        return Script(
+            self._hass,
+            validated,
+            spec.name,
+            DOMAIN,
+            script_mode="queued" if spec.run_mode == RUN_MODE_SERIAL else "restart",
+            max_runs=SERIAL_QUEUE_LIMIT,
+            max_exceeded="WARNING",
+            logger=LOGGER,
+        )
+
+    def plan_for(self, device_id: str, key: str) -> EffectiveTriggerPlan | None:
+        """Return the effective plan the device Script was built with for a trigger, or None."""
+        return self._plans.get(device_id, {}).get(key)
 
     @staticmethod
     def _refuse_denied(trigger: TriggerSpec) -> None:
         """Raise ActionsInvalid naming the denied services of a trigger; a tree that cannot be walked is refused too."""
+        ActionRunner._refuse_denied_actions(trigger.actions)
+
+    @staticmethod
+    def _refuse_denied_actions(actions: list[dict[str, Any]]) -> None:
+        """Raise ActionsInvalid naming the denied services of owner actions; a tree that cannot be walked too."""
         try:
-            denied = analyze_actions(trigger.actions).denied
+            denied = analyze_actions(actions).denied
         except DocumentRejectedError as err:
             msg = f"the actions cannot be checked ({err.reason})"
             raise ActionsInvalid(msg) from err
@@ -307,6 +429,7 @@ class ActionRunner:
         self._runnable.pop(device_id, None)
         self._generation.pop(device_id, None)
         self._restricted.discard(device_id)
+        self._plans.pop(device_id, None)
         if (script := self._scripts.pop(device_id, None)) is not None:
             await script.async_unload()
         if remove_issue:

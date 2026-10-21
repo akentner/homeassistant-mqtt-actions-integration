@@ -1648,12 +1648,7 @@ class Manager:
                 )
             except (ActionsInvalid, LocalActionRecordInvalid) as err:
                 raise LocalActionError(LOCAL_ACTION_INVALID_ACTIONS) from err
-            if self._local_record(identity) is None:
-                candidate = (*self._local_records, record)
-            else:
-                # The record keeps its place, so a repeated identical edit saves the identical set (MIR-09)
-                candidate = tuple(record if item.identity == identity else item for item in self._local_records)
-            await self._async_commit_local_records(candidate, identity.device_id)
+            await self._async_commit_local_records(self._local_candidate(identity, record), identity.device_id)
             return LocalActionChange(identity, _copy_record(record), active=trigger is not None)
 
     async def async_remove_local_action(self, identity: LocalActionIdentity) -> LocalActionChange:
@@ -1667,8 +1662,7 @@ class Manager:
             identity = self._checked_local_identity(identity)
             if self._local_record(identity) is None:
                 raise LocalActionError(LOCAL_ACTION_STALE_TARGET)
-            candidate = tuple(item for item in self._local_records if item.identity != identity)
-            await self._async_commit_local_records(candidate, identity.device_id)
+            await self._async_commit_local_records(self._local_candidate(identity, None), identity.device_id)
             return LocalActionChange(identity, None, active=False)
 
     def _checked_local_identity(self, identity: LocalActionIdentity) -> LocalActionIdentity:
@@ -1694,6 +1688,22 @@ class Manager:
     def _local_record(self, identity: LocalActionIdentity) -> LocalActionRecord | None:
         """Return the saved record of an identity, None when there is none."""
         return next((record for record in self._local_records if record.identity == identity), None)
+
+    def _local_candidate(
+        self, identity: LocalActionIdentity, record: LocalActionRecord | None
+    ) -> tuple[LocalActionRecord, ...]:
+        """
+        Return the complete record set with the record of `identity` replaced, appended or, for None, removed.
+
+        A replaced record keeps its place, so a repeated identical edit yields the identical set (MIR-09).
+        """
+        if record is not None and self._local_record(identity) is None:
+            return (*self._local_records, record)
+        return tuple(
+            replacement
+            for item in self._local_records
+            if (replacement := record if item.identity == identity else item) is not None
+        )
 
     async def _async_commit_local_records(self, candidate: tuple[LocalActionRecord, ...], device_id: str) -> None:
         """

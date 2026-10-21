@@ -1220,7 +1220,8 @@ class Manager:
         Load the saved local records as they are; nothing is matched against mirrors and nothing is rewritten (D-05).
 
         A Store this release cannot read (a newer version, an unreadable file) starts the instance without local
-        actions; the Store then refuses every save, so the file is never overwritten (T-11-09).
+        actions; the Store then refuses every save, so the file is never overwritten (T-11-09). Only a successful load
+        deletes the local failure issues whose record is gone: a refused one proves nothing about them (T-11-40).
         """
         try:
             self._local_records = await self._local_store.async_load_records()
@@ -1230,6 +1231,23 @@ class Manager:
                 "The local actions of this instance cannot be read (%s); they are not used and not overwritten",
                 type(err).__name__,
             )
+        else:
+            self._delete_local_failure_issues_without_record()
+
+    @callback
+    def _delete_local_failure_issues_without_record(self) -> None:
+        """
+        Delete every local failure issue whose named trigger has no saved record; such an issue could never clear.
+
+        An issue without a readable identity (an inactive leftover of a release that did not persist it) goes too.
+        Records are never matched against mirrors here, so an orphan or pruned record keeps its issue (D-05, D-19).
+        """
+        for domain, issue_id in list(ir.async_get(self._hass).issues):
+            if domain != DOMAIN or not issue_id.startswith(ISSUE_LOCAL_ACTION_FAILED_PREFIX):
+                continue
+            identity = self._local_failure_identity(issue_id.removeprefix(ISSUE_LOCAL_ACTION_FAILED_PREFIX))
+            if identity is None or self._local_record(identity) is None:
+                ir.async_delete_issue(self._hass, DOMAIN, issue_id)
 
     async def _async_load_store(self) -> None:
         """Load the persisted baseline and published ids; anything malformed is dropped."""

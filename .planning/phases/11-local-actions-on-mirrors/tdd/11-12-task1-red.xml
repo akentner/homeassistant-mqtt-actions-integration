@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.241" timestamp="2026-10-21T05:05:51.580050+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_docs" name="test_readme_documents_every_local_actions_topic" time="0.125"><failure message="AssertionError: the README has no Local actions on mirrored devices section&#10;assert ''">def test_readme_documents_every_local_actions_topic() -&gt; None:
+        """
+        MIR-15, D-06: one README section covers every topic of local actions on mirrors.
+    
+        Navigation, the three modes, local trust, the safe defaults, the gates, parallel runs, the orphan and kind identity
+        rules, the lifecycle, the local Repairs issue, count-only diagnostics and the canonical state variable.
+        """
+&gt;       local = _plain(_readme_local_section())
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_docs.py:629: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _readme_local_section() -&gt; str:
+        """Return the README section on local actions; a missing section fails the test with a clear message."""
+        section = _section(README.read_text(encoding="utf-8"), LOCAL_SECTION)
+&gt;       assert section, "the README has no Local actions on mirrored devices section"
+E       AssertionError: the README has no Local actions on mirrored devices section
+E       assert ''
+
+tests/test_docs.py:618: AssertionError</failure></testcase></testsuite></testsuites>

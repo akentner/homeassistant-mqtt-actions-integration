@@ -1,5 +1,6 @@
 """Documentation checks: the README says what the code does (D-16)."""
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -22,6 +23,7 @@ TROUBLESHOOTING = DOCS / "troubleshooting.md"
 BROKER_ACL = DOCS / "broker-acl.md"
 TRANSLATIONS = ROOT / "custom_components" / "mqtt_actions" / "translations" / "en.json"
 SERVICES_YAML = ROOT / "custom_components" / "mqtt_actions" / "services.yaml"
+SERVICES_PY = ROOT / "custom_components" / "mqtt_actions" / "services.py"
 # The pages this plan adds; every one of them has to exist for the link and example checks to mean anything
 EXPECTED_PAGES = ("operations.md", "diagnostics.md", "troubleshooting.md")
 FENCE = re.compile(r"^```([^\n]*)\n(.*?)^```$", re.DOTALL | re.MULTILINE)
@@ -596,3 +598,142 @@ def test_docs_explain_a_crashed_instance_that_keeps_the_legacy_discovery() -> No
     assert "crashed or removed instance" in troubleshooting
     assert "mqtt_actions/v1/instances/<instance id>/availability" in troubleshooting
     assert "empty retained" in troubleshooting
+
+
+# Phase 11 (MIR-15, D-06, D-09): local actions on mirrored devices
+LOCAL_SECTION = "local actions on mirrored devices"
+DOWNGRADE_SECTION = "downgrading to 1.0.1"
+# A claim that the downgrade round trip was run; "has not been verified" does not match (D-09, T-11-29)
+VERIFIED_ROUND_TRIP = re.compile(r"round trip (was |has been |is )?(verified|passed|confirmed|tested)")
+
+
+def _plain(text: str) -> str:
+    """Return normalized text without backticks and emphasis marks."""
+    return _normalize(text).replace("`", "").replace("*", "")
+
+
+def _readme_local_section() -> str:
+    """Return the README section on local actions; a missing section fails the test with a clear message."""
+    section = _section(README.read_text(encoding="utf-8"), LOCAL_SECTION)
+    assert section, "the README has no Local actions on mirrored devices section"
+    return section
+
+
+def test_readme_documents_every_local_actions_topic() -> None:
+    """
+    MIR-15, D-06: one README section covers every topic of local actions on mirrors.
+
+    Navigation, the three modes, local trust, the safe defaults, the gates, parallel runs, the orphan and kind identity
+    rules, the lifecycle, the local Repairs issue, count-only diagnostics and the canonical state variable.
+    """
+    local = _plain(_readme_local_section())
+    topics = {
+        "navigation": ("configure", "local actions of mirrored devices", "remove local customization"),
+        "additive mode": ("in addition to the owner actions",),
+        "replacement mode": ("instead of the owner actions",),
+        "mute": ("locally muted", "executes no actions on this instance"),
+        "local trust": ("need no approval", "the approval concerns only the owner actions"),
+        "safe defaults": ("safe defaults", "serial", "5 runs in 10 seconds", "run actions on startup"),
+        "gates": ("observe", "disabled", "circuit breaker", "releases"),
+        "parallel": ("in parallel", "the other branch still finishes", "stop", "error"),
+        "response variables": ("response variable", "share one namespace"),
+        "orphans": ("no longer present on the owner", "inactive", "edit", "reattach"),
+        "kind identity": ("device kind", "saved for another device type"),
+        "tombstone": ("tombstone", "discarded", "logged"),
+        "transient prune": ("prune", "kept"),
+        "adoption": ("adopt", "local_actions_discarded"),
+        "integration removal": ("removing the integration", "number of devices"),
+        "local failure": ("local_action_failed", "continue_on_error", "same trigger"),
+        "diagnostics": ("diagnostics", "counts", "docs/diagnostics.md"),
+        "never shared": ("never leave this instance", "hash", "export"),
+        "state caveat": ("{{ state }}", "canonical", "live", "states("),
+    }
+    for topic, phrases in topics.items():
+        for phrase in phrases:
+            assert phrase in local, f"the local actions section never says {phrase!r} ({topic})"
+
+
+def test_readme_warns_prominently_about_a_downgrade_to_1_0_1() -> None:
+    """
+    D-09: the downgrade warning is an alert box that names what 1.0.1 ignores and what the bench has not shown.
+
+    It says that 1.0.1 ignores replacement and mute, so approved owner actions may run again, that the separate local
+    data is there again after an upgrade, and that the real round trip is unverified and deferred (MIR-F4).
+    """
+    text = README.read_text(encoding="utf-8")
+    assert DOWNGRADE_SECTION in _plain(_readme_local_section()), "the downgrade warning is not in the local section"
+    section = _section(text, DOWNGRADE_SECTION)
+    assert section, "the README has no Downgrading to 1.0.1 section"
+    assert "> [!WARNING]" in section, "the downgrade section has no warning alert"
+    downgrade = _plain(section)
+    for phrase in (
+        "1.0.1 ignores",
+        "instead of the owner actions",
+        "muted",
+        "approved owner actions may run again",
+        "separate",
+        "available again",
+        "not been verified",
+        "deferred",
+        "mir-f4",
+    ):
+        assert phrase in downgrade, f"the downgrade warning never says {phrase!r}"
+    limitations = _plain(_section(text, "limitations"))
+    assert "downgrade to 1.0.1" in limitations, "the Limitations section never names the downgrade to 1.0.1"
+    readme = _plain(text)
+    assert not VERIFIED_ROUND_TRIP.search(readme), "the README claims that the downgrade round trip was verified"
+    assert "phase 12" not in readme, "the README talks about a planning phase"
+
+
+def _adopt_response_keys() -> list[str]:
+    """Return the keys of the response dict that the adopt_device handler returns, read from its source."""
+    tree = ast.parse(SERVICES_PY.read_text(encoding="utf-8"))
+    handler = next(
+        node for node in ast.walk(tree) if isinstance(node, ast.AsyncFunctionDef) and node.name == "_async_handle_adopt"
+    )
+    returns = [node.value for node in ast.walk(handler) if isinstance(node, ast.Return)]
+    assert len(returns) == 1, "the adopt_device handler has more than one return"
+    response = returns[0]
+    assert isinstance(response, ast.Dict), "the adopt_device handler does not return a dict literal"
+    keys = [key.value for key in response.keys if isinstance(key, ast.Constant) and isinstance(key.value, str)]
+    assert len(keys) == len(response.keys), "the adopt_device response has a key that is not a string literal"
+    return keys
+
+
+def test_operations_adopt_row_names_every_response_key() -> None:
+    """D-05, MIR-08: the adopt_device row lists exactly what the handler returns, local_actions_discarded included."""
+    keys = _adopt_response_keys()
+    assert "local_actions_discarded" in keys
+    text = _page(OPERATIONS)
+    rows = [line for line in text.splitlines() if line.startswith("| `adopt_device`")]
+    assert len(rows) == 1, "the operations page has no single adopt_device row"
+    for key in keys:
+        assert f"`{key}`" in rows[0], f"the adopt_device row never names the response key {key}"
+    adoption = _plain(_section(text, "adoption"))
+    for phrase in ("local_actions_discarded", "local actions", "discarded", "logged", "count"):
+        assert phrase in adoption, f"the Adoption section never says {phrase!r}"
+
+
+def test_operations_re_trigger_section_explains_local_actions() -> None:
+    """MIR-10: a re-trigger runs the effective actions; a muted trigger answers error/no_actions; no new words."""
+    retrigger = _plain(_section(_page(OPERATIONS), "re-trigger"))
+    for phrase in ("local actions", "muted", "no_actions", "no new status"):
+        assert phrase in retrigger, f"the Re-trigger section never says {phrase!r}"
+
+
+def test_troubleshooting_explains_when_the_local_failure_issue_clears() -> None:
+    """D-18, D-19: the local failure entry names the handled-error rule and the only ways the issue clears."""
+    issues = json.loads(TRANSLATIONS.read_text(encoding="utf-8"))["issues"]
+    # The per-key check above therefore covers the local issue as well
+    assert "local_action_failed" in issues
+    entry = _plain(_section(_page(TROUBLESHOOTING), "`local_action_failed`"))
+    assert entry, "the troubleshooting page has no local_action_failed section"
+    for phrase in (
+        "continue_on_error",
+        "still raises",
+        "only a later successful run of the same trigger",
+        "remove its local customization",
+        "independent",
+        "removing the device",
+    ):
+        assert phrase in entry, f"the local_action_failed entry never says {phrase!r}"

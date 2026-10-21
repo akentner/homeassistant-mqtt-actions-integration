@@ -10,7 +10,9 @@ way of an older instance that is still online (see [Upgrading from 0.1.x](#upgra
 
 Several Home Assistant instances on the same broker share their devices: a device you create on one instance appears
 on all the others as a read-only mirror, and every instance runs the actions locally once its user approved them. See
-[Multiple instances](#multiple-instances) and [Trust model and approval](#trust-model-and-approval). What you can do
+[Multiple instances](#multiple-instances) and [Trust model and approval](#trust-model-and-approval). A mirror can also
+get local actions of its own that run only on this instance, see
+[Local actions on mirrored devices](#local-actions-on-mirrored-devices). What you can do
 once it runs, such as re-triggering actions, seeing who is connected and recovering devices, is described under
 [Operations](#operations).
 
@@ -267,6 +269,132 @@ Actions from another instance run with the full access of your Home Assistant, s
   denylist cannot see inside them. That is why the approval shows the full YAML: approve only what you read and trust.
   Your own devices are not restricted at all.
 
+## Local actions on mirrored devices
+
+A mirror runs the actions of its owner once you approved them. A trigger of a mirror can also have **local actions**:
+actions that run only on this instance, in addition to the owner actions or instead of them, for example to switch a
+light that only this instance has. Local actions never leave this instance. They are not part of the config document,
+the hash of the owner actions, the export of `export_devices` or the content of an adoption, so adding or changing them
+keeps every approval valid. A Home Assistant backup of this instance contains them. Devices you own have no local
+actions; you change their actions directly.
+
+> [!WARNING]
+> Read [Downgrading to 1.0.1](#downgrading-to-101) before you go back to version 1.0.1: approved owner actions may run
+> again on triggers that you replaced or muted here.
+
+### Editing local actions
+
+1. Go to **Settings > Devices & services > MQTT Actions**, choose **Configure** on the hub entry and then **Local
+   actions of mirrored devices**.
+2. Choose the mirrored device, then the trigger: `ON` or `OFF` of a Switch, or an option of a Select with its friendly
+   name and state value, for example `Cozy (cozy)`. Each trigger shows its local mode directly, for example
+   `Cozy (cozy) — instead of the owner actions`. These markers use the language of the Home Assistant server, not the
+   language of your browser.
+3. Choose the mode and build the actions with the action editor. Saving checks the actions against the Home Assistant
+   action schema, applies them at once without a restart and returns to the triggers. Closing the dialog discards only
+   the change you have not saved yet.
+
+A trigger that already has a local customization opens a menu: edit it, or **Remove local customization**, which
+deletes its mode and its local actions after a confirmation. The trigger then runs the owner actions again, and only
+while they are approved here.
+
+- **In addition to the owner actions** (preselected for a new customization): the owner actions and the local actions
+  both run, in parallel. While the owner actions are not approved here, only the local actions run.
+- **Instead of the owner actions**: only the local actions run on this instance. The owner actions of this trigger never
+  run here, even when they are approved.
+- **Locally muted**: **Instead of the owner actions** without local actions. After a separate confirmation the trigger
+  executes no actions on this instance. Muting is not the same as removing the customization, which brings back the
+  owner actions.
+
+None of the modes changes anything on other instances.
+
+### Trust, approval and the gates
+
+- Local actions need no approval. They run with the full access of this instance, like the actions of devices you own,
+  because you wrote them here, and the denylist for actions of other instances does not apply to them. They also run
+  while the owner actions are pending, blocked or empty.
+- The approval concerns only the owner actions. A local customization never approves them, and replacing every trigger
+  locally leaves the approval request open and adoption refused. The request in Repairs says how many triggers of the
+  device are replaced locally and that local actions may already run.
+- While the owner actions are not approved here, the device runs with safe defaults instead of the owner's settings:
+  **Run actions on startup** off, run mode `serial` and a circuit breaker of 5 runs in 10 seconds. Once you approve the
+  owner actions, the owner's settings apply to the whole device, local actions included.
+- The modes `observe` and `disabled` and the circuit breaker apply to local actions like to every run. Saving or
+  removing a local customization releases a tripped circuit breaker of the device.
+- Test buttons and the re-trigger run what a state change would run on this instance. While the circuit breaker is
+  tripped, a test button still runs a trigger that has only owner actions, but not a trigger that runs local actions. A
+  re-trigger of a locally muted trigger answers `error` with the reason `no_actions`; there are no new status words.
+
+### Parallel runs
+
+In the mode **In addition to the owner actions** the owner actions and the local actions are the two branches of one
+`parallel` step in the single Script of the device. The run mode and the circuit breaker stay device-wide: one change is
+one run.
+
+- A failure in one branch does not stop the other: the other branch still finishes.
+- A `stop`, normal or with `error: true`, ends its own branch at once and the whole run as soon as the other branch has
+  finished. It never cuts the other branch short.
+- Both branches share one namespace of response variables. A `response_variable` name that both branches use is one
+  variable, and which value it ends up with is not defined. Give local response variables names of their own, for
+  example with a `local_` prefix.
+
+### The `{{ state }}` variable
+
+Every run gets the variable `state`: the canonical state value of the trigger that runs, `ON` or `OFF` for a Switch and
+the state value of the option exactly as the owner created it for a Select, whatever capitalization the payload had. It
+stays the same for the whole run, and a test button or a re-trigger sets it to the value of its trigger. A live lookup
+such as `{{ states('switch.hall_light') }}` reads the entity at the moment the template renders instead: it can already
+show a newer value, `unavailable` while the owner is offline, and for a Select the friendly name, not the state value.
+Use `{{ state }}` to react to the change that started the run:
+
+```yaml
+action: notify.notify
+data:
+  message: "Hall light turned {{ state }}"
+```
+
+### Lifecycle
+
+- **Owner changes.** Local actions survive the owner's edits, renames, new revisions, restarts of either instance and a
+  new pinned owner. A local customization belongs to the device, its device kind and the state value of the trigger; a
+  new friendly name keeps it.
+- **Removed options.** When the owner removes a Select option, its local customization is kept but inactive and marked
+  as no longer present on the owner. You can view, edit or remove it; editing does not make it active. It reattaches by
+  itself when the owner adds an option with the same state value again, compared like a state message (trimmed,
+  capitalization ignored).
+- **Device kind.** A customization is never applied to another device kind. One that does not match the kind of the
+  device stays inactive and is marked as saved for another device type.
+- **Start and prune.** Nothing is discarded when Home Assistant starts or when a mirror is pruned because its document
+  was not seen again: the local actions are kept and apply again when the mirror returns. A device that has local
+  actions but no mirror right now stays in the device list, marked as not mirrored, so you can remove them.
+- **Tombstone.** When the owner deletes the device, its tombstone discards the local actions of the device on this
+  instance, and the number is logged.
+- **Adoption.** Adopting a device discards its local actions on this instance, because it becomes a device you own. The
+  response of `mqtt_actions.adopt_device` reports how many triggers had them in `local_actions_discarded`, and the
+  number is logged.
+- **Removing the integration** deletes the local actions of this instance, whether or not the devices are kept on the
+  broker. The removal settings in the options of the hub name the number of devices whose local actions go with it.
+
+### Local failures and diagnostics
+
+- A failure of local actions raises the Repairs issue `local_action_failed`, one per device, independent of the issue
+  `action_failed` of the owner actions. It names the latest local trigger that failed. An error that a local step
+  handles with `continue_on_error` still raises it. Only a later successful run of the same trigger clears it, or
+  removing its local customization; a success of another trigger or of the owner actions, a `stop` and a cancelled run
+  do not. See [docs/troubleshooting.md](docs/troubleshooting.md).
+- Diagnostics show counts only: how many devices and triggers have local actions and how many of them are orphaned, in
+  the section `local_actions` and per device. They never show the local actions, their labels or their state values.
+  See [docs/diagnostics.md](docs/diagnostics.md).
+
+### Downgrading to 1.0.1
+
+> [!WARNING]
+> Version 1.0.1 ignores local actions, including the modes **Instead of the owner actions** and **Locally muted**.
+> After a downgrade it runs no local actions, and approved owner actions may run again on this instance, also on
+> triggers that you replaced or muted here. The local actions are kept in a separate storage file that 1.0.1 does not
+> read or change, so by design they are available again after you upgrade back. This downgrade round trip has not been
+> verified on real instances; that check is deferred (MIR-F4).
+
 ## Operations
 
 These tools are for running several instances with confidence. Every service is admin only and can return a response.
@@ -284,7 +412,8 @@ These tools are for running several instances with confidence. Every service is 
 - **Export and import:** `mqtt_actions.export_devices` returns your devices as JSON, or writes a private file;
   `mqtt_actions.import_devices` creates new devices from it, all or nothing.
 - **Adoption:** `mqtt_actions.adopt_device` takes over a device whose owner is offline (or with `force`), if you
-  approved its actions on this instance first.
+  approved its actions on this instance first. It discards the local actions of the device on this instance and
+  reports how many triggers had them in `local_actions_discarded`.
 - **Duplicate instance id:** a clone or a restored backup that shares an instance id is reported in Repairs, with a fix
   that gives the copy a new id.
 - **Diagnostics:** **Download diagnostics** on the integration entry gives a file with the structure of your setup and
@@ -305,8 +434,9 @@ When something looks wrong, start with Repairs and then
   other instances keep the devices as orphaned mirrors that show as unavailable, and nothing is pruned because the
   owner is offline. Only if you switched on **Delete all devices when this integration is removed** in the options of
   the hub before you remove it, the integration deletes all devices created on this instance from the broker, and
-  every connected instance removes them. Either way the local storage and the integration's Repairs issues of this
-  instance are removed. The entities of the devices are removed with the integration, because they belong to it: after
+  every connected instance removes them. Either way the local storage, the local actions of mirrored devices and the
+  integration's Repairs issues of this instance are removed; the removal settings in the options of the hub name the
+  number of devices whose local actions are deleted. The entities of the devices are removed with the integration, because they belong to it: after
   a removal they are gone from the integration page, and a new setup creates them again.
 
 ## Topic and payload contract
@@ -395,6 +525,9 @@ Every device gets a random UUID. Its state topic, which is also its command topi
 - A test button press of a native device runs the actions only on the instance where it is pressed. On the legacy
   path, it runs them on every instance that approved the device.
 - Only Switch and Select devices exist in this release.
+- Local actions exist only for mirrors, not for devices you own, and the export and import of devices leave them out.
+- A downgrade to 1.0.1 ignores local actions, so approved owner actions may run again on replaced or muted triggers.
+  See [Downgrading to 1.0.1](#downgrading-to-101).
 - Actions that target a `device_id` work only on the instance where they were created, because device IDs differ
   between instances. Prefer entity, area or label targets.
 

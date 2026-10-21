@@ -31,7 +31,7 @@ no loaded MQTT Actions entry a call fails with a translated error.
 | `export_devices` | `device_id` (optional, several allowed), `file_name` (optional) | `export` (the export document) and `file` (the relative path, or none) |
 | `import_devices` | `data` or `file_name`, exactly one of them | `imported`: one entry per created device with `index`, `uuid` and `name` |
 | `retrigger` | `device_id` (required), `state` (optional) | `request_id`, `uuid`, `state` and `instances`, one entry per instance |
-| `adopt_device` | `device_id` (required), `force` (optional, default false) | `uuid`, `adopted` and `previous_owner` |
+| `adopt_device` | `device_id` (required), `force` (optional, default false) | `uuid`, `adopted`, `previous_owner` and `local_actions_discarded` |
 
 The field `device_id` of a service is the **Home Assistant registry id of the device of MQTT Actions** (since 0.2 the
 same device that carries the entities; a device on the legacy path uses its companion device, see
@@ -67,6 +67,11 @@ instance was down, and the actions should run once more without changing the sta
 - **What it respects:** the gates of each receiving instance. A mirror that is not approved there runs nothing, a
   device in observe or disabled mode runs nothing, a device that the circuit breaker paused runs nothing, and a device
   without runnable actions runs nothing. The request carries a state of the device, never actions.
+- **Local actions:** each receiving instance runs what a state change would run there, its own local actions of mirrored
+  devices included (see the README). A mirror whose owner actions are not approved there but that has local actions
+  for the trigger runs them and answers `executed`. A trigger that is locally muted there answers `error` with the
+  reason `no_actions`. A tripped circuit breaker answers `paused` either way. There are no new status or reason words,
+  and the answer does not say whether owner actions, local actions or both ran.
 - **What it returns:** one entry per instance with `instance_id`, `instance_name`, `status` and, for some statuses, a
   `reason`. The caller waits for the instances that the roster shows as online and leaves as soon as all of them
   answered, or after `RETRIGGER_ACK_WINDOW_SECONDS` at the latest.
@@ -232,6 +237,12 @@ known state and the mode stay. It publishes a new config document with itself as
 marker** `transferred_from`, which lists the ids of the previous owners, newest last, at most
 `MAX_TRANSFER_HISTORY` entries. The first revision is the old one plus one. The mirror and its approval are dropped here
 and the device is added as an owned device, which does not need an approval. Nothing is removed from the broker.
+
+Adoption discards the local actions that this instance kept for the mirror, because an owned device has none; they are
+never part of the adopted device. The response key `local_actions_discarded` gives the count of triggers whose local
+actions were discarded, `0` when there were none, and the count is logged. A local customization never counts as an
+approval: a mirror whose owner actions are still pending is refused even when every trigger is replaced locally. When
+the adoption fails after the discard, the mirror comes back together with its local actions.
 
 The marker is additive: it is an optional key of the document, there is no schema change, and a document without it
 means the device was never adopted. Followers honor it only when their pinned owner is offline according to their

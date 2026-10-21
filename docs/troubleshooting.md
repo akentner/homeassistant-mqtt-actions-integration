@@ -197,11 +197,16 @@ successful run. The log has more detail.
 
 **Meaning:** the local actions of a trigger of a mirrored device failed on this instance. There is one issue per
 device, next to and independent of `action_failed`. It names the latest local trigger that failed, the time and the
-error. **Why:** a local action raised an error, for example an entity that does not exist on this instance. The owner
-actions and other instances are not affected. **What to do:** open the options of MQTT Actions, choose Local actions,
-the device and the trigger, and correct its local actions. The issue disappears when that trigger's local actions run
-successfully, or when you remove its local customization. A success of another trigger or of the owner actions does
-not clear it. Removing the device deletes the issue with the device.
+error. **Why:** a local action raised an error, for example an entity that does not exist on this instance, or the
+saved local actions no longer validate here. An error that a local step handles with `continue_on_error` still raises
+the issue: the run goes on as you wrote it, but the step failed. A failure in the local actions never raises
+`action_failed`, and a failure of the owner actions never raises this one. In the mode **In addition to the owner
+actions** both run in parallel, and one failing does not stop the other. Other instances are not affected. **What to do:** open the options of MQTT Actions, choose **Local
+actions of mirrored devices**, the device and the trigger, and correct its local actions. Only a later successful run of
+the same trigger clears the issue, or you remove its local customization. A success of another trigger or of the owner
+actions does not clear it, and neither does a run that ended with a `stop`, was cancelled or was replaced by a newer
+run. When the mirror goes, by a tombstone of its owner, a prune or an adoption, the issue goes with it, and removing the
+integration deletes it as well.
 
 ### `mqtt_discovery_disabled`
 

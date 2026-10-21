@@ -608,8 +608,8 @@ VERIFIED_ROUND_TRIP = re.compile(r"round trip (was |has been |is )?(verified|pas
 
 
 def _plain(text: str) -> str:
-    """Return normalized text without backticks and emphasis marks."""
-    return _normalize(text).replace("`", "").replace("*", "")
+    """Return normalized text without blockquote markers, backticks and emphasis marks."""
+    return _normalize(re.sub(r"^> ?", "", text, flags=re.MULTILINE)).replace("`", "").replace("*", "")
 
 
 def _readme_local_section() -> str:
@@ -734,6 +734,6 @@ def test_troubleshooting_explains_when_the_local_failure_issue_clears() -> None:
         "only a later successful run of the same trigger",
         "remove its local customization",
         "independent",
-        "removing the device",
+        "the issue goes with it",
     ):
         assert phrase in entry, f"the local_action_failed entry never says {phrase!r}"

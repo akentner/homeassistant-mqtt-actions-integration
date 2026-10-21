@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.159" timestamp="2026-10-21T06:18:37.291810+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_lifecycle" name="test_local_failure_issue_survives_restart_prune_and_failed_adoption_until_success_or_removal" time="0.947"><failure message="AssertionError: the local failure issue must survive a restart of Home Assistant&#10;assert False is True&#10; +  where False = IssueEntry(active=False, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 21, 4, 18, 38, 230438, tzinfo=...-ce3c-4516-9115-a8fbbae1a344', learn_more_url=None, severity=None, translation_key=None, translation_placeholders=None).active">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140624680020560'&gt;
+hass_storage = {'auth': {'data': {'credentials': [], 'groups': [{'id': 'system-admin', 'name': 'Administrators'}, {'id': 'system-user...ata': {'content_user': '2bffb920baba41f698b98da4a7729d37'}, 'key': 'http.auth', 'minor_version': 1, 'version': 1}, ...}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fe5c07601a0&gt;
+freezer = &lt;freezegun.api.FrozenDateTimeFactory object at 0x7fe5c0a316a0&gt;
+
+    async def test_local_failure_issue_survives_restart_prune_and_failed_adoption_until_success_or_removal(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        freezer: FrozenDateTimeFactory,
+    ) -&gt; None:
+        """G-01, D-19: only a proven success of the named trigger or removal of its customization ends the local issue."""
+        failing = FailingLocal(hass)
+        async_mock_service(hass, "test", "owner_on")
+        spec = make_spec(on=OWNER_ON)
+        identity = local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON)
+        entry, manager = await _failing_local_mirror(hass, make_hub_entry, spec)
+        await _local_on_runs(hass, spec.device_id)
+        raised = _local_issue(hass, spec.device_id)
+        assert raised is not None, "premise: the failed local run raised the local failure issue"
+        assert raised.translation_placeholders is not None
+        named = {key: raised.translation_placeholders[key] for key in ("trigger", "error")}
+    
+        # A restart of Home Assistant: the issue registry comes back from its own storage, then the integration starts
+        await _reload_issue_registry(hass, hass_storage)
+        await restart_entry(hass, entry)
+        manager = manager_of(entry)
+        restored = _local_issue(hass, spec.device_id)
+        assert restored is not None
+&gt;       assert restored.active is True, "the local failure issue must survive a restart of Home Assistant"
+E       AssertionError: the local failure issue must survive a restart of Home Assistant
+E       assert False is True
+E        +  where False = IssueEntry(active=False, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 21, 4, 18, 38, 230438, tzinfo=...-ce3c-4516-9115-a8fbbae1a344', learn_more_url=None, severity=None, translation_key=None, translation_placeholders=None).active
+
+tests/test_local_actions_lifecycle.py:946: AssertionError</failure></testcase></testsuite></testsuites>

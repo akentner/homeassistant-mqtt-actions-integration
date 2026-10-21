@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import (
@@ -859,3 +860,155 @@ async def test_every_trigger_replaced_keeps_pending_owner_hash_yaml_and_refused_
     with pytest.raises(AdoptionError) as refused:
         await manager.async_adopt_device(spec.device_id, force=True)
     assert refused.value.reason == "not_approved"
+
+
+# --- Plan 11-14 (G-01): the local failure issue lives as long as its customization (D-19, MIR-13, T-11-21) ------------
+
+# Literal on purpose: the production prefix of the local failure issue (ISSUE_LOCAL_ACTION_FAILED_PREFIX)
+LOCAL_ISSUE_PREFIX = "local_action_failed_"
+LOCAL_FAIL = [{"action": "test.local_fail"}]
+LOCAL_FAIL_ERROR = "local boom"
+
+
+class FailingLocal:
+    """`test.local_fail` raises while `failing` is set and records every call."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.failing = True
+        self.calls = 0
+        hass.services.async_register("test", "local_fail", self._handle)
+
+    async def _handle(self, _call: Any) -> None:
+        self.calls += 1
+        if self.failing:
+            raise HomeAssistantError(LOCAL_FAIL_ERROR)
+
+
+def _local_issue(hass: HomeAssistant, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{LOCAL_ISSUE_PREFIX}{device_id}")
+
+
+async def _reload_issue_registry(hass: HomeAssistant, hass_storage: dict[str, Any]) -> None:
+    """Put the issue registry's own saved data into its storage, as HA does at shutdown, and load it like a start."""
+    registry = ir.async_get(hass)
+    data = registry._data_to_save()
+    # The test Store of the registry writes nothing; this save only consumes the pending delayed write
+    await registry._store.async_save(data)
+    envelope = {
+        "version": ir.STORAGE_VERSION_MAJOR,
+        "minor_version": ir.STORAGE_VERSION_MINOR,
+        "key": ir.STORAGE_KEY,
+        "data": data,
+    }
+    hass_storage[ir.STORAGE_KEY] = json.loads(json.dumps(envelope))
+    await registry.async_load()
+
+
+async def _failing_local_mirror(
+    hass: HomeAssistant, make_hub_entry: Callable, spec: DeviceSpec, entry: Any = None
+) -> tuple[Any, Manager]:
+    """Set up (or reuse) a follower with a pending mirror whose additive ON record calls the failing service."""
+    entry = entry or await setup_entry(hass, make_hub_entry())
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=True)
+    manager = manager_of(entry)
+    await manager.async_set_local_action(
+        local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON), LocalActionMode.ADDITIVE, LOCAL_FAIL
+    )
+    return entry, manager
+
+
+async def test_local_failure_issue_survives_restart_prune_and_failed_adoption_until_success_or_removal(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """G-01, D-19: only a proven success of the named trigger or removal of its customization ends the local issue."""
+    failing = FailingLocal(hass)
+    async_mock_service(hass, "test", "owner_on")
+    spec = make_spec(on=OWNER_ON)
+    identity = local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON)
+    entry, manager = await _failing_local_mirror(hass, make_hub_entry, spec)
+    await _local_on_runs(hass, spec.device_id)
+    raised = _local_issue(hass, spec.device_id)
+    assert raised is not None, "premise: the failed local run raised the local failure issue"
+    assert raised.translation_placeholders is not None
+    named = {key: raised.translation_placeholders[key] for key in ("trigger", "error")}
+
+    # A restart of Home Assistant: the issue registry comes back from its own storage, then the integration starts
+    await _reload_issue_registry(hass, hass_storage)
+    await restart_entry(hass, entry)
+    manager = manager_of(entry)
+    restored = _local_issue(hass, spec.device_id)
+    assert restored is not None
+    assert restored.active is True, "the local failure issue must survive a restart of Home Assistant"
+    expected_data = {"kind": identity.kind, "state_value": identity.state_value}
+    assert restored.data == expected_data, "the identity of the named trigger survives the restart"
+    assert restored.translation_placeholders is not None
+    assert {key: restored.translation_placeholders[key] for key in ("trigger", "error")} == named
+
+    # A transient prune of the cached mirror keeps the record, so it keeps the issue
+    await _prune(hass, freezer)
+    assert spec.device_id not in manager.mirrors, "premise: the prune removed the mirror"
+    assert manager.local_action_counts().records == 1, "premise: the prune kept the record"
+    assert _local_issue(hass, spec.device_id) is not None, "a transient prune keeps the local failure issue"
+
+    # The owner document returns; a failed adoption keeps the record, so it keeps the issue
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+    assert spec.device_id in manager.mirrors, "premise: the mirror is back"
+    info = manager.mirrors[spec.device_id].mirror
+    assert info is not None
+    assert await manager.async_approve(spec.device_id, info.actions_hash) is True
+    with (
+        patch.object(hass.config_entries, "async_add_subentry", side_effect=RuntimeError("boom")),
+        pytest.raises(RuntimeError),
+    ):
+        await manager.async_adopt_device(spec.device_id, force=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert spec.device_id in manager.mirrors, "premise: the rollback restored the mirror"
+    assert manager.local_action_counts().records == 1, "premise: the rollback restored the record"
+    assert _local_issue(hass, spec.device_id) is not None, "a failed adoption keeps the local failure issue"
+
+    # A proven success of the named trigger clears the issue
+    failing.failing = False
+    calls = failing.calls
+    await _local_on_runs(hass, spec.device_id)
+    assert failing.calls == calls + 1, "premise: the local branch ran"
+    assert _local_issue(hass, spec.device_id) is None, "a proven success of the named trigger clears the issue"
+
+    # A new failure raises it again, and removing that trigger's customization deletes it
+    failing.failing = True
+    await _local_on_runs(hass, spec.device_id)
+    assert _local_issue(hass, spec.device_id) is not None, "premise: the new failure raised the issue again"
+    await manager.async_remove_local_action(identity)
+    assert _local_issue(hass, spec.device_id) is None, "removing the customization deletes the issue"
+
+
+async def test_tombstone_and_completed_adoption_delete_the_local_failure_issue(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-05, D-19: a saved tombstone discard and a completed adoption end the customization, and its issue with it."""
+    FailingLocal(hass)
+    async_mock_service(hass, "test", "owner_on")
+    tombstoned = make_spec(name="Tombstoned lamp", on=OWNER_ON)
+    adopted = make_spec(name="Adopted lamp", on=OWNER_ON)
+    entry, manager = await _failing_local_mirror(hass, make_hub_entry, tombstoned)
+    await _failing_local_mirror(hass, make_hub_entry, adopted, entry)
+    await _local_on_runs(hass, tombstoned.device_id)
+    await _local_on_runs(hass, adopted.device_id)
+    assert _local_issue(hass, tombstoned.device_id) is not None, "premise: the failure raised the issue"
+    assert _local_issue(hass, adopted.device_id) is not None, "premise: the failure raised the issue"
+
+    await deliver_config(hass, tombstoned.device_id, "", retain=False)
+    assert tombstoned.device_id not in manager.mirrors
+    assert _local_issue(hass, tombstoned.device_id) is None, "a saved tombstone discard deletes the issue"
+
+    info = manager.mirrors[adopted.device_id].mirror
+    assert info is not None
+    assert await manager.async_approve(adopted.device_id, info.actions_hash) is True
+    assert (await manager.async_adopt_device(adopted.device_id, force=True)).local_actions_discarded == 1
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert adopted.device_id in manager.devices
+    assert _local_issue(hass, adopted.device_id) is None, "a completed adoption deletes the issue"

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.036" timestamp="2026-10-21T03:29:08.573973+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_lifecycle" name="test_tombstone_after_prune_still_discards_records" time="0.929"><failure message="AssertionError: assert [{'actions': ...': 'ON', ...}] == [{'actions': ...': 'ON', ...}]&#10;  &#10;  At index 0 diff: {'device_id': '1eec7b11-d38a-4b30-ba05-4203b7c7a8f0', 'kind': 'switch', 'state_value': 'ON', 'label': 'ON', 'mode': 'additive', 'actions': [{'action': 'test.local_on', 'data': {'source': 'local'}}]} != {'device_id': '0f0e0d0c-0b0a-4908-8706-050403020100', 'kind': 'switch', 'state_value': 'ON', 'label': 'ON', 'mode': 'additive', 'actions': [{'action': 'test.local_on', 'data': {'source': 'local'}}]}&#10;  Left contains 2 more items, first extra item: {'actions': [{'action': 'test.local_on', 'data': {'source': 'local'}}], 'device_id': '1eec7b11-d38a-4b30-ba05-420...&#10;  &#10;  ...Full output truncated (2 lines hidden), use '-vv' to show">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140230237500624'&gt;
+hass_storage = {'auth': {'data': {'credentials': [], 'groups': [{'id': 'system-admin', 'name': 'Administrators'}, {'id': 'system-user... ...}], 'settings': {'entity_id_parts': None}}, 'key': 'core.entity_registry', 'minor_version': 23, 'version': 1}, ...}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f89ec56efb0&gt;
+freezer = &lt;freezegun.api.FrozenDateTimeFactory object at 0x7f89ec29d7f0&gt;
+
+    async def test_tombstone_after_prune_still_discards_records(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        freezer: FrozenDateTimeFactory,
+    ) -&gt; None:
+        """D-05: the tombstone that follows an earlier prune deletes the records although no mirror exists any more."""
+        spec = make_spec(on=OWNER_ON)
+        _entry, manager = await _cached_mirror_with_records(hass, hass_storage, make_hub_entry, spec)
+        await _prune(hass, freezer)
+        assert spec.device_id not in manager.mirrors, "premise: the prune removed the mirror"
+        assert len(_stored_rows(hass_storage) or []) == 3, "premise: the prune kept the records"
+        mqtt_mock.async_publish.reset_mock()
+    
+        await deliver_config(hass, spec.device_id, "", retain=False)
+    
+&gt;       assert _stored_rows(hass_storage) == [_row_data(OTHER_DEVICE)]
+E       AssertionError: assert [{'actions': ...': 'ON', ...}] == [{'actions': ...': 'ON', ...}]
+E         
+E         At index 0 diff: {'device_id': '1eec7b11-d38a-4b30-ba05-4203b7c7a8f0', 'kind': 'switch', 'state_value': 'ON', 'label': 'ON', 'mode': 'additive', 'actions': [{'action': 'test.local_on', 'data': {'source': 'local'}}]} != {'device_id': '0f0e0d0c-0b0a-4908-8706-050403020100', 'kind': 'switch', 'state_value': 'ON', 'label': 'ON', 'mode': 'additive', 'actions': [{'action': 'test.local_on', 'data': {'source': 'local'}}]}
+E         Left contains 2 more items, first extra item: {'actions': [{'action': 'test.local_on', 'data': {'source': 'local'}}], 'device_id': '1eec7b11-d38a-4b30-ba05-420...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_local_actions_lifecycle.py:516: AssertionError</failure></testcase></testsuite></testsuites>

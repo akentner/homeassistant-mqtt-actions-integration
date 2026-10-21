@@ -6,22 +6,38 @@ option leaves its record inactive and the exact StateValue return reattaches it 
 """
 
 import copy
+import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
-from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
+from pytest_homeassistant_custom_component.common import (
+    async_fire_mqtt_message,
+    async_fire_time_changed,
+    async_mock_service,
+)
 
-from custom_components.mqtt_actions.const import PAYLOAD_OFF, PAYLOAD_ON, SUBENTRY_SELECT, SUBENTRY_SWITCH
+from custom_components.mqtt_actions.const import (
+    CONF_DEVICE_ID,
+    PAYLOAD_OFF,
+    PAYLOAD_ON,
+    PRUNE_GRACE_SECONDS,
+    STORE_MIRRORS,
+    SUBENTRY_SELECT,
+    SUBENTRY_SWITCH,
+)
 from custom_components.mqtt_actions.local_actions import LocalActionMode, local_trigger_identity
 from custom_components.mqtt_actions.local_actions_store import LocalActionsStore
 from custom_components.mqtt_actions.model import trigger_key
 from custom_components.mqtt_actions.topics import state_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
-from tests.helpers import BASE, announce_presence, deliver_config, manager_of, restart_entry, setup_entry
+from tests.helpers import BASE, announce_presence, deliver_config, manager_of, restart_entry, seed_store, setup_entry
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    import pytest
+    from freezegun.api import FrozenDateTimeFactory
     from homeassistant.core import HomeAssistant
 
     from custom_components.mqtt_actions.manager import Manager
@@ -358,3 +374,215 @@ async def test_kind_mismatched_record_stays_inactive_through_owner_changes(
     assert [row.identity for row in inactive] == [mismatch]
     change = await manager.async_set_local_action(mismatch, LocalActionMode.ADDITIVE, LOCAL_ON)
     assert change.active is False
+
+
+# --- Task 2: transient prune keeps, a tombstone destroys, even after a prune (D-05, D-08) ----------------------------
+
+OTHER_DEVICE = "0f0e0d0c-0b0a-4908-8706-050403020100"
+
+
+def _row_data(device_id: str, state_value: str = PAYLOAD_ON, kind: str = SUBENTRY_SWITCH) -> dict[str, Any]:
+    """Return the stored v1 row of an additive record."""
+    return {
+        "device_id": device_id,
+        "kind": kind,
+        "state_value": state_value,
+        "label": state_value,
+        "mode": "additive",
+        "actions": LOCAL_ON,
+    }
+
+
+def _seed_local(hass_storage: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    hass_storage[LOCAL_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": LOCAL_STORE_KEY,
+        "data": {"records": rows},
+    }
+
+
+async def _cached_mirror_with_records(
+    hass: HomeAssistant, hass_storage: dict[str, Any], make_hub_entry: Callable, spec: DeviceSpec
+) -> tuple[Any, Manager]:
+    """Start a follower whose mirror comes from the cache only, with ON and OFF records plus another device's record."""
+    seed_store(hass_storage, {STORE_MIRRORS: {spec.device_id: document_payload(spec)}})
+    _seed_local(
+        hass_storage,
+        [_row_data(spec.device_id), _row_data(spec.device_id, PAYLOAD_OFF), _row_data(OTHER_DEVICE)],
+    )
+    entry = await setup_entry(hass, make_hub_entry())
+    manager = manager_of(entry)
+    assert spec.device_id in manager.mirrors, "premise: the mirror is restored from the cache"
+    return entry, manager
+
+
+async def _prune(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    """Announce the owner online and let the grace window pass: an unseen mirror of an online owner is pruned."""
+    await announce_presence(hass, "online")
+    freezer.tick(timedelta(seconds=PRUNE_GRACE_SECONDS + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+def _own_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [record.getMessage() for record in caplog.records if record.name.startswith("custom_components")]
+
+
+async def test_transient_prune_keeps_local_records_byte_identical(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """D-05: a prune removes the runtime mirror, never its local records; they stay listed and manageable."""
+    spec = make_spec(on=OWNER_ON)
+    _entry, manager = await _cached_mirror_with_records(hass, hass_storage, make_hub_entry, spec)
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+
+    await _prune(hass, freezer)
+
+    assert spec.device_id not in manager.mirrors, "premise: the prune removed the mirror"
+    assert hass_storage[LOCAL_STORE_KEY] == before, "a prune never changes the local Store"
+    listed = {device.device_id: device for device in manager.local_action_devices()}
+    assert listed[spec.device_id].mirrored is False
+    assert listed[spec.device_id].records == 2
+
+
+async def test_startup_cleanup_of_a_cached_mirror_keeps_local_records(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-05: the start drops a cached mirror of an id owned here, and keeps every local record of that id."""
+    sub = make_switch_subentry("Lamp", on=OWNER_ON)
+    owned = sub["data"][CONF_DEVICE_ID]
+    spec = make_spec(device_id=owned, on=OWNER_ON)
+    seed_store(hass_storage, {STORE_MIRRORS: {owned: document_payload(spec)}})
+    _seed_local(hass_storage, [_row_data(owned)])
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+
+    manager = manager_of(await setup_entry(hass, make_hub_entry([sub])))
+
+    assert owned in manager.devices
+    assert owned not in manager.mirrors
+    assert hass_storage[LOCAL_STORE_KEY] == before
+
+
+async def test_tombstone_discards_records_saves_at_once_and_publishes_nothing(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D-05: a tombstone deletes every record of the device, saves without delay and logs the count only."""
+    spec = make_spec(on=OWNER_ON)
+    _entry, manager = await _cached_mirror_with_records(hass, hass_storage, make_hub_entry, spec)
+    mqtt_mock.async_publish.reset_mock()
+
+    with caplog.at_level(logging.INFO):
+        await deliver_config(hass, spec.device_id, "", retain=False)
+
+    assert spec.device_id not in manager.mirrors
+    assert _stored_rows(hass_storage) == [_row_data(OTHER_DEVICE)], "only the tombstoned device loses its records"
+    assert [device.device_id for device in manager.local_action_devices()] == [OTHER_DEVICE]
+    assert mqtt_mock.async_publish.call_count == 0, "deleting local records publishes nothing"
+    messages = _own_messages(caplog)
+    assert any("2 local actions" in message for message in messages), messages
+    assert not any("test.local_on" in message for message in messages), "no action content reaches the log"
+
+
+async def test_tombstone_after_prune_still_discards_records(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """D-05: the tombstone that follows an earlier prune deletes the records although no mirror exists any more."""
+    spec = make_spec(on=OWNER_ON)
+    _entry, manager = await _cached_mirror_with_records(hass, hass_storage, make_hub_entry, spec)
+    await _prune(hass, freezer)
+    assert spec.device_id not in manager.mirrors, "premise: the prune removed the mirror"
+    assert len(_stored_rows(hass_storage) or []) == 3, "premise: the prune kept the records"
+    mqtt_mock.async_publish.reset_mock()
+
+    await deliver_config(hass, spec.device_id, "", retain=False)
+
+    assert _stored_rows(hass_storage) == [_row_data(OTHER_DEVICE)]
+    assert [device.device_id for device in manager.local_action_devices()] == [OTHER_DEVICE]
+    assert mqtt_mock.async_publish.call_count == 0
+
+
+async def test_tombstone_cause_reaches_the_manager_without_a_mirror(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """The manager seam: a tombstone of an id without a mirror deletes its records instead of returning early."""
+    from custom_components.mqtt_actions.manager import MirrorRemovalCause
+
+    _seed_local(hass_storage, [_row_data(OTHER_DEVICE), _row_data(OTHER_DEVICE, PAYLOAD_OFF)])
+    manager = manager_of(await setup_entry(hass, make_hub_entry()))
+    assert OTHER_DEVICE not in manager.mirrors
+
+    async with manager.lock:
+        await manager.async_remove_mirror(OTHER_DEVICE, cause=MirrorRemovalCause.TRANSIENT_PRUNE)
+    assert len(_stored_rows(hass_storage) or []) == 2, "a prune cause keeps the records"
+
+    async with manager.lock:
+        await manager.async_remove_mirror(OTHER_DEVICE, cause=MirrorRemovalCause.TOMBSTONE)
+    assert _stored_rows(hass_storage) == []
+    assert manager.local_action_devices() == ()
+
+
+async def test_tombstone_on_an_owned_id_keeps_its_records(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """An owned id is never a mirror: the owner heals its topic and no local record of that id is touched."""
+    sub = make_switch_subentry("Lamp", on=OWNER_ON)
+    owned = sub["data"][CONF_DEVICE_ID]
+    _seed_local(hass_storage, [_row_data(owned)])
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+    manager = manager_of(await setup_entry(hass, make_hub_entry([sub])))
+
+    await deliver_config(hass, owned, "", retain=False)
+
+    assert owned in manager.devices
+    assert hass_storage[LOCAL_STORE_KEY] == before
+
+
+async def test_tombstone_without_records_writes_nothing(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """A tombstone of a mirror that has no local record leaves the local Store unwritten."""
+    spec = make_spec(on=OWNER_ON)
+    manager = manager_of(await setup_entry(hass, make_hub_entry()))
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+
+    await deliver_config(hass, spec.device_id, "", retain=False)
+
+    assert spec.device_id not in manager.mirrors
+    assert LOCAL_STORE_KEY not in hass_storage
+
+
+async def test_tombstone_save_failure_keeps_the_records_and_removes_the_mirror(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-22: when the discard cannot be saved the records stay, on disk and in memory; the mirror still goes."""
+    spec = make_spec(on=OWNER_ON)
+    _entry, manager = await _cached_mirror_with_records(hass, hass_storage, make_hub_entry, spec)
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+
+    with patch.object(LocalActionsStore, "_async_write_data", AsyncMock(side_effect=OSError("disk full"))):
+        await deliver_config(hass, spec.device_id, "", retain=False)
+
+    assert spec.device_id not in manager.mirrors
+    assert hass_storage[LOCAL_STORE_KEY] == before
+    assert manager.local_action_counts().records == 3

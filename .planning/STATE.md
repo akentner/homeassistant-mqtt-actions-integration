@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-07-PLAN.md
-last_updated: "2026-10-21T02:03:20.296Z"
+stopped_at: Completed 11-08-PLAN.md
+last_updated: "2026-10-21T02:27:09.525Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 59a5fa063eec161276c9998e517a0ebf825e40cb
+state_head: 295795a11172490c15d91bc5115511fb0982f8fd
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 49
-  completed_plans: 43
+  completed_plans: 44
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 8 of 13
+Plan: 9 of 13
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -158,6 +158,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P05 | 25 min | 3 tasks | 11 files |
 | Phase 11 P06 | 14 min | 3 tasks | 12 files |
 | Phase 11 P07 | 19 min | 3 tasks | 17 files |
+| Phase 11 P08 | 17 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -356,6 +357,10 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-07: muted triggers answer the re-trigger error/no_actions; ack word sets unchanged, ManualRunResult never reaches the wire
 - [Phase 11]: 11-07: local_action_failed_<id> stores the named identity in issue data; only that trigger's proven success or removal of its customization clears it
 - [Phase 11]: 11-07: approval count 'replaced' counts active replacements incl. muted; local edits update an existing request in place, keeping dismissal
+- [Phase 11]: Phase 11-08: the hub options open as a menu (settings, local_actions); the former init form is the settings step
+- [Phase 11]: Phase 11-08: local trigger picker markers are translated in the instance language (hass.config.language) via async_get_translations, since select option labels are not translated by the frontend
+- [Phase 11]: Phase 11-08: empty replacement always passes local_actions_confirm_mute; Remove local customization has its own local_actions_confirm_remove; drafts never reach the Manager unconfirmed
+- [Phase 11]: Phase 11-08: approval confirm closing line now says the owner actions do not run until submit, because local actions may already run (D-17)
 
 ### Pending Todos
 
@@ -391,8 +396,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T02:03:19.993Z
-Stopped at: Completed 11-07-PLAN.md
+Last session: 2026-10-21T02:27:09.219Z
+Stopped at: Completed 11-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

@@ -97,13 +97,21 @@ from .document import (
 )
 from .entities import device_info_for
 from .local_actions import (
+    LocalActionCounts,
     LocalActionIdentity,
     LocalActionMode,
     LocalActionRecord,
+    LocalActionRecordInvalid,
+    LocalMatch,
     build_effective_trigger_plans,
+    copy_local_records,
     effective_policy,
+    local_action_counts,
+    local_trigger_identity,
+    make_local_record,
+    match_local_records,
 )
-from .local_actions_store import LocalActionsStore
+from .local_actions_store import LocalActionsStore, LocalActionsStoreError
 from .model import DeviceSpec, TriggerSpec, shown, spec_from_subentry, trigger_key
 from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway, async_attempt
@@ -166,6 +174,19 @@ class LocalActionDevice:
     kind: str | None
     mirrored: bool
     records: int
+
+
+# Why a local-action edit was refused (LocalActionError.reason); the flow maps each to a base error
+LOCAL_ACTION_NOT_RUNNING = "not_running"
+LOCAL_ACTION_STALE_TARGET = "stale_target"
+LOCAL_ACTION_INVALID_MODE = "invalid_mode"
+LOCAL_ACTION_INVALID_ACTIONS = "invalid_actions"
+LOCAL_ACTION_SAVE_FAILED = "save_failed"
+
+
+def _copy_record(record: LocalActionRecord | None) -> LocalActionRecord | None:
+    """Return a record with its own copy of the actions, None for None."""
+    return None if record is None else copy_local_records((record,))[0]
 
 
 class LocalActionError(HomeAssistantError):
@@ -1552,20 +1573,149 @@ class Manager:
         return tuple(listed)
 
     def local_action_triggers(self, device_id: str) -> tuple[LocalActionTrigger, ...]:
-        """Return the editor rows of a device; skeleton (Plan 11-05 Task 2 RED)."""
-        del device_id
-        return ()
+        """
+        Return the editor rows of a device: its current triggers in owner order, then its inactive records (D-12).
+
+        A current trigger shows the owner's friendly name and StateValue with its record, if any. A record that matches
+        no current trigger (an orphaned option, the other device kind, no current mirror) follows, sorted by identity,
+        with its last saved label. Every record is a copy.
+        """
+        records = [record for record in self._local_records if record.identity.device_id == device_id]
+        rows: list[LocalActionTrigger] = []
+        if (mirror := self.mirrors.get(device_id)) is None:
+            match = LocalMatch({}, tuple(sorted(records, key=lambda record: record.identity)))
+        else:
+            match = match_local_records(mirror.spec, records)
+            rows.extend(
+                LocalActionTrigger(
+                    local_trigger_identity(device_id, mirror.spec.kind, trigger.value),
+                    trigger.value,
+                    trigger.friendly_name,
+                    present=True,
+                    record=_copy_record(match.active.get(trigger.key)),
+                )
+                for trigger in mirror.spec.triggers.values()
+            )
+        rows.extend(
+            LocalActionTrigger(
+                record.identity, record.state_value, record.label, present=False, record=_copy_record(record)
+            )
+            for record in match.inactive
+        )
+        return tuple(rows)
+
+    def local_action_counts(self) -> LocalActionCounts:
+        """Return how many local records exist and how they attach to the current mirrors; counts only (D-04)."""
+        return local_action_counts(
+            self._local_records, {device_id: mirror.spec for device_id, mirror in self.mirrors.items()}
+        )
 
     async def async_set_local_action(
         self, identity: LocalActionIdentity, mode: LocalActionMode | str, actions: Any
     ) -> LocalActionChange:
-        """Save the local customization of one trigger; skeleton (Plan 11-05 Task 2 RED)."""
-        del mode, actions
-        return LocalActionChange(identity, None, active=False)
+        """
+        Save the local customization of one trigger, durably, and apply it at once; raise LocalActionError (D-13).
+
+        Under the manager lock the target is checked again: a current trigger of a current mirror, or a trigger that
+        already has a saved record (an orphan or the other kind, which stays inactive, D-12). Anything else is stale.
+        The raw actions are validated, but the raw copy is what is saved; the complete candidate set is written before
+        anything changes in memory, so a failed save leaves the previous record, Script and breaker (D-22, T-11-13).
+        A saved edit rebuilds only its device, runs nothing retroactively and releases that device's tripped breaker.
+        """
+        async with self._lock:
+            identity = self._checked_local_identity(identity)
+            trigger = self._local_trigger(identity)
+            # A current trigger names the shown value and its friendly name; a retained record keeps its own (D-11)
+            if trigger is not None:
+                state_value, label = trigger.value, trigger.friendly_name
+            elif (existing := self._local_record(identity)) is not None:
+                state_value, label = existing.state_value, existing.label
+            else:
+                raise LocalActionError(LOCAL_ACTION_STALE_TARGET)
+            try:
+                checked_mode = LocalActionMode(mode)
+            except ValueError as err:
+                raise LocalActionError(LOCAL_ACTION_INVALID_MODE) from err
+            try:
+                await async_validate_actions(self._hass, actions)
+                record = make_local_record(
+                    identity.device_id,
+                    identity.kind,
+                    state_value,
+                    label=label,
+                    mode=checked_mode,
+                    actions=actions,
+                )
+            except (ActionsInvalid, LocalActionRecordInvalid) as err:
+                raise LocalActionError(LOCAL_ACTION_INVALID_ACTIONS) from err
+            if self._local_record(identity) is None:
+                candidate = (*self._local_records, record)
+            else:
+                # The record keeps its place, so a repeated identical edit saves the identical set (MIR-09)
+                candidate = tuple(record if item.identity == identity else item for item in self._local_records)
+            await self._async_commit_local_records(candidate, identity.device_id)
+            return LocalActionChange(identity, _copy_record(record), active=trigger is not None)
 
     async def async_remove_local_action(self, identity: LocalActionIdentity) -> LocalActionChange:
-        """Remove the local customization of one trigger; skeleton (Plan 11-05 Task 2 RED)."""
-        return LocalActionChange(identity, None, active=False)
+        """
+        Remove the local customization of one trigger, durably, and restore owner-only behavior (D-14).
+
+        Allowed for every saved record, active or not; an identity without a record is stale. Saved before anything
+        changes in memory, like an edit; raise LocalActionError.
+        """
+        async with self._lock:
+            identity = self._checked_local_identity(identity)
+            if self._local_record(identity) is None:
+                raise LocalActionError(LOCAL_ACTION_STALE_TARGET)
+            candidate = tuple(item for item in self._local_records if item.identity != identity)
+            await self._async_commit_local_records(candidate, identity.device_id)
+            return LocalActionChange(identity, None, active=False)
+
+    def _checked_local_identity(self, identity: LocalActionIdentity) -> LocalActionIdentity:
+        """Return the identity with its StateValue normalized; raise LocalActionError while not running."""
+        if not self._running:
+            raise LocalActionError(LOCAL_ACTION_NOT_RUNNING)
+        if not isinstance(identity, LocalActionIdentity) or not all(
+            isinstance(part, str) and part for part in (identity.device_id, identity.kind, identity.state_value)
+        ):
+            raise LocalActionError(LOCAL_ACTION_STALE_TARGET)
+        return local_trigger_identity(identity.device_id, identity.kind, identity.state_value)
+
+    def _local_trigger(self, identity: LocalActionIdentity) -> TriggerSpec | None:
+        """Return the current owner trigger a local identity attaches to: same mirror, kind and StateValue."""
+        mirror = self.mirrors.get(identity.device_id)
+        if mirror is None or mirror.spec.kind != identity.kind:
+            return None
+        for trigger in mirror.spec.triggers.values():
+            if local_trigger_identity(identity.device_id, identity.kind, trigger.value) == identity:
+                return trigger
+        return None
+
+    def _local_record(self, identity: LocalActionIdentity) -> LocalActionRecord | None:
+        """Return the saved record of an identity, None when there is none."""
+        return next((record for record in self._local_records if record.identity == identity), None)
+
+    async def _async_commit_local_records(self, candidate: tuple[LocalActionRecord, ...], device_id: str) -> None:
+        """
+        Save a complete candidate record set, then apply it to the one affected device; the caller holds the lock.
+
+        Nothing in memory changes before the save succeeded. The mirror of the device, if there is one, gets its Script
+        rebuilt from the new records, and only then is its breaker released, so the next run already uses the new plan.
+        """
+        try:
+            saved = await self._local_store.async_save_records(candidate)
+        except LocalActionsStoreError as err:
+            LOGGER.warning("A local action edit could not be saved, so nothing changed")
+            raise LocalActionError(LOCAL_ACTION_SAVE_FAILED) from err
+        self._local_records = saved
+        if (mirror := self.mirrors.get(device_id)) is None:
+            return
+        await self._async_refresh_mirror_script(mirror)
+        # A local edit is a release, like a changed configuration (D-03, D-15); only after a durable save
+        mirror.breaker.reset()
+        self._delete_breaker_issue(device_id)
+        if self._tripped.pop(device_id, None) is not None:
+            self._schedule_save()
 
     def approval_state(self, device_id: str) -> ApprovalState:
         """

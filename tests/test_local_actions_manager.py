@@ -465,3 +465,32 @@ async def test_edit_waits_for_the_manager_lock(
         assert _stored_rows(hass_storage) is None, "nothing is written while another holder has the lock"
     await task
     assert _stored_rows(hass_storage) is not None
+
+
+async def test_editor_rows_list_current_triggers_then_inactive_records_as_copies(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-11, D-12: current triggers in owner order with friendly name, then inactive records; counts only elsewhere."""
+    spec = make_spec(
+        SUBENTRY_SELECT, options=[("cozy", "Gemütlich", []), ("bright", "Hell", [{"action": "test.owner_on"}])]
+    )
+    gone = {**_additive_on(spec.device_id), "kind": SUBENTRY_SELECT, "state_value": "party", "label": "Party"}
+    _seed_local_store(hass_storage, [gone, _additive_on(ORPHAN_DEVICE)])
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    await manager.async_set_local_action(
+        local_trigger_identity(spec.device_id, SUBENTRY_SELECT, "Bright"), LocalActionMode.REPLACEMENT, []
+    )
+
+    rows = manager.local_action_triggers(spec.device_id)
+    assert [(row.state_value, row.label, row.present, row.record is not None) for row in rows] == [
+        ("cozy", "Gemütlich", True, False),
+        ("bright", "Hell", True, True),
+        ("party", "Party", False, True),
+    ]
+    assert rows[1].record is not None
+    rows[1].record.actions.append({"action": "test.tamper"})
+    assert manager.local_action_triggers(spec.device_id)[1].record.actions == [], "rows hand out copies"
+    assert [(row.label, row.present) for row in manager.local_action_triggers(ORPHAN_DEVICE)] == [("On", False)]
+    counts = manager.local_action_counts()
+    assert (counts.records, counts.devices, counts.active, counts.inactive, counts.muted) == (3, 2, 1, 2, 1)
+    assert counts.orphan_only_devices == 1

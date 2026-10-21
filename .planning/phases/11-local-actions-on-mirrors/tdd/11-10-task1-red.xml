@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.322" timestamp="2026-10-21T04:50:00.004466+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_multi_instance" name="test_state_changes_run_only_each_followers_own_local_actions" time="0.231"><failure message="AssertionError: assert {('bare', 'OF...mp_on']}, ...} == {('bare', 'OF...mp_on']}, ...}&#10;  &#10;  Omitting 5 identical items, use -vv to show&#10;  Differing items:&#10;  {('lamp', 'OFF'): {'alpha': ['owner_off'], 'beta': [], 'gamma': ['gamma_sentinel_lamp_off', 'owner_off']}} != {('lamp', 'OFF'): {'alpha': ['owner_off'], 'beta': [], 'gamma': ['gamma_sentinel_lamp_off']}}&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;
+fake_broker = &lt;tests.fake_broker.FakeBroker object at 0x7f40d8335940&gt;
+make_instance = &lt;tests.fake_broker.InstanceFactory object at 0x7f40d8335a90&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f40d832f110&gt;
+make_select_subentry = &lt;function make_select_subentry.&lt;locals&gt;._make at 0x7f40d6305b10&gt;
+
+    async def test_state_changes_run_only_each_followers_own_local_actions(
+        hass: HomeAssistant,
+        fake_broker: FakeBroker,
+        make_instance: Callable,
+        make_switch_subentry: Callable,
+        make_select_subentry: Callable,
+    ) -&gt; None:
+        """D-02, D-03, MIR-02: one state change on the shared topic runs a different effective plan on each follower."""
+        scenario = await _scenario(hass, make_instance, make_switch_subentry, make_select_subentry)
+        shared_before = _shared_retained(fake_broker)
+    
+        runs: dict[tuple[str, str], dict[str, list[str]]] = {}
+        for device, value in EXPECTED_RUNS:
+            await scenario.alpha.manager.async_send_state(_device_of(scenario, device), value)
+            await _settle(*scenario.instances)
+            runs[device, value] = scenario.ran()
+    
+&gt;       assert runs == EXPECTED_RUNS
+E       AssertionError: assert {('bare', 'OF...mp_on']}, ...} == {('bare', 'OF...mp_on']}, ...}
+E         
+E         Omitting 5 identical items, use -vv to show
+E         Differing items:
+E         {('lamp', 'OFF'): {'alpha': ['owner_off'], 'beta': [], 'gamma': ['gamma_sentinel_lamp_off', 'owner_off']}} != {('lamp', 'OFF'): {'alpha': ['owner_off'], 'beta': [], 'gamma': ['gamma_sentinel_lamp_off']}}
+E         Use -v to get more diff
+
+tests/test_local_multi_instance.py:383: AssertionError</failure></testcase></testsuite></testsuites>

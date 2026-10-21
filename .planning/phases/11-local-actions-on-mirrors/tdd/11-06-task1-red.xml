@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.979" timestamp="2026-10-21T03:26:55.123977+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_lifecycle" name="test_option_rename_survives_with_refreshed_label" time="0.884"><failure message="AssertionError: the last known friendly name is refreshed in the local Store; nothing else of the record changes&#10;assert [{'actions': ...l': 'B', ...}] == [{'actions': ...: 'Bee', ...}]&#10;  &#10;  At index 0 diff: {'device_id': 'dec2aea5-955d-4c2b-a969-dc56770f02b9', 'kind': 'select', 'state_value': 'b', 'label': 'B', 'mode': 'additive', 'actions': [{'action': 'test.local_b', 'data': {'source': 'local'}}]} != {'device_id': 'dec2aea5-955d-4c2b-a969-dc56770f02b9', 'kind': 'select', 'state_value': 'b', 'label': 'Bee', 'mode': 'additive', 'actions': [{'action': 'test.local_b', 'data': {'source': 'local'}}]}&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140322933697776'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...f02b9', 'kind': 'select', 'label': 'B', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9f885f9d20&gt;
+
+    async def test_option_rename_survives_with_refreshed_label(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """D-11: an owner rename of a present option refreshes the saved label durably; identity and actions stay."""
+        local_calls = async_mock_service(hass, "test", "local_b")
+        spec = _select([("a", "A"), ("b", "B")])
+        _entry, manager = await _select_with_local_b(hass, make_hub_entry, spec)
+        rows = _stored_rows(hass_storage)
+        assert rows is not None
+        assert rows[0]["label"] == "B", "premise: the record was saved with the friendly name of the option"
+    
+        await _owner_sends(hass, _select([("a", "A"), ("b", "Bee")], spec.device_id), rev=2)
+    
+&gt;       assert _stored_rows(hass_storage) == [{**rows[0], "label": "Bee"}], (
+            "the last known friendly name is refreshed in the local Store; nothing else of the record changes"
+        )
+E       AssertionError: the last known friendly name is refreshed in the local Store; nothing else of the record changes
+E       assert [{'actions': ...l': 'B', ...}] == [{'actions': ...: 'Bee', ...}]
+E         
+E         At index 0 diff: {'device_id': 'dec2aea5-955d-4c2b-a969-dc56770f02b9', 'kind': 'select', 'state_value': 'b', 'label': 'B', 'mode': 'additive', 'actions': [{'action': 'test.local_b', 'data': {'source': 'local'}}]} != {'device_id': 'dec2aea5-955d-4c2b-a969-dc56770f02b9', 'kind': 'select', 'state_value': 'b', 'label': 'Bee', 'mode': 'additive', 'actions': [{'action': 'test.local_b', 'data': {'source': 'local'}}]}
+E         Use -v to get more diff
+
+tests/test_local_actions_lifecycle.py:222: AssertionError</failure></testcase></testsuite></testsuites>

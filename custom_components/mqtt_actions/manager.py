@@ -143,6 +143,22 @@ class MirrorInfo:
     native: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class LocalActionDevice:
+    """
+    One device the local-actions editor can show: a current mirror, or saved records without one (D-05, D-12).
+
+    `name` and `kind` come from the current mirror; a device known only from its records has no name and the kind of
+    its first record. `records` counts the saved records of the device, never their content.
+    """
+
+    device_id: str
+    name: str | None
+    kind: str | None
+    mirrored: bool
+    records: int
+
+
 class AdoptionError(Exception):
     """
     An adoption was refused before anything changed (D-10).
@@ -1436,6 +1452,10 @@ class Manager:
             self._entry, data={**self._entry.data, CONF_INSTANCE_ID: str(uuid.uuid4())}
         )
         self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
+
+    def local_action_devices(self) -> tuple[LocalActionDevice, ...]:
+        """Return every current mirror and every device that has saved local records; skeleton (Plan 11-05 RED)."""
+        return ()
 
     def approval_state(self, device_id: str) -> ApprovalState:
         """

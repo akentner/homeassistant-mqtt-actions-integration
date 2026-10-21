@@ -218,7 +218,13 @@ class Instance:
             await self.hass.config_entries.async_setup(self.entry.entry_id)
             await self.hass.async_block_till_done(wait_background_tasks=True)
             return
-        manager = Manager(self.hass, self.entry, gateway=self.gateway, store_key=self.store_key)
+        manager = Manager(
+            self.hass,
+            self.entry,
+            gateway=self.gateway,
+            store_key=self.store_key,
+            local_store_key=self.local_store_key,
+        )
         self.entry.runtime_data = manager
         await manager.async_start()
 
@@ -236,8 +242,8 @@ class InstanceFactory:
         self._broker = broker
         self._stack = AsyncExitStack()
         self.instances: list[Instance] = []
-        # The gateway and the store key of each hass that runs the real setup; the patched constructors read them
-        self._real: dict[HomeAssistant, tuple[FakeGateway, str]] = {}
+        # The gateway and both store keys of each hass that runs the real setup; the patched constructors read them
+        self._real: dict[HomeAssistant, tuple[FakeGateway, str, str]] = {}
 
     async def __call__(
         self,
@@ -288,13 +294,13 @@ class InstanceFactory:
         )
         if real_setup:
             self._patch_gateways()
-            self._real[hass] = (gateway, store_key)
+            self._real[hass] = (gateway, store_key, local_store_key)
             # The manifest depends on mqtt, whose client the fake gateway replaces; core MQTT itself is never set up
             hass.config.components.add("mqtt")
             assert await hass.config_entries.async_setup(entry.entry_id)
             await hass.async_block_till_done(wait_background_tasks=True)
         else:
-            manager = Manager(hass, entry, gateway=gateway, store_key=store_key)
+            manager = Manager(hass, entry, gateway=gateway, store_key=store_key, local_store_key=local_store_key)
             entry.runtime_data = manager
             await manager.async_start()
         # Stops whichever manager the instance runs at the end, so a restart inside a test is not stopped twice
@@ -304,7 +310,7 @@ class InstanceFactory:
 
     def _patch_gateways(self) -> None:
         """
-        Make the real setup of every hass use its fake gateway and its own store key; done once, undone at the close.
+        Make the real setup of every hass use its fake gateway and its own store keys; done once, undone at the close.
 
         The patches replace the constructors the setup and the manager call, and the dispatch is by the hass they get,
         so a reload builds its manager on the same gateway and the same Store. They are entered first, so they end last.
@@ -316,8 +322,8 @@ class InstanceFactory:
             return self._real[hass][0]
 
         def _manager(hass: HomeAssistant, entry: MockConfigEntry) -> Manager:
-            gateway, store_key = self._real[hass]
-            return Manager(hass, entry, gateway=gateway, store_key=store_key)
+            gateway, store_key, local_store_key = self._real[hass]
+            return Manager(hass, entry, gateway=gateway, store_key=store_key, local_store_key=local_store_key)
 
         for target, replacement in (
             ("custom_components.mqtt_actions.MqttGateway", _gateway),

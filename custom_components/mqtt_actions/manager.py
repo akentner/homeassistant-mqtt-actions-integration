@@ -53,6 +53,7 @@ from .const import (
     ISSUE_DUPLICATE_INSTANCE_ID,
     ISSUE_KEPT_DUPLICATES,
     ISSUE_NATIVE_CUTOVER_WAITING,
+    LOCAL_ACTIONS_STORE_KEY,
     LOGGER,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
@@ -95,6 +96,12 @@ from .document import (
     spec_has_actions,
 )
 from .entities import device_info_for
+from .local_actions import (
+    LocalActionRecord,
+    build_effective_trigger_plans,
+    effective_policy,
+)
+from .local_actions_store import LocalActionsStore
 from .model import DeviceSpec, TriggerSpec, shown, spec_from_subentry, trigger_key
 from .modes import is_mode, most_restrictive
 from .mqtt_gateway import IncomingMessage, MqttGateway, async_attempt
@@ -485,12 +492,13 @@ class Manager:
         *,
         gateway: MqttGateway | None = None,
         store_key: str = STORE_KEY,
+        local_store_key: str = LOCAL_ACTIONS_STORE_KEY,
     ) -> None:
         """
         Initialize the manager.
 
-        The gateway and the store key are injectable so tests can run several managers against a fake broker; the
-        production defaults are the MQTT gateway and the shared store key.
+        The gateway and both store keys are injectable so tests can run several managers against a fake broker; the
+        production defaults are the MQTT gateway and the shared store keys.
         """
         self._hass = hass
         self._entry = entry
@@ -508,6 +516,10 @@ class Manager:
         self._approvals: dict[str, str] = {}
         self._publisher: DiscoveryPublisher | None = None
         self._store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, store_key)
+        # The local actions of mirrors live in a Store of their own, never in the main Store or a document (D-07)
+        self._local_store = LocalActionsStore(hass, local_store_key)
+        # Every saved local record, loaded before any mirror is restored; never pruned at a start (D-05, D-22)
+        self._local_records: tuple[LocalActionRecord, ...] = ()
         self._stored_last_acted: dict[str, str] = {}
         self._published: set[str] = set()
         # device id -> config hash at the time its breaker tripped; the counting window is never stored (D-17)
@@ -785,6 +797,8 @@ class Manager:
 
     async def async_start(self) -> None:
         """Load the persisted state, clear orphans, start every configured device and publish availability online."""
+        # First: a restored mirror builds its Script from these records before its state is subscribed (D-22)
+        await self._async_load_local_actions()
         await self._async_load_store()
         integration = await async_get_integration(self._hass, DOMAIN)
         self._version = str(integration.version)
@@ -1061,6 +1075,22 @@ class Manager:
             partial(self._publisher.async_publish_availability, self._instance_id, state),
             f"publish the {state.value} availability",
         )
+
+    async def _async_load_local_actions(self) -> None:
+        """
+        Load the saved local records as they are; nothing is matched against mirrors and nothing is rewritten (D-05).
+
+        A Store this release cannot read (a newer version, an unreadable file) starts the instance without local
+        actions; the Store then refuses every save, so the file is never overwritten (T-11-09).
+        """
+        try:
+            self._local_records = await self._local_store.async_load_records()
+        except Exception as err:  # noqa: BLE001 - whatever the load raises, the start goes on without local actions
+            self._local_records = ()
+            LOGGER.warning(
+                "The local actions of this instance cannot be read (%s); they are not used and not overwritten",
+                type(err).__name__,
+            )
 
     async def _async_load_store(self) -> None:
         """Load the persisted baseline and published ids; anything malformed is dropped."""
@@ -1454,8 +1484,27 @@ class Manager:
         self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
 
     def local_action_devices(self) -> tuple[LocalActionDevice, ...]:
-        """Return every current mirror and every device that has saved local records; skeleton (Plan 11-05 RED)."""
-        return ()
+        """
+        Return every current mirror, then every other device that has saved local records, sorted by id (D-05, D-12).
+
+        A device whose records outlived its mirror (a transient prune, a start before the owner's document) stays
+        listed, so its records remain viewable and removable. Counts only; no record content.
+        """
+        counts: dict[str, int] = {}
+        first_kind: dict[str, str] = {}
+        for record in self._local_records:
+            counts[record.identity.device_id] = counts.get(record.identity.device_id, 0) + 1
+            first_kind.setdefault(record.identity.device_id, record.identity.kind)
+        listed = [
+            LocalActionDevice(device_id, mirror.name, mirror.spec.kind, mirrored=True, records=counts.get(device_id, 0))
+            for device_id, mirror in self.mirrors.items()
+        ]
+        listed.extend(
+            LocalActionDevice(device_id, None, first_kind[device_id], mirrored=False, records=counts[device_id])
+            for device_id in sorted(counts)
+            if device_id not in self.mirrors
+        )
+        return tuple(listed)
 
     def approval_state(self, device_id: str) -> ApprovalState:
         """
@@ -1466,13 +1515,19 @@ class Manager:
         """
         if device_id in self.devices:
             return ApprovalState.OWNED
-        if (mirror := self.mirrors.get(device_id)) is None or (info := mirror.mirror) is None:
+        if (mirror := self.mirrors.get(device_id)) is None:
+            return ApprovalState.UNKNOWN
+        return self._mirror_approval(mirror)
+
+    def _mirror_approval(self, mirror: Device) -> ApprovalState:
+        """Return the approval word of a mirror object, also of one that is not registered in `mirrors` yet."""
+        if (info := mirror.mirror) is None:
             return ApprovalState.UNKNOWN
         if info.denied:
             return ApprovalState.BLOCKED
         if not spec_has_actions(mirror.spec):
             return ApprovalState.NO_ACTIONS
-        if self._approvals.get(device_id) == info.actions_hash:
+        if self._approvals.get(mirror.device_id) == info.actions_hash:
             return ApprovalState.APPROVED
         return ApprovalState.PENDING
 
@@ -1549,21 +1604,20 @@ class Manager:
 
     async def _async_refresh_mirror_script(self, device: Device) -> None:
         """
-        Build the Script of a mirror only for an approved, unblocked document, and unload it otherwise (TRU-01).
+        Build the Script of a mirror from the effective plans of its triggers, or unload it when nothing runs (TRU-01).
 
-        The gate is "no Script until the approved hash equals the actions hash of the mirror": a blocked mirror, one
-        without actions and one whose approval does not match (never approved, or the owner changed the actions) get no
-        Script, and unloading stops its running and queued runs. The build is restricted, so even a forged approval
-        entry cannot give a statically denied service a Script (T-03-33).
+        The owner branch of a trigger is eligible only while the approved hash equals the actions hash of the mirror:
+        a blocked mirror, one without actions and one whose approval does not match (never approved, or the owner
+        changed the actions) lose only their owner branches. A saved local record keeps its local branch whatever the
+        approval (D-02); without any record this is exactly the previous gate, and an unloaded Script stops its running
+        and queued runs. Owner actions are built restricted, so even a forged approval entry cannot give a statically
+        denied service a Script (T-03-33). The plans are built from copies; the shared spec never changes.
         """
-        info = device.mirror
-        if info is None:
+        if device.mirror is None:
             return
-        approved = self._approvals.get(device.device_id) == info.actions_hash
-        if info.denied or not spec_has_actions(device.spec) or not approved:
-            await self.runner.async_unload(device.device_id)
-            return
-        await self.runner.async_build_device(device.spec, restricted=True)
+        approval = str(self._mirror_approval(device))
+        plans = build_effective_trigger_plans(device.spec, approval, self._local_records)
+        await self.runner.async_build_effective(device.spec, plans, policy=effective_policy(device.spec, approval))
 
     async def async_remove_mirror(self, device_id: str) -> None:
         """

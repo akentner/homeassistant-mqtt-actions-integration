@@ -115,11 +115,12 @@ class LocalActionsStore(Store[dict[str, Any]]):
             self._write_error = None
             try:
                 await self.async_save(local_actions_payload(snapshot))
-            except Exception as err:
-                msg = f"The local actions of {self.key} could not be saved"
-                raise LocalActionsStoreError(msg) from err
-            if (error := self._write_error) is not None:
-                self._write_error = None
+            except Exception as err:  # noqa: BLE001 - any failure of the write is reported the same way
+                error: Exception | None = err
+            else:
+                error = self._write_error
+            self._write_error = None
+            if error is not None:
                 msg = f"The local actions of {self.key} could not be saved"
                 raise LocalActionsStoreError(msg) from error
             self._records = snapshot

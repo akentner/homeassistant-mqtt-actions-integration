@@ -231,7 +231,7 @@ Plans:
   4. Nothing local leaves the instance: the central config, actions hash, export, diagnostics content and adoption payload are byte-identical with and without local actions, existing approvals stay valid, and no new re-trigger status or reason word appears on the broker. Diagnostics show only counts of local actions (per device, orphaned). The approval issue says how many triggers are replaced locally, while the approval stays pending and adoption stays refused. (MIR-04, MIR-10, MIR-12, MIR-14)
   5. Local actions survive owner content changes, renames, rev bumps, restarts and an owner re-pin. Local actions of a Select option the owner removed stay inactive, are listed as orphaned in the options where the user can remove them, and re-attach when the same StateValue returns. An adoption discards them with a log entry and `adopt_device` reports it; start-up, transient prunes and tombstones discard nothing, and the local actions of a deleted device stay inactive until the user removes them (amended 2026-10-21, WR-01). The README documents modes, mute, parallel semantics, this lifecycle, downgrade behavior and the `{{ state }}` template caveat. (MIR-06, MIR-07, MIR-08, MIR-15)
 
-**Plans**: 23/25 plans executed
+**Plans**: 24/25 plans executed
 
 Plans:
 **Wave 1**
@@ -298,7 +298,7 @@ Plans:
 - [x] 11-22-PLAN.md — Review WR-04: the hub-removal warning says "cannot be read" instead of a device count (en/de)
 
 **Wave 21** *(blocked on Wave 20 completion)*
-- [ ] 11-24-PLAN.md — Re-verification gap / WR-05: loading never writes the local Store (newer minor kept byte-identical); unknown row keys survive every save; README "Newer versions"
+- [x] 11-24-PLAN.md — Re-verification gap / WR-05: loading never writes the local Store (newer minor kept byte-identical); unknown row keys survive every save; README "Newer versions"
 
 **Wave 22** *(blocked on Wave 21 completion)*
 - [ ] 11-25-PLAN.md — Review WR-06: a run in flight cannot re-open local_action_failed after a save without local actions
@@ -343,7 +343,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
 | 9.2. CR-01 Cross-Instance Gap Closure (INSERTED) | 9/9 | Complete    | 2026-10-16 |
 | 10. Review Findings and Native Migration Extraction | 10/10 | Complete    | 2026-10-17 |
-| 11. Local Actions on Mirrors | 23/25 | In Progress | - |
+| 11. Local Actions on Mirrors | 24/25 | In Progress | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |
 
 ## Backlog

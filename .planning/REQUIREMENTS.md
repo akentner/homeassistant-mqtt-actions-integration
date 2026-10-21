@@ -31,16 +31,16 @@ Order is fixed by the owner: release v1.0.1 first, then the review findings, the
 - [ ] **MIR-03**: In "in addition to" mode, owner and local parts run in parallel within the device's single Script; a runtime failure of one part does not stop the other; run mode and breaker stay device-wide
 - [ ] **MIR-04**: Local actions never leave the instance: they are not in the central config, the actions hash, the export, diagnostics content or the adoption payload; existing approvals stay valid
 - [ ] **MIR-05**: An empty "instead of" mutes the trigger on this instance
-- [ ] **MIR-06**: Local actions survive owner content changes, renames, rev bumps, restarts and an owner re-pin
+- [x] **MIR-06**: Local actions survive owner content changes, renames, rev bumps, restarts and an owner re-pin
 - [ ] **MIR-07**: Local actions of a Select option the owner removed are kept inactive, shown as orphaned in the flow, removable there, and re-attach when the same StateValue returns
-- [ ] **MIR-08**: On an adoption, local actions are discarded and logged; `adopt_device` reports it in its response. A tombstone removes the mirror but keeps its local actions inactive until the user removes them or the device returns; nothing is discarded at start-up, on a transient prune or on a tombstone (amended 2026-10-21, review WR-01)
+- [x] **MIR-08**: On an adoption, local actions are discarded and logged; `adopt_device` reports it in its response. A tombstone removes the mirror but keeps its local actions inactive until the user removes them or the device returns; nothing is discarded at start-up, on a transient prune or on a tombstone (amended 2026-10-21, review WR-01)
 - [ ] **MIR-09**: Device mode (observe, disabled) and the circuit breaker apply to local actions; a local edit releases a tripped breaker
 - [ ] **MIR-10**: Test buttons and the re-trigger service run the effective actions on this instance; no new status or reason words appear on the broker
 - [ ] **MIR-11**: While the owner's actions are unapproved, `run_on_startup`, run mode and breaker limits from the owner's document do not govern local runs; safe defaults apply
 - [ ] **MIR-12**: The approval issue shows how many triggers are replaced locally; the approval state stays pending and adoption stays refused
 - [ ] **MIR-13**: Local action failures raise their own Repairs issue, independent of owner action failures
 - [ ] **MIR-14**: Diagnostics show counts of local actions (per device, orphaned), never their content
-- [ ] **MIR-15**: README documents modes, mute, parallel semantics, lifecycle (orphan, tombstone, adoption), downgrade behavior and the `{{ state }}` template caveat; UI texts exist in en and de
+- [x] **MIR-15**: README documents modes, mute, parallel semantics, lifecycle (orphan, tombstone, adoption), downgrade behavior and the `{{ state }}` template caveat; UI texts exist in en and de
 
 ### Verification
 
@@ -91,16 +91,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIR-03 | Phase 11 | Gaps Found |
 | MIR-04 | Phase 11 | Gaps Found |
 | MIR-05 | Phase 11 | Gaps Found |
-| MIR-06 | Phase 11 | Gaps Found |
+| MIR-06 | Phase 11 | Complete |
 | MIR-07 | Phase 11 | Gaps Found |
-| MIR-08 | Phase 11 | Gaps Found |
+| MIR-08 | Phase 11 | Complete |
 | MIR-09 | Phase 11 | Gaps Found |
 | MIR-10 | Phase 11 | Gaps Found |
 | MIR-11 | Phase 11 | Gaps Found |
 | MIR-12 | Phase 11 | Gaps Found |
 | MIR-13 | Phase 11 | Gaps Found |
 | MIR-14 | Phase 11 | Gaps Found |
-| MIR-15 | Phase 11 | Gaps Found |
+| MIR-15 | Phase 11 | Complete |
 | QLT-01 | Phase 12 | Pending |
 | QLT-04 | Phase 12 | Pending |
 | QLT-05 | Phase 12 | Pending |

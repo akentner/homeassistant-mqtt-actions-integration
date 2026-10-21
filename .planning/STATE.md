@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-22-PLAN.md
-last_updated: "2026-10-21T09:34:06.429Z"
+stopped_at: Completed 11-24-PLAN.md
+last_updated: "2026-10-21T09:45:40.896Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 0882f0d20ee3043cc712c4e56b0ac9e1a64d8b1a
+state_head: 2ed0c436ce9dea228bb90d5a1d4029d8dc91d570
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 61
-  completed_plans: 59
+  completed_plans: 60
   percent: 67
 ---
 
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 
 ## Current Position
 
-Phase: 11 (Local Actions on Mirrors) — READY TO EXECUTE
-Plan: 23 of 23
+Phase: 11 (Local Actions on Mirrors) — EXECUTING
+Plan: 25 of 25
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -174,6 +174,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P20 | 9 min | 3 tasks | 13 files |
 | Phase 11 P21 | 6min | 2 tasks | 11 files |
 | Phase 11 P22 | 10 min | 3 tasks | 14 files |
+| Phase 11 P24 | 8 min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -403,6 +404,8 @@ Recent decisions affecting current work:
 - [Phase 11]: Later duplicates of a parsed identity are not preserved; async_remove_records forgets preserved rows and keys (D-10, D-08)
 - [Phase 11]: 11-22: the removal warning count is None whenever the saved local actions cannot be read (loaded or unloaded hub); the options flow then shows step settings_unreadable with fixed en/de text instead of a number (WR-04, D-08)
 - [Phase 11]: 11-22: readable removal counts include devices named only by preserved rows, since removal deletes those rows too
+- [Phase 11]: 11-24: loading the local actions Store never writes it; LocalActionsStore.async_load reads through a read_only=True reader, so a newer minor file keeps its bytes and stamp (WR-05, D-22)
+- [Phase 11]: 11-24: unknown keys of a parsable local row are kept on LocalActionRecord.extra and written back on every save; explicit saves stamp this minor, so future minor migrations must be idempotent
 
 ### Pending Todos
 
@@ -439,8 +442,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T08:31:04.187Z
-Stopped at: Completed 11-22-PLAN.md
+Last session: 2026-10-21T09:45:40.533Z
+Stopped at: Completed 11-24-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

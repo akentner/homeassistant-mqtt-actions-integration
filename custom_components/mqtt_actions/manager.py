@@ -1795,6 +1795,9 @@ class Manager:
         The raw actions are validated, but the raw copy is what is saved; the complete candidate set is written before
         anything changes in memory, so a failed save leaves the previous record, Script and breaker (D-22, T-11-13).
         A saved edit rebuilds only its device, runs nothing retroactively and releases that device's tripped breaker.
+        A saved record without local actions (a mute, or additive with an empty list) cannot fail locally any more, so
+        it also ends the local failure issue that names its trigger; a failed save raises before and clears nothing
+        (D-19 as amended on 2026-10-21, WR-02).
         """
         async with self._lock:
             identity = self._checked_local_identity(identity)
@@ -1823,6 +1826,8 @@ class Manager:
             except (ActionsInvalid, LocalActionRecordInvalid) as err:
                 raise LocalActionError(LOCAL_ACTION_INVALID_ACTIONS) from err
             await self._async_commit_local_records(self._local_candidate(identity, record), identity.device_id)
+            if not record.actions:
+                self._clear_local_failure_naming(identity)
             return LocalActionChange(identity, _copy_record(record), active=trigger is not None)
 
     async def async_remove_local_action(self, identity: LocalActionIdentity) -> LocalActionChange:
@@ -1846,9 +1851,10 @@ class Manager:
         Turn the local outcome of one run, or of a build, into the local failure issue of its device (D-18, D-19).
 
         A failure creates or updates the one issue of the device: it names the latest failed local trigger and its
-        bounded error. Only a proven success of exactly that trigger clears it; no success, a success of another
-        trigger and every owner result leave it alone (T-11-21). A failure whose customization is gone by now is
-        dropped, because nothing could ever clear it.
+        bounded error. Here only a proven success of exactly that trigger clears it; no success, a success of another
+        trigger and every owner result leave it alone (T-11-21). The other two ways to end it are not outcomes: a
+        durable save of that trigger without local actions, and the removal of its customization. A failure whose
+        customization is gone by now is dropped, because nothing could ever clear it.
         """
         if (identity := outcome.identity) is None:
             return
@@ -1885,8 +1891,8 @@ class Manager:
         Every placeholder comes from the broker or from a run, so each is cut and escaped (T-11-23); no action, trace
         or variable is part of it. The issue data keeps the identity of the named trigger, so a later success or
         removal can be matched after a reload of the integration. The issue is persistent: a restart of Home Assistant
-        brings it back active with its data and text, because only a success or the end of its customization may end
-        it (D-19, T-11-21).
+        brings it back active with its data and text, because only a success, a durable save of the named trigger
+        without local actions or the end of its customization may end it (D-19 as amended, T-11-21).
         """
         ir.async_create_issue(
             self._hass,

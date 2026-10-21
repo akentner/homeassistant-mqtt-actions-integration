@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.296" timestamp="2026-10-21T09:48:59.993971+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_docs" name="test_local_failure_texts_name_every_way_the_issue_clears" time="0.121"><failure message="AssertionError: en.json: issues.local_action_failed.description never says 'without local actions'&#10;assert 'without local actions' in 'The local actions for {trigger} of {device} failed at {time}: {error}\n\nOnly the local actions of this instance are ...l actions of that trigger run successfully, or when you remove its local customization in the options of MQTT Actions.'">def test_local_failure_texts_name_every_way_the_issue_clears() -&gt; None:
+        """
+        WR-02, D-19 amended, MIR-15, D-06: a save of the named trigger without local actions ends the issue too.
+    
+        The en and de issue text, the troubleshooting entry and the README bullet on the local failure issue all name it.
+        """
+        for path, phrase in (
+            (TRANSLATIONS, "without local actions"),
+            (TRANSLATIONS.with_name("de.json"), "ohne lokale Aktionen"),
+        ):
+            issue = json.loads(path.read_text(encoding="utf-8")).get("issues", {}).get("local_action_failed", {})
+            description = issue.get("description", "")
+&gt;           assert phrase in description, f"{path.name}: issues.local_action_failed.description never says {phrase!r}"
+E           AssertionError: en.json: issues.local_action_failed.description never says 'without local actions'
+E           assert 'without local actions' in 'The local actions for {trigger} of {device} failed at {time}: {error}\n\nOnly the local actions of this instance are ...l actions of that trigger run successfully, or when you remove its local customization in the options of MQTT Actions.'
+
+tests/test_docs.py:786: AssertionError</failure></testcase></testsuite></testsuites>

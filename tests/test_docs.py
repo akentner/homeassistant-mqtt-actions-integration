@@ -771,6 +771,30 @@ def test_troubleshooting_explains_when_the_local_failure_issue_clears() -> None:
         assert phrase in entry, f"the local_action_failed entry never says {phrase!r}"
 
 
+def test_local_failure_texts_name_every_way_the_issue_clears() -> None:
+    """
+    WR-02, D-19 amended, MIR-15, D-06: a save of the named trigger without local actions ends the issue too.
+
+    The en and de issue text, the troubleshooting entry and the README bullet on the local failure issue all name it.
+    """
+    for path, phrase in (
+        (TRANSLATIONS, "without local actions"),
+        (TRANSLATIONS.with_name("de.json"), "ohne lokale Aktionen"),
+    ):
+        issue = json.loads(path.read_text(encoding="utf-8")).get("issues", {}).get("local_action_failed", {})
+        description = issue.get("description", "")
+        assert phrase in description, f"{path.name}: issues.local_action_failed.description never says {phrase!r}"
+
+    entry = _normalize(_section(_page(TROUBLESHOOTING), "`local_action_failed`"))
+    assert entry, "the troubleshooting page has no local_action_failed section"
+    assert "without local actions" in entry, "the local_action_failed entry never names a save without local actions"
+
+    local_failures = _bullets(_section(README.read_text(encoding="utf-8"), "local failures and diagnostics"))
+    bullet = next((item for item in local_failures if "local_action_failed" in item), None)
+    assert bullet is not None, "the README Local failures and diagnostics section has no local_action_failed bullet"
+    assert "without local actions" in _plain(bullet), "the README local failure bullet never names that save"
+
+
 def test_troubleshooting_says_the_local_failure_issue_survives_restart_prune_and_failed_adoption() -> None:
     """G-01, D-19, MIR-15: the issue lives as long as its customization; a prune no longer removes it."""
     entry = _plain(_section(_page(TROUBLESHOOTING), "`local_action_failed`"))

@@ -1,0 +1,18 @@
+{
+  "command": "uv run pytest -q -p no:logging \"tests/test_local_actions_manager.py::test_unreadable_local_store_issue_has_english_and_german_text_without_placeholders\" --junitxml=.planning/phases/11-local-actions-on-mirrors/tdd/11-15-task2-red.xml",
+  "exitCode": 1,
+  "output": "<?xml version=\"1.0\" encoding=\"utf-8\"?><testsuites name=\"pytest tests\"><testsuite name=\"pytest\" errors=\"0\" failures=\"1\" skipped=\"0\" tests=\"1\" time=\"0.347\" timestamp=\"2026-10-21T06:33:56.921894+02:00\" hostname=\"lap-aleken-tux1\"><testcase classname=\"tests.test_local_actions_manager\" name=\"test_unreadable_local_store_issue_has_english_and_german_text_without_placeholders\" time=\"0.122\"><failure message=\"AssertionError: en: issues.local_actions_unreadable.title is missing or empty&#10;assert ''\">def test_unreadable_local_store_issue_has_english_and_german_text_without_placeholders() -&gt; None:\n        \"\"\"D-06, T-11-43: both languages carry a fixed title and description; nothing from the records reaches the text.\"\"\"\n        english, german = _unreadable_issue_text(\"en\"), _unreadable_issue_text(\"de\")\n    \n        for language, text in ((\"en\", english), (\"de\", german)):\n            for field in (\"title\", \"description\"):\n&gt;               assert text[field], f\"{language}: issues.{UNREADABLE_ISSUE_ID}.{field} is missing or empty\"\nE               AssertionError: en: issues.local_actions_unreadable.title is missing or empty\nE               assert ''\n\ntests/test_local_actions_manager.py:1237: AssertionError</failure></testcase></testsuite></testsuites>",
+  "targetTest": "test_unreadable_local_store_issue_has_english_and_german_text_without_placeholders",
+  "targetFile": "tests/test_local_actions_manager.py",
+  "nodeId": "tests/test_local_actions_manager.py::test_unreadable_local_store_issue_has_english_and_german_text_without_placeholders",
+  "expected": "en.json and de.json both have a non-empty issues.local_actions_unreadable title and description without any {variable}; the English description contains 'not applied' and 'refused'; the German text differs from the English one.",
+  "actual": "en.json has no issues.local_actions_unreadable entry: AssertionError 'en: issues.local_actions_unreadable.title is missing or empty' (assert '').",
+  "reportPath": ".planning/phases/11-local-actions-on-mirrors/tdd/11-15-task2-red.xml",
+  "runStartedAt": "2026-10-21T04:33:55.269281Z",
+  "reportModifiedAt": "2026-10-21T04:33:57.268310Z",
+  "consoleTail": [
+    "FAILED tests/test_local_actions_manager.py::test_unreadable_local_store_issue_has_english_and_german_text_without_placeholders",
+    "1 failed in 0.34s"
+  ],
+  "semanticAssessment": "Valid semantic RED. The target node was collected and executed (1 test, 0 errors, 0 skipped). Both translation files were read and parsed; the key lookup uses .get, so the missing entry failed on the planned assertion for the English title and not with a KeyError. That is exactly the missing D-06 text of G-02, not a load, import or fixture fault. The German and content assertions after it were not reached at RED."
+}

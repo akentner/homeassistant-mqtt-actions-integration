@@ -12,6 +12,7 @@ import copy
 import functools
 import json
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
@@ -1213,3 +1214,28 @@ async def test_hub_removal_deletes_the_unreadable_local_store_issue(
 
         assert _unreadable_issue(hass) is None, f"{mode}: hub removal deletes the unreadable issue"
         assert LOCAL_STORE_KEY not in hass_storage, f"{mode}: hub removal deletes the local Store file (D-08)"
+
+
+# --- Plan 11-15 Task 2: English and German text of the unreadable issue (G-02, D-06, MIR-15) --------------------------
+
+TRANSLATIONS_DIR = Path(__file__).resolve().parents[1] / "custom_components" / "mqtt_actions" / "translations"
+
+
+def _unreadable_issue_text(language: str) -> dict[str, Any]:
+    """Return the title and description of the unreadable issue in one language, empty strings when missing."""
+    issues = json.loads((TRANSLATIONS_DIR / f"{language}.json").read_text(encoding="utf-8")).get("issues", {})
+    entry = issues.get(UNREADABLE_ISSUE_ID) or {}
+    return {"title": entry.get("title", ""), "description": entry.get("description", "")}
+
+
+def test_unreadable_local_store_issue_has_english_and_german_text_without_placeholders() -> None:
+    """D-06, T-11-43: both languages carry a fixed title and description; nothing from the records reaches the text."""
+    english, german = _unreadable_issue_text("en"), _unreadable_issue_text("de")
+
+    for language, text in (("en", english), ("de", german)):
+        for field in ("title", "description"):
+            assert text[field], f"{language}: issues.{UNREADABLE_ISSUE_ID}.{field} is missing or empty"
+            assert "{" not in text[field], f"{language}: issues.{UNREADABLE_ISSUE_ID}.{field} has a placeholder"
+    assert "not applied" in english["description"], "the English text says the local customizations are not applied"
+    assert "refused" in english["description"], "the English text says that editing is refused"
+    assert german != english, "the German text is a translation, not a copy of the English one"

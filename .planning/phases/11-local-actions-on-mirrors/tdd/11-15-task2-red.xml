@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.347" timestamp="2026-10-21T06:33:56.921894+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_manager" name="test_unreadable_local_store_issue_has_english_and_german_text_without_placeholders" time="0.122"><failure message="AssertionError: en: issues.local_actions_unreadable.title is missing or empty&#10;assert ''">def test_unreadable_local_store_issue_has_english_and_german_text_without_placeholders() -&gt; None:
+        """D-06, T-11-43: both languages carry a fixed title and description; nothing from the records reaches the text."""
+        english, german = _unreadable_issue_text("en"), _unreadable_issue_text("de")
+    
+        for language, text in (("en", english), ("de", german)):
+            for field in ("title", "description"):
+&gt;               assert text[field], f"{language}: issues.{UNREADABLE_ISSUE_ID}.{field} is missing or empty"
+E               AssertionError: en: issues.local_actions_unreadable.title is missing or empty
+E               assert ''
+
+tests/test_local_actions_manager.py:1237: AssertionError</failure></testcase></testsuite></testsuites>

@@ -194,6 +194,9 @@ LOCAL_ACTION_INVALID_MODE = "invalid_mode"
 LOCAL_ACTION_INVALID_ACTIONS = "invalid_actions"
 LOCAL_ACTION_SAVE_FAILED = "save_failed"
 
+# One issue per instance while the local actions Store cannot be read; issue id and translation key (G-02, D-05)
+ISSUE_LOCAL_ACTIONS_UNREADABLE = "local_actions_unreadable"
+
 
 def _copy_record(record: LocalActionRecord | None) -> LocalActionRecord | None:
     """Return a record with its own copy of the actions, None for None."""
@@ -556,6 +559,7 @@ async def async_remove_local_state(
         ISSUE_DISCOVERY_DISABLED,
         ISSUE_DUPLICATE_INSTANCE_ID,
         ISSUE_KEPT_DUPLICATES,
+        ISSUE_LOCAL_ACTIONS_UNREADABLE,
         ISSUE_NATIVE_CUTOVER_WAITING,
     }
     registry = ir.async_get(hass)
@@ -1220,8 +1224,10 @@ class Manager:
         Load the saved local records as they are; nothing is matched against mirrors and nothing is rewritten (D-05).
 
         A Store this release cannot read (a newer version, an unreadable file) starts the instance without local
-        actions; the Store then refuses every save, so the file is never overwritten (T-11-09). Only a successful load
-        deletes the local failure issues whose record is gone: a refused one proves nothing about them (T-11-40).
+        actions; the Store then refuses every save, so the file is never overwritten (T-11-09). The refusal raises one
+        instance issue, so the user learns that replaced and muted triggers run the owner actions again (G-02); it has
+        no placeholders and never carries record content. Only a successful load deletes that issue and the local
+        failure issues whose record is gone: a refused one proves nothing about them (T-11-40).
         """
         try:
             self._local_records = await self._local_store.async_load_records()
@@ -1231,7 +1237,18 @@ class Manager:
                 "The local actions of this instance cannot be read (%s); they are not used and not overwritten",
                 type(err).__name__,
             )
+            # Not persistent: every start decides again whether the Store is readable
+            ir.async_create_issue(
+                self._hass,
+                DOMAIN,
+                ISSUE_LOCAL_ACTIONS_UNREADABLE,
+                is_fixable=False,
+                is_persistent=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key=ISSUE_LOCAL_ACTIONS_UNREADABLE,
+            )
         else:
+            ir.async_delete_issue(self._hass, DOMAIN, ISSUE_LOCAL_ACTIONS_UNREADABLE)
             self._delete_local_failure_issues_without_record()
 
     @callback

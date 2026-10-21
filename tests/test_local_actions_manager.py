@@ -959,10 +959,15 @@ async def test_local_failure_issue_names_the_latest_failed_trigger_and_clears_on
     assert _local_issue(hass, spec.device_id) is None, "a proven success of the named trigger clears the issue"
 
 
-async def test_local_failure_issue_survives_owner_success_continued_error_stop_mute_and_owner_change(
+async def test_local_failure_issue_survives_owner_success_continued_error_stop_and_owner_change(
     hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
 ) -> None:
-    """D-19, 11-06 hand-off: nothing but the named trigger's proven success or its removal clears the local issue."""
+    """
+    D-19 (amended 2026-10-21), 11-06 hand-off: no owner result, continued error, stop or owner change clears it.
+
+    Only the named trigger's proven success, a durable save of it without local actions (a mute here) or its removal
+    end the local issue.
+    """
     flaky = Flaky(hass, "on")
     owner_off = async_mock_service(hass, "test", "owner_off")
     async_mock_service(hass, "test", "owner_on")
@@ -991,10 +996,17 @@ async def test_local_failure_issue_survives_owner_success_continued_error_stop_m
     await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
     assert _local_issue(hass, spec.device_id) is not None, "a stopped run never proves a local success"
 
-    # A muted trigger runs nothing, so it proves nothing
+    # A muted trigger has no local actions left, so it can no longer fail locally: the mute ends its issue (WR-02)
     await _set(manager, spec, PAYLOAD_ON, LocalActionMode.REPLACEMENT, [])
     await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
-    assert _local_issue(hass, spec.device_id) is not None, "muting is no recovery"
+    assert _local_issue(hass, spec.device_id) is None, "muting the named trigger ends its local failure issue (WR-02)"
+
+    # Raise it again for the last step
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+    flaky.failing = {"on"}
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _local_issue(hass, spec.device_id) is not None, "premise: the named trigger failed again"
 
     # An owner content change clears the owner's issues only
     changed = make_spec(
@@ -1032,6 +1044,66 @@ async def test_local_failure_issue_clears_on_proven_success_after_an_edit_and_on
     assert _local_issue(hass, spec.device_id) is not None, "removing another trigger's customization clears nothing"
     await manager.async_remove_local_action(local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON))
     assert _local_issue(hass, spec.device_id) is None, "removing the named customization clears the issue"
+
+
+async def test_saving_the_named_trigger_without_local_actions_clears_its_local_failure_issue(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-02, D-19 (amended 2026-10-21): a saved record without local actions cannot fail locally; it ends the issue."""
+    Flaky(hass, "on")
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    on_label = escape_markdown(spec.triggers[trigger_key(PAYLOAD_ON)].label)
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _named_trigger(hass, spec.device_id) == on_label, "premise: the issue names ON"
+
+    # A mute: replacement with an empty list keeps the owner actions suppressed and ends the issue
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.REPLACEMENT, [])
+    assert _local_issue(hass, spec.device_id) is None, "a mute of the named trigger ends its local failure issue"
+
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _named_trigger(hass, spec.device_id) == on_label, "premise: the issue names ON again"
+
+    # Additive with an empty list runs no local action either
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, [])
+    assert _local_issue(hass, spec.device_id) is None, "emptying the named trigger's additive actions ends the issue"
+
+
+async def test_only_a_durable_save_of_the_named_trigger_without_local_actions_clears_the_issue(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-11-49: another trigger, a save with local actions and a failed save keep the issue; the durable one ends it."""
+    Flaky(hass, "on")
+    async_mock_service(hass, "test", "local_on")
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    on_label = escape_markdown(spec.triggers[trigger_key(PAYLOAD_ON)].label)
+    on = local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON)
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _named_trigger(hass, spec.device_id) == on_label, "premise: the issue names ON"
+
+    await _set(manager, spec, PAYLOAD_OFF, LocalActionMode.REPLACEMENT, [])
+    assert _named_trigger(hass, spec.device_id) == on_label, "muting another trigger keeps the issue of ON"
+
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, LOCAL_ON)
+    assert _named_trigger(hass, spec.device_id) == on_label, "a save with local actions waits for a proven success"
+
+    with (
+        patch.object(LocalActionsStore, "_async_write_data", AsyncMock(side_effect=OSError("disk full"))),
+        pytest.raises(LocalActionError) as caught,
+    ):
+        await manager.async_set_local_action(on, LocalActionMode.REPLACEMENT, [])
+    assert caught.value.reason == "save_failed"
+    assert _named_trigger(hass, spec.device_id) == on_label, "a failed save never clears the issue"
+
+    await manager.async_set_local_action(on, LocalActionMode.REPLACEMENT, [])
+    assert _local_issue(hass, spec.device_id) is None, "the durable save without local actions ends the issue"
+    await manager.async_set_local_action(on, LocalActionMode.REPLACEMENT, [])
+    assert _local_issue(hass, spec.device_id) is None, "saving the same empty record again is a no-op"
 
 
 async def test_local_failure_issue_survives_an_orphaned_option_until_its_record_is_removed(

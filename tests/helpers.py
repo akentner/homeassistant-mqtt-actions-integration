@@ -40,10 +40,25 @@ if TYPE_CHECKING:
 
 
 # The documented diagnostics key sets; an unknown key fails the test, which is the point (D-17)
-TOP_KEYS = {"integration_version", "hub", "roster", "devices"}
+TOP_KEYS = {"integration_version", "hub", "roster", "devices", "local_actions"}
 HUB_KEYS = {"base_topic", "instance_name", "instance_id", "instance_mode"}
 ROSTER_KEYS = {"id", "name", "version", "last_seen", "online"}
-DEVICE_KEYS = {"uuid", "kind", "origin", "owner", "mode", "effective_mode", "approval", "breaker", "rev", "hash"}
+DEVICE_KEYS = {
+    "uuid",
+    "kind",
+    "origin",
+    "owner",
+    "mode",
+    "effective_mode",
+    "approval",
+    "breaker",
+    "rev",
+    "hash",
+    "local_action_triggers",
+    "local_action_orphans",
+}
+# The local actions of mirrors appear as counts only (D-04, Plan 11-09)
+LOCAL_ACTIONS_KEYS = {"devices", "triggers", "orphaned_triggers", "orphan_only_devices"}
 
 
 PREFIX = "homeassistant"

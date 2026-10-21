@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -19,12 +20,14 @@ from custom_components.mqtt_actions.const import (
     CONF_INSTANCE_NAME,
     DOMAIN,
     HEARTBEAT_OFFLINE_SECONDS,
+    ISSUE_LOCAL_ACTION_FAILED_PREFIX,
+    LOCAL_ACTIONS_STORE_KEY,
     SUBENTRY_SELECT,
 )
 from custom_components.mqtt_actions.document import build_content, content_hash
 from custom_components.mqtt_actions.topics import config_topic, heartbeat_topic, state_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
-from tests.helpers import DEVICE_KEYS, HUB_KEYS, ROSTER_KEYS, TOP_KEYS
+from tests.helpers import DEVICE_KEYS, HUB_KEYS, LOCAL_ACTIONS_KEYS, ROSTER_KEYS, TOP_KEYS
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -316,3 +319,171 @@ async def test_output_has_exactly_the_documented_keys(
     assert all(set(row) == ROSTER_KEYS for row in result["roster"])
     assert len(result["devices"]) == 2
     assert all(set(row) == DEVICE_KEYS for row in result["devices"])
+    assert set(result["local_actions"]) == LOCAL_ACTIONS_KEYS
+
+
+# ------------------------------------------------------------------------------------ local actions (Plan 11-09)
+
+# Sentinels of the local actions of mirrors: none of them may appear in the serialized diagnostics (D-04, D-14)
+S_LOCAL_LABEL = "SENTINEL LOCAL LABEL"
+S_LOCAL_VALUE = "sentinellocalorphanvalue"
+S_LOCAL_ENTITY = "light.sentinel_local_entity"
+S_LOCAL_TEMPLATE = "SENTINEL_LOCAL_TEMPLATE"
+S_LOCAL_DATA = "SENTINEL_LOCAL_SERVICE_DATA"
+S_LOCAL_ERROR = "SENTINEL LOCAL ERROR"
+S_LOCAL_TRACE = "SENTINEL_LOCAL_TRACE"
+LOCAL_SENTINELS = (
+    S_LOCAL_LABEL,
+    S_LOCAL_VALUE,
+    S_LOCAL_ENTITY,
+    S_LOCAL_TEMPLATE,
+    S_LOCAL_DATA,
+    S_LOCAL_ERROR,
+    S_LOCAL_TRACE,
+)
+# A device known only from its local records; it has no mirror and therefore no device row
+ORPHAN_ONLY_ID = "7a1e2b3c-4d5e-4f60-8a9b-0c1d2e3f4a5b"
+LOCAL_ACTIONS = [
+    {"action": "test.local", "target": {"entity_id": S_LOCAL_ENTITY}, "data": {"message": S_LOCAL_DATA}},
+    {"action": "test.say", "data": {"message": "{{ '" + S_LOCAL_TEMPLATE + "' }}"}},
+]
+
+
+def _local_row(device_id: str, kind: str, state_value: str, mode: str = "additive") -> dict[str, Any]:
+    return {
+        "device_id": device_id,
+        "kind": kind,
+        "state_value": state_value,
+        "label": S_LOCAL_LABEL,
+        "mode": mode,
+        "actions": LOCAL_ACTIONS,
+    }
+
+
+def _seed_local_records(hass_storage: dict[str, Any], mirror_id: str, own_id: str | None = None) -> None:
+    """
+    Seed five records: an active one and an orphaned option on the mirror, two on a device without any mirror, and
+    one on the owned device (owned devices never carry local actions, so it is inactive).
+    """
+    rows = [
+        _local_row(mirror_id, "select", S_MIRROR_VALUE, "replacement"),
+        _local_row(mirror_id, "select", S_LOCAL_VALUE),
+        _local_row(ORPHAN_ONLY_ID, "switch", "ON"),
+        _local_row(ORPHAN_ONLY_ID, "switch", "OFF", "replacement"),
+    ]
+    if own_id is not None:
+        rows.append(_local_row(own_id, "switch", "ON"))
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": LOCAL_ACTIONS_STORE_KEY,
+        "data": {"records": rows},
+    }
+
+
+async def _hub_with_local_records(
+    hass: HomeAssistant, hass_storage: dict[str, Any], make_hub_entry: Callable, make_switch_subentry: Callable
+) -> tuple[MockConfigEntry, str, str, Any]:
+    """Return a loaded hub with an owned Switch, a Select mirror and local records on both plus an orphan-only id."""
+    sub = make_switch_subentry(S_OWN_NAME, on=[{"action": "test.on"}])
+    own_id = sub["data"]["device_id"]
+    mirror = make_spec(
+        SUBENTRY_SELECT,
+        name=S_MIRROR_NAME,
+        options=[(S_MIRROR_VALUE, S_MIRROR_LABEL, [{"action": "test.on"}]), ("other", "Other", [])],
+    )
+    _seed_local_records(hass_storage, mirror.device_id, own_id)
+    entry = await _setup(hass, make_hub_entry([sub]))
+    await _deliver(hass, mirror.device_id, document_payload(mirror))
+    assert mirror.device_id in _manager(entry).mirrors
+    return entry, own_id, mirror.device_id, mirror
+
+
+async def test_local_actions_appear_as_counts_only(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-04: aggregate and per-device integers; the orphan-only device counts without getting a device row."""
+    entry, own_id, mirror_id, _mirror = await _hub_with_local_records(
+        hass, hass_storage, make_hub_entry, make_switch_subentry
+    )
+
+    result = await _diagnostics(hass, entry)
+
+    assert "local_actions" in result, "the diagnostics carry no local actions summary"
+    assert result["local_actions"] == {
+        "devices": 3,
+        "triggers": 5,
+        "orphaned_triggers": 4,
+        "orphan_only_devices": 2,
+    }
+    rows = _rows(result)
+    assert set(rows) == {own_id, mirror_id}, "a device known only from local records has no device row"
+    assert (rows[mirror_id]["local_action_triggers"], rows[mirror_id]["local_action_orphans"]) == (2, 1)
+    assert (rows[own_id]["local_action_triggers"], rows[own_id]["local_action_orphans"]) == (1, 1)
+    values = [*result["local_actions"].values()]
+    values += [row[key] for row in rows.values() for key in ("local_action_triggers", "local_action_orphans")]
+    assert all(type(value) is int and value >= 0 for value in values)
+
+
+async def test_local_counts_are_zero_without_records(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+) -> None:
+    entry, _own_id, _mirror_id = await _hub_with_owned_device_and_mirror(hass, make_hub_entry, make_switch_subentry)
+
+    result = await _diagnostics(hass, entry)
+
+    assert result["local_actions"] == dict.fromkeys(LOCAL_ACTIONS_KEYS, 0)
+    assert all((row["local_action_triggers"], row["local_action_orphans"]) == (0, 0) for row in result["devices"])
+
+
+async def test_orphan_only_devices_count_without_any_mirror(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """An instance with no mirror and no device at all still counts the devices its local records name."""
+    _seed_local_records(hass_storage, "8b2f3c4d-5e6f-4a70-9b8c-1d2e3f4a5b6c")
+    entry = await _setup(hass, make_hub_entry())
+
+    result = await _diagnostics(hass, entry)
+
+    assert result["devices"] == []
+    assert result["local_actions"] == {
+        "devices": 2,
+        "triggers": 4,
+        "orphaned_triggers": 4,
+        "orphan_only_devices": 2,
+    }
+
+
+async def test_local_sentinels_never_appear_and_the_shared_hash_is_unchanged(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    make_switch_subentry: Callable,
+) -> None:
+    """D-04, D-14: no record, label, StateValue, action, Template, error or trace; the content hash stays shared."""
+    entry, _own_id, mirror_id, mirror = await _hub_with_local_records(
+        hass, hass_storage, make_hub_entry, make_switch_subentry
+    )
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{mirror_id}",
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="local_action_failed",
+        translation_placeholders={"device": "d", "trigger": S_LOCAL_LABEL, "time": "now", "error": S_LOCAL_ERROR},
+        data={"trace": S_LOCAL_TRACE},
+    )
+
+    result = await _diagnostics(hass, entry)
+    text = json.dumps(result)
+
+    for sentinel in (*LOCAL_SENTINELS, *SENTINELS):
+        assert sentinel not in text
+    assert ORPHAN_ONLY_ID not in text, "an orphan-only device is counted, never named"
+    assert _rows(result)[mirror_id]["hash"] == content_hash(build_content(mirror))

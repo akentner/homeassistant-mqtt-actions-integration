@@ -11,7 +11,7 @@ from custom_components.mqtt_actions import const
 from custom_components.mqtt_actions.button import RestorePreviousButton, ResyncButton
 from custom_components.mqtt_actions.select import DeviceModeSelect, InstanceModeSelect
 from custom_components.mqtt_actions.sensor import RosterSensor
-from tests.helpers import DEVICE_KEYS, HUB_KEYS, ROSTER_KEYS, TOP_KEYS
+from tests.helpers import DEVICE_KEYS, HUB_KEYS, LOCAL_ACTIONS_KEYS, ROSTER_KEYS, TOP_KEYS
 
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
@@ -221,7 +221,18 @@ def _link_targets(document: Path) -> set[Path]:
 def test_diagnostics_page_lists_the_included_keys_and_the_exclusions() -> None:
     text = _page(DIAGNOSTICS)
     # The key sets that tests/test_diagnostics.py pins to the real output, plus the keys the plan names
-    keys = {*TOP_KEYS, *HUB_KEYS, *ROSTER_KEYS, *DEVICE_KEYS, "hub", "roster", "devices", "approval", "breaker"}
+    keys = {
+        *TOP_KEYS,
+        *HUB_KEYS,
+        *ROSTER_KEYS,
+        *DEVICE_KEYS,
+        *LOCAL_ACTIONS_KEYS,
+        "hub",
+        "roster",
+        "devices",
+        "approval",
+        "breaker",
+    }
     for key in sorted(keys):
         assert f"`{key}`" in text, f"the diagnostics page never names the key {key}"
     sentences = _sentences(text)
@@ -232,6 +243,8 @@ def test_diagnostics_page_lists_the_included_keys_and_the_exclusions() -> None:
         ("actions", "yaml", "templates", "entity ids", "service data"),
         ("device names",),
         ("credentials", "host names"),
+        # D-04, D-14: the local actions of mirrors are counted, never shown (Plan 11-09)
+        ("local actions", "labels", "state values", "templates", "errors", "traces"),
     )
     for needles in exclusions:
         assert any("never" in sentence and all(needle in sentence for needle in needles) for sentence in sentences), (

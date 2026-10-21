@@ -393,7 +393,9 @@ data:
 > After a downgrade it runs no local actions, and approved owner actions may run again on this instance, also on
 > triggers that you replaced or muted here. The local actions are kept in a separate storage file that 1.0.1 does not
 > read or change, so by design they are available again after you upgrade back. This downgrade round trip has not been
-> verified on real instances; that check is deferred (MIR-F4).
+> verified on real instances; that check is deferred (MIR-F4). Removing the integration on 1.0.1 does not delete that
+> local actions file; when you add the hub again on 1.1, the file is deleted before the new hub starts, so the new hub
+> never runs local actions of the removed one.
 
 ## Operations
 

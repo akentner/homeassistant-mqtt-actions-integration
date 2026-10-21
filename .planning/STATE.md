@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-08-PLAN.md
-last_updated: "2026-10-21T02:27:09.525Z"
+stopped_at: Completed 11-09-PLAN.md
+last_updated: "2026-10-21T02:41:12.300Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 295795a11172490c15d91bc5115511fb0982f8fd
+state_head: f4b5a31b9690b010f6b75b2bda4fc08ccbc20eec
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 49
-  completed_plans: 44
+  completed_plans: 45
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 9 of 13
+Plan: 10 of 13
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -159,6 +159,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P06 | 14 min | 3 tasks | 12 files |
 | Phase 11 P07 | 19 min | 3 tasks | 17 files |
 | Phase 11 P08 | 17 min | 3 tasks | 16 files |
+| Phase 11 P09 | 8 min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -361,6 +362,9 @@ Recent decisions affecting current work:
 - [Phase 11]: Phase 11-08: local trigger picker markers are translated in the instance language (hass.config.language) via async_get_translations, since select option labels are not translated by the frontend
 - [Phase 11]: Phase 11-08: empty replacement always passes local_actions_confirm_mute; Remove local customization has its own local_actions_confirm_remove; drafts never reach the Manager unconfirmed
 - [Phase 11]: Phase 11-08: approval confirm closing line now says the owner actions do not run until submit, because local actions may already run (D-17)
+- [Phase 11]: Hub removal deletes the local actions Store in keep, delete and unloaded paths; Manager.async_stop closes the local Store so a late save cannot recreate it (D-08)
+- [Phase 11]: Removal warning counts distinct device ids with local records (orphan-only included), shown in the settings step as local_action_device_count in both removal modes
+- [Phase 11]: Diagnostics expose local actions as integers only: local_actions.{devices,triggers,orphaned_triggers,orphan_only_devices} and per-device local_action_triggers/local_action_orphans (D-04)
 
 ### Pending Todos
 
@@ -396,8 +400,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T02:27:09.219Z
-Stopped at: Completed 11-08-PLAN.md
+Last session: 2026-10-21T02:41:11.996Z
+Stopped at: Completed 11-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

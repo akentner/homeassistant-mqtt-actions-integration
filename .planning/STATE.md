@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-15-PLAN.md
-last_updated: "2026-10-21T04:39:22.647Z"
+stopped_at: Completed 11-16-PLAN.md
+last_updated: "2026-10-21T04:48:23.266Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 1c1ff189fd18ecafd8511ea47f43f6aab93f34fd
+state_head: f766d47305e3ff051524d05f7b9def4a502d761f
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 53
-  completed_plans: 50
+  completed_plans: 51
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 15 of 17
+Plan: 16 of 17
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -165,6 +165,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P11 | 17 min | 2 tasks | 1 files |
 | Phase 11 P14 | 14 min | 3 tasks | 12 files |
 | Phase 11 P15 | 8 min | 2 tasks | 10 files |
+| Phase 11 P16 | 7min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -379,6 +380,9 @@ Recent decisions affecting current work:
 - [Phase 11]: G-01: a start deletes a local failure issue without a saved record only after a successful local load; a refused load deletes nothing (T-11-40)
 - [Phase 11]: G-02: a refused local Store load raises the instance issue local_actions_unreadable (non-fixable, non-persistent, ERROR, no placeholders); a successful load and hub removal delete it; LocalActionsStore and its never-overwrite refusal are unchanged (T-11-09)
 - [Phase 11]: G-02 edge assumption: an envelope that is readable but has no record list is a readable, empty Store and raises no issue; only a newer major, an unknown version or an unreadable file count as refused
+- [Phase 11]: G-03: the hub user flow removes a leftover local actions Store right before async_create_entry; Store key and format unchanged
+- [Phase 11]: G-03 guard: abort single_instance_allowed when a non-ignored hub exists at submit, before the removal (T-11-45)
+- [Phase 11]: G-03 failure path: LocalActionsStoreError creates no entry and shows local_actions_not_removed in en and de (T-11-44)
 
 ### Pending Todos
 
@@ -415,8 +419,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T04:39:22.327Z
-Stopped at: Completed 11-15-PLAN.md
+Last session: 2026-10-21T04:48:22.941Z
+Stopped at: Completed 11-16-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

@@ -27,7 +27,7 @@ Order is fixed by the owner: release v1.0.1 first, then the review findings, the
 ### Local Actions on Mirrors (backlog 999.1)
 
 - [ ] **MIR-01**: On a follower, the user sets local actions per trigger of a mirrored device (switch on/off, each Select option) with mode "in addition to" or "instead of" the owner's actions, from the integration's options
-- [ ] **MIR-02**: Local actions run without approval, also while the owner's actions are pending, blocked or empty; the owner's actions still run only when their exact hash is approved
+- [x] **MIR-02**: Local actions run without approval, also while the owner's actions are pending, blocked or empty; the owner's actions still run only when their exact hash is approved
 - [ ] **MIR-03**: In "in addition to" mode, owner and local parts run in parallel within the device's single Script; a runtime failure of one part does not stop the other; run mode and breaker stay device-wide
 - [ ] **MIR-04**: Local actions never leave the instance: they are not in the central config, the actions hash, the export, diagnostics content or the adoption payload; existing approvals stay valid
 - [ ] **MIR-05**: An empty "instead of" mutes the trigger on this instance
@@ -40,7 +40,7 @@ Order is fixed by the owner: release v1.0.1 first, then the review findings, the
 - [ ] **MIR-12**: The approval issue shows how many triggers are replaced locally; the approval state stays pending and adoption stays refused
 - [ ] **MIR-13**: Local action failures raise their own Repairs issue, independent of owner action failures
 - [ ] **MIR-14**: Diagnostics show counts of local actions (per device, orphaned), never their content
-- [ ] **MIR-15**: README documents modes, mute, parallel semantics, lifecycle (orphan, tombstone, adoption), downgrade behavior and the `{{ state }}` template caveat; UI texts exist in en and de
+- [x] **MIR-15**: README documents modes, mute, parallel semantics, lifecycle (orphan, tombstone, adoption), downgrade behavior and the `{{ state }}` template caveat; UI texts exist in en and de
 
 ### Verification
 
@@ -87,7 +87,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FIX-07 | Phase 10 | Complete |
 | FIX-08 | Phase 10 | Complete |
 | MIR-01 | Phase 11 | Pending |
-| MIR-02 | Phase 11 | Pending |
+| MIR-02 | Phase 11 | Complete |
 | MIR-03 | Phase 11 | Pending |
 | MIR-04 | Phase 11 | Pending |
 | MIR-05 | Phase 11 | Pending |
@@ -100,7 +100,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIR-12 | Phase 11 | Pending |
 | MIR-13 | Phase 11 | Pending |
 | MIR-14 | Phase 11 | Pending |
-| MIR-15 | Phase 11 | Pending |
+| MIR-15 | Phase 11 | Complete |
 | QLT-01 | Phase 12 | Pending |
 | QLT-04 | Phase 12 | Pending |
 | QLT-05 | Phase 12 | Pending |

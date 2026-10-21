@@ -35,6 +35,33 @@ class LocalActionsStoreUnreadableError(HomeAssistantError):
     """Raised when stored local actions exist but cannot be read; nothing is rewritten and every save is refused."""
 
 
+class _LocalActionsReader(Store[dict[str, Any]]):
+    """
+    A read-only view of the local actions file, used by every load (WR-05, D-22, D-07).
+
+    Core saves the result of the migration hook after any version mismatch, stamped with this release's minor version.
+    A Store built with `read_only=True` drops that save, so a load never writes, whatever version the file carries.
+    """
+
+    def __init__(self, hass: HomeAssistant, key: str) -> None:
+        """Initialize the reader of the file stored under `key`."""
+        super().__init__(
+            hass,
+            LOCAL_ACTIONS_STORE_VERSION,
+            key,
+            private=True,
+            atomic_writes=True,
+            minor_version=LOCAL_ACTIONS_STORE_MINOR_VERSION,
+            read_only=True,
+        )
+
+    async def _async_migrate_func(
+        self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Upgrade an older payload through the pure migrator; the read-only Store never saves the result."""
+        return migrate_local_actions_payload(old_major_version, old_minor_version, old_data)
+
+
 class LocalActionsStore(Store[dict[str, Any]]):
     """
     The HA Store of the local action records of one instance.
@@ -45,7 +72,8 @@ class LocalActionsStore(Store[dict[str, Any]]):
     missing file beside a `.corrupt.` copy of the same key, which Home Assistant leaves after a file it could not parse
     (D-07). Rows this release cannot parse and top-level keys other than the record list, for example of a newer
     minor format, are kept from the last successful load and written back after the records on every save; they are
-    never records (D-07, WR-03). Loading never rewrites the Store except through the migration hook (D-22). Removal
+    never records (D-07, WR-03). Loading never writes the Store, whatever version it carries, because it reads through a
+    read-only Store: a newer minor file keeps its bytes and its stamp until an explicit save (D-22, WR-05). Removal
     deletes the file and the corrupt copies of its own key only, and forgets the kept rows (D-08).
     """
 
@@ -68,11 +96,14 @@ class LocalActionsStore(Store[dict[str, Any]]):
         # The base Store logs a failed write and returns normally; the override below keeps the error for the caller
         self._write_error: Exception | None = None
 
-    async def _async_migrate_func(
-        self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Upgrade an older payload through the pure migrator; the Store saves the result."""
-        return migrate_local_actions_payload(old_major_version, old_minor_version, old_data)
+    async def async_load(self) -> dict[str, Any] | None:
+        """
+        Return the stored payload through a read-only Store, so a load never writes (WR-05, D-22).
+
+        Core would save the migrated payload of a newer minor file with this release's minor version; the reader drops
+        that save. A newer major version still raises UnsupportedStorageVersionError before the migration hook.
+        """
+        return await _LocalActionsReader(self.hass, self.key).async_load()
 
     async def _async_write_data(self, data: dict[str, Any]) -> None:
         """Write through the base Store and remember a failure, which the base Store would only log."""
@@ -103,7 +134,8 @@ class LocalActionsStore(Store[dict[str, Any]]):
         Raises the Store's UnsupportedStorageVersionError for a newer major version, LocalActionsStoreVersionError for
         any other unreadable version, and LocalActionsStoreUnreadableError for a payload without a record list or for a
         missing file beside a corrupt copy of this key. The Store is then left unloaded and refuses every save. Null
-        data and a missing file without such a copy load as no records.
+        data and a missing file without such a copy load as no records. The load never writes the file, also not for a
+        newer minor version, whose bytes and stamp stay until an explicit save (WR-05).
         """
         async with self._lock:
             self._loaded = False

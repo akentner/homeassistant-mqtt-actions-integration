@@ -612,7 +612,8 @@ async def async_local_action_device_count(
     Manager, which returns None while its local load was refused (WR-04); an unloaded hub reads the file, and any read
     error (a newer version, a payload without a record list, a corrupt copy beside a missing file) returns None. None
     means unknown: the saved local actions cannot be read, and removal deletes them anyway, so it must never be shown
-    as a number. Reading never writes the Store. Counts only: no record leaves this function.
+    as a number. The read goes through a read-only Store: it never writes the file, also not for a newer minor
+    version (WR-05). Counts only: no record leaves this function.
     """
     if entry.state is ConfigEntryState.LOADED and isinstance(manager := getattr(entry, "runtime_data", None), Manager):
         return manager.local_action_removal_device_count()
@@ -1227,6 +1228,9 @@ class Manager:
     async def _async_load_local_actions(self) -> None:
         """
         Load the saved local records as they are; nothing is matched against mirrors and nothing is rewritten (D-05).
+
+        The load reads through a read-only Store, so a file of a newer minor version keeps its bytes and its stamp
+        (WR-05).
 
         A Store this release cannot read (a newer version, an unreadable file) starts the instance without local
         actions; the Store then refuses every save, so the file is never overwritten (T-11-09). The refusal raises one

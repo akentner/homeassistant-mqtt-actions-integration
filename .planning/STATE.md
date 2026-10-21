@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-23-PLAN.md
-last_updated: "2026-10-21T07:44:06.073Z"
+stopped_at: Completed 11-19-PLAN.md
+last_updated: "2026-10-21T07:54:03.854Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 8c0ea14379903a87ec46a80aab398e4bb6cea60b
+state_head: 4bcf27011e6270b93abd910a69ff698e1d02ee5a
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 59
-  completed_plans: 55
+  completed_plans: 56
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 20 of 23
+Plan: 21 of 23
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -170,6 +170,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P13 | 9min | 2 tasks | 1 files |
 | Phase 11 P18 | 8 min | 3 tasks | 13 files |
 | Phase 11 P23 | 1 min | 2 tasks | 4 files |
+| Phase 11 P19 | 7 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -391,6 +392,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-13: final Phase 11 gate green on 9bec171 (2072 passed, 2 pre-Phase-11 xfails, 0 skipped; Ruff, hassfest clean); HACS NOT RUN on the unpushed branch, must pass on the first push before Phase 12 release work
 - [Phase 11]: D-05 amended (WR-01): a tombstone removes only the runtime mirror and keeps local action records inactive like a prune; only adoption, explicit removal and hub removal delete them
 - [Phase 11]: 11-23: Owner decisions of 2026-10-21 (WR-01 to WR-04) recorded as a dated Amendments block in 11-CONTEXT.md; D-05 only gains a pointer; MIR-08, success criterion 5 and release notes name adoption as the only discard
+- [Phase 11]: 11-19: A durable save of the named trigger without local actions (mute or empty additive) clears local_action_failed; a failed save, another trigger or a save with actions keep it (D-19 amended, WR-02)
 
 ### Pending Todos
 
@@ -427,8 +429,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T07:44:05.651Z
-Stopped at: Completed 11-23-PLAN.md
+Last session: 2026-10-21T07:54:03.422Z
+Stopped at: Completed 11-19-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

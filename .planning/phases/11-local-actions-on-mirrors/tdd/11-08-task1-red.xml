@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.997" timestamp="2026-10-21T04:12:10.440726+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_flow" name="test_save_and_reopen_additive_switch_trigger" time="0.879"><failure message="AssertionError: the hub options open as a menu&#10;assert &lt;FlowResultType.FORM: 'form'&gt; is &lt;FlowResultType.MENU: 'menu'&gt;&#10; +  where &lt;FlowResultType.MENU: 'menu'&gt; = FlowResultType.MENU">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139873237473936'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f36cc558670&gt;
+
+    async def test_save_and_reopen_additive_switch_trigger(
+        hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+    ) -&gt; None:
+        """D-06, D-13: a new trigger defaults to additive, saves through the Manager at once and reopens what was saved."""
+        local_calls = async_mock_service(hass, "test", "local_on")
+        spec = make_spec(name="Lamp", on=[{"action": "test.owner_on"}])
+        entry = await _mirror(hass, make_hub_entry, spec)
+        manager = manager_of(entry)
+    
+&gt;       picker = await _open_device(hass, entry, "Lamp")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_local_actions_flow.py:142: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+hass = &lt;HomeAssistant RUNNING&gt;
+entry = &lt;ConfigEntry entry_id=01M5E3NYDAGGS6VJW8AWXPJ8MR version=1 domain=mqtt_actions title=Test instance state=ConfigEntryState.LOADED unique_id=None&gt;
+device_label = 'Lamp'
+
+    async def _open_device(hass: HomeAssistant, entry: MockConfigEntry, device_label: str) -&gt; dict[str, Any]:
+        """Open the hub options, choose Local actions and the device; return the trigger picker."""
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+&gt;       assert result["type"] is FlowResultType.MENU, "the hub options open as a menu"
+E       AssertionError: the hub options open as a menu
+E       assert &lt;FlowResultType.FORM: 'form'&gt; is &lt;FlowResultType.MENU: 'menu'&gt;
+E        +  where &lt;FlowResultType.MENU: 'menu'&gt; = FlowResultType.MENU
+
+tests/test_local_actions_flow.py:110: AssertionError</failure></testcase></testsuite></testsuites>

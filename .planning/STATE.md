@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-06-PLAN.md
-last_updated: "2026-10-21T01:38:21.394Z"
+stopped_at: Completed 11-07-PLAN.md
+last_updated: "2026-10-21T02:03:20.296Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 9865e65a9abc868a56a0a86d6a85d34844a75c65
+state_head: 59a5fa063eec161276c9998e517a0ebf825e40cb
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 49
-  completed_plans: 42
+  completed_plans: 43
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 7 of 13
+Plan: 8 of 13
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -157,6 +157,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P04 | 10 min | 2 tasks | 10 files |
 | Phase 11 P05 | 25 min | 3 tasks | 11 files |
 | Phase 11 P06 | 14 min | 3 tasks | 12 files |
+| Phase 11 P07 | 19 min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -351,6 +352,10 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-06: Only a tombstone discards local records (MirrorRemovalCause.TOMBSTONE, also after a prune); a prune and startup cleanup keep them
 - [Phase 11]: 11-06: Adoption saves the overlay discard before any publish and reports local_actions_discarded via AdoptionResult; a failed subentry creation restores records before the mirror
 - [Phase 11]: 11-06: Owner content changes refresh saved labels of active records durably; startup and new mirrors never rewrite the local Store
+- [Phase 11]: 11-07: test presses refuse a paused device only when the trigger runs local actions; owner-only presses keep the D-13 bypass, re-trigger refuses every paused device
+- [Phase 11]: 11-07: muted triggers answer the re-trigger error/no_actions; ack word sets unchanged, ManualRunResult never reaches the wire
+- [Phase 11]: 11-07: local_action_failed_<id> stores the named identity in issue data; only that trigger's proven success or removal of its customization clears it
+- [Phase 11]: 11-07: approval count 'replaced' counts active replacements incl. muted; local edits update an existing request in place, keeping dismissal
 
 ### Pending Todos
 
@@ -386,8 +391,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T01:38:21.094Z
-Stopped at: Completed 11-06-PLAN.md
+Last session: 2026-10-21T02:03:19.993Z
+Stopped at: Completed 11-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

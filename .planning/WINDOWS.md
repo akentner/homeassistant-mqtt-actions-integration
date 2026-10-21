@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 2
+open_count: 3
 waived_count: 0
 fixed_count: 0
-total_count: 2
-last_updated: 2026-10-16T13:35:58.035Z
+total_count: 3
+last_updated: 2026-10-21T02:01:56.737Z
 ---
 
 # Broken Windows Ledger
@@ -17,6 +17,7 @@ last_updated: 2026-10-16T13:35:58.035Z
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 10 | unmet-truth | custom_components/mqtt_actions/native_migration.py |  | defer_for_run mutant survives the suite (pre-existing at dbfbf81: _follow_native_status legacy add unpinned); pin in a later plan | open |  | 2026-10-16T13:35:57.906Z |  |
 | 2 | 10 | unmet-truth | custom_components/mqtt_actions/native_migration.py |  | forget mutant survives the suite (pre-existing at dbfbf81: _forget_native per-run discards unpinned); pin in a later plan | open |  | 2026-10-16T13:35:58.035Z |  |
+| 3 | 11 | stub | custom_components/mqtt_actions/translations/en.json |  | issues.local_action_failed title/description and the approval confirm {replaced} wording are not translated yet; Plan 11-08 Task 3 adds them (en/de) | open |  | 2026-10-21T02:01:56.737Z |  |
 
 ````json
 [
@@ -43,6 +44,19 @@ last_updated: 2026-10-16T13:35:58.035Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-10-16T13:35:58.035Z",
+    "resolved_at": null,
+    "milestone": "v1.1"
+  },
+  {
+    "id": 3,
+    "kind": "stub",
+    "phase": "11",
+    "file": "custom_components/mqtt_actions/translations/en.json",
+    "line": null,
+    "description": "issues.local_action_failed title/description and the approval confirm {replaced} wording are not translated yet; Plan 11-08 Task 3 adds them (en/de)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T02:01:56.737Z",
     "resolved_at": null,
     "milestone": "v1.1"
   }

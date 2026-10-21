@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-20-PLAN.md
-last_updated: "2026-10-21T08:08:37.933Z"
+stopped_at: Completed 11-21-PLAN.md
+last_updated: "2026-10-21T08:18:47.198Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: edc348513a9121dc3804b0737aa3a65d7093646b
+state_head: cc3e79d382131f8926214f4e394f32bcbfc57ff4
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 59
-  completed_plans: 57
+  completed_plans: 58
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 22 of 23
+Plan: 23 of 23
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -172,6 +172,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P23 | 1 min | 2 tasks | 4 files |
 | Phase 11 P19 | 7 min | 3 tasks | 14 files |
 | Phase 11 P20 | 9 min | 3 tasks | 13 files |
+| Phase 11 P21 | 6min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -397,6 +398,8 @@ Recent decisions affecting current work:
 - [Phase 11]: A local Store payload without a record list is unreadable (LocalActionsStoreUnreadableError), not an empty Store; reverses the 11-15 assumption per the owner decision of 2026-10-21 (WR-03)
 - [Phase 11]: A None load beside a <file>.corrupt.<time> copy of the same key is unreadable at every start until the copy is restored or deleted; null data and a missing file without a copy stay empty and writable
 - [Phase 11]: async_remove_records deletes the corrupt copies of its own key only, so hub removal and the new-hub cleanup leave a readable Store (D-08)
+- [Phase 11]: Local Store rows that fail parse and unknown top-level keys are kept verbatim and written back after the parsed records on every save; never applied, counted or shown (WR-03, D-07 extended)
+- [Phase 11]: Later duplicates of a parsed identity are not preserved; async_remove_records forgets preserved rows and keys (D-10, D-08)
 
 ### Pending Todos
 
@@ -433,8 +436,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T08:08:37.501Z
-Stopped at: Completed 11-20-PLAN.md
+Last session: 2026-10-21T08:18:46.762Z
+Stopped at: Completed 11-21-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

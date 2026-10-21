@@ -1,6 +1,7 @@
 """Constants for the MQTT Actions integration."""
 
 import logging
+from enum import StrEnum
 from typing import Final
 
 DOMAIN: Final = "mqtt_actions"
@@ -262,6 +263,19 @@ REASON_NO_STATE: Final = "no_state"
 # A mirror whose config document was not seen again within this window after setup, a reconnect or the owner coming
 # online is pruned, but only when its owner's availability says online (D-10, A2)
 PRUNE_GRACE_SECONDS: Final = 30.0
+
+
+class MirrorRemovalCause(StrEnum):
+    """
+    Why a mirror is removed; only a tombstone has the authority to destroy local data (D-05).
+
+    A prune infers a deletion from a missing document while the owner is online, so it removes the runtime mirror and
+    keeps the local records; a tombstone is the owner's explicit deletion and also discards them.
+    """
+
+    TRANSIENT_PRUNE = "transient_prune"
+    TOMBSTONE = "tombstone"
+
 
 # Logging: unknown payloads are logged as a truncated repr so a payload cannot grow or forge a log line
 MAX_LOGGED_PAYLOAD_LENGTH: Final = 40

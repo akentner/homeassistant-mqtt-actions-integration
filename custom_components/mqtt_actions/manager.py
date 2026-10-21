@@ -81,6 +81,7 @@ from .const import (
     STORE_VERSION,
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
+    MirrorRemovalCause,
 )
 from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
 from .document import (
@@ -1885,7 +1886,7 @@ class Manager:
         device.breaker.max_runs = policy.breaker_max_runs
         device.breaker.window = float(policy.breaker_window)
 
-    async def async_remove_mirror(self, device_id: str) -> None:
+    async def async_remove_mirror(self, device_id: str, *, cause: MirrorRemovalCause) -> None:
         """
         Remove the mirror of a device its owner deleted, and everything this instance keeps about it (D-09, SYN-05).
 
@@ -1893,12 +1894,43 @@ class Manager:
         evidence. Nothing is published, the topics belong to the owner. Both subscriptions end, the Script state is
         unloaded, the persisted payload, baseline and tripped hash are forgotten and every per-device issue is deleted.
         Leftover registry entries are cleaned last, and only when no entity of the device is live.
+
+        The local records of the device stay after a prune. A tombstone discards them, also when an earlier prune
+        already removed the mirror (D-05).
         """
         if device_id in self.devices:
             # An owned id is never a mirror; unloading its Script here would kill the owner's own device
             return
-        if (device := self.mirrors.pop(device_id, None)) is None:
+        if (device := self.mirrors.pop(device_id, None)) is not None:
+            await self._async_unload_removed_mirror(device)
+        if cause is MirrorRemovalCause.TOMBSTONE:
+            await self._async_discard_tombstoned_records(device_id)
+
+    async def _async_discard_tombstoned_records(self, device_id: str) -> None:
+        """Discard the local records of a deleted device durably; a failed save keeps them and is logged by count."""
+        try:
+            discarded = await self._async_discard_local_records(device_id)
+        except LocalActionsStoreError:
+            LOGGER.warning("The local actions of a device its owner deleted could not be discarded, so they are kept")
             return
+        if discarded:
+            LOGGER.info("Discarded %d local actions of a device its owner deleted", discarded)
+
+    async def _async_discard_local_records(self, device_id: str) -> int:
+        """
+        Save the record set without the records of a device and return how many were dropped; the caller holds the lock.
+
+        Nothing is written when the device has no record. Raises LocalActionsStoreError, and then nothing changed.
+        """
+        candidate = tuple(record for record in self._local_records if record.identity.device_id != device_id)
+        discarded = len(self._local_records) - len(candidate)
+        if discarded:
+            self._local_records = await self._local_store.async_save_records(candidate)
+        return discarded
+
+    async def _async_unload_removed_mirror(self, device: Device) -> None:
+        """Release a removed mirror and forget everything this instance kept about it; its local records stay."""
+        device_id = device.device_id
         # The mirror ends here, and so does its native flag (D-03)
         self._native.mirrors.discard(device_id)
         if device.unsubscribe is not None:

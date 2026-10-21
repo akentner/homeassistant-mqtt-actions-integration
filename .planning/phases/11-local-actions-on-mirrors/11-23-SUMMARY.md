@@ -175,3 +175,9 @@ None - no external service configuration required.
 ---
 *Phase: 11-local-actions-on-mirrors*
 *Completed: 2026-10-21*
+
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/11-local-actions-on-mirrors/11-23-SUMMARY.md`
+- FOUND: `b3ecda2` (Task 1), `1e426b5` (Task 2)
+- Task 1 and Task 2 `<automated>` gates re-run: exit 0

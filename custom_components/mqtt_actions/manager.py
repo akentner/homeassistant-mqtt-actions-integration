@@ -1888,12 +1888,15 @@ class Manager:
         bounded error. Here only a proven success of exactly that trigger clears it; no success, a success of another
         trigger and every owner result leave it alone (T-11-21). The other two ways to end it are not outcomes: a
         durable save of that trigger without local actions, and the removal of its customization. A failure whose
-        customization is gone by now is dropped, because nothing could ever clear it.
+        customization is gone by now is dropped, because nothing could ever clear it. So is a failure whose current
+        record has no local actions, for example a mute or an empty additive list saved while the run was in flight:
+        the save ended the issue, and the cancelled run reports its failure only afterwards (WR-06).
         """
         if (identity := outcome.identity) is None:
             return
         if outcome.status is OutcomeStatus.FAILURE:
-            if self._local_record(identity) is None:
+            record = self._local_record(identity)
+            if record is None or not record.actions:
                 return
             error = (outcome.error or "")[:MAX_ISSUE_ERROR_LENGTH]
             LOGGER.error(

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from homeassistant.exceptions import UnsupportedStorageVersionError
+from homeassistant.exceptions import HomeAssistantError, UnsupportedStorageVersionError
 from homeassistant.helpers.storage import Store
 from homeassistant.util.file import WriteError
 
@@ -204,11 +204,13 @@ async def test_malformed_duplicate_identity_keeps_the_first_row(hass: Any, hass_
 
 @pytest.mark.parametrize(
     "data",
-    [[], "text", None, {}, {"records": "text"}, {"records": {"0": _row()}}],
-    ids=["list", "text", "none", "no-records", "records-text", "records-mapping"],
+    [[], "text", {}, {"records": "text"}, {"records": {"0": _row(label=MARKER)}}],
+    ids=["list", "text", "no-records", "records-text", "records-mapping"],
 )
-async def test_malformed_payload_shape_loads_no_records(hass: Any, hass_storage: dict[str, Any], data: Any) -> None:
-    """T-11-09: a payload that is not a mapping with a record list means no overlays, and it is not rewritten."""
+async def test_malformed_payload_shape_refuses_the_load_and_every_save(
+    hass: Any, hass_storage: dict[str, Any], caplog: pytest.LogCaptureFixture, data: Any
+) -> None:
+    """WR-03, D-07, T-11-09: a payload without a record list is unreadable; it is never loaded as empty or rewritten."""
     hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
         "version": 1,
         "minor_version": 1,
@@ -216,9 +218,36 @@ async def test_malformed_payload_shape_loads_no_records(hass: Any, hass_storage:
         "data": data,
     }
     before = _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY)
+    store = LocalActionsStore(hass)
 
-    assert await _restarted(hass) == ()
-    assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == before
+    with caplog.at_level(logging.DEBUG, logger="custom_components.mqtt_actions"):
+        with pytest.raises(HomeAssistantError) as caught:
+            await store.async_load_records()
+        # Matched by name, so this module still collects before the error class exists
+        assert type(caught.value).__name__ == "LocalActionsStoreUnreadableError"
+        with pytest.raises(HomeAssistantError):
+            await store.async_save_records([_record()])
+
+    assert store.records == ()
+    assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == before, "the unreadable payload is untouched"
+    assert MARKER not in str(caught.value), "the error names the reason, never stored content"
+    assert MARKER not in caplog.text, "no stored content reaches the log"
+
+
+async def test_null_payload_loads_no_records_like_a_missing_file(hass: Any, hass_storage: dict[str, Any]) -> None:
+    """An envelope whose data is null holds no records, like a missing file; it stays writable."""
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": LOCAL_ACTIONS_STORE_KEY,
+        "data": None,
+    }
+    store = LocalActionsStore(hass)
+
+    assert await store.async_load_records() == ()
+    await store.async_save_records([_record()])
+
+    assert hass_storage[LOCAL_ACTIONS_STORE_KEY] == _envelope([_row()]), "a later save writes a v1 payload"
 
 
 async def test_newer_major_version_refuses_and_keeps_the_stored_bytes(hass: Any, hass_storage: dict[str, Any]) -> None:

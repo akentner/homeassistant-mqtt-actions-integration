@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.121" timestamp="2026-10-21T09:58:16.788249+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_manager" name="test_shape_invalid_local_store_raises_the_unreadable_issue_and_is_never_overwritten" time="0.873"><failure message="AssertionError: a local Store without a record list must raise the local_actions_unreadable issue&#10;assert None is not None">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140576026928064'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...7537', 'kind': 'switch', 'label': 'On', ...}}}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fda6b636820&gt;
+
+    async def test_shape_invalid_local_store_raises_the_unreadable_issue_and_is_never_overwritten(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """WR-03, D-07, T-11-50: a record mapping instead of a record list raises the issue and no save ever writes it."""
+        owner_calls = async_mock_service(hass, "test", "owner_on")
+        local_calls = async_mock_service(hass, "test", "local_on")
+        spec = make_spec(on=OWNER_ON)
+        hass_storage[LOCAL_STORE_KEY] = {
+            "version": 1,
+            "minor_version": 1,
+            "key": LOCAL_STORE_KEY,
+            "data": {"records": {"0": _replacement_on(spec.device_id)}},
+        }
+        before = _local_store_bytes(hass_storage)
+    
+        manager = await _pending_mirror(hass, make_hub_entry, spec)
+    
+        issue = _unreadable_issue(hass)
+&gt;       assert issue is not None, "a local Store without a record list must raise the local_actions_unreadable issue"
+E       AssertionError: a local Store without a record list must raise the local_actions_unreadable issue
+E       assert None is not None
+
+tests/test_local_actions_manager.py:1312: AssertionError</failure></testcase></testsuite></testsuites>

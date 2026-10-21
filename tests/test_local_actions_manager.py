@@ -1288,6 +1288,51 @@ async def test_hub_removal_deletes_the_unreadable_local_store_issue(
         assert LOCAL_STORE_KEY not in hass_storage, f"{mode}: hub removal deletes the local Store file (D-08)"
 
 
+# --- Plan 11-20 Task 1: a shape-invalid local Store is unreadable, not empty (WR-03, D-07, T-11-09) ------------------
+
+
+async def test_shape_invalid_local_store_raises_the_unreadable_issue_and_is_never_overwritten(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-03, D-07, T-11-50: a record mapping instead of a record list raises the issue and no save ever writes it."""
+    owner_calls = async_mock_service(hass, "test", "owner_on")
+    local_calls = async_mock_service(hass, "test", "local_on")
+    spec = make_spec(on=OWNER_ON)
+    hass_storage[LOCAL_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": LOCAL_STORE_KEY,
+        "data": {"records": {"0": _replacement_on(spec.device_id)}},
+    }
+    before = _local_store_bytes(hass_storage)
+
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+
+    issue = _unreadable_issue(hass)
+    assert issue is not None, "a local Store without a record list must raise the local_actions_unreadable issue"
+    assert issue.is_fixable is False
+    assert issue.is_persistent is False
+    assert issue.severity == ir.IssueSeverity.ERROR
+    assert not issue.translation_placeholders, "the issue carries no placeholder and no record content"
+    assert _local_store_bytes(hass_storage) == before, "the start never rewrites the unreadable local Store"
+
+    assert await manager.async_approve(spec.device_id, manager.mirrors[spec.device_id].mirror.actions_hash)
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert len(owner_calls) == 1, "the approved owner action runs on the trigger the unreadable record replaced"
+    assert local_calls == [], "no overlay of the unreadable Store applies"
+
+    identity = local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON)
+    with pytest.raises(LocalActionError) as caught:
+        await manager.async_set_local_action(identity, LocalActionMode.REPLACEMENT, LOCAL_ON)
+    assert caught.value.reason == "save_failed"
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _local_store_bytes(hass_storage) == before, "a refused edit never overwrites the unreadable local Store"
+
+    renamed = make_spec(device_id=spec.device_id, name="Renamed lamp", on=OWNER_ON)
+    await deliver_config(hass, spec.device_id, document_payload(renamed, rev=2), retain=False)
+    assert _local_store_bytes(hass_storage) == before, "an owner change never overwrites the unreadable local Store"
+
+
 # --- Plan 11-15 Task 2: English and German text of the unreadable issue (G-02, D-06, MIR-15) --------------------------
 
 TRANSLATIONS_DIR = Path(__file__).resolve().parents[1] / "custom_components" / "mqtt_actions" / "translations"

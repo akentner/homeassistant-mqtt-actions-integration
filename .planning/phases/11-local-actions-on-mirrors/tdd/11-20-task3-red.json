@@ -1,0 +1,18 @@
+{
+  "command": "uv run pytest -q -p no:logging \"tests/test_local_actions_manager.py::test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover\" --junitxml=.planning/phases/11-local-actions-on-mirrors/tdd/11-20-task3-red.xml",
+  "exitCode": 1,
+  "output": "<?xml version=\"1.0\" encoding=\"utf-8\"?><testsuites name=\"pytest tests\"><testsuite name=\"pytest\" errors=\"0\" failures=\"1\" skipped=\"0\" tests=\"1\" time=\"0.377\" timestamp=\"2026-10-21T10:03:16.779391+02:00\" hostname=\"lap-aleken-tux1\"><testcase classname=\"tests.test_local_actions_manager\" name=\"test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover\" time=\"0.123\"><failure message=\"AssertionError: en: the description names '.corrupt'&#10;assert '.corrupt' in 'The saved local actions of this instance cannot be read. A newer version of MQTT Actions saved them, or the file is d...the version that saved them, or restore the file from a backup. Then restart Home Assistant or reload the integration.'\">def test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover() -&gt; None:\n        \"\"\"WR-03, D-06, MIR-15: both languages say where Home Assistant moved a damaged file and how to recover.\"\"\"\n        english, german = _unreadable_issue_text(\"en\")[\"description\"], _unreadable_issue_text(\"de\")[\"description\"]\n    \n        for phrase in (\".corrupt\", \"repair issue\", \"backup\", \"delete\"):\n&gt;           assert phrase in english, f\"en: the description names {phrase!r}\"\nE           AssertionError: en: the description names '.corrupt'\nE           assert '.corrupt' in 'The saved local actions of this instance cannot be read. A newer version of MQTT Actions saved them, or the file is d...the version that saved them, or restore the file from a backup. Then restart Home Assistant or reload the integration.'\n\ntests/test_local_actions_manager.py:1417: AssertionError</failure></testcase></testsuite></testsuites>",
+  "targetTest": "test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover",
+  "targetFile": "tests/test_local_actions_manager.py",
+  "nodeId": "tests/test_local_actions_manager.py::test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover",
+  "expected": "The en description of issues.local_actions_unreadable names .corrupt, repair issue, backup and delete and still says not applied and refused; the de description names .corrupt, Backup and l\u00f6sche; neither has a placeholder.",
+  "actual": "The first phrase assertion fails: AssertionError \"en: the description names '.corrupt'\". The current text only says a newer version saved the file or it is damaged, and offers update or restore from a backup; it never mentions the corrupt copy Home Assistant leaves, its own repair issue or deleting the file (WR-03).",
+  "reportPath": ".planning/phases/11-local-actions-on-mirrors/tdd/11-20-task3-red.xml",
+  "runStartedAt": "2026-10-21T08:03:15.111347Z",
+  "reportModifiedAt": "2026-10-21T08:03:17.156308Z",
+  "consoleTail": [
+    "FAILED tests/test_local_actions_manager.py::test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover",
+    "1 failed in 0.37s"
+  ],
+  "semanticAssessment": "Valid semantic RED. The target node was collected and executed (1 test, 0 errors, 0 skipped). Both translation files were read; the test failed on the planned first phrase assertion of the English description, because the text does not yet describe the corrupt copy and the recovery paths (WR-03). Not an import, collection or fixture fault."
+}

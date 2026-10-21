@@ -1407,3 +1407,17 @@ def test_unreadable_local_store_issue_has_english_and_german_text_without_placeh
     assert "not applied" in english["description"], "the English text says the local customizations are not applied"
     assert "refused" in english["description"], "the English text says that editing is refused"
     assert german != english, "the German text is a translation, not a copy of the English one"
+
+
+def test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover() -> None:
+    """WR-03, D-06, MIR-15: both languages say where Home Assistant moved a damaged file and how to recover."""
+    english, german = _unreadable_issue_text("en")["description"], _unreadable_issue_text("de")["description"]
+
+    for phrase in (".corrupt", "repair issue", "backup", "delete"):
+        assert phrase in english, f"en: the description names {phrase!r}"
+    for phrase in (".corrupt", "Backup", "lösche"):
+        assert phrase in german, f"de: the description names {phrase!r}"
+    assert "{" not in english, "en: no placeholder"
+    assert "{" not in german, "de: no placeholder"
+    assert "not applied" in english, "en: still says the local customizations are not applied"
+    assert "refused" in english, "en: still says that editing is refused"

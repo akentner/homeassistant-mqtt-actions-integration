@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.377" timestamp="2026-10-21T10:03:16.779391+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_manager" name="test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover" time="0.123"><failure message="AssertionError: en: the description names '.corrupt'&#10;assert '.corrupt' in 'The saved local actions of this instance cannot be read. A newer version of MQTT Actions saved them, or the file is d...the version that saved them, or restore the file from a backup. Then restart Home Assistant or reload the integration.'">def test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover() -&gt; None:
+        """WR-03, D-06, MIR-15: both languages say where Home Assistant moved a damaged file and how to recover."""
+        english, german = _unreadable_issue_text("en")["description"], _unreadable_issue_text("de")["description"]
+    
+        for phrase in (".corrupt", "repair issue", "backup", "delete"):
+&gt;           assert phrase in english, f"en: the description names {phrase!r}"
+E           AssertionError: en: the description names '.corrupt'
+E           assert '.corrupt' in 'The saved local actions of this instance cannot be read. A newer version of MQTT Actions saved them, or the file is d...the version that saved them, or restore the file from a backup. Then restart Home Assistant or reload the integration.'
+
+tests/test_local_actions_manager.py:1417: AssertionError</failure></testcase></testsuite></testsuites>

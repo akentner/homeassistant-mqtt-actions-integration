@@ -377,7 +377,7 @@
     },
     "local_actions_unreadable": {
       "title": "Local actions cannot be read",
-      "description": "The saved local actions of this instance cannot be read. A newer version of MQTT Actions saved them, or the file is damaged.\n\nUntil they can be read, local actions, replacements and mutes are not applied. Approved owner actions run on every trigger, also on triggers you replaced or muted here. Editing local actions is refused, and the file is not changed.\n\nUpdate MQTT Actions to the version that saved them, or restore the file from a backup. Then restart Home Assistant or reload the integration."
+      "description": "The saved local actions of this instance cannot be read. A newer version of MQTT Actions saved them, or the file is damaged.\n\nUntil they can be read, local actions, replacements and mutes are not applied. Approved owner actions run on every trigger, also on triggers you replaced or muted here. Editing local actions is refused, and MQTT Actions does not change the file.\n\nIf a newer version saved them, update MQTT Actions to that version. Home Assistant moves a file it cannot read at all aside in the `.storage` folder as `mqtt_actions.local_actions.corrupt.` followed by a time, and shows its own repair issue for it. To recover, restore the file from a backup, or repair the file or that copy and save it as `.storage/mqtt_actions.local_actions`. To start without the saved local actions, delete the file and any such copy. Then restart Home Assistant or reload the integration."
     },
     "mqtt_discovery_disabled": {
       "title": "MQTT discovery is disabled",

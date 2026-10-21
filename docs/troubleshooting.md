@@ -216,12 +216,17 @@ integration deletes it as well, and a start deletes an issue whose local customi
 ### `local_actions_unreadable`
 
 **Meaning:** the saved local actions of this instance cannot be read. Until they can, local actions, replacements and
-mutes are not applied: approved owner actions run on every trigger, also on triggers you replaced or muted here.
-Editing local actions is refused, and the file is not changed. **Why:** a newer version of MQTT Actions saved the file
-in a format this version cannot read, or the file is damaged. MQTT Actions does not overwrite it, so the newer or
-damaged file and your local actions in it stay as they are. **What to do:** update MQTT Actions to the version that
-saved the file, or restore the file from a backup, then restart Home Assistant or reload the integration. The issue
-disappears at the next start that can read the file. Removing the integration deletes the file and the issue.
+mutes are not applied: approved owner actions run on every trigger, also on triggers you replaced or muted here. Editing
+local actions is refused, and the file is not changed. **Why:** a newer version of MQTT Actions saved the file in a
+format this version cannot read, or the file is damaged: it is not valid JSON, or it holds no record list. MQTT Actions
+does not overwrite it, so the newer or damaged file and your local actions in it stay as they are. Home Assistant itself
+moves a file that is not valid JSON aside in the `.storage` folder as `mqtt_actions.local_actions.corrupt.` followed by
+a time, and shows its own repair issue for it. MQTT Actions treats such a copy beside a missing file as unreadable too,
+at every start, until you act. **What to do:** if a newer version saved the file, update MQTT Actions to that version.
+Otherwise restore `.storage/mqtt_actions.local_actions` from a backup, or repair the file or its `.corrupt` copy and
+save it under that name. To start without the saved local actions, delete the file and any `.corrupt` copy of it. Then
+restart Home Assistant or reload the integration. The issue disappears at the next start that can read the file.
+Removing the integration deletes the file, its `.corrupt` copies and the issue.
 
 ### `mqtt_discovery_disabled`
 

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.307" timestamp="2026-10-21T10:14:10.683082+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_docs" name="test_readme_documents_every_local_actions_topic" time="0.130"><failure message="AssertionError: the local actions section never says 'cannot read' (newer versions)&#10;assert 'cannot read' in ' a mirror runs the actions of its owner once you approved them. a trigger of a mirror can also have local actions: ac...in on 1.1, the file is deleted before the new hub starts, so the new hub never runs local actions of the removed one. '">def test_readme_documents_every_local_actions_topic() -&gt; None:
+        """
+        MIR-15, D-06: one README section covers every topic of local actions on mirrors.
+    
+        Navigation, the three modes, local trust, the safe defaults, the gates, parallel runs, the orphan and kind identity
+        rules, the lifecycle, the local Repairs issue, count-only diagnostics and the canonical state variable.
+        """
+        local = _plain(_readme_local_section())
+        topics = {
+            "navigation": ("configure", "local actions of mirrored devices", "remove local customization"),
+            "additive mode": ("in addition to the owner actions",),
+            "replacement mode": ("instead of the owner actions",),
+            "mute": ("locally muted", "executes no actions on this instance"),
+            "local trust": ("need no approval", "the approval concerns only the owner actions"),
+            "safe defaults": ("safe defaults", "serial", "5 runs in 10 seconds", "run actions on startup"),
+            "gates": ("observe", "disabled", "circuit breaker", "releases"),
+            "parallel": ("in parallel", "the other branch still finishes", "stop", "error"),
+            "response variables": ("response variable", "share one namespace"),
+            "orphans": ("no longer present on the owner", "inactive", "edit", "reattach"),
+            "kind identity": ("device kind", "saved for another device type"),
+            "newer versions": ("cannot read", "unchanged", "neither applies nor shows", "saving here keeps them"),
+            "tombstone": ("tombstone", "kept", "inactive", "not mirrored", "apply again"),
+            "transient prune": ("prune", "kept"),
+            "adoption": ("adopt", "local_actions_discarded"),
+            "integration removal": ("removing the integration", "number of devices"),
+            "local failure": ("local_action_failed", "continue_on_error", "same trigger"),
+            "diagnostics": ("diagnostics", "counts", "docs/diagnostics.md"),
+            "never shared": ("never leave this instance", "hash", "export"),
+            "state caveat": ("{{ state }}", "canonical", "live", "states("),
+        }
+        for topic, phrases in topics.items():
+            for phrase in phrases:
+&gt;               assert phrase in local, f"the local actions section never says {phrase!r} ({topic})"
+E               AssertionError: the local actions section never says 'cannot read' (newer versions)
+E               assert 'cannot read' in ' a mirror runs the actions of its owner once you approved them. a trigger of a mirror can also have local actions: ac...in on 1.1, the file is deleted before the new hub starts, so the new hub never runs local actions of the removed one. '
+
+tests/test_docs.py:654: AssertionError</failure></testcase></testsuite></testsuites>

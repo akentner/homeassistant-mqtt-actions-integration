@@ -639,6 +639,7 @@ def test_readme_documents_every_local_actions_topic() -> None:
         "response variables": ("response variable", "share one namespace"),
         "orphans": ("no longer present on the owner", "inactive", "edit", "reattach"),
         "kind identity": ("device kind", "saved for another device type"),
+        "newer versions": ("cannot read", "unchanged", "neither applies nor shows", "saving here keeps them"),
         "tombstone": ("tombstone", "kept", "inactive", "not mirrored", "apply again"),
         "transient prune": ("prune", "kept"),
         "adoption": ("adopt", "local_actions_discarded"),

@@ -364,6 +364,9 @@ data:
   capitalization ignored).
 - **Device kind.** A customization is never applied to another device kind. One that does not match the kind of the
   device stays inactive and is marked as saved for another device type.
+- **Newer versions.** Local actions that a newer version of MQTT Actions saved in a form this version cannot read stay
+  in the file unchanged. This version neither applies nor shows them, and saving here keeps them. They apply again
+  after an upgrade to a version that reads them.
 - **Start and prune.** Nothing is discarded when Home Assistant starts or when a mirror is pruned because its document
   was not seen again: the local actions are kept and apply again when the mirror returns. A device that has local
   actions but no mirror right now stays in the device list, marked as not mirrored, so you can remove them.

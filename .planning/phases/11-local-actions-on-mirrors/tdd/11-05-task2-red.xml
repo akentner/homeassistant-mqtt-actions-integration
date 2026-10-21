@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.019" timestamp="2026-10-21T03:03:06.113805+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_manager" name="test_edit_saves_immediately_and_applies_without_restart_or_retroactive_run" time="0.884"><failure message="AssertionError: the edit must be written to the local Store immediately&#10;assert None == [{'actions': [{'action': 'test.local_on', 'data': {'source': 'local'}}], 'device_id': 'f28919d1-15de-4c0f-a549-3036db371449', 'kind': 'switch', 'label': 'ON', ...}]&#10; +  where None = _stored_rows({'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...: {'data': {'content_user': 'bc5c77a40ed24b75b666382aad5daafc'}, 'key': 'http.auth', 'minor_version': 1, 'version': 1}})">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140100641335888'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...: {'data': {'content_user': 'bc5c77a40ed24b75b666382aad5daafc'}, 'key': 'http.auth', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f6bc1aa9590&gt;
+
+    async def test_edit_saves_immediately_and_applies_without_restart_or_retroactive_run(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """D-13, D-22: a submitted edit is durable at once, applies to the next real edge and runs nothing by itself."""
+        owner_calls = async_mock_service(hass, "test", "owner_on")
+        local_calls = async_mock_service(hass, "test", "local_on")
+        spec = make_spec(on=[{"action": "test.owner_on"}])
+        manager = await _pending_mirror(hass, make_hub_entry, spec)
+        identity = local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, "on")
+    
+        change = await manager.async_set_local_action(identity, LocalActionMode.ADDITIVE, LOCAL_ON)
+    
+        # Read before any clock advance or block_till_done: the save is not a delayed one
+&gt;       assert _stored_rows(hass_storage) == [
+            {
+                "device_id": spec.device_id,
+                "kind": SUBENTRY_SWITCH,
+                "state_value": PAYLOAD_ON,
+                # The last known friendly name of the trigger, kept for the orphan display (D-11)
+                "label": PAYLOAD_ON,
+                "mode": "additive",
+                "actions": LOCAL_ON,
+            }
+        ], "the edit must be written to the local Store immediately"
+E       AssertionError: the edit must be written to the local Store immediately
+E       assert None == [{'actions': [{'action': 'test.local_on', 'data': {'source': 'local'}}], 'device_id': 'f28919d1-15de-4c0f-a549-3036db371449', 'kind': 'switch', 'label': 'ON', ...}]
+E        +  where None = _stored_rows({'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...: {'data': {'content_user': 'bc5c77a40ed24b75b666382aad5daafc'}, 'key': 'http.auth', 'minor_version': 1, 'version': 1}})
+
+tests/test_local_actions_manager.py:262: AssertionError</failure></testcase></testsuite></testsuites>

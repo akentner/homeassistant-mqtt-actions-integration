@@ -97,6 +97,8 @@ from .document import (
 )
 from .entities import device_info_for
 from .local_actions import (
+    LocalActionIdentity,
+    LocalActionMode,
     LocalActionRecord,
     build_effective_trigger_plans,
     effective_policy,
@@ -164,6 +166,49 @@ class LocalActionDevice:
     kind: str | None
     mirrored: bool
     records: int
+
+
+class LocalActionError(HomeAssistantError):
+    """
+    A local-action edit was refused and nothing was saved or changed (T-11-13).
+
+    `reason` is one of the LOCAL_ACTION_* codes; the flow maps it to a base error. The message never carries actions.
+    """
+
+    def __init__(self, reason: str) -> None:
+        """Remember the reason code; the message is the code."""
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass(frozen=True, slots=True)
+class LocalActionChange:
+    """
+    The result of a saved local-action edit or removal, for the flow.
+
+    `record` is a copy of the saved record, None after a removal. `active` is True when the record attaches to a
+    current trigger of a current mirror; an orphan or kind-mismatched record is saved but stays inactive (D-12).
+    """
+
+    identity: LocalActionIdentity
+    record: LocalActionRecord | None
+    active: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LocalActionTrigger:
+    """
+    One trigger row of the local-actions editor of a device (D-11, D-12, D-16).
+
+    `present` is True for a current owner trigger of the mirror; a record without one (an orphan, another kind) has
+    `present` False and shows its last saved label and StateValue. `record` is a copy, None when nothing is saved.
+    """
+
+    identity: LocalActionIdentity
+    state_value: str
+    label: str
+    present: bool
+    record: LocalActionRecord | None
 
 
 class AdoptionError(Exception):
@@ -1505,6 +1550,22 @@ class Manager:
             if device_id not in self.mirrors
         )
         return tuple(listed)
+
+    def local_action_triggers(self, device_id: str) -> tuple[LocalActionTrigger, ...]:
+        """Return the editor rows of a device; skeleton (Plan 11-05 Task 2 RED)."""
+        del device_id
+        return ()
+
+    async def async_set_local_action(
+        self, identity: LocalActionIdentity, mode: LocalActionMode | str, actions: Any
+    ) -> LocalActionChange:
+        """Save the local customization of one trigger; skeleton (Plan 11-05 Task 2 RED)."""
+        del mode, actions
+        return LocalActionChange(identity, None, active=False)
+
+    async def async_remove_local_action(self, identity: LocalActionIdentity) -> LocalActionChange:
+        """Remove the local customization of one trigger; skeleton (Plan 11-05 Task 2 RED)."""
+        return LocalActionChange(identity, None, active=False)
 
     def approval_state(self, device_id: str) -> ApprovalState:
         """

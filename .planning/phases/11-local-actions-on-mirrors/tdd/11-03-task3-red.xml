@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.333" timestamp="2026-10-21T02:03:03.775327+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_parallel" name="test_outcome_both_failures_report_the_local_failure" time="0.142"><failure message="AssertionError: Home Assistant Core 2026.9.4 native parallel semantics changed (homeassistant/helpers/script.py: _async_parallel_step, _async_run_script, stop/continue_on_error handling, or helpers/trace.py paths). D-20: stop and return to the owner before any sequential fallback; adapt the Phase 11 branch reducer only on purpose.&#10;assert [] == ['failure']&#10;  &#10;  Right contains one more item: 'failure'&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;
+
+    async def test_outcome_both_failures_report_the_local_failure(hass: HomeAssistant) -&gt; None:
+        """The outer error names the owner only; the runner still reports the local failure with its own error."""
+        Probe(hass)
+        spec, runner, outcomes = await _outcome_runner(hass, [{"action": "probe.fail"}], [{"action": "probe.fail_local"}])
+    
+        await _enqueue(hass, runner, spec)
+    
+&gt;       assert _statuses(outcomes) == [LOCAL_FAILED], HINT
+E       AssertionError: Home Assistant Core 2026.9.4 native parallel semantics changed (homeassistant/helpers/script.py: _async_parallel_step, _async_run_script, stop/continue_on_error handling, or helpers/trace.py paths). D-20: stop and return to the owner before any sequential fallback; adapt the Phase 11 branch reducer only on purpose.
+E       assert [] == ['failure']
+E         
+E         Right contains one more item: 'failure'
+E         Use -v to get more diff
+
+tests/test_local_parallel.py:770: AssertionError</failure></testcase></testsuite></testsuites>

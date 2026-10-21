@@ -33,6 +33,7 @@ from custom_components.mqtt_actions.const import (
     CONF_INSTANCE_NAME,
     DOMAIN,
     ISSUE_DENIED_CALL_PREFIX,
+    MAX_ISSUE_ERROR_LENGTH,
     PAYLOAD_ON,
     SUBENTRY_SWITCH,
 )
@@ -723,3 +724,189 @@ async def test_one_additive_overlay_free_mirror_build_is_identical_to_the_direct
     pending = _bare_runner(hass)
     await pending.async_build_effective(spec, build_effective_trigger_plans(spec, "pending", []))
     assert pending.script_count(spec.device_id) == 0
+
+
+# --- per-branch outcomes of the production runner (Plan 11-03 Task 3, D-18-D-20) ------------------------------------
+# Status words of local_actions.OutcomeStatus, quoted: the runner reports one BranchOutcome per run of a trigger that
+# has a local branch, after both branches settled; success needs the current Script, generation and stop epoch.
+
+LOCAL_FAILED = "failure"
+LOCAL_SUCCEEDED = "success"
+LOCAL_UNPROVEN = "no_success"
+
+
+async def _outcome_runner(
+    hass: HomeAssistant,
+    owner: list[dict[str, Any]],
+    local: list[dict[str, Any]],
+    *,
+    approval: str = "approved",
+    run_mode: str = "serial",
+) -> tuple[DeviceSpec, ActionRunner, list[Any]]:
+    spec = make_spec(on=owner, off=[{"action": "probe.owner"}], run_mode=run_mode)
+    runner = _bare_runner(hass)
+    outcomes: list[Any] = []
+    runner.on_local_outcome = outcomes.append
+    await runner.async_build_effective(spec, build_effective_trigger_plans(spec, approval, [_additive_on(spec, local)]))
+    return spec, runner, outcomes
+
+
+def _start(runner: ActionRunner, spec: DeviceSpec, key: str = SWITCH_ON_KEY) -> None:
+    trigger = spec.triggers[key]
+    runner.enqueue(spec.device_id, spec.name, trigger.label, key, {"device_id": spec.device_id})
+
+
+def _statuses(outcomes: list[Any]) -> list[str]:
+    return [str(outcome.status) for outcome in outcomes]
+
+
+async def test_outcome_both_failures_report_the_local_failure(hass: HomeAssistant) -> None:
+    """The outer error names the owner only; the runner still reports the local failure with its own error."""
+    Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(hass, [{"action": "probe.fail"}], [{"action": "probe.fail_local"}])
+
+    await _enqueue(hass, runner, spec)
+
+    assert _statuses(outcomes) == [LOCAL_FAILED], HINT
+    assert outcomes[0].error == "LOCAL_FAILURE", HINT
+    assert (outcomes[0].device_id, outcomes[0].trigger_key, outcomes[0].label) == (
+        spec.device_id,
+        SWITCH_ON_KEY,
+        spec.triggers[SWITCH_ON_KEY].label,
+    )
+
+
+async def test_outcome_owner_stop_masked_local_error_is_a_local_failure(hass: HomeAssistant) -> None:
+    Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(
+        hass, [{"stop": "normal stop"}], [{"action": "probe.fail_local"}, LOCAL_DONE]
+    )
+
+    await _enqueue(hass, runner, spec)
+
+    assert _statuses(outcomes) == [LOCAL_FAILED], HINT
+    assert outcomes[0].error == "LOCAL_FAILURE", HINT
+
+
+async def test_outcome_continued_local_error_stays_a_failure_and_the_continuation_runs(hass: HomeAssistant) -> None:
+    probe = Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(
+        hass, [{"action": "probe.owner"}], [{"action": "probe.fail_local", "continue_on_error": True}, LOCAL_DONE]
+    )
+
+    await _enqueue(hass, runner, spec)
+
+    assert "probe.local_done" in probe.events, "authored continue_on_error must keep running the local branch"
+    assert _statuses(outcomes) == [LOCAL_FAILED], HINT
+
+
+async def test_outcome_local_success_needs_a_clean_completed_local_branch(hass: HomeAssistant) -> None:
+    """An owner failure is no local failure: the delayed local branch completes and is a proven local success."""
+    probe = Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(
+        hass, [{"action": "probe.fail"}], [{"action": "probe.finish"}, LOCAL_DONE]
+    )
+    collector = trace_get()
+
+    await _enqueue(hass, runner, spec)
+
+    assert probe.events == ["probe.fail", "local_finished", "probe.local_done"], HINT
+    assert _statuses(outcomes) == [LOCAL_SUCCEEDED], HINT
+    assert outcomes[0].error is None
+    # T-11-08: the collector is task-local to the run; the caller's trace sees nothing of it
+    assert collector == {}
+
+
+async def test_outcome_normal_stop_and_condition_abort_are_no_local_success(hass: HomeAssistant) -> None:
+    Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(hass, [{"stop": "normal stop"}], [{"action": "probe.finish"}])
+    await _enqueue(hass, runner, spec)
+    assert _statuses(outcomes) == [LOCAL_UNPROVEN], HINT
+
+    probe = Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(
+        hass,
+        [{"action": "probe.owner"}],
+        [{"condition": "template", "value_template": "{{ false }}"}, {"action": "probe.local"}],
+    )
+    await _enqueue(hass, runner, spec)
+    assert "probe.local" not in probe.events, HINT
+    assert _statuses(outcomes) == [LOCAL_UNPROVEN], HINT
+
+
+async def test_outcome_stopped_rebuilt_and_superseded_runs_are_no_local_success(hass: HomeAssistant) -> None:
+    """A cancelled run returns a normal result; the runner's own stop, rebuild and restart proofs keep it unproven."""
+    probe = Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(hass, [{"action": "probe.owner"}], [{"action": "probe.hold"}])
+    _start(runner, spec)
+    await _turns()
+    await runner.async_stop_runs(spec.device_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert "hold_cancelled" in probe.events, HINT
+    assert _statuses(outcomes) == [LOCAL_UNPROVEN], HINT
+
+    probe = Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(hass, [{"action": "probe.owner"}], [{"action": "probe.hold"}])
+    _start(runner, spec)
+    await _turns()
+    await runner.async_build_effective(spec, build_effective_trigger_plans(spec, "approved", []))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert "hold_cancelled" in probe.events, HINT
+    assert _statuses(outcomes) == [LOCAL_UNPROVEN], HINT
+
+    probe = Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(
+        hass, [{"action": "probe.owner"}], [{"action": "probe.hold"}], run_mode="restart"
+    )
+    _start(runner, spec)
+    await _turns()
+    _start(runner, spec)
+    await _turns()
+    probe.gate.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert probe.events.count("hold_cancelled") == 1, HINT
+    assert sorted(_statuses(outcomes)) == [LOCAL_UNPROVEN, LOCAL_SUCCEEDED], HINT
+    assert [outcome.generation for outcome in outcomes if str(outcome.status) == LOCAL_SUCCEEDED] == [2]
+
+
+async def test_outcome_owner_only_and_other_trigger_runs_report_nothing(hass: HomeAssistant) -> None:
+    probe = Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(hass, [{"action": "probe.owner"}], [{"action": "probe.local"}])
+
+    await _enqueue(hass, runner, spec, key=next(key for key in spec.triggers if key != SWITCH_ON_KEY))
+
+    assert probe.events == ["probe.owner"], HINT
+    assert outcomes == [], "a run without a local branch supplies no local outcome"
+
+
+async def test_outcome_error_text_is_bounded_and_carries_no_trace_content(hass: HomeAssistant) -> None:
+    async def _long_failure(_call: ServiceCall) -> None:
+        raise HomeAssistantError("x" * 5000)
+
+    hass.services.async_register("probe", "long_failure", _long_failure)
+    spec, runner, outcomes = await _outcome_runner(
+        hass,
+        [{"action": "probe.owner"}],
+        [{"variables": {"secret": "do-not-keep"}}, {"action": "probe.long_failure"}],
+    )
+    Probe(hass)
+
+    await _enqueue(hass, runner, spec)
+
+    assert _statuses(outcomes) == [LOCAL_FAILED], HINT
+    assert outcomes[0].error is not None
+    assert 0 < len(outcomes[0].error) <= MAX_ISSUE_ERROR_LENGTH
+    assert "do-not-keep" not in repr(outcomes[0])
+
+
+async def test_pending_local_only_script_uses_the_safe_local_policy(hass: HomeAssistant) -> None:
+    """D-03: an unapproved owner's restart mode never reaches the local Script; it runs queued, bound 10."""
+    Probe(hass)
+    spec, runner, _outcomes = await _outcome_runner(
+        hass, [{"action": "probe.owner"}], [{"action": "probe.local"}], approval="pending", run_mode="restart"
+    )
+
+    script = runner.script_for(spec.device_id, SWITCH_ON_KEY)
+
+    assert script is not None
+    assert (script.script_mode, script.max_runs) == ("queued", 10)

@@ -20,6 +20,7 @@ from homeassistant.util.file import WriteError
 
 from custom_components.mqtt_actions.const import (
     LOCAL_ACTIONS_STORE_KEY,
+    LOCAL_ACTIONS_STORE_MINOR_VERSION,
     LOCAL_ACTIONS_STORE_VERSION,
     STORE_APPROVALS,
     STORE_DEVICE_MODES,
@@ -39,6 +40,7 @@ from custom_components.mqtt_actions.local_actions import (
     LocalActionMode,
     LocalActionRecord,
     LocalActionsStoreVersionError,
+    copy_local_records,
     local_actions_payload,
     local_record_data,
     make_local_record,
@@ -641,6 +643,69 @@ async def test_preserved_device_ids_name_only_mapping_rows_with_a_device_id(
     await store.async_load_records()
 
     assert store.preserved_device_ids == frozenset({"abc"}), "a parsed record is not a kept row"
+
+
+def test_unknown_row_keys_round_trip_as_copies() -> None:
+    """WR-05, T-11-61: a parsable row keeps the keys it does not know on its record and writes them back."""
+    data = {"records": [{**_row(), "enabled": False, "conditions": [{"x": [1]}]}]}
+
+    parsed = parse_local_actions_payload(data)
+
+    assert len(parsed.records) == 1
+    assert parsed.preserved == ()
+    record = parsed.records[0]
+    assert record.extra == {"enabled": False, "conditions": [{"x": [1]}]}
+    payload = local_actions_payload(parsed.records)
+    assert payload == data
+
+    data["records"][0]["conditions"][0]["x"].append(2)
+    payload["records"][0]["conditions"][0]["x"].append(3)
+    assert record.extra == {"enabled": False, "conditions": [{"x": [1]}]}, "the record owns its copy"
+    assert local_actions_payload(parsed.records)["records"][0]["conditions"] == [{"x": [1]}]
+    copied = copy_local_records(parsed.records)[0]
+    assert copied.extra == record.extra
+    assert copied.extra is not record.extra
+    assert copied.extra["conditions"] is not record.extra["conditions"]
+
+    made = make_local_record(
+        DEVICE,
+        SUBENTRY_SWITCH,
+        "ON",
+        label="On",
+        mode="additive",
+        actions=[],
+        extra={
+            "device_id": "x",
+            "z": 1,
+        },
+    )
+    assert made.extra == {"z": 1}, "a known key never comes from extra"
+    assert local_record_data(made)["device_id"] == DEVICE
+
+
+async def test_a_save_after_a_newer_minor_load_keeps_every_key_and_stamps_this_minor(
+    hass: Any, hass_storage: dict[str, Any]
+) -> None:
+    """WR-05, T-11-63: an explicit save keeps rows, row keys and top-level keys, and stamps this release's minor."""
+    data = {
+        "records": [{**_row(), "enabled": False}, {**_row(state_value="OFF", label="Off"), "mode": "conditional"}],
+        "groups": [{"future": True}],
+    }
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 2,
+        "key": LOCAL_ACTIONS_STORE_KEY,
+        "data": copy.deepcopy(data),
+    }
+    store = LocalActionsStore(hass)
+    loaded = await store.async_load_records()
+    assert len(loaded) == 1, "premise: the conditional row is kept aside, not a record"
+
+    await store.async_save_records(loaded)
+
+    stored = hass_storage[LOCAL_ACTIONS_STORE_KEY]
+    assert stored["data"] == {"groups": [{"future": True}], "records": [data["records"][0], data["records"][1]]}
+    assert stored["minor_version"] == LOCAL_ACTIONS_STORE_MINOR_VERSION
 
 
 def test_payload_functions_keep_preserved_rows_and_extra_keys_as_copies() -> None:

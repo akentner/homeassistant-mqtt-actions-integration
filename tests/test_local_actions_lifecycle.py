@@ -262,6 +262,50 @@ async def test_option_rename_survives_with_refreshed_label(
     assert len(local_calls) == 1
 
 
+async def test_unknown_keys_of_a_readable_row_survive_an_edit_and_a_label_refresh(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-05, T-11-61, D-11: keys this release does not know stay on a readable row through every save it makes."""
+    local_calls = async_mock_service(hass, "test", "local_b2")
+    spec = _select([("a", "A"), ("b", "B"), ("c", "C")])
+    row_b = {
+        **_row_data(spec.device_id, "b", SUBENTRY_SELECT),
+        "label": "B",
+        "enabled": False,
+        "conditions": [{"condition": "state", "entity_id": "sun.sun", "state": "above_horizon"}],
+    }
+    row_c = {**_row_data(spec.device_id, "c", SUBENTRY_SELECT), "label": "C", "future": {"note": "kept"}}
+    hass_storage[LOCAL_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 2,
+        "key": LOCAL_STORE_KEY,
+        "data": {"records": [copy.deepcopy(row_b), copy.deepcopy(row_c)]},
+    }
+    entry = await setup_entry(hass, make_hub_entry())
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+    await _state(hass, spec.device_id, "a", retain=True)
+    manager = manager_of(entry)
+
+    await manager.async_set_local_action(
+        local_trigger_identity(spec.device_id, SUBENTRY_SELECT, "b"), LocalActionMode.ADDITIVE, LOCAL_B2
+    )
+    assert _stored_rows(hass_storage) == [{**row_b, "actions": LOCAL_B2}, row_c], "an edit keeps the unknown keys"
+
+    await _owner_sends(hass, _select([("a", "A"), ("b", "Bee"), ("c", "Sea")], spec.device_id), rev=2)
+    assert _stored_rows(hass_storage) == [
+        {**row_b, "actions": LOCAL_B2, "label": "Bee"},
+        {**row_c, "label": "Sea"},
+    ], "a label refresh changes only the label"
+
+    await manager.async_remove_local_action(local_trigger_identity(spec.device_id, SUBENTRY_SELECT, "c"))
+    assert _stored_rows(hass_storage) == [{**row_b, "actions": LOCAL_B2, "label": "Bee"}], (
+        "the removal of another record keeps the unknown keys"
+    )
+
+    await _state(hass, spec.device_id, "b")
+    assert len(local_calls) == 1, "a row with unknown keys is applied as before"
+
+
 async def test_label_refresh_save_failure_keeps_the_old_label_and_the_owner_update(
     hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
 ) -> None:
@@ -627,20 +671,29 @@ async def test_tombstoned_device_records_apply_again_when_the_owner_publishes_it
 
 
 async def _adoptable_mirror(
-    hass: HomeAssistant, hass_storage: dict[str, Any], make_hub_entry: Callable, *, approve: bool = True
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    *,
+    approve: bool = True,
+    row_extra: dict[str, Any] | None = None,
 ) -> tuple[Any, Manager, DeviceSpec]:
     """
     Start a follower with the mirror of an offline owner and three records: ON and OFF of the mirror, one elsewhere.
 
     The OFF record of the mirror is a kind mismatch (Select kind), so an inactive record of the device is counted too.
+    `row_extra` adds keys this release does not know to every seeded row (WR-05).
     """
     spec = make_spec(name="Foreign lamp", on=OWNER_ON)
     _seed_local(
         hass_storage,
         [
-            {**_row_data(spec.device_id), "mode": "replacement"},
-            {**_row_data(spec.device_id, PAYLOAD_OFF, SUBENTRY_SELECT), "mode": "replacement"},
-            _row_data(OTHER_DEVICE),
+            {**row, **(row_extra or {})}
+            for row in (
+                {**_row_data(spec.device_id), "mode": "replacement"},
+                {**_row_data(spec.device_id, PAYLOAD_OFF, SUBENTRY_SELECT), "mode": "replacement"},
+                _row_data(OTHER_DEVICE),
+            )
         ],
     )
     entry = await setup_entry(hass, make_hub_entry())
@@ -782,6 +835,37 @@ async def test_adoption_subentry_failure_restores_mirror_and_records_and_publish
     await _state(hass, spec.device_id, PAYLOAD_OFF, retain=True)
     await _state(hass, spec.device_id, PAYLOAD_ON)
     assert (len(local_calls), owner_calls) == (1, []), "the restored mirror runs its local replacement again"
+
+
+ROW_EXTRA = {"enabled": False, "future": {"note": "kept"}}
+
+
+async def test_failed_adoption_restores_unknown_row_keys(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-05, T-11-61: the rollback of a failed adoption writes the discarded rows back with their unknown keys."""
+    _entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry, row_extra=ROW_EXTRA)
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+
+    with (
+        patch.object(hass.config_entries, "async_add_subentry", side_effect=RuntimeError("boom")),
+        pytest.raises(RuntimeError),
+    ):
+        await manager.async_adopt_device(spec.device_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert hass_storage[LOCAL_STORE_KEY] == before, "the restore keeps the unknown keys of every row"
+
+
+async def test_completed_adoption_keeps_unknown_keys_of_other_devices(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-05, T-11-61: the discard of one device's records leaves the rows of another device whole."""
+    _entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry, row_extra=ROW_EXTRA)
+
+    assert (await manager.async_adopt_device(spec.device_id)).local_actions_discarded == 2
+
+    assert _stored_rows(hass_storage) == [{**_row_data(OTHER_DEVICE), **ROW_EXTRA}]
 
 
 # Literal on purpose: the production key of the main Store (STORE_KEY)

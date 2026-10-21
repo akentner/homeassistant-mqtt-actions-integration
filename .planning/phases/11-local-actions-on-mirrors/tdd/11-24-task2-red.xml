@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.006" timestamp="2026-10-21T11:40:18.541360+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_lifecycle" name="test_unknown_keys_of_a_readable_row_survive_an_edit_and_a_label_refresh" time="0.878"><failure message="AssertionError: an edit keeps the unknown keys&#10;assert [{'actions': ...l': 'C', ...}] == [{'actions': ...select', ...}]&#10;  &#10;  At index 0 diff: {'device_id': '6addac72-3929-43ef-a328-f277ba42b92b', 'kind': 'select', 'state_value': 'b', 'label': 'B', 'mode': 'additive', 'actions': [{'action': 'test.local_b2', 'data': {'source': 'local', 'edited': True}}]} != {'device_id': '6addac72-3929-43ef-a328-f277ba42b92b', 'kind': 'select', 'state_value': 'b', 'label': 'B', 'mode': 'additive', 'actions': [{'action': 'test.local_b2', 'data': {'source': 'local', 'edited': True}}], 'enabled': False, 'conditions': [{'condition': 'state', 'entity_id': 'sun.sun', 'state': 'above_horizon'}]}&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140576768110816'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...2b92b', 'kind': 'select', 'label': 'C', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fda970f6140&gt;
+
+    async def test_unknown_keys_of_a_readable_row_survive_an_edit_and_a_label_refresh(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """WR-05, T-11-61, D-11: keys this release does not know stay on a readable row through every save it makes."""
+        local_calls = async_mock_service(hass, "test", "local_b2")
+        spec = _select([("a", "A"), ("b", "B"), ("c", "C")])
+        row_b = {
+            **_row_data(spec.device_id, "b", SUBENTRY_SELECT),
+            "label": "B",
+            "enabled": False,
+            "conditions": [{"condition": "state", "entity_id": "sun.sun", "state": "above_horizon"}],
+        }
+        row_c = {**_row_data(spec.device_id, "c", SUBENTRY_SELECT), "label": "C", "future": {"note": "kept"}}
+        hass_storage[LOCAL_STORE_KEY] = {
+            "version": 1,
+            "minor_version": 2,
+            "key": LOCAL_STORE_KEY,
+            "data": {"records": [copy.deepcopy(row_b), copy.deepcopy(row_c)]},
+        }
+        entry = await setup_entry(hass, make_hub_entry())
+        await deliver_config(hass, spec.device_id, document_payload(spec))
+        await _state(hass, spec.device_id, "a", retain=True)
+        manager = manager_of(entry)
+    
+        await manager.async_set_local_action(
+            local_trigger_identity(spec.device_id, SUBENTRY_SELECT, "b"), LocalActionMode.ADDITIVE, LOCAL_B2
+        )
+&gt;       assert _stored_rows(hass_storage) == [{**row_b, "actions": LOCAL_B2}, row_c], "an edit keeps the unknown keys"
+E       AssertionError: an edit keeps the unknown keys
+E       assert [{'actions': ...l': 'C', ...}] == [{'actions': ...select', ...}]
+E         
+E         At index 0 diff: {'device_id': '6addac72-3929-43ef-a328-f277ba42b92b', 'kind': 'select', 'state_value': 'b', 'label': 'B', 'mode': 'additive', 'actions': [{'action': 'test.local_b2', 'data': {'source': 'local', 'edited': True}}]} != {'device_id': '6addac72-3929-43ef-a328-f277ba42b92b', 'kind': 'select', 'state_value': 'b', 'label': 'B', 'mode': 'additive', 'actions': [{'action': 'test.local_b2', 'data': {'source': 'local', 'edited': True}}], 'enabled': False, 'conditions': [{'condition': 'state', 'entity_id': 'sun.sun', 'state': 'above_horizon'}]}
+E         Use -v to get more diff
+
+tests/test_local_actions_lifecycle.py:292: AssertionError</failure></testcase></testsuite></testsuites>

@@ -249,7 +249,7 @@
       },
       "settings": {
         "title": "MQTT-Actions-Optionen",
-        "description": "Lege fest, was mit deinen Geräten passiert, wenn du diese Integration entfernst. Die Auswahl wird beim Entfernen gelesen, stelle sie also vor dem Entfernen der Integration ein. Außerdem kannst du einen optionalen MQTT-Discovery-Export deiner Geräte für externe Verbraucher einschalten, die nicht Home Assistant sind.",
+        "description": "Lege fest, was mit deinen Geräten passiert, wenn du diese Integration entfernst. Die Auswahl wird beim Entfernen gelesen, stelle sie also vor dem Entfernen der Integration ein. Beim Entfernen dieser Integration werden in jedem Fall auch lokale Aktionen für {local_action_device_count} Geräte auf dieser Instanz gelöscht. Außerdem kannst du einen optionalen MQTT-Discovery-Export deiner Geräte für externe Verbraucher einschalten, die nicht Home Assistant sind.",
         "data": {
           "delete_devices_on_remove": "Alle Geräte löschen, wenn diese Integration entfernt wird",
           "discovery_export": "MQTT-Discovery-Export veröffentlichen",

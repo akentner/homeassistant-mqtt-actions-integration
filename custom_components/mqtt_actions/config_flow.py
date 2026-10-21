@@ -65,6 +65,7 @@ from .manager import (
     LocalActionError,
     LocalActionTrigger,
     Manager,
+    async_local_action_device_count,
 )
 from .model import invalid_name, validate_breaker, validate_option
 from .topics import InvalidBaseTopic, validate_base_topic
@@ -200,7 +201,12 @@ class HubOptionsFlow(OptionsFlow):
         return self.async_show_menu(step_id="init", menu_options=["settings", "local_actions"])
 
     async def async_step_settings(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Show the delete choice, the export switch and the export prefix, and store what is submitted."""
+        """
+        Show the delete choice, the export switch and the export prefix, and store what is submitted.
+
+        The description warns how many devices lose their local actions when the hub is removed, in either removal
+        mode (D-08); the count is read again each time the form is shown.
+        """
         errors: dict[str, str] = {}
         if user_input is not None:
             options: dict[str, Any] = {
@@ -233,10 +239,12 @@ class HubOptionsFlow(OptionsFlow):
         if user_input is not None:
             # A refused submit shows what the user typed, not the stored values
             suggested.update(user_input)
+        local_devices = await async_local_action_device_count(self.hass, self.config_entry)
         return self.async_show_form(
             step_id="settings",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
             errors=errors,
+            description_placeholders={"local_action_device_count": str(local_devices)},
         )
 
     # --- local actions of mirrored devices (D-06, D-11 to D-16) -------------------------------------------------

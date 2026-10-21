@@ -249,7 +249,7 @@
       },
       "settings": {
         "title": "MQTT Actions options",
-        "description": "Choose what happens to your devices when you remove this integration. The choice is read at the moment of removal, so set it before you remove the integration. You can also switch on an optional MQTT Discovery export of your devices for external consumers that are not Home Assistant.",
+        "description": "Choose what happens to your devices when you remove this integration. The choice is read at the moment of removal, so set it before you remove the integration. Removing this integration also deletes the local actions of {local_action_device_count} devices on this instance, in either case. You can also switch on an optional MQTT Discovery export of your devices for external consumers that are not Home Assistant.",
         "data": {
           "delete_devices_on_remove": "Delete all devices when this integration is removed",
           "discovery_export": "Publish an MQTT Discovery export",

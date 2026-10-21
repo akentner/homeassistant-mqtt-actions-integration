@@ -126,6 +126,16 @@ class LocalActionsStore(Store[dict[str, Any]]):
             self._records = snapshot
             return copy_local_records(snapshot)
 
+    async def async_close(self) -> None:
+        """
+        Refuse every later save until the next load; called when the Manager stops (T-11-28).
+
+        A save already running finishes first, because both take the lock. After that a late callback of a stopped
+        Manager cannot write, so a hub removal that deletes the file cannot see it come back.
+        """
+        async with self._lock:
+            self._loaded = False
+
     async def async_remove_records(self) -> None:
         """
         Remove this Store's file and forget its records; no other key is touched. Raise LocalActionsStoreError.

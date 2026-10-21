@@ -16,7 +16,7 @@ from functools import partial
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.config_entries import ConfigSubentry
+from homeassistant.config_entries import ConfigEntryState, ConfigSubentry
 from homeassistant.const import ATTR_RESTORED
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
@@ -530,14 +530,27 @@ async def _async_clear_discovery_topics(
     return cleared and exported
 
 
-async def async_remove_local_state(hass: HomeAssistant, entry: ConfigEntry, *, store_key: str = STORE_KEY) -> None:  # noqa: ARG001
+async def async_remove_local_state(
+    hass: HomeAssistant,
+    entry: ConfigEntry,  # noqa: ARG001
+    *,
+    store_key: str = STORE_KEY,
+    local_store_key: str = LOCAL_ACTIONS_STORE_KEY,
+) -> None:
     """
-    Forget everything this instance keeps locally: the Store and every integration issue (D-11).
+    Forget everything this instance keeps locally: both Stores and every integration issue (D-08, D-11).
 
-    Both hub removal modes end here; nothing is published. `store_key` is a test seam like the Manager constructor
-    parameters: production passes nothing.
+    Both hub removal modes end here, for a loaded and an unloaded hub alike, because Home Assistant always unloads the
+    entry first; nothing is published. The local actions Store goes even when the shared devices stay on the broker
+    (D-08), and its issues go with the per-device prefixes. A failure to delete the local file is logged and does not
+    keep the issues. `store_key` and `local_store_key` are test seams like the Manager constructor parameters:
+    production passes neither.
     """
     await Store(hass, STORE_VERSION, store_key).async_remove()
+    try:
+        await LocalActionsStore(hass, local_store_key).async_remove_records()
+    except LocalActionsStoreError as err:
+        LOGGER.warning("The local actions could not be deleted: %s", type(err.__cause__ or err).__name__)
     # One issue per instance each, so they go by id; the per-device families go by prefix
     instance_issues = {
         ISSUE_DISCOVERY_DISABLED,
@@ -557,14 +570,15 @@ async def async_remove_all_devices(
     *,
     gateway: MqttGateway | None = None,
     store_key: str = STORE_KEY,
+    local_store_key: str = LOCAL_ACTIONS_STORE_KEY,
 ) -> None:
     """
     Delete-everywhere mode of the hub removal (D-11): clear everything this instance published and forget local state.
 
     Only used when the user chose deletion in the hub options before removing the hub; the default keeps every device
     retained on the broker. Called when no manager exists any more. The scope is the ids this instance published
-    (persisted set) plus the current subentries, plus its availability topic; the local state goes last. `gateway` and
-    `store_key` are test seams: production passes neither.
+    (persisted set) plus the current subentries, plus its availability topic; the local state goes last. `gateway`,
+    `store_key` and `local_store_key` are test seams: production passes none of them.
     """
     store: Store[dict[str, Any]] = Store(hass, STORE_VERSION, store_key)
     stored = await store.async_load() or {}
@@ -581,7 +595,27 @@ async def async_remove_all_devices(
         partial(publisher.async_publish_availability, entry.data[CONF_INSTANCE_ID], AvailabilityState.CLEARED),
         "clear the instance availability",
     )
-    await async_remove_local_state(hass, entry, store_key=store_key)
+    await async_remove_local_state(hass, entry, store_key=store_key, local_store_key=local_store_key)
+
+
+async def async_local_action_device_count(
+    hass: HomeAssistant, entry: ConfigEntry, *, local_store_key: str = LOCAL_ACTIONS_STORE_KEY
+) -> int:
+    """
+    Return how many distinct devices have saved local actions on this instance, for the removal warning (D-08).
+
+    Devices, not triggers or action steps, and orphan-only devices count too. A loaded hub answers from the Manager's
+    records, which equal the file; an unloaded hub reads the file. A file that cannot be read counts as none, the
+    same as for a starting Manager. Counts only: no record leaves this function.
+    """
+    if entry.state is ConfigEntryState.LOADED and isinstance(manager := getattr(entry, "runtime_data", None), Manager):
+        return manager.local_action_counts().devices
+    try:
+        records = await LocalActionsStore(hass, local_store_key).async_load_records()
+    except (HomeAssistantError, ValueError) as err:
+        LOGGER.warning("The local actions could not be read to count them: %s", type(err).__name__)
+        return 0
+    return len({record.identity.device_id for record in records})
 
 
 class Manager:
@@ -1067,6 +1101,8 @@ class Manager:
             self.sync.async_stop()
             self.presence.async_stop()
             self.retrigger.async_stop()
+            # Every local record is already durable; a late save of a stopped Manager must not recreate a removed file
+            await self._local_store.async_close()
             await self._store.async_save(self._data_to_save())
             for device in [*self.devices.values(), *self.mirrors.values()]:
                 if device.unsubscribe is not None:

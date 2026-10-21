@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.022" timestamp="2026-10-21T04:20:08.042899+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_flow" name="test_picker_labels_show_the_mode_and_inactive_markers_directly" time="0.874"><failure message="AssertionError: assert {'0f0e0d0c-0b...100', 'Scene'} == {'0f0e0d0c-0b...or&gt;', 'Scene'}&#10;  &#10;  Extra items in the left set:&#10;  '0f0e0d0c-0b0a-4908-8706-050403020100'&#10;  Extra items in the right set:&#10;  '0f0e0d0c-0b0a-4908-8706-050403020100 — &lt;missing no_mirror&gt;'&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140519799005136'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...0100', 'kind': 'switch', 'label': 'ON', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fcd597fd4e0&gt;
+
+    async def test_picker_labels_show_the_mode_and_inactive_markers_directly(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """D-11, D-12, D-16: additional, instead-of, muted, orphan and kind-mismatch markers; orphan-only devices listed."""
+        spec = make_spec(
+            SUBENTRY_SELECT,
+            name="Scene",
+            options=[("cozy", "Gemütlich", []), ("bright", "Hell", []), ("calm", "Ruhig", [])],
+        )
+        _seed_local_store(
+            hass_storage,
+            [
+                _row(spec.device_id, SUBENTRY_SELECT, "cozy", "Gemütlich", "additive", LOCAL_ON),
+                _row(spec.device_id, SUBENTRY_SELECT, "bright", "Hell", "replacement", LOCAL_ON),
+                _row(spec.device_id, SUBENTRY_SELECT, "party", "Party", "replacement", []),
+                _row(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON, "Old switch", "additive", LOCAL_ON),
+                _row(ORPHAN_DEVICE, SUBENTRY_SWITCH, PAYLOAD_ON, PAYLOAD_ON, "additive", LOCAL_ON),
+            ],
+        )
+        entry = await _mirror(hass, make_hub_entry, spec)
+        marker = {key: _marker(key) for key in ("additive", "replacement", "muted", "orphan", "kind_mismatch", "no_mirror")}
+    
+        menu = await hass.config_entries.options.async_init(entry.entry_id)
+        devices = await _configure(hass, menu, {"next_step_id": "local_actions"})
+&gt;       assert set(_options(devices, "device").values()) == {"Scene", f"{ORPHAN_DEVICE} — {marker['no_mirror']}"}
+E       AssertionError: assert {'0f0e0d0c-0b...100', 'Scene'} == {'0f0e0d0c-0b...or&gt;', 'Scene'}
+E         
+E         Extra items in the left set:
+E         '0f0e0d0c-0b0a-4908-8706-050403020100'
+E         Extra items in the right set:
+E         '0f0e0d0c-0b0a-4908-8706-050403020100 — &lt;missing no_mirror&gt;'
+E         Use -v to get more diff
+
+tests/test_local_actions_flow.py:351: AssertionError</failure></testcase></testsuite></testsuites>

@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 
 from custom_components.mqtt_actions.const import DOMAIN, PAYLOAD_OFF, PAYLOAD_ON, SUBENTRY_SELECT, SUBENTRY_SWITCH
 from custom_components.mqtt_actions.local_actions import LocalActionMode, local_trigger_identity
+from custom_components.mqtt_actions.model import trigger_key
 from custom_components.mqtt_actions.topics import state_topic
 from tests.documents import document_payload, make_spec
 from tests.helpers import BASE, deliver_config, manager_of, setup_entry
@@ -281,3 +282,228 @@ async def test_trigger_labels_follow_the_language_of_the_instance(
     label = _options(picker, "trigger")[_value(picker, "trigger", PAYLOAD_ON)]
     assert label == f"{PAYLOAD_ON} — {_flat('de')['selector.local_trigger_status.options.additive']}"
     assert label != f"{PAYLOAD_ON} — {ADDITIONAL_EN}"
+
+
+# --- Task 2: direct markers, mute and removal confirmations, orphans and cancellation (D-12 to D-16) ---------------
+
+LOCAL_STORE_KEY = "mqtt_actions.local_actions"
+# A device id of the valid shape that no mirror uses: a device known only from its saved records
+ORPHAN_DEVICE = "0f0e0d0c-0b0a-4908-8706-050403020100"
+
+
+def _row(device_id: str, kind: str, state_value: str, label: str, mode: str, actions: list[Any]) -> dict[str, Any]:
+    return {
+        "device_id": device_id,
+        "kind": kind,
+        "state_value": state_value,
+        "label": label,
+        "mode": mode,
+        "actions": actions,
+    }
+
+
+def _seed_local_store(hass_storage: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    """Write local records as an HA Store v1 envelope under the production local key."""
+    hass_storage[LOCAL_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": LOCAL_STORE_KEY,
+        "data": {"records": rows},
+    }
+
+
+def _marker(key: str) -> str:
+    """Return the English marker text of a trigger label; a missing text shows as the bare key."""
+    return _flat("en").get(f"selector.local_trigger_status.options.{key}", f"<missing {key}>")
+
+
+def _record(entry: MockConfigEntry, device_id: str, state_value: str) -> Any:
+    """Return the saved record of the trigger with `state_value`, None without one."""
+    rows = manager_of(entry).local_action_triggers(device_id)
+    (row,) = (row for row in rows if row.state_value == state_value)
+    return row.record
+
+
+async def test_picker_labels_show_the_mode_and_inactive_markers_directly(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-11, D-12, D-16: additional, instead-of, muted, orphan and kind-mismatch markers; orphan-only devices listed."""
+    spec = make_spec(
+        SUBENTRY_SELECT,
+        name="Scene",
+        options=[("cozy", "Gemütlich", []), ("bright", "Hell", []), ("calm", "Ruhig", [])],
+    )
+    _seed_local_store(
+        hass_storage,
+        [
+            _row(spec.device_id, SUBENTRY_SELECT, "cozy", "Gemütlich", "additive", LOCAL_ON),
+            _row(spec.device_id, SUBENTRY_SELECT, "bright", "Hell", "replacement", LOCAL_ON),
+            _row(spec.device_id, SUBENTRY_SELECT, "party", "Party", "replacement", []),
+            _row(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON, "Old switch", "additive", LOCAL_ON),
+            _row(ORPHAN_DEVICE, SUBENTRY_SWITCH, PAYLOAD_ON, PAYLOAD_ON, "additive", LOCAL_ON),
+        ],
+    )
+    entry = await _mirror(hass, make_hub_entry, spec)
+    marker = {key: _marker(key) for key in ("additive", "replacement", "muted", "orphan", "kind_mismatch", "no_mirror")}
+
+    menu = await hass.config_entries.options.async_init(entry.entry_id)
+    devices = await _configure(hass, menu, {"next_step_id": "local_actions"})
+    assert set(_options(devices, "device").values()) == {"Scene", f"{ORPHAN_DEVICE} — {marker['no_mirror']}"}
+
+    picker = await _configure(hass, devices, {"device": spec.device_id})
+    assert set(_options(picker, "trigger").values()) == {
+        f"Gemütlich (cozy) — {marker['additive']}",
+        f"Hell (bright) — {marker['replacement']}",
+        "Ruhig (calm)",
+        f"Party (party) — {marker['muted']} — {marker['orphan']}",
+        f"Old switch (ON) — {marker['additive']} — {marker['kind_mismatch']}",
+    }
+
+    orphan_picker = await _open_device(hass, entry, ORPHAN_DEVICE)
+    assert set(_options(orphan_picker, "trigger").values()) == {
+        f"{PAYLOAD_ON} — {marker['additive']} — {marker['no_mirror']}"
+    }
+    for language in ("en", "de"):
+        flat = _flat(language)
+        assert all(flat.get(f"selector.local_trigger_status.options.{key}") for key in marker), language
+
+
+async def test_empty_replacement_needs_the_mute_confirmation_before_any_save(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-15: Instead of with no actions asks a dedicated mute confirmation; going back keeps the draft (T-11-25)."""
+    spec = make_spec(name="*Lamp*")
+    entry = await _mirror(hass, make_hub_entry, spec)
+    picker = await _open_device(hass, entry, "*Lamp*")
+    editor = await _configure(hass, picker, {"trigger": _value(picker, "trigger", PAYLOAD_ON)})
+    assert editor["description_placeholders"]["device"] == "\\*Lamp\\*", "broker names are escaped (T-11-26)"
+
+    confirm = await _configure(hass, editor, _edit_input("replacement", []))
+
+    assert confirm["type"] is FlowResultType.MENU
+    assert confirm["step_id"] == "local_actions_confirm_mute"
+    assert list(confirm["menu_options"]) == [
+        "local_actions_mute_confirmed",
+        "local_actions_edit",
+        "local_actions_device",
+    ]
+    assert confirm["description_placeholders"]["device"] == "\\*Lamp\\*"
+    assert _record(entry, spec.device_id, PAYLOAD_ON) is None, "nothing is saved before the confirmation"
+
+    again = await _configure(hass, confirm, {"next_step_id": "local_actions_edit"})
+    assert again["step_id"] == "local_actions_edit"
+    assert _section_suggested(again) == {"mode": "replacement", "actions": []}, "back to the editor keeps the draft"
+    confirm = await _configure(hass, again, _edit_input("replacement", []))
+    back = await _configure(hass, confirm, {"next_step_id": "local_actions_mute_confirmed"})
+
+    assert back["step_id"] == "local_actions_device"
+    record = _record(entry, spec.device_id, PAYLOAD_ON)
+    assert record is not None
+    assert record.mode is LocalActionMode.REPLACEMENT
+    assert record.actions == []
+    muted = _marker("muted")
+    assert _options(back, "trigger")[_value(back, "trigger", PAYLOAD_ON)] == f"{PAYLOAD_ON} — {muted}"
+
+
+async def test_removal_has_its_own_confirmation_and_restores_owner_only(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """D-14: Remove local customization is a separate entry and confirmation; it deletes, it never mutes."""
+    spec = make_spec(name="Lamp")
+    entry = await _mirror(hass, make_hub_entry, spec)
+    identity = local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON)
+    await manager_of(entry).async_set_local_action(identity, LocalActionMode.REPLACEMENT, [])
+    picker = await _open_device(hass, entry, "Lamp")
+
+    menu = await _configure(hass, picker, {"trigger": _value(picker, "trigger", PAYLOAD_ON)})
+    assert list(menu["menu_options"]) == ["local_actions_edit", "local_actions_confirm_remove", "local_actions_device"]
+    confirm = await _configure(hass, menu, {"next_step_id": "local_actions_confirm_remove"})
+    assert confirm["type"] is FlowResultType.MENU
+    assert confirm["step_id"] == "local_actions_confirm_remove"
+    assert list(confirm["menu_options"]) == ["local_actions_remove_confirmed", "local_actions_device"]
+
+    kept = await _configure(hass, confirm, {"next_step_id": "local_actions_device"})
+    assert kept["step_id"] == "local_actions_device"
+    assert _record(entry, spec.device_id, PAYLOAD_ON) is not None, "keeping it changes nothing"
+
+    menu = await _configure(hass, kept, {"trigger": _value(kept, "trigger", PAYLOAD_ON)})
+    confirm = await _configure(hass, menu, {"next_step_id": "local_actions_confirm_remove"})
+    back = await _configure(hass, confirm, {"next_step_id": "local_actions_remove_confirmed"})
+
+    assert back["step_id"] == "local_actions_device"
+    assert _record(entry, spec.device_id, PAYLOAD_ON) is None, "removed, not an empty replacement"
+    assert _options(back, "trigger")[_value(back, "trigger", PAYLOAD_ON)] == PAYLOAD_ON
+
+
+async def test_cancelling_a_draft_keeps_earlier_saved_triggers(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-13: discarding or closing drops only the unsaved draft; saved triggers and the local Store stay."""
+    spec = make_spec(SUBENTRY_SELECT, name="Scene", options=[("cozy", "Gemütlich", []), ("bright", "Hell", [])])
+    entry = await _mirror(hass, make_hub_entry, spec)
+    picker = await _open_device(hass, entry, "Scene")
+    editor = await _configure(hass, picker, {"trigger": _value(picker, "trigger", "Gemütlich")})
+    picker = await _configure(hass, editor, _edit_input("additive", LOCAL_ON))
+    saved = json.dumps(hass_storage[LOCAL_STORE_KEY]["data"], sort_keys=True)
+
+    editor = await _configure(hass, picker, {"trigger": _value(picker, "trigger", "Hell")})
+    confirm = await _configure(hass, editor, _edit_input("replacement", []))
+    picker = await _configure(hass, confirm, {"next_step_id": "local_actions_device"})
+
+    assert picker["step_id"] == "local_actions_device"
+    assert _record(entry, spec.device_id, "bright") is None, "the discarded draft never reached the Manager"
+    editor = await _configure(hass, picker, {"trigger": _value(picker, "trigger", "Hell")})
+    assert _section_suggested(editor) == {"mode": "additive", "actions": []}, "a discarded draft is gone"
+
+    # Closing the dialog in the middle of an edit drops that edit only
+    hass.config_entries.options.async_abort(editor["flow_id"])
+    await hass.async_block_till_done()
+
+    assert json.dumps(hass_storage[LOCAL_STORE_KEY]["data"], sort_keys=True) == saved
+    record = _record(entry, spec.device_id, "cozy")
+    assert record is not None
+    assert record.actions == LOCAL_ON
+    assert entry.options == {}
+
+
+async def test_editing_an_orphan_saves_it_but_never_activates_it(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-12: an orphaned option can be edited; it stays inactive until the owner offers the StateValue again."""
+    spec = make_spec(SUBENTRY_SELECT, name="Scene", options=[("cozy", "Gemütlich", []), ("bright", "Hell", [])])
+    _seed_local_store(hass_storage, [_row(spec.device_id, SUBENTRY_SELECT, "party", "Party", "replacement", [])])
+    entry = await _mirror(hass, make_hub_entry, spec)
+    picker = await _open_device(hass, entry, "Scene")
+
+    menu = await _configure(hass, picker, {"trigger": _value(picker, "trigger", "Party")})
+    assert menu["step_id"] == "local_actions_trigger"
+    editor = await _configure(hass, menu, {"next_step_id": "local_actions_edit"})
+    back = await _configure(hass, editor, _edit_input("additive", LOCAL_ON))
+
+    assert back["step_id"] == "local_actions_device"
+    rows = manager_of(entry).local_action_triggers(spec.device_id)
+    (orphan,) = (row for row in rows if row.state_value == "party")
+    assert orphan.present is False
+    assert orphan.record is not None
+    assert orphan.record.mode is LocalActionMode.ADDITIVE
+    assert manager_of(entry).runner.can_run(spec.device_id, trigger_key("party")) is False, "an orphan never runs"
+    orphan_marker = _marker("orphan")
+    assert _options(back, "trigger")[_value(back, "trigger", "Party")].endswith(orphan_marker)
+
+
+async def test_invalid_local_actions_show_a_base_error_and_save_nothing(
+    hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
+) -> None:
+    """The Manager validates the raw selector data; a refusal is a base error with the capped message (11-02)."""
+    spec = make_spec(name="Lamp")
+    entry = await _mirror(hass, make_hub_entry, spec)
+    picker = await _open_device(hass, entry, "Lamp")
+    editor = await _configure(hass, picker, {"trigger": _value(picker, "trigger", PAYLOAD_ON)})
+
+    refused = await _configure(hass, editor, _edit_input("additive", [{"action": "not_a_service"}]))
+
+    assert refused["step_id"] == "local_actions_edit"
+    assert refused["errors"] == {"base": "invalid_local_actions"}
+    assert 0 < len(refused["description_placeholders"]["error"]) <= 200, "the validation message is capped"
+    assert _section_suggested(refused) == {"mode": "additive", "actions": [{"action": "not_a_service"}]}
+    assert _record(entry, spec.device_id, PAYLOAD_ON) is None

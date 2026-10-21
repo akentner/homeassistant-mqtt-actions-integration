@@ -366,7 +366,9 @@ data:
   device stays inactive and is marked as saved for another device type.
 - **Newer versions.** Local actions that a newer version of MQTT Actions saved in a form this version cannot read stay
   in the file unchanged. This version neither applies nor shows them, and saving here keeps them. They apply again
-  after an upgrade to a version that reads them.
+  after an upgrade to a version that reads them. A local customization that this version can read but that carries
+  settings it does not know is applied without those settings, and saving here keeps those settings unchanged.
+  Starting this version or opening its settings never rewrites the file.
 - **Start and prune.** Nothing is discarded when Home Assistant starts or when a mirror is pruned because its document
   was not seen again: the local actions are kept and apply again when the mirror returns. A device that has local
   actions but no mirror right now stays in the device list, marked as not mirrored, so you can remove them.

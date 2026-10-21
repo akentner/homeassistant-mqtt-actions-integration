@@ -54,6 +54,10 @@ Implement MIR-01 to MIR-15: followers configure local actions per trigger of mir
 - **D-07 extended (WR-03):** A payload without a record list, or a missing file next to a Home Assistant `.corrupt` copy, counts as unreadable: issue raised, no overlay, saves refused. Stored rows this release cannot parse are kept unchanged on every save.
 - **D-08 extended (WR-04):** When the saved local actions cannot be read, the removal settings show a dedicated warning, in English and German, that they cannot be read and will be deleted, instead of a device count.
 
+### Amendments (owner decision 2026-10-21, re-verification WR-05 and WR-06)
+- **D-07 extended (WR-05):** Loading the local Store never writes it, whatever version it carries. A row this release can parse but that carries keys it does not know is applied as before, and its unknown keys are kept and written back unchanged on every save: an edit, the removal of another record, a D-11 label refresh, an adoption discard or restore.
+- **D-19 amended (WR-06):** A failure reported for a trigger whose saved customization has no local actions (a mute or an empty additive list saved while a run was in flight) is dropped. Saving that trigger without local actions therefore ends its local failure issue, also for a run in flight.
+
 ### Implementation discretion
 - Exact Store key/schema and migration mechanics, module/API names, plan splits, bounded diagnostics counts and translated wording are implementation details, subject to the decisions above.
 - Research must select and justify safe local execution defaults under MIR-11. No numerical defaults were chosen in this discussion.

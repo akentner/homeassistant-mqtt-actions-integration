@@ -1012,3 +1012,113 @@ async def test_tombstone_and_completed_adoption_delete_the_local_failure_issue(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert adopted.device_id in manager.devices
     assert _local_issue(hass, adopted.device_id) is None, "a completed adoption deletes the issue"
+
+
+# --- Plan 11-14 Task 2: a start deletes a local failure issue whose record is gone (D-05, D-19, T-11-40) --------------
+
+STALE_DEVICE = "1a2b3c4d-5e6f-4a0b-8c1d-2e3f4a5b6c7d"
+LEFTOVER_DEVICE = "7d6c5b4a-3f2e-4d1c-8b0a-6f5e4d3c2b1a"
+SEEDED_PLACEHOLDERS = {"device": "Lamp", "trigger": "onChangeToOn", "time": "2026-10-21T00:00:00+00:00", "error": "x"}
+
+
+def _persistent_issue_row(device_id: str, state_value: str = PAYLOAD_ON) -> dict[str, Any]:
+    """Return the stored row of a persistent local failure issue naming the switch trigger `state_value`."""
+    identity = local_trigger_identity(device_id, SUBENTRY_SWITCH, state_value)
+    return {
+        "created": "2026-10-21T00:00:00+00:00",
+        "dismissed_version": None,
+        "domain": DOMAIN,
+        "is_persistent": True,
+        "issue_id": f"{LOCAL_ISSUE_PREFIX}{device_id}",
+        "breaks_in_ha_version": None,
+        "data": {"kind": identity.kind, "state_value": identity.state_value},
+        "is_fixable": False,
+        "issue_domain": None,
+        "learn_more_url": None,
+        "severity": "error",
+        "translation_key": "local_action_failed",
+        "translation_placeholders": dict(SEEDED_PLACEHOLDERS),
+    }
+
+
+def _leftover_issue_row(device_id: str) -> dict[str, Any]:
+    """Return the stored row of a non-persistent issue of the previous release: it reloads inactive with no data."""
+    return {
+        "created": "2026-10-21T00:00:00+00:00",
+        "dismissed_version": None,
+        "domain": DOMAIN,
+        "is_persistent": False,
+        "issue_id": f"{LOCAL_ISSUE_PREFIX}{device_id}",
+    }
+
+
+async def _seed_issues(hass: HomeAssistant, hass_storage: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    """Load the issue registry from a storage that holds `rows`, as a start of Home Assistant does."""
+    hass_storage[ir.STORAGE_KEY] = {
+        "version": ir.STORAGE_VERSION_MAJOR,
+        "minor_version": ir.STORAGE_VERSION_MINOR,
+        "key": ir.STORAGE_KEY,
+        "data": {"issues": rows},
+    }
+    await ir.async_get(hass).async_load()
+    for row in rows:
+        assert _local_issue(hass, row["issue_id"].removeprefix(LOCAL_ISSUE_PREFIX)) is not None, "premise: seeded"
+
+
+async def test_start_deletes_a_local_failure_issue_whose_record_is_gone(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-19: after a successful local load, an issue whose trigger has no saved record can never clear, so it goes."""
+    _seed_local(hass_storage, [_row_data(OTHER_DEVICE)])
+    await _seed_issues(
+        hass,
+        hass_storage,
+        [
+            _persistent_issue_row(STALE_DEVICE),
+            _persistent_issue_row(OTHER_DEVICE, PAYLOAD_OFF),
+            _leftover_issue_row(LEFTOVER_DEVICE),
+        ],
+    )
+
+    await setup_entry(hass, make_hub_entry())
+
+    assert _local_issue(hass, STALE_DEVICE) is None, "an issue whose device has no record is deleted at start"
+    assert _local_issue(hass, OTHER_DEVICE) is None, "an issue whose trigger has no record is deleted at start"
+    assert _local_issue(hass, LEFTOVER_DEVICE) is None, "an inactive leftover without identity is deleted at start"
+
+
+async def test_start_keeps_a_local_failure_issue_whose_record_exists(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-05, D-19: an issue whose record exists stays, also for an orphan record; the start writes no record."""
+    _seed_local(hass_storage, [_row_data(OTHER_DEVICE)])
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+    await _seed_issues(hass, hass_storage, [_persistent_issue_row(OTHER_DEVICE)])
+
+    manager = manager_of(await setup_entry(hass, make_hub_entry()))
+
+    assert OTHER_DEVICE not in manager.mirrors, "premise: the record is an orphan, no mirror exists"
+    issue = _local_issue(hass, OTHER_DEVICE)
+    assert issue is not None, "an issue whose record exists survives the start"
+    assert issue.active is True
+    assert issue.translation_placeholders == SEEDED_PLACEHOLDERS
+    assert hass_storage[LOCAL_STORE_KEY] == before, "the start changes no local record"
+
+
+async def test_refused_local_load_keeps_every_local_failure_issue(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-11-40, D-05: a refused local load proves nothing about the records, so no local failure issue is deleted."""
+    hass_storage[LOCAL_STORE_KEY] = {
+        "version": 2,
+        "minor_version": 1,
+        "key": LOCAL_STORE_KEY,
+        "data": {"records": [_row_data(OTHER_DEVICE)]},
+    }
+    await _seed_issues(hass, hass_storage, [_persistent_issue_row(STALE_DEVICE), _leftover_issue_row(LEFTOVER_DEVICE)])
+
+    manager = manager_of(await setup_entry(hass, make_hub_entry()))
+
+    assert manager.local_action_counts().records == 0, "premise: the newer local Store was refused"
+    assert _local_issue(hass, STALE_DEVICE) is not None, "a refused load deletes no local failure issue"
+    assert _local_issue(hass, LEFTOVER_DEVICE) is not None, "a refused load deletes no leftover issue either"

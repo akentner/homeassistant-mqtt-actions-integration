@@ -2707,6 +2707,9 @@ class Manager:
         device_id = device.device_id
         if not self.runner.can_run(device_id, trigger.key):
             return
+        # A pause stops local actions on every entry point (MIR-09); owner-only test presses keep bypassing it (D-13)
+        if device.breaker.tripped and self.runs_local(device_id, trigger.key):
+            return
         self.runner.enqueue(
             device_id,
             device.name,
@@ -2715,6 +2718,18 @@ class Manager:
             {"device_id": device_id, "state": trigger.value},
             test=True,
         )
+
+    def runs_local(self, device_id: str, key: str) -> bool:
+        """Return True when the current Script of the device runs local actions for the trigger."""
+        plan = self.runner.plan_for(device_id, key)
+        return plan is not None and plan.local_path is not None
+
+    def mutes_trigger(self, device_id: str, key: str) -> bool:
+        """Return True when an active local replacement without actions mutes the trigger of a mirror (D-14)."""
+        if (mirror := self.mirrors.get(device_id)) is None or (trigger := mirror.spec.triggers.get(key)) is None:
+            return False
+        record = self._local_record(local_trigger_identity(device_id, mirror.spec.kind, trigger.value))
+        return record is not None and record.mode is LocalActionMode.REPLACEMENT and not record.actions
 
     @staticmethod
     def _log_ignored(device: Device, payload: str) -> None:

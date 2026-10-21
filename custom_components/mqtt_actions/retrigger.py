@@ -438,6 +438,9 @@ class RetriggerCoordinator:
         if trigger is None:
             return ACK_ERROR, REASON_NOT_RUNNABLE
         if not manager.runner.can_run(device.device_id, trigger.key):
+            # A muted trigger runs nothing whatever the approval of the owner says (D-03, D-14)
+            if manager.mutes_trigger(device.device_id, trigger.key):
+                return ACK_ERROR, REASON_NO_ACTIONS
             if manager.approval_state(device.device_id) in {ApprovalState.PENDING, ApprovalState.BLOCKED}:
                 return ACK_NOT_APPROVED, None
             return ACK_ERROR, REASON_NOT_RUNNABLE if trigger.actions else REASON_NO_ACTIONS

@@ -1176,6 +1176,134 @@ async def test_failure_outcome_of_a_removed_customization_raises_no_local_issue(
     assert _local_issue(hass, spec.device_id) is None
 
 
+# --- Plan 11-25 Task 1: a run in flight cannot re-open the issue a save without local actions ended (WR-06) ----------
+
+# A failing local step that continues, then a delay that keeps the run in flight until a rebuild cancels it
+IN_FLIGHT_FAILING_ON = [
+    {"action": "test.flaky", "data": {"which": "on"}, "continue_on_error": True},
+    {"delay": {"seconds": 30}},
+]
+
+
+async def _start_in_flight_failing_run(hass: HomeAssistant, manager: Manager, spec: DeviceSpec) -> Flaky:
+    """Start a local ON run that has already failed once and waits in its delay; return the failing service."""
+    flaky = Flaky(hass, "on")
+    async_mock_service(hass, "test", "owner_on")
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, IN_FLIGHT_FAILING_ON)
+    async_fire_mqtt_message(hass, state_topic(BASE, spec.device_id), PAYLOAD_ON, retain=False)
+    # The run parks in its 30 s delay and Home Assistant's block_till_done waits for it, so only yield to the loop
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        if flaky.calls == ["on"]:
+            break
+    assert flaky.calls == ["on"], "premise: the local run started and its failing step ran once"
+    return flaky
+
+
+def _hold_local_outcomes(manager: Manager) -> list[BranchOutcome]:
+    """
+    Hold the local outcomes the runner reports instead of handing them to the manager; return the held list.
+
+    The runner delivers the outcome of a cancelled run when its task resumes. Whether that happens before or after
+    the save returns depends on event loop ordering, so the test fixes the order the defect needs: after the save.
+    """
+    held: list[BranchOutcome] = []
+    manager.runner.on_local_outcome = held.append
+    return held
+
+
+def _deliver_held_outcomes(manager: Manager, held: list[BranchOutcome]) -> None:
+    """Hand the held outcomes to the manager, as the runner does once the cancelled run has finished."""
+    for outcome in held:
+        manager.async_report_local_outcome(outcome)
+
+
+async def test_an_in_flight_failing_run_cannot_reopen_the_issue_after_a_mute_save(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-06, D-19 (amended), MIR-05: the cancelled run of a muted trigger must not re-open the issue."""
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    held = _hold_local_outcomes(manager)
+    await _start_in_flight_failing_run(hass, manager, spec)
+    on = local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON)
+
+    change = await manager.async_set_local_action(on, LocalActionMode.REPLACEMENT, [])
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _deliver_held_outcomes(manager, held)
+
+    assert change.record is not None
+    assert not change.record.actions, "premise: the saved ON record has no local actions"
+    assert [outcome.status for outcome in held] == [OutcomeStatus.FAILURE], "premise: the cancelled run reported it"
+    assert _local_issue(hass, spec.device_id) is None, "a stale failure of a run in flight must not re-open the issue"
+
+
+async def test_an_in_flight_failing_run_cannot_reopen_the_issue_after_emptying_the_additive_actions(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-06, D-19 (amended): the same for an additive record whose list was emptied while the run was in flight."""
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    held = _hold_local_outcomes(manager)
+    await _start_in_flight_failing_run(hass, manager, spec)
+    on = local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON)
+
+    change = await manager.async_set_local_action(on, LocalActionMode.ADDITIVE, [])
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _deliver_held_outcomes(manager, held)
+
+    assert change.record is not None
+    assert not change.record.actions, "premise: the saved ON record has no local actions"
+    assert [outcome.status for outcome in held] == [OutcomeStatus.FAILURE], "premise: the cancelled run reported it"
+    assert _local_issue(hass, spec.device_id) is None, "a stale failure of a run in flight must not re-open the issue"
+
+
+async def test_failure_outcome_of_a_customization_without_local_actions_raises_no_local_issue(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-06, T-11-64: a late failure for a record without local actions would never clear, so it is dropped."""
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    identity = local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON)
+    await manager.async_set_local_action(identity, LocalActionMode.REPLACEMENT, [])
+
+    manager.async_report_local_outcome(
+        BranchOutcome(
+            spec.device_id,
+            trigger_key(PAYLOAD_ON),
+            spec.triggers[trigger_key(PAYLOAD_ON)].label,
+            OutcomeStatus.FAILURE,
+            "late failure",
+            1,
+            identity=identity,
+            device_name=spec.name,
+        )
+    )
+
+    assert _local_issue(hass, spec.device_id) is None
+
+
+async def test_an_in_flight_failure_still_reports_while_its_trigger_has_local_actions(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-11-65, D-19: the bound of the guard; a save that keeps local actions still lets the real failure through."""
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    held = _hold_local_outcomes(manager)
+    await _start_in_flight_failing_run(hass, manager, spec)
+    async_mock_service(hass, "test", "local_on")
+    on = local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON)
+
+    await manager.async_set_local_action(on, LocalActionMode.ADDITIVE, LOCAL_ON)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    _deliver_held_outcomes(manager, held)
+
+    assert [outcome.status for outcome in held] == [OutcomeStatus.FAILURE], "premise: the cancelled run reported it"
+    assert _named_trigger(hass, spec.device_id) == escape_markdown(spec.triggers[trigger_key(PAYLOAD_ON)].label), (
+        "a trigger that still has local actions keeps the failure of its cancelled run"
+    )
+
+
 def test_local_failure_issue_family_is_a_separate_device_issue_prefix() -> None:
     """D-18: its own prefix, deleted with the device and the hub like every per-device issue family."""
     prefix = getattr(const_module, "ISSUE_LOCAL_ACTION_FAILED_PREFIX", None)

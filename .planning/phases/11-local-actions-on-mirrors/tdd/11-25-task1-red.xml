@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.070" timestamp="2026-10-21T11:51:45.216988+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_manager" name="test_an_in_flight_failing_run_cannot_reopen_the_issue_after_a_mute_save" time="0.920"><failure message="AssertionError: a stale failure of a run in flight must not re-open the issue&#10;assert IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 21, 9, 51, 46, 174264, tzinfo=d...Lamp', 'trigger': 'onChangeToOn', 'time': '2026-10-21T02:51:46-07:00', 'error': 'local \\*boom\\* \\[x\\](y) \\_z\\_'}) is None&#10; +  where IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 21, 9, 51, 46, 174264, tzinfo=d...Lamp', 'trigger': 'onChangeToOn', 'time': '2026-10-21T02:51:46-07:00', 'error': 'local \\*boom\\* \\[x\\](y) \\_z\\_'}) = _local_issue(&lt;HomeAssistant RUNNING&gt;, '56897551-7f0f-4610-83d8-82f12ab3c066')&#10; +    where '56897551-7f0f-4610-83d8-82f12ab3c066' = DeviceSpec(kind='switch', device_id='56897551-7f0f-4610-83d8-82f12ab3c066', name='Lamp', run_on_startup=False, run_mod... 'b4dc66dde806': TriggerSpec(value='OFF', key='b4dc66dde806', label='onChangeToOff', friendly_name='OFF', actions=[])}).device_id">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139758914578016'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...c066', 'kind': 'switch', 'label': 'ON', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f1c2a283c10&gt;
+
+    async def test_an_in_flight_failing_run_cannot_reopen_the_issue_after_a_mute_save(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """WR-06, D-19 (amended), MIR-05: the cancelled run of a muted trigger must not re-open the issue."""
+        spec = make_spec(on=OWNER_ON)
+        manager = await _pending_mirror(hass, make_hub_entry, spec)
+        held = _hold_local_outcomes(manager)
+        await _start_in_flight_failing_run(hass, manager, spec)
+        on = local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON)
+    
+        change = await manager.async_set_local_action(on, LocalActionMode.REPLACEMENT, [])
+        await hass.async_block_till_done(wait_background_tasks=True)
+        _deliver_held_outcomes(manager, held)
+    
+        assert change.record is not None
+        assert not change.record.actions, "premise: the saved ON record has no local actions"
+        assert [outcome.status for outcome in held] == [OutcomeStatus.FAILURE], "premise: the cancelled run reported it"
+&gt;       assert _local_issue(hass, spec.device_id) is None, "a stale failure of a run in flight must not re-open the issue"
+E       AssertionError: a stale failure of a run in flight must not re-open the issue
+E       assert IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 21, 9, 51, 46, 174264, tzinfo=d...Lamp', 'trigger': 'onChangeToOn', 'time': '2026-10-21T02:51:46-07:00', 'error': 'local \\*boom\\* \\[x\\](y) \\_z\\_'}) is None
+E        +  where IssueEntry(active=True, breaks_in_ha_version=None, created=datetime.datetime(2026, 10, 21, 9, 51, 46, 174264, tzinfo=d...Lamp', 'trigger': 'onChangeToOn', 'time': '2026-10-21T02:51:46-07:00', 'error': 'local \\*boom\\* \\[x\\](y) \\_z\\_'}) = _local_issue(&lt;HomeAssistant RUNNING&gt;, '56897551-7f0f-4610-83d8-82f12ab3c066')
+E        +    where '56897551-7f0f-4610-83d8-82f12ab3c066' = DeviceSpec(kind='switch', device_id='56897551-7f0f-4610-83d8-82f12ab3c066', name='Lamp', run_on_startup=False, run_mod... 'b4dc66dde806': TriggerSpec(value='OFF', key='b4dc66dde806', label='onChangeToOff', friendly_name='OFF', actions=[])}).device_id
+
+tests/test_local_actions_manager.py:1238: AssertionError</failure></testcase></testsuite></testsuites>

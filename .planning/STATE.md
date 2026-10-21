@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-10-21T00:11:43.501Z"
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-10-21T00:34:35.506Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: f82c95d5ade03ccb7df45da9bd642b56934dbe4e
+state_head: d766715c92f0894563a5f6cdd5e99fcb4714c1e9
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 49
-  completed_plans: 38
+  completed_plans: 39
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 3 of 13
+Plan: 4 of 13
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -153,6 +153,7 @@ Progress: [███████░░░] 67%
 | Phase 10 P10 | 8min | 2 tasks | 6 files |
 | Phase 11 P01 | 15 min | 3 tasks | 6 files |
 | Phase 11 P03 | 17 min | 3 tasks | 10 files |
+| Phase 11 P02 | 22 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -334,6 +335,10 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-03: async_build_effective is the mirror build entry; overlay-free mirrors delegate unchanged to the restricted build (or unload when unapproved); customized triggers run owner branch 0 and local branch 1 in one native parallel, guard on owner_path only
 - [Phase 11]: 11-03: local success needs no error under local_path, a proven run (current Script, latest generation, unchanged stop epoch, HA not stopping), no stop step and a reached non-false last local step; outcomes are delivered from finally because a cancelled dispatcher run raises CancelledError
 - [Phase 11]: 11-03: stored v1 local row {device_id, kind, state_value, label, mode, actions} is parse_local_record/local_record_data; identity device id + kind + strip/lower StateValue; LOCAL_SAFE_POLICY startup off, serial, 5/10 s, queue 10
+- [Phase 11]: 11-02: D-22 frontend gate PASS on Core 2026.9.4 / frontend 20260826.7 (human-approved 2026-10-21); 11-08 may build the options editor on section + ActionSelector
+- [Phase 11]: 11-02: 11-08 uses collapsed: False for the per-trigger section (a collapsed section re-folds after a base error)
+- [Phase 11]: 11-02: Action-list guidance goes into the section/step description; ActionSelector data_description is not rendered
+- [Phase 11]: 11-02: Local-action validation errors use errors[base]; Manager validation stays mandatory because ActionSelector passes raw frontend data
 
 ### Pending Todos
 
@@ -369,8 +374,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T00:11:43.257Z
-Stopped at: Completed 11-03-PLAN.md
+Last session: 2026-10-21T00:34:35.259Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

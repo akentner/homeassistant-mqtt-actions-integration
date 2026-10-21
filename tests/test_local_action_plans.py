@@ -1,9 +1,9 @@
 """
 The gate oracle of effective trigger plans: approval x local customization x owner actions (D-02, D-05, D-11, D-21).
 
-Pure data and a test-local reference rule, written before any Phase 11 production code. The module imports nothing from
-the integration, so it collects and passes on its own; Plan 11-03 binds every row to the production plan builder
-without changing a row.
+Pure data and a test-local reference rule, written before any Phase 11 production code (Plan 11-01). Plan 11-03 binds
+every row to the production plan builder `local_actions.build_effective_trigger_plan` without changing a row; the
+binding and the identity, mute, orphan, aliasing and policy tests sit below the self-checks.
 
 The 24 baseline rows are the full product of the three locked axes. In a baseline row a present customization is an
 active record with a non-empty local sequence. The separate rows cover what the baseline cannot express: an empty
@@ -20,10 +20,22 @@ Some pure combinations cannot happen end to end: a `no_actions` mirror never has
 defensive matrix keeps them; the integration tests only build reachable states.
 """
 
+import copy
 import itertools
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
+from typing import Any
 
 import pytest
+
+from custom_components.mqtt_actions import local_actions
+from custom_components.mqtt_actions.local_actions import (
+    LocalActionMode,
+    build_effective_trigger_plan,
+    build_effective_trigger_plans,
+    make_local_record,
+)
+from custom_components.mqtt_actions.model import TriggerSpec, trigger_key
+from tests.documents import make_spec
 
 # The approval words of a mirror (trust.ApprovalState), quoted rather than imported on purpose
 APPROVED = "approved"
@@ -287,3 +299,232 @@ def test_identity_normalizes_the_state_value_and_ignores_labels() -> None:
     assert reference_identity("dev-1", SELECT, " Cozy ") == reference_identity("dev-1", SELECT, "cozy")
     assert reference_identity("dev-1", SELECT, "cozy") != reference_identity("dev-2", SELECT, "cozy")
     assert reference_identity("dev-1", SELECT, "cozy") != reference_identity("dev-1", SELECT, "Gemuetlich")
+
+
+# --- the production binding (Plan 11-03): every row against build_effective_trigger_plan ----------------------------
+
+DEVICE = "dev-1"
+OWNER_SEQUENCE = [{"action": "test.owner", "data": {"nested": ["owner"]}}]
+LOCAL_SEQUENCE = [{"action": "test.local", "data": {"nested": ["local"]}}]
+
+
+def _bind(case: GateCase) -> Any:
+    """Build the production plan of one row: a Select option `cozy` and the row's record, if any."""
+    owner = copy.deepcopy(OWNER_SEQUENCE) if case.owner_trigger == OWNER_ACTIONS else []
+    trigger = TriggerSpec("cozy", trigger_key("cozy"), "Cozy", "Cozy", owner)
+    record = None
+    if case.customization != ABSENT:
+        record = make_local_record(
+            DEVICE,
+            SWITCH if case.record == KIND_MISMATCH else SELECT,
+            "gone" if case.record == ORPHAN else "cozy",
+            label="Cozy",
+            mode=LocalActionMode(case.customization),
+            actions=copy.deepcopy(LOCAL_SEQUENCE) if case.local_actions else [],
+        )
+    return build_effective_trigger_plan(DEVICE, SELECT, trigger, case.approval, record)
+
+
+@pytest.mark.parametrize("case", EXPECTED_GATE_CASES, ids=lambda case: case.case_id)
+def test_production_plan_matches_gate_row(case: GateCase) -> None:
+    plan = _bind(case)
+    assert (plan.owner_eligible, plan.local_eligible, str(plan.composition)) == (
+        case.owner_eligible,
+        case.local_eligible,
+        case.composition,
+    )
+    # D-04: a replacement leaves the owner approval word alone
+    assert plan.approval == case.approval
+
+
+@pytest.mark.parametrize("case", SEPARATE_GATE_CASES, ids=lambda case: case.case_id)
+def test_production_plan_matches_separate_row(case: GateCase) -> None:
+    plan = _bind(case)
+    assert (plan.owner_eligible, plan.local_eligible, str(plan.composition)) == (
+        case.owner_eligible,
+        case.local_eligible,
+        case.composition,
+    )
+    assert plan.approval == case.approval
+
+
+def test_production_identity_is_the_reference_identity() -> None:
+    """D-10: device id, kind and the strip/lower StateValue; the original value and label are kept apart."""
+    record = make_local_record(DEVICE, SELECT, " Cozy ", label="Gemuetlich", mode=LocalActionMode.ADDITIVE, actions=[])
+    assert astuple(record.identity) == reference_identity(DEVICE, SELECT, " Cozy ")
+    assert record.state_value == " Cozy "
+    assert record.label == "Gemuetlich"
+    assert local_actions.local_trigger_identity(DEVICE, SELECT, "COZY") == record.identity
+    assert local_actions.local_trigger_identity(DEVICE, SWITCH, "cozy") != record.identity
+
+
+@pytest.mark.parametrize(
+    "actions",
+    ["test.local", {"action": "test.local"}, [1], [["test.local"]], None, ("x",)],
+    ids=["string", "mapping", "int-item", "list-item", "none", "tuple"],
+)
+def test_make_local_record_refuses_a_malformed_action_list(actions: Any) -> None:
+    with pytest.raises(ValueError, match="actions"):
+        make_local_record(DEVICE, SELECT, "cozy", label="Cozy", mode=LocalActionMode.ADDITIVE, actions=actions)
+
+
+@pytest.mark.parametrize(
+    ("device_id", "kind", "state_value", "label", "mode"),
+    [
+        ("", SELECT, "cozy", "Cozy", ADDITIVE),
+        (DEVICE, "light", "cozy", "Cozy", ADDITIVE),
+        (DEVICE, SELECT, "  ", "Cozy", ADDITIVE),
+        (DEVICE, SELECT, "cozy", 7, ADDITIVE),
+        (DEVICE, SELECT, "cozy", "Cozy", "sometimes"),
+    ],
+    ids=["empty-device", "unknown-kind", "blank-state-value", "label-not-text", "unknown-mode"],
+)
+def test_make_local_record_refuses_malformed_fields(
+    device_id: str, kind: str, state_value: str, label: Any, mode: str
+) -> None:
+    with pytest.raises(ValueError):  # noqa: PT011 - the field named in the message differs per row
+        make_local_record(device_id, kind, state_value, label=label, mode=mode, actions=[])  # type: ignore[arg-type]
+
+
+def test_parse_local_record_reads_a_v1_row_and_refuses_malformed_rows() -> None:
+    row = {"device_id": DEVICE, "kind": SWITCH, "state_value": "ON", "label": "On", "mode": ADDITIVE, "actions": []}
+    record = local_actions.parse_local_record(row)
+    assert record.identity == local_actions.local_trigger_identity(DEVICE, SWITCH, "on")
+    assert record.mode is LocalActionMode.ADDITIVE
+    assert local_actions.local_record_data(record) == row
+    for broken in ({**row, "actions": "x"}, {**row, "mode": "x"}, {k: v for k, v in row.items() if k != "kind"}, []):
+        with pytest.raises(ValueError):  # noqa: PT011
+            local_actions.parse_local_record(broken)
+
+
+def test_record_actions_do_not_alias_input_output_or_plan() -> None:
+    """T-11-06: a frozen record owns deep copies; neither the caller nor a plan can change it afterwards."""
+    source = copy.deepcopy(LOCAL_SEQUENCE)
+    record = make_local_record(DEVICE, SELECT, "cozy", label="Cozy", mode=LocalActionMode.ADDITIVE, actions=source)
+    source[0]["data"]["nested"].append("caller")
+    assert record.actions == LOCAL_SEQUENCE
+
+    spec = make_spec(SELECT, device_id=DEVICE, options=[("cozy", "Cozy", copy.deepcopy(OWNER_SEQUENCE))])
+    plan = build_effective_trigger_plans(spec, APPROVED, [record])[0]
+    assert plan.owner_actions is not None
+    assert plan.local_actions is not None
+    plan.owner_actions[0]["data"]["nested"].append("plan")
+    plan.local_actions[0]["data"]["nested"].append("plan")
+    assert record.actions == LOCAL_SEQUENCE
+    assert next(iter(spec.triggers.values())).actions == OWNER_SEQUENCE
+
+    data = local_actions.local_record_data(record)
+    data["actions"][0]["data"]["nested"].append("output")
+    assert record.actions == LOCAL_SEQUENCE
+
+
+def test_renamed_owner_label_keeps_identity_and_attachment() -> None:
+    """D-10, D-11: a renamed option keeps its record; the plan shows the owner's current label."""
+    record = make_local_record(DEVICE, SELECT, "Cozy", label="Cozy", mode=LocalActionMode.REPLACEMENT, actions=[])
+    renamed = make_spec(SELECT, device_id=DEVICE, options=[("cozy", "Gemuetlich", copy.deepcopy(OWNER_SEQUENCE))])
+
+    plan = build_effective_trigger_plans(renamed, APPROVED, [record])[0]
+
+    assert plan.customization is LocalActionMode.REPLACEMENT
+    assert str(plan.composition) == MUTED
+    assert plan.label == "Gemuetlich"
+    assert record.label == "Cozy"
+
+
+def test_orphan_record_stays_inactive_and_reattaches_when_the_option_returns() -> None:
+    """D-05, D-12: the record of a removed option is kept inactive and attaches again to the same StateValue."""
+    record = make_local_record(
+        DEVICE, SELECT, "cozy", label="Cozy", mode=LocalActionMode.ADDITIVE, actions=copy.deepcopy(LOCAL_SEQUENCE)
+    )
+    without = make_spec(SELECT, device_id=DEVICE, options=[("warm", "Warm", []), ("cold", "Cold", [])])
+    returned = make_spec(SELECT, device_id=DEVICE, options=[("warm", "Warm", []), ("COZY", "Cozy again", [])])
+
+    match = local_actions.match_local_records(without, [record])
+    assert match.active == {}
+    assert match.inactive == (record,)
+    assert [plan.customization for plan in build_effective_trigger_plans(without, PENDING, [record])] == [None, None]
+
+    match = local_actions.match_local_records(returned, [record])
+    assert match.active == {trigger_key("COZY"): record}
+    assert match.inactive == ()
+    plans = build_effective_trigger_plans(returned, PENDING, [record])
+    assert [str(plan.composition) for plan in plans] == [NOTHING, LOCAL_ONLY]
+
+
+def test_cross_kind_record_never_attaches() -> None:
+    """D-10, D-12: a Switch ON record and a Select option `on` of the same device id stay apart, both ways."""
+    switch_record = make_local_record(
+        DEVICE, SWITCH, "ON", label="On", mode=LocalActionMode.REPLACEMENT, actions=copy.deepcopy(LOCAL_SEQUENCE)
+    )
+    select_record = make_local_record(
+        DEVICE, SELECT, "on", label="on", mode=LocalActionMode.REPLACEMENT, actions=copy.deepcopy(LOCAL_SEQUENCE)
+    )
+    switch = make_spec(SWITCH, device_id=DEVICE, on=copy.deepcopy(OWNER_SEQUENCE))
+    select = make_spec(SELECT, device_id=DEVICE, options=[("on", "on", copy.deepcopy(OWNER_SEQUENCE))])
+
+    switch_plans = build_effective_trigger_plans(switch, APPROVED, [select_record])
+    select_plans = build_effective_trigger_plans(select, APPROVED, [switch_record])
+
+    assert all(plan.customization is None for plan in (*switch_plans, *select_plans))
+    assert str(switch_plans[0].composition) == OWNER_ONLY
+    assert str(select_plans[0].composition) == OWNER_ONLY
+    assert local_actions.match_local_records(select, [switch_record]).inactive == (switch_record,)
+
+
+def test_inactive_records_sort_by_identity_and_plans_follow_owner_order() -> None:
+    records = [
+        make_local_record(DEVICE, SELECT, value, label=value, mode=LocalActionMode.ADDITIVE, actions=[])
+        for value in ("zeta", "alpha", "b")
+    ]
+    spec = make_spec(SELECT, device_id=DEVICE, options=[("b", "B", []), ("a", "A", [])])
+
+    match = local_actions.match_local_records(spec, records)
+
+    assert [record.identity.state_value for record in match.inactive] == ["alpha", "zeta"]
+    assert [plan.state_value for plan in build_effective_trigger_plans(spec, APPROVED, records)] == ["b", "a"]
+
+
+def test_effective_policy_ignores_unapproved_owner_metadata() -> None:
+    """D-03, MIR-11: startup off, serial, 5 runs in 10 s and queue 10 until the exact owner hash is approved."""
+    spec = make_spec(run_on_startup=True, run_mode="restart", breaker_max_runs=3, breaker_window=30)
+    safe = local_actions.LOCAL_SAFE_POLICY
+    assert (safe.run_on_startup, safe.run_mode, safe.breaker_max_runs, safe.breaker_window, safe.queue_limit) == (
+        False,
+        "serial",
+        5,
+        10,
+        10,
+    )
+    for approval in (PENDING, BLOCKED, NO_ACTIONS):
+        assert local_actions.effective_policy(spec, approval) == safe
+    approved = local_actions.effective_policy(spec, APPROVED)
+    assert (approved.run_on_startup, approved.run_mode, approved.breaker_max_runs, approved.breaker_window) == (
+        True,
+        "restart",
+        3,
+        30,
+    )
+
+
+def test_local_action_counts_cover_devices_active_inactive_replaced_and_muted() -> None:
+    """D-04, D-08: counts only; a device whose records are all inactive is an orphan-only device."""
+    other = "dev-2"
+    spec = make_spec(SELECT, device_id=DEVICE, options=[("cozy", "Cozy", []), ("warm", "Warm", [])])
+    records = [
+        make_local_record(DEVICE, SELECT, "cozy", label="Cozy", mode=LocalActionMode.REPLACEMENT, actions=[]),
+        make_local_record(
+            DEVICE,
+            SELECT,
+            "warm",
+            label="Warm",
+            mode=LocalActionMode.REPLACEMENT,
+            actions=copy.deepcopy(LOCAL_SEQUENCE),
+        ),
+        make_local_record(DEVICE, SELECT, "gone", label="Gone", mode=LocalActionMode.ADDITIVE, actions=[]),
+        make_local_record(other, SWITCH, "ON", label="On", mode=LocalActionMode.ADDITIVE, actions=[]),
+    ]
+
+    counts = local_actions.local_action_counts(records, {DEVICE: spec})
+
+    assert (counts.records, counts.devices, counts.active, counts.inactive) == (4, 2, 2, 2)
+    assert (counts.replaced, counts.muted, counts.orphan_only_devices) == (1, 1, 1)

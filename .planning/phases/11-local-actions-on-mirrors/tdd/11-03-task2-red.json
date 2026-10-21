@@ -1,0 +1,18 @@
+{
+  "command": "uv run pytest -q \"tests/test_local_action_plans.py::test_production_plan_matches_gate_row[approved-replacement-owner_actions]\" --junitxml=.planning/phases/11-local-actions-on-mirrors/tdd/11-03-task2-red.xml",
+  "exitCode": 1,
+  "output": "<?xml version=\"1.0\" encoding=\"utf-8\"?><testsuites name=\"pytest tests\"><testsuite name=\"pytest\" errors=\"0\" failures=\"1\" skipped=\"0\" tests=\"1\" time=\"0.232\" timestamp=\"2026-10-21T01:59:56.087569+02:00\" hostname=\"lap-aleken-tux1\"><testcase classname=\"tests.test_local_action_plans\" name=\"test_production_plan_matches_gate_row[approved-replacement-owner_actions]\" time=\"0.124\"><failure message=\"AssertionError: assert (True, True, ...er_and_local') == (False, True, 'local_only')&#10;  &#10;  At index 0 diff: True != False&#10;  Use -v to get more diff\">case = GateCase(approval='approved', customization='replacement', owner_trigger='owner_actions', owner_eligible=False, local_eligible=True, composition='local_only', local_actions=True, record='active', name='')\n\n    @pytest.mark.parametrize(\"case\", EXPECTED_GATE_CASES, ids=lambda case: case.case_id)\n    def test_production_plan_matches_gate_row(case: GateCase) -&gt; None:\n        plan = _bind(case)\n&gt;       assert (plan.owner_eligible, plan.local_eligible, str(plan.composition)) == (\n            case.owner_eligible,\n            case.local_eligible,\n            case.composition,\n        )\nE       AssertionError: assert (True, True, ...er_and_local') == (False, True, 'local_only')\nE         \nE         At index 0 diff: True != False\nE         Use -v to get more diff\n\ntests/test_local_action_plans.py:331: AssertionError</failure></testcase></testsuite></testsuites>",
+  "targetTest": "test_production_plan_matches_gate_row[approved-replacement-owner_actions]",
+  "targetFile": "tests/test_local_action_plans.py",
+  "nodeId": "tests/test_local_action_plans.py::test_production_plan_matches_gate_row[approved-replacement-owner_actions]",
+  "expected": "Gate row approved x replacement x owner_actions bound to build_effective_trigger_plan: owner branch not eligible, local branch eligible, composition local_only, approval word unchanged.",
+  "actual": "(owner_eligible, local_eligible, composition) == (True, True, 'owner_and_local'): the Task 1 builder treats every attached record as additive, so an active replacement still grants the approved owner branch.",
+  "reportPath": ".planning/phases/11-local-actions-on-mirrors/tdd/11-03-task2-red.xml",
+  "runStartedAt": "2026-10-20T23:59:54.445294Z",
+  "reportModifiedAt": "2026-10-20T23:59:56.319527Z",
+  "consoleTail": [
+    "FAILED tests/test_local_action_plans.py::test_production_plan_matches_gate_row[approved-replacement-owner_actions]",
+    "1 failed in 0.23s"
+  ],
+  "semanticAssessment": "Valid semantic RED for the target. The parametrized node was collected and executed (1 test, 0 errors), the module imports production code that exists since Task 1, the fixture-free binding built a plan, and the test failed on its planned row assertion because replacement does not yet exclude the owner branch. Across the module 24 tests fail: 17 on planned assertions (4 gate/separate rows for replacement, mute and kind mismatch; 11 DID NOT RAISE for malformed records; aliasing; renamed-label mute) and 6 on missing API attributes (parse_local_record, local_trigger_identity, match_local_records x2, LOCAL_SAFE_POLICY, local_action_counts), which Task 2 GREEN adds; every Plan 11-01 oracle row and self-check stays green."
+}

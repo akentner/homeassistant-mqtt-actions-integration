@@ -373,7 +373,7 @@
     },
     "local_action_failed": {
       "title": "Lokale Aktionen sind fehlgeschlagen",
-      "description": "Die lokalen Aktionen für {trigger} von {device} sind um {time} fehlgeschlagen: {error}\n\nBetroffen sind nur die lokalen Aktionen dieser Instanz, nicht die Aktionen der Besitzerin und nicht andere Instanzen. Das Problem nennt den zuletzt fehlgeschlagenen lokalen Auslöser. Es verschwindet, wenn die lokalen Aktionen dieses Auslösers erfolgreich laufen oder wenn du seine lokale Anpassung in den Optionen von MQTT Actions entfernst."
+      "description": "Die lokalen Aktionen für {trigger} von {device} sind um {time} fehlgeschlagen: {error}\n\nBetroffen sind nur die lokalen Aktionen dieser Instanz, nicht die Aktionen der Besitzerin und nicht andere Instanzen. Das Problem nennt den zuletzt fehlgeschlagenen lokalen Auslöser. Es verschwindet, wenn die lokalen Aktionen dieses Auslösers erfolgreich laufen, wenn du diesen Auslöser ohne lokale Aktionen speicherst oder wenn du seine lokale Anpassung in den Optionen von MQTT Actions entfernst."
     },
     "local_actions_unreadable": {
       "title": "Lokale Aktionen können nicht gelesen werden",

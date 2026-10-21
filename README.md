@@ -381,9 +381,10 @@ data:
 
 - A failure of local actions raises the Repairs issue `local_action_failed`, one per device, independent of the issue
   `action_failed` of the owner actions. It names the latest local trigger that failed. An error that a local step
-  handles with `continue_on_error` still raises it. Only a later successful run of the same trigger clears it, or
-  removing its local customization; a success of another trigger or of the owner actions, a `stop` and a cancelled run
-  do not. See [docs/troubleshooting.md](docs/troubleshooting.md).
+  handles with `continue_on_error` still raises it. While its trigger has local actions, only a later successful run
+  of the same trigger clears it. Saving that trigger without local actions (**Locally muted**, or **In addition to the
+  owner actions** with an empty list) or removing its local customization ends it as well; a success of another trigger
+  or of the owner actions, a `stop` and a cancelled run do not. See [docs/troubleshooting.md](docs/troubleshooting.md).
 - Diagnostics show counts only: how many devices and triggers have local actions and how many of them are orphaned, in
   the section `local_actions` and per device. They never show the local actions, their labels or their state values.
   See [docs/diagnostics.md](docs/diagnostics.md).

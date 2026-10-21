@@ -373,7 +373,7 @@
     },
     "local_action_failed": {
       "title": "Local actions failed",
-      "description": "The local actions for {trigger} of {device} failed at {time}: {error}\n\nOnly the local actions of this instance are affected, not the owner actions and not other instances. The issue names the latest local trigger that failed. It disappears when the local actions of that trigger run successfully, or when you remove its local customization in the options of MQTT Actions."
+      "description": "The local actions for {trigger} of {device} failed at {time}: {error}\n\nOnly the local actions of this instance are affected, not the owner actions and not other instances. The issue names the latest local trigger that failed. It disappears when the local actions of that trigger run successfully, when you save that trigger without local actions, or when you remove its local customization in the options of MQTT Actions."
     },
     "local_actions_unreadable": {
       "title": "Local actions cannot be read",

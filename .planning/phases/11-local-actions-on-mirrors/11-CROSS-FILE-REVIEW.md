@@ -380,3 +380,84 @@ By severity: 0 Critical, 0 High, 0 Medium, 4 Low, 16 Info.
 **Routed-gap count: 4, all fixed (G-01, G-02, G-03, G-04); none is still routed.** Next step: Plan 11-13 may run.
 Its precondition (no OPEN or ROUTED findings row) holds, and it runs the final Phase 11 gate on code that contains
 every review fix.
+
+## Final Gate
+
+**Plan:** 11-13 Task 1, run on 2026-10-21.
+**Gated build:** branch `gsd/phase-11-local-actions-on-mirrors` at `9bec171`. The last commit that touches
+`custom_components/` or `tests/` is `8eb4734` (plan 11-17), so the gate ran on code that contains all four review
+fixes. The Phase 11 production diff is now `git diff 762a3db..HEAD -- custom_components/`: 15 files, +2538/-149.
+**Environment:** Python 3.14.8, Home Assistant 2026.9.4, pytest 9.0.3,
+pytest-homeassistant-custom-component 0.13.367, Ruff 0.16.10, mosquitto 2.1.2 (`/usr/bin/mosquitto`).
+`uv lock --check` exits 0.
+
+### Precondition
+
+| Check | Command | Exit | Result |
+|-------|---------|------|--------|
+| No OPEN or ROUTED finding | `! grep -Eq "\| (Critical\|High\|Medium\|Low) \| (OPEN\|ROUTED) \|" 11-CROSS-FILE-REVIEW.md` | 0 | holds: F-01 to F-04 are FIXED, F-05 to F-20 are NO-CHANGE |
+
+### Gate commands
+
+| # | Gate | Exact command | Exit | Measured summary |
+|---|------|---------------|------|------------------|
+| 1 | Phase 11 targeted suites | `uv run pytest -q tests/test_local_action_plans.py tests/test_local_parallel.py tests/test_local_actions_store.py tests/test_local_actions_manager.py tests/test_local_actions_lifecycle.py tests/test_local_actions_flow.py tests/test_local_invariants.py tests/test_local_multi_instance.py` | 0 | 265 passed, 0 failed, 0 skipped, 0 xfailed (13.96 s) |
+| 2 | FIXED regression ids | `uv run pytest -v` with the four ids from rows F-01 to F-04 (listed below) | 0 | 4 passed (1.42 s) |
+| 3a | Ruff lint | `uv run ruff check .` | 0 | `All checks passed!` |
+| 3b | Ruff format | `uv run ruff format --check .` | 0 | `111 files already formatted` |
+| 4a | Unit tier, unfiltered | `uv run pytest -q -m "not broker and not multi_instance" -rsx` | 0 | 1874 passed, 198 deselected, 2 xfailed, 0 skipped (120.02 s) |
+| 4b | Multi-instance tier, unfiltered | `uv run pytest -q -m multi_instance -rsx` | 0 | 180 passed, 1894 deselected, 0 skipped (10.47 s) |
+| 5 | Required-broker full suite | `MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q -rsx` | 0 | 2072 passed, 2 xfailed, 0 skipped, 0 failed (145.46 s) |
+| 5b | Broker tier alone (cross-check) | `MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q -m broker -rsx` | 0 | 18 passed, 2056 deselected, 0 skipped (17.85 s) |
+| 6a | hassfest (`validate.yml` job `hassfest`) | `podman run --rm --pull=always -v <repo>:/github/workspace:Z --workdir /github/workspace ghcr.io/home-assistant/hassfest` | 0 | `Integrations: 1`, `Invalid integrations: 0`; image `sha256:2dce3c54…` built 2026-10-16 |
+| 6b | HACS (`validate.yml` job `hacs`, `hacs/action@d556e73` 22.5.0) | not run on this build, see below | n/a | **NOT RUN locally** |
+
+The `-rsx` flag only adds the skip and xfail report lines. The tiers add up to the full suite:
+1874 + 180 + 18 = 2072 passed, and 1874 + 2 + 198 = 2074 collected.
+
+FIXED regression ids, all passed in gate 2 and again in gate 5:
+
+- F-01: `tests/test_local_actions_lifecycle.py::test_local_failure_issue_survives_restart_prune_and_failed_adoption_until_success_or_removal`
+- F-02: `tests/test_local_actions_manager.py::test_unreadable_local_store_raises_an_instance_issue_and_applies_no_overlay`
+- F-03: `tests/test_hub_removal.py::test_new_hub_never_loads_local_actions_left_by_an_earlier_hub`
+- F-04: `tests/test_local_actions_lifecycle.py::test_failed_adoption_keeps_a_tripped_breaker_paused`
+
+The evidence tests of the NO-CHANGE rows F-05 to F-20 run in gate 5, which has no failure.
+
+### Skip, xfail and deselect audit
+
+- `git diff 762a3db..HEAD -- tests/ | grep -E '^\+.*(pytest\.mark\.(skip|xfail|skipif)|pytest\.skip\(|pytest\.xfail\(|importorskip)'`
+  prints nothing (exit 1). Phase 11 added no skip or xfail marker.
+- The two xfailed cases are the `[entity_id_rename]` parameters of
+  `tests/test_takeover.py::test_disable_duplicates_leaves_an_entry_enabled_that_holds_any_user_customization` and
+  `::test_remove_replay_twins_leaves_a_newer_entry_that_holds_any_user_customization`. Their marker comes from
+  `4bc91d8` (Phase 8), which is before Phase 11. They are the same 2 xfailed cases the 11-11 review started from.
+- No gate uses `--deselect`. `pyproject.toml` `addopts` is `--strict-markers` only, and no `--deselect` appears in
+  `.github/`, `pyproject.toml` or `tests/conftest.py`. The expected-RED exception of 11-VALIDATION.md expired at
+  Plan 11-05 Task 1, and its target passes in gates 1 and 5.
+- The broker cases ran under `MQTT_ACTIONS_REQUIRE_BROKER=1` with 0 skipped, so they were not skipped for a missing
+  executable.
+
+### HACS validation: not run on this build
+
+The `hacs/action` job runs the container `ghcr.io/hacs/action:main`. Its entry point (`action/action.py` in
+`hacs/integration`) does not read the checked-out workspace. It fetches the repository from the GitHub API at a ref
+and needs a GitHub token. The branch `gsd/phase-11-local-actions-on-mirrors` is not on GitHub (`origin` has no such
+branch), and pushing is the user's job. A local run could therefore only validate `main`, not this build. No local
+run was made, and the user's personal token was not passed to the third-party container.
+
+Supporting evidence, not a substitute for the run:
+
+- The scheduled Validate run 39532934013 on `main` at `3dc9093` (2026-10-21 02:25 UTC) passed both jobs, `hassfest`
+  and `HACS`. `3dc9093` is the merge base of this branch.
+- Between `3dc9093` and this build, the files that HACS reads are unchanged: `hacs.json`,
+  `custom_components/mqtt_actions/manifest.json` and `custom_components/mqtt_actions/brand/`. Only the `README.md`
+  content changed (+152/-6), and `.github/workflows/ci.yml` and `validate.yml` each gained `branches: ["**"]`.
+
+**Open item:** the `HACS` job of `validate.yml` must pass on the first push of this branch. That push runs Validate on
+the branch (`branches: ["**"]`). Phase 12 must not start its release work before that result exists.
+
+### Gate verdict
+
+Gates 1 to 5 and 6a passed with exit 0. HACS (6b) was not run on this build and is recorded as an open item, not as a
+pass.

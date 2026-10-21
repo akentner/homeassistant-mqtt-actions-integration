@@ -1,183 +1,181 @@
 ---
 phase: 11-local-actions-on-mirrors
-reviewed: 2026-10-21T05:42:46Z
+reviewed: 2026-10-21T08:40:15Z
 depth: standard
-files_reviewed: 39
+files_reviewed: 17
 files_reviewed_list:
   - custom_components/mqtt_actions/config_flow.py
   - custom_components/mqtt_actions/const.py
-  - custom_components/mqtt_actions/diagnostics.py
-  - custom_components/mqtt_actions/__init__.py
   - custom_components/mqtt_actions/local_actions.py
   - custom_components/mqtt_actions/local_actions_store.py
   - custom_components/mqtt_actions/manager.py
-  - custom_components/mqtt_actions/repairs.py
-  - custom_components/mqtt_actions/retrigger.py
-  - custom_components/mqtt_actions/runner.py
-  - custom_components/mqtt_actions/services.py
   - custom_components/mqtt_actions/sync.py
   - custom_components/mqtt_actions/translations/de.json
   - custom_components/mqtt_actions/translations/en.json
-  - custom_components/mqtt_actions/trust.py
-  - docs/diagnostics.md
-  - docs/operations.md
   - docs/troubleshooting.md
   - README.md
-  - tests/fake_broker.py
-  - tests/helpers.py
-  - tests/test_diagnostics.py
-  - tests/test_discovery_export.py
   - tests/test_docs.py
   - tests/test_hub_removal.py
-  - tests/test_local_action_plans.py
-  - tests/test_local_actions_flow.py
   - tests/test_local_actions_lifecycle.py
   - tests/test_local_actions_manager.py
-  - tests/test_local_actions_store_instances.py
   - tests/test_local_actions_store.py
   - tests/test_local_invariants.py
-  - tests/test_local_multi_instance.py
-  - tests/test_local_parallel.py
-  - tests/test_native_cleanup.py
-  - tests/test_repairs_flow.py
-  - tests/test_services.py
-  - tests/test_sync_follower.py
   - tests/test_translations.py
 findings:
   critical: 0
-  warning: 4
-  info: 7
-  total: 11
+  warning: 2
+  info: 10
+  total: 12
 status: issues_found
 ---
 
 # Phase 11: Code Review Report
 
-**Reviewed:** 2026-10-21T05:42:46Z
+**Reviewed:** 2026-10-21T08:40:15Z
 **Depth:** standard
-**Files Reviewed:** 39
+**Files Reviewed:** 17
 **Status:** issues_found
 
 ## Summary
 
-I reviewed the Phase 11 diff (`01a9edf..HEAD`). It adds local actions on mirrors: a pure model (`local_actions.py`), a separate Store, effective-plan Script building with one native `parallel` per trigger, per-branch outcome reduction from Core traces, the options-flow editor, lifecycle hooks (prune, tombstone, adoption, hub removal), and diagnostics and docs.
+This is an incremental re-review of `git diff 4426cf3..HEAD`, the gap-closure plans 11-18 to 11-23. It checks the fixes for WR-01 to WR-04 against the owner amendments in 11-CONTEXT.md ("Amendments, owner decision 2026-10-21") and looks for regressions the fixes introduced.
 
-The full test suite passes: `uv run pytest -n 8` gave 2072 passed and 2 xfailed. I checked the trace-path assumptions against the installed Core `helpers/script.py`. The `parallel/<idx>/sequence` paths, step-level trace elements for disabled steps, and `gather(return_exceptions=True)` semantics all match what `at_dispatch`, `reduce_local_outcome` and `_owner_error` expect. I also checked the owner-subtree guard path in `_replace_at` against the validated tree shape, and found no defect there.
+Verification of the earlier warnings:
+- **WR-01 (tombstone): fixed.** `MirrorRemovalCause` is gone. `sync._async_remove` only acts on an existing mirror, and `Manager.async_remove_mirror` never writes the local Store. Records and their failure issue stay and are listed as "not mirrored". Adoption is now the only path that calls `_async_discard_local_records`. README, troubleshooting and tests match.
+- **WR-02 (issue cannot clear after mute or empty additive): fixed for the synchronous path.** A durable save without actions clears the issue only when the issue names that identity, and a failed save clears nothing. An in-flight run can still re-create the issue after the clear. I confirmed this with a probe (see WR-06).
+- **WR-03 (corrupt or shape-invalid Store): fixed for the two named cases.** A payload without a record list now raises `LocalActionsStoreUnreadableError`, and so does a missing file next to a `<key>.corrupt.*` copy. The Store stays unloaded and refuses saves. The copy match is anchored on `"<file>.corrupt."`, so other keys do not match. Rows that fail parsing are now kept, and unknown top-level keys too. The forward-compatibility part is only half fixed: unknown keys inside a parseable row are still stripped on save (see WR-05).
+- **WR-04 (removal warning shows 0): fixed.** The count is `int | None`. A loaded hub reports `None` via `_local_actions_readable`, and an unloaded hub maps any read error to `None`. The dedicated `settings_unreadable` step uses the same schema and submits through `async_step_settings`. The en/de texts exist and are covered by `OPTION_STEPS`. Devices named only by preserved rows are counted.
 
-I found no blockers. The remaining findings are about data durability and issue lifecycle:
-- An unauthenticated tombstone permanently destroys local-only data.
-- The local failure issue can become impossible to clear without undoing the user's choice.
-- A corrupt or shape-invalid local Store is silently treated as empty, which contradicts the code's own docstring and the troubleshooting doc.
-- The hub-removal warning under-reports what gets deleted.
+Probe used for WR-06, run outside the repository: `/tmp/akentner/claude-1000/-home-akentner-Projects-homeassistant-mqtt-actions-integration/667d23fa-9fde-4c75-b77c-e0d2d74cb17b/scratchpad/test_probe_mute_race.py`. It runs an additive local branch `[test.flaky (continue_on_error), delay 30 s]`, fires ON, saves a mute while the run is in flight, then waits for it to settle. Result: no issue right after the save, then `local_action_failed` exists naming `switch/on` while the record's actions are `[]`.
+
+I found no blockers. IN-01 to IN-07 are unchanged by this diff and carried forward.
+
+**Resolved since previous review:** WR-01, WR-02, WR-03 and WR-04, as recorded in 11-REVIEW-DISPOSITION.md. WR-05 and WR-06 below are gaps or regressions left by the WR-03 and WR-02 fixes. They are new findings, not reopened IDs. None of IN-01 to IN-07 was resolved.
 
 ## Narrative Findings (AI reviewer)
 
 ## Warnings
 
-### WR-01: Any tombstone on a config topic permanently discards local actions, while the mirror itself self-heals
+### WR-05: Unknown keys inside a parseable row are dropped on save, contradicting the new "saving here keeps them" promise
 
-**File:** `custom_components/mqtt_actions/sync.py:489-505`, `custom_components/mqtt_actions/manager.py:2167-2200`
-**Issue:** `_async_remove` now forwards every empty config payload for a non-owned, valid id to `async_remove_mirror(..., cause=TOMBSTONE)`. This happens even when no mirror exists. `_async_discard_tombstoned_records` then saves the record set without that device.
+**File:** `custom_components/mqtt_actions/local_actions.py:143-167`, `custom_components/mqtt_actions/local_actions.py:245-255`, `README.md:367-369`, `custom_components/mqtt_actions/manager.py:615`
+**Issue:** The WR-03 fix keeps only rows that *fail* `parse_local_record`. `parse_local_record` checks that the six `RECORD_KEYS` are present and ignores every other key. `local_record_data` then writes back only those six keys. A newer minor release will most likely add an optional row field (for example `enabled`, `conditions` or `variables`). Such a row:
+1. parses here as a full record and is **applied without the new field's semantics**. For example, a row a newer release marked `"enabled": false` runs here.
+2. loses the field permanently on the next save of this release. That save can be any edit, a label refresh in `_async_refresh_local_labels`, or an adoption discard.
 
-An empty payload carries no owner, so its provenance is never checked. A stray "delete retained topic" from any broker client is enough, for example MQTT Explorer, a script, or a misconfigured bridge. The owner treats its cleared config topic as a foreign write (`_check_owned` → `_overwritten`) and republishes, so the mirror comes back on every instance. The local records do not come back: they exist only in this instance's Store and nothing on the broker can restore them.
+Verified:
 
-Before Phase 11 the same event was fully self-healing. Now it is permanent, silent data loss on every connected instance; the only trace is an INFO log line. This is a data-loss risk created by D-05 trusting an unauthenticated signal. I am not asking for broker auth here.
-**Fix:** Corroborate the tombstone before destroying local data. Options:
-- Remove the mirror at once but defer the record discard. Discard only when the document stays absent for `PRUNE_GRACE_SECONDS` while the owner is online, using the same evidence the prune already uses. If a document of the pinned owner arrives in the meantime, cancel the discard.
-- Or keep the records, mark them inactive as after a prune, and let the user remove them. The editor already lists "no mirror" devices.
-
-```python
-# sync._async_remove: remove the mirror now, schedule the record discard
-await manager.async_remove_mirror(device_id, cause=MirrorRemovalCause.TRANSIENT_PRUNE)
-self._pending_tombstones[device_id] = manager.clock()  # discard after grace if no document of the owner returns
+```text
+parse_local_actions_payload({'records': [{...six keys..., 'enabled': False, 'conditions': [...]}]})
+-> 1 record, preserved=()
+local_actions_payload(...) -> {'records': [{...six keys only...}]}
 ```
 
-### WR-02: The local failure issue cannot clear after the user mutes the trigger or empties its additive actions
+The README bullet added in this diff says local actions a newer version saved "stay in the file unchanged ... saving here keeps them". That is only true for rows that fail to parse.
 
-**File:** `custom_components/mqtt_actions/manager.py:1788-1842`, `custom_components/mqtt_actions/manager.py:1845-1878`
-**Issue:** Only two events clear the local failure issue:
-- a proven `SUCCESS` outcome of the named trigger (`_clear_local_failure_naming`);
-- removal of its record (`async_remove_local_action`).
-
-`async_set_local_action` never looks at the issue. Suppose the user reacts to a failure by changing the trigger to a mute (`REPLACEMENT` with `[]`) or to `ADDITIVE` with `[]`. Both are valid saves through the flow. The trigger then has no local branch (`build_effective_trigger_plan` sets `local_actions=None`), so no local outcome is ever produced again, and the record still exists. The issue stays forever and shows a stale error for actions that no longer exist.
-
-To get rid of it, the user must remove the customization. For a mute, that brings back the owner actions they deliberately suppressed. `docs/troubleshooting.md:206` tells the user to "correct its local actions", which in this case does not work.
-**Fix:** When a saved record has no local actions, clear the issue if it names that identity. A record without local actions cannot fail locally any more.
+There is a related problem. For a newer minor envelope, Core's `Store._async_load_data` calls `_async_migrate_func` and then `async_save(stored)` stamped with this release's `minor_version = 1`. Merely loading therefore rewrites the file and downgrades its minor marker. The newer release will then run its own 1→2 migration over rows that are already in 2-shape. This also happens in the unloaded-hub count path, so the new docstring claim "Reading never writes the Store" (`manager.py:615`) is false for a newer-minor file.
+**Fix:** Keep each row's unknown keys and write them back. Also refuse to apply rows that carry keys this release does not know, or at least document why that is safe. For example:
 
 ```python
-# in async_set_local_action, after _async_commit_local_records(...)
-if not record.actions:
-    self._clear_local_failure_naming(identity)
+# LocalActionRecord gains: extra: dict[str, Any] = field(default_factory=dict)
+def parse_local_record(raw):
+    ...
+    record = make_local_record(...)
+    extra = {k: copy.deepcopy(v) for k, v in raw.items() if k not in RECORD_KEYS}
+    return dataclasses.replace(record, extra=extra)
+
+def local_record_data(record):
+    return {**copy.deepcopy(record.extra), "device_id": ..., ...}
 ```
 
-### WR-03: A corrupt or shape-invalid local Store is treated as empty: no `local_actions_unreadable` issue, mutes revert, and the next save overwrites it
+If unknown row keys should instead mean "not applicable here", send such rows to `preserved` and do not parse them. In `migrate_local_actions_payload`, record that every future minor migration must be idempotent, because an older release re-stamps the file as minor 1 at load. Fix the `manager.py:615` docstring.
 
-**File:** `custom_components/mqtt_actions/local_actions_store.py:87-99`, `custom_components/mqtt_actions/manager.py:1222-1252`, `docs/troubleshooting.md:216-221`
-**Issue:** The `local_actions_unreadable` issue and its docs promise this for a damaged file: local actions are not applied, the issue is shown, editing is refused, and "the file is not changed". The code only does that when `async_load` raises, which in practice means a newer major version. Two other cases bypass it.
+### WR-06: An in-flight failing run re-creates the local failure issue after a mute or empty-additive save cleared it (WR-02 fix is racy)
 
-1. **JSON-corrupt file.** Core's `Store._async_load_data` renames the file to `*.corrupt.<time>`, raises a generic `storage_corruption` issue and returns `None`. `async_load_records` treats `None` as "no records" and sets `_loaded = True`. The integration issue is never raised. Replaced and muted triggers silently run approved owner actions again, which is exactly the safety regression the issue text warns about.
-2. **Valid JSON with the wrong shape**, for example `{"records": {...}}`, or a newer minor format. The code only logs a warning and still sets `_loaded = True`. The next save then overwrites the file with the reduced set, which can be any edit, a label refresh in `_async_refresh_local_labels`, or a tombstone discard. This contradicts the class docstring ("never overwritten", T-11-09).
+**File:** `custom_components/mqtt_actions/manager.py:1856-1857`, `custom_components/mqtt_actions/manager.py:1886-1896`, `custom_components/mqtt_actions/runner.py:483-493`
+**Issue:** `async_set_local_action` clears the issue right after the commit. The run that was in flight when the user saved keeps going. The rebuild cancels it, and the runner's `finally` ("Also on cancellation: a local error recorded before a restart or unload is still a local failure") later delivers a `FAILURE` outcome. `reduce_local_outcome` returns `FAILURE` without needing `proven`. `async_report_local_outcome` only drops a failure when the record is *gone* (`_local_record(identity) is None`). After a mute the record still exists with `actions == []`, so the issue is re-created and names a trigger that has no local actions.
 
-There is a related forward-compatibility problem. Rows that fail `parse_local_record` are dropped in memory, for example a `mode` value a newer minor release adds. Core's minor-version path also re-saves the payload at load. The next save of this release then erases those rows permanently.
-**Fix:** Treat "shape invalid" and "load returned None while a corrupt sibling file exists" as unreadable. That means raising the instance issue and keeping `_loaded = False`, so no save can overwrite. At minimum, do this for `not parsed.shape_valid`:
+The probe described in the Summary reproduces this: issue absent right after the save, present after settle with `data={'kind': 'switch', 'state_value': 'on'}`, while the record's actions are `[]`. This is the stuck state WR-02 was about. The only ways out are saving the mute again or removing the customization, which brings back the owner actions the user deliberately suppressed. Removal is not affected, because the record is gone and the outcome is dropped. The two "end the customization" paths are therefore asymmetric.
+**Fix:** Drop a failure outcome whose current record has no local actions, the same way a removed record is dropped:
 
 ```python
-if not parsed.shape_valid:
-    raise LocalActionsStoreVersionError("local actions Store holds no record list")  # Manager raises the issue, refuses saves
+if outcome.status is OutcomeStatus.FAILURE:
+    record = self._local_record(identity)
+    if record is None or not record.actions:
+        return  # nothing local can fail any more; a stale in-flight outcome must not re-open the issue
 ```
 
-Then align `docs/troubleshooting.md` and the issue text with what actually happens for a JSON-corrupt file: Core moves it aside, and the user restores it from the `.corrupt` copy.
-
-### WR-04: The hub-removal warning reports 0 devices when the local Store is unreadable, but removal deletes the file anyway
-
-**File:** `custom_components/mqtt_actions/manager.py:605-622`, `custom_components/mqtt_actions/config_flow.py` (`async_step_settings`, `local_action_device_count` placeholder)
-**Issue:** `async_local_action_device_count` returns `manager.local_action_counts().devices` for a loaded hub. That is `0` when the load was refused, because `_local_records = ()`. For an unloaded hub, a read error is also mapped to `0`. Either way, `async_remove_local_state` then deletes the file unconditionally.
-
-This is the downgrade scenario the README warns about: a file written by a newer release is unreadable here. The settings text tells the user that removing the hub "deletes the local actions of 0 devices" while it actually deletes all of them.
-**Fix:** Return `None` (unknown) when the Store could not be read, and show a dedicated warning text such as "the saved local actions cannot be read and will be deleted". For a loaded hub, expose a `local_actions_readable` flag from the Manager instead of the count of an empty fallback.
+Add a regression test modelled on the probe: an in-flight local branch with a recorded error, then a mute save, then settle. The issue must stay absent.
 
 ## Info
 
-### IN-01: The `replaced` placeholder of the approval issue is never rendered, so `_refresh_approval_count` does no visible work
+### IN-08: Preserved rows are invisible to every device-scoped operation, so they outlive adoption and "Remove local customization" and can resurface after an upgrade
 
-**File:** `custom_components/mqtt_actions/manager.py:2120`, `custom_components/mqtt_actions/manager.py:2125-2132`
+**File:** `custom_components/mqtt_actions/local_actions_store.py:126-136`, `custom_components/mqtt_actions/manager.py:2228-2238`, `custom_components/mqtt_actions/local_actions.py:176-184`
+**Issue:**
+- `_async_discard_local_records` (adoption) filters only `_local_records`. Preserved rows of the adopted device stay in the file. After an upgrade that parses them, they become local records of a device this instance now owns. `local_actions_discarded` and the troubleshooting text ("its local actions are discarded") under-report this.
+- A user can create a record for an identity that already has a preserved row, because the editor does not show it. Removing that record later leaves the preserved row, and it comes back after an upgrade. The `ParsedLocalActions` docstring says "removing a record never brings an older row back (D-10)", which only holds for parsed duplicates.
+- Genuinely malformed rows, not from a newer version, are now kept forever. They log a WARNING on every start and can only be cleared by removing the hub.
+- `preserved_device_ids` ignores preserved rows without a string `device_id`. A file holding only such rows shows "0 devices" in the removal settings, although removal deletes them.
+
+**Fix:** In `_async_discard_local_records`, also drop preserved rows whose `device_id` matches, and have the Store expose a `discard_preserved(device_id)` helper for this. Make the `ParsedLocalActions` docstring precise. Optionally surface a preserved-row count in diagnostics.
+
+### IN-09: Hub removal deletes Core's `.corrupt` copy but leaves Core's persistent `storage_corruption_*` repair pointing at it
+
+**File:** `custom_components/mqtt_actions/local_actions_store.py:180-195`, `custom_components/mqtt_actions/manager.py:535-560`
+**Issue:** Core creates a persistent CRITICAL issue `homeassistant/storage_corruption_mqtt_actions.local_actions_<time>` with `corrupt_path` as a placeholder. `async_remove_records` now deletes that file, both at hub removal and when a new hub is created in `async_step_user`. `async_remove_local_state` only deletes issues in `DOMAIN`, so the Core issue survives and points at a file that no longer exists. Deleting the copy also destroys the user's only repairable copy. The `settings_unreadable` text says the local actions are deleted, but it does not mention that the `.corrupt` copy goes too.
+**Fix:** Also delete Core issues whose id starts with `storage_corruption_{LOCAL_ACTIONS_STORE_KEY}_`, using `ir.async_delete_issue(hass, HOMEASSISTANT_DOMAIN, ...)`. Name the `.corrupt` copy in the `settings_unreadable` text.
+
+### IN-10: Text drift after the WR-01 and WR-03 fixes
+
+**File:** `docs/troubleshooting.md:219-222`, `custom_components/mqtt_actions/manager.py:1726-1727`
+**Issue:**
+- Troubleshooting still says "the file is not changed" and "the newer or damaged file and your local actions in it stay as they are". Two sentences later it says that Home Assistant moves a non-JSON file aside. The en/de issue text was reworded to "MQTT Actions does not change the file", but the troubleshooting page was not.
+- The `local_action_devices` docstring lists only "a transient prune, a start before the owner's document" as reasons a record-only device is listed. A tombstone now does the same.
+
+**Fix:** Change the troubleshooting text to "MQTT Actions does not change the file" and drop "stay as they are" for the damaged-JSON case. Add "a tombstone" to the docstring.
+
+### IN-01: The `replaced` placeholder of the approval issue is never rendered, so `_refresh_approval_count` does no visible work (carried forward)
+
+**File:** `custom_components/mqtt_actions/manager.py:2152`, `custom_components/mqtt_actions/manager.py:2157-2163`
 **Issue:** `approval_required` is a fixable issue. Its only description lives in `fix_flow.step.confirm`, and that text is filled from `ApprovalRepairFlow`'s own placeholders (`repairs.py`). The issue-level `translation_placeholders["replaced"]` is not referenced by any translation. `_refresh_approval_count` therefore re-creates the issue on every local edit only to update an unused value.
 **Fix:** Drop the issue-level `replaced` placeholder and `_refresh_approval_count`, or reference `{replaced}` in a rendered string.
 
-### IN-02: Production-dead state and API kept only for tests
+### IN-02: Production-dead state and API kept only for tests (carried forward)
 
-**File:** `custom_components/mqtt_actions/manager.py:298`, `custom_components/mqtt_actions/manager.py:2162`, `custom_components/mqtt_actions/runner.py:305-307`, `custom_components/mqtt_actions/manager.py:1420-1422`
+**File:** `custom_components/mqtt_actions/manager.py:299`, `custom_components/mqtt_actions/manager.py:2194`, `custom_components/mqtt_actions/runner.py:305-307`, `custom_components/mqtt_actions/manager.py:1427`
 **Issue:** Production code never reads these:
 - `Device.policy` and `ActionRunner.policy_for`/`_policies`: only `tests/test_local_actions_manager.py` reads them.
 - `Manager.async_adopt`: production uses `async_adopt_device`.
 - `LocalActionChange`: returned by `async_set_local_action`/`async_remove_local_action`, but the flow discards it.
+
 **Fix:** Remove them, or mark them clearly as test seams so they do not drift from the real policy holders (tracker and breaker).
 
-### IN-03: The test topic applies the mode gate twice
+### IN-03: The test topic applies the mode gate twice (carried forward)
 
-**File:** `custom_components/mqtt_actions/manager.py:2923-2930`
+**File:** `custom_components/mqtt_actions/manager.py:2952-2960`, `custom_components/mqtt_actions/manager.py:2980`
 **Issue:** `_on_test_message` first returns on `_test_blocked(device)`, then calls `run_manual`, which checks the same mode again. Two gates for one rule can drift apart.
 **Fix:** Drop the `_test_blocked` check in `_on_test_message`, so `run_manual` is the only gate as MIR-10 intends.
 
-### IN-04: `local_action_devices` docstring says "sorted by id", but mirrors are listed in dict order
+### IN-04: `local_action_devices` docstring says "sorted by id", but mirrors are listed in dict order (carried forward)
 
-**File:** `custom_components/mqtt_actions/manager.py:1715-1736`
+**File:** `custom_components/mqtt_actions/manager.py:1722-1743`
 **Issue:** Only the record-only devices are sorted; the mirrors follow `self.mirrors` insertion order.
 **Fix:** Sort the mirrors as well, or fix the docstring.
 
-### IN-05: A build-time local validation failure is logged twice at ERROR and refreshes the issue time on every rebuild
+### IN-05: A build-time local validation failure is logged twice at ERROR and refreshes the issue time on every rebuild (carried forward)
 
-**File:** `custom_components/mqtt_actions/runner.py:249-261`, `custom_components/mqtt_actions/manager.py:1860-1866`
+**File:** `custom_components/mqtt_actions/runner.py:249-261`, `custom_components/mqtt_actions/manager.py:1886-1896`
 **Issue:** `_async_check_branches` logs "Invalid local actions ..." and then emits a FAILURE outcome, which `async_report_local_outcome` logs again at ERROR. This repeats on every rebuild: owner document update, approval, or an edit of another trigger. Each time the issue's `time` placeholder moves forward, although no run happened.
 **Fix:** Log once, in the Manager. Optionally, skip re-emitting a generation-0 failure when the issue already names the same identity with the same error.
 
-### IN-06: Shared response variables let an approved owner branch feed values into unguarded local templates
+### IN-06: Shared response variables let an approved owner branch feed values into unguarded local templates (carried forward)
 
-**File:** `custom_components/mqtt_actions/runner.py:53-60`, `README.md` (Parallel runs)
+**File:** `custom_components/mqtt_actions/runner.py:53-60`, `README.md:337-339` (Parallel runs)
 **Issue:** Owner and local branches share one response-variable namespace inside one `parallel`. Only the owner subtree is guarded. A local template that reads a variable name the owner branch also sets, for example a templated `action:`, renders owner-controlled data with full local trust. Through that path the owner could reach a denied service. The README presents this only as a race. It is also a trust-boundary crossing.
 **Fix:** In the README, state that local actions must not read variables the owner branch could set. Optionally, namespace or deny owner `response_variable` names in the restricted analysis.
 
-### IN-07: `adopt_device` surfaces an untranslated internal error when the local discard cannot be saved
+### IN-07: `adopt_device` surfaces an untranslated internal error when the local discard cannot be saved (carried forward)
 
 **File:** `custom_components/mqtt_actions/services.py:309-312`
 **Issue:** `async_adopt_device` can raise `LocalActionsStoreError` before anything changed. The handler catches only `AdoptionError`, so the caller sees the raw message "The local actions of mqtt_actions.local_actions could not be saved" instead of a translated `ServiceValidationError`, as the other refusals get.
@@ -185,6 +183,6 @@ This is the downgrade scenario the README warns about: a file written by a newer
 
 ---
 
-_Reviewed: 2026-10-21T05:42:46Z_
+_Reviewed: 2026-10-21T08:40:15Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_

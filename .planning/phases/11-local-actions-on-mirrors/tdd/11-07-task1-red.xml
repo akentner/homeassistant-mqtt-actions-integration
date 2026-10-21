@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.027" timestamp="2026-10-21T03:45:40.235159+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_manager" name="test_test_button_and_retrigger_refuse_local_runs_while_the_breaker_is_tripped" time="0.909"><failure message="AssertionError: a tripped breaker must refuse a test run of local actions&#10;assert (4, 3) == (3, 2)&#10;  &#10;  At index 0 diff: 4 != 3&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140312624438240'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...cd4', 'kind': 'switch', 'label': 'OFF', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9d15c1d4e0&gt;
+
+    async def test_test_button_and_retrigger_refuse_local_runs_while_the_breaker_is_tripped(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """MIR-09, D-03: a tripped breaker refuses a test run of a trigger with local actions on every entry point."""
+        local_on = async_mock_service(hass, "test", "local_on")
+        local_off = async_mock_service(hass, "test", "local_off")
+        spec = make_spec(on=OWNER_ON)
+        manager = await _pending_mirror(hass, make_hub_entry, spec)
+        await _trip_by_local_runs(hass, manager, spec)
+        calls = (len(local_on), len(local_off))
+    
+        await manager.async_press_test(spec.device_id, trigger_key(PAYLOAD_ON))
+        _legacy_test_press(manager, spec.device_id, PAYLOAD_OFF)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+&gt;       assert (len(local_on), len(local_off)) == calls, "a tripped breaker must refuse a test run of local actions"
+E       AssertionError: a tripped breaker must refuse a test run of local actions
+E       assert (4, 3) == (3, 2)
+E         
+E         At index 0 diff: 4 != 3
+E         Use -v to get more diff
+
+tests/test_local_actions_manager.py:791: AssertionError</failure></testcase></testsuite></testsuites>

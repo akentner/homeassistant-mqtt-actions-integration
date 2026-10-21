@@ -10,6 +10,7 @@ but never changes an assertion. No marker or condition ever hides its failure.
 import asyncio
 import copy
 import functools
+import uuid
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
@@ -17,6 +18,7 @@ import pytest
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
+from custom_components.mqtt_actions import retrigger as retrigger_module
 from custom_components.mqtt_actions.const import (
     DOMAIN,
     ISSUE_CIRCUIT_BREAKER_PREFIX,
@@ -38,6 +40,8 @@ from custom_components.mqtt_actions.local_actions import (
 from custom_components.mqtt_actions.local_actions_store import LocalActionsStore
 from custom_components.mqtt_actions.manager import LocalActionError, Manager
 from custom_components.mqtt_actions.model import trigger_key
+from custom_components.mqtt_actions.mqtt_gateway import IncomingMessage
+from custom_components.mqtt_actions.retrigger import RetriggerRequest
 from custom_components.mqtt_actions.topics import state_topic
 from tests.documents import document_payload, make_spec
 from tests.helpers import BASE, deliver_config, manager_of, restart_entry, seed_store, setup_entry
@@ -670,3 +674,180 @@ async def test_observe_disabled_and_tripped_breaker_refuse_local_runs(
     await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
 
     assert (len(local_on), len(local_off)) == calls, f"{refusal} must refuse every local run"
+
+
+# --- Plan 11-07 Task 1: every entry point runs the effective actions through the same gates (D-03, MIR-09, MIR-10) ---
+
+OWNER_ON = [{"action": "test.owner_on"}]
+
+
+def _retrigger(manager: Manager, device_id: str, state: str = PAYLOAD_ON) -> tuple[str, str | None] | None:
+    """Hand one fresh re-trigger request to the receiver of this instance and return its answer."""
+    request = RetriggerRequest(
+        request_id=str(uuid.uuid4()),
+        requester=manager.instance_id,
+        state=state,
+        sent_at=manager.retrigger.wall_clock(),
+    )
+    # The receiver treats its own requests as already rate limited by the caller, so repeated calls are all admitted
+    manager.retrigger._remember_own(request.request_id)
+    return manager.retrigger._decide(device_id, request)
+
+
+def _legacy_test_press(manager: Manager, device_id: str, payload: str = PAYLOAD_ON) -> None:
+    """Deliver a press on the legacy test topic of a device, as a test button of a v0.1.0 device publishes it."""
+    manager.test_message_handler(device_id)(IncomingMessage(payload=payload, retain=False))
+
+
+def _untouched(manager: Manager, device_id: str) -> tuple[Any, ...]:
+    """What a test run must never change: baseline, startup window, breaker count and trip, and the revision."""
+    device = manager.device(device_id)
+    assert device is not None
+    return (
+        device.tracker.last_acted,
+        device.tracker.startup_pending,
+        len(device.breaker._stamps),
+        device.breaker.tripped,
+        manager.revision(device_id),
+    )
+
+
+def _shared_publishes(mqtt_mock: Any) -> list[str]:
+    """Return the topics published so far, without the re-trigger answers addressed to a requester."""
+    return [call.args[0] for call in mqtt_mock.async_publish.call_args_list if "/acks" not in call.args[0]]
+
+
+# case -> (approved, record mode and actions or None, services that run, re-trigger answer)
+ENTRY_POINT_CASES: dict[str, tuple[bool, tuple[LocalActionMode, list[dict[str, Any]]] | None, list[str], Any]] = {
+    "owner_only_pending": (False, None, [], ("not_approved", None)),
+    "owner_only_approved": (True, None, ["owner_on"], ("executed", None)),
+    "additive_pending": (False, (LocalActionMode.ADDITIVE, LOCAL_ON), ["local_on"], ("executed", None)),
+    "additive_approved": (True, (LocalActionMode.ADDITIVE, LOCAL_ON), ["local_on", "owner_on"], ("executed", None)),
+    "replacement_pending": (False, (LocalActionMode.REPLACEMENT, LOCAL_ON), ["local_on"], ("executed", None)),
+    "replacement_approved": (True, (LocalActionMode.REPLACEMENT, LOCAL_ON), ["local_on"], ("executed", None)),
+    # A muted trigger runs nothing whatever the approval, so approving the owner would not change the answer
+    "mute_pending": (False, (LocalActionMode.REPLACEMENT, []), [], ("error", "no_actions")),
+    "mute_approved": (True, (LocalActionMode.REPLACEMENT, []), [], ("error", "no_actions")),
+}
+
+
+@pytest.mark.parametrize("case", ENTRY_POINT_CASES)
+async def test_test_button_legacy_test_and_retrigger_run_what_a_state_change_runs(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable, case: str
+) -> None:
+    """MIR-10, D-03: native and legacy test presses and the re-trigger run exactly the effective actions of a change."""
+    approved, record, expected, answer = ENTRY_POINT_CASES[case]
+    mocks = {service: async_mock_service(hass, "test", service) for service in ("owner_on", "local_on")}
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    if approved:
+        assert await manager.async_approve(spec.device_id, manager.mirrors[spec.device_id].mirror.actions_hash)
+    if record is not None:
+        await manager.async_set_local_action(
+            local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON), record[0], record[1]
+        )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    before = _untouched(manager, spec.device_id)
+    shared_before = _shared_publishes(mqtt_mock)
+
+    runs: dict[str, list[str]] = {}
+
+    async def _settle(source: str) -> None:
+        await hass.async_block_till_done(wait_background_tasks=True)
+        runs[source] = sorted(service for service, served in mocks.items() for _ in served)
+        for served in mocks.values():
+            served.clear()
+
+    await manager.async_press_test(spec.device_id, trigger_key(PAYLOAD_ON))
+    await _settle("native test button")
+    _legacy_test_press(manager, spec.device_id)
+    await _settle("legacy test topic")
+    retrigger_answer = _retrigger(manager, spec.device_id)
+    await _settle("re-trigger")
+    assert _untouched(manager, spec.device_id) == before, "a test run never touches baseline, breaker or revision"
+    assert _shared_publishes(mqtt_mock) == shared_before, "a test run publishes nothing but the re-trigger answer"
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    await _settle("state change")
+
+    assert runs == dict.fromkeys(runs, expected), f"{case}: every entry point must run the effective actions"
+    assert retrigger_answer == answer, f"{case}: the re-trigger answer was {retrigger_answer}"
+
+
+async def test_test_button_and_retrigger_refuse_local_runs_while_the_breaker_is_tripped(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """MIR-09, D-03: a tripped breaker refuses a test run of a trigger with local actions on every entry point."""
+    local_on = async_mock_service(hass, "test", "local_on")
+    local_off = async_mock_service(hass, "test", "local_off")
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    await _trip_by_local_runs(hass, manager, spec)
+    calls = (len(local_on), len(local_off))
+
+    await manager.async_press_test(spec.device_id, trigger_key(PAYLOAD_ON))
+    _legacy_test_press(manager, spec.device_id, PAYLOAD_OFF)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert (len(local_on), len(local_off)) == calls, "a tripped breaker must refuse a test run of local actions"
+    assert _retrigger(manager, spec.device_id) == ("paused", None)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert (len(local_on), len(local_off)) == calls
+    assert manager.device(spec.device_id).breaker.tripped, "a refused test run never releases the breaker"
+
+
+@pytest.mark.parametrize("mode", [MODE_OBSERVE, MODE_DISABLED])
+async def test_test_button_and_retrigger_refuse_local_runs_in_observe_and_disabled_mode(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable, mode: str
+) -> None:
+    """MIR-09, D-14: observe and disabled refuse a test run of local actions, with the existing answer words."""
+    local_on = async_mock_service(hass, "test", "local_on")
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    await manager.async_set_local_action(
+        local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON), LocalActionMode.ADDITIVE, LOCAL_ON
+    )
+    await manager.async_set_device_mode(spec.device_id, mode)
+
+    await manager.async_press_test(spec.device_id, trigger_key(PAYLOAD_ON))
+    _legacy_test_press(manager, spec.device_id)
+    answer = _retrigger(manager, spec.device_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert local_on == []
+    assert answer == ({MODE_OBSERVE: "observing", MODE_DISABLED: "disabled"}[mode], None)
+
+
+async def test_test_button_of_an_overlay_free_mirror_still_runs_while_paused(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-13 of Phase 2 is unchanged without local actions: a test press of owner-only actions bypasses the pause."""
+    owner_calls = async_mock_service(hass, "test", "owner_on")
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    assert await manager.async_approve(spec.device_id, manager.mirrors[spec.device_id].mirror.actions_hash)
+    manager.device(spec.device_id).breaker.trip()
+
+    await manager.async_press_test(spec.device_id, trigger_key(PAYLOAD_ON))
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert len(owner_calls) == 1
+    assert _retrigger(manager, spec.device_id) == ("paused", None), "the re-trigger keeps refusing a paused device"
+
+
+def test_retrigger_acknowledgement_vocabulary_is_unchanged() -> None:
+    """MIR-10, D-03: local actions add no status or reason word to the broker answers."""
+    assert frozenset(retrigger_module._STATUS_WORDS) == {
+        "executed",
+        "not_approved",
+        "paused",
+        "observing",
+        "disabled",
+        "error",
+    }
+    assert frozenset(retrigger_module._REASON_WORDS) == {
+        "unknown_device",
+        "bad_state",
+        "no_actions",
+        "not_runnable",
+        "offline",
+    }

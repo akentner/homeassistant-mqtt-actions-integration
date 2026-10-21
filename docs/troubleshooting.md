@@ -207,8 +207,10 @@ trigger, and correct its local actions. Only a later successful run of the same 
 its local customization. A success of another trigger or of the owner actions does not clear it, and neither does a run
 that ended with a `stop`, was cancelled or was replaced by a newer run. The issue survives a restart of Home Assistant,
 a prune of the mirror and a failed adoption, as long as the local customization of its trigger exists. When the owner
-deletes the device (a tombstone) or you adopt it, its local actions are discarded and the issue goes with it. Removing
-the integration deletes it as well, and a start deletes an issue whose local customization no longer exists.
+deletes the device (a tombstone), its local actions are kept, inactive, and so is this issue, until you remove the
+local customization or the device returns. When you adopt the device, its local actions are discarded and the issue
+goes with it. Removing the integration deletes it as well, and a start deletes an issue whose local customization no
+longer exists.
 
 ### `local_actions_unreadable`
 

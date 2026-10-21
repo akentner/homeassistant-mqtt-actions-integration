@@ -367,8 +367,10 @@ data:
 - **Start and prune.** Nothing is discarded when Home Assistant starts or when a mirror is pruned because its document
   was not seen again: the local actions are kept and apply again when the mirror returns. A device that has local
   actions but no mirror right now stays in the device list, marked as not mirrored, so you can remove them.
-- **Tombstone.** When the owner deletes the device, its tombstone discards the local actions of the device on this
-  instance, and the number is logged.
+- **Tombstone.** When the owner deletes the device, or any client clears its config topic, the mirror is removed at
+  once, but its local actions are kept, inactive, like after a prune. The device stays in the device list, marked as
+  not mirrored, where you can view and remove them. If the device comes back, for example because the owner publishes
+  it again after a stray clear, they apply again. The number of kept local actions is logged.
 - **Adoption.** Adopting a device discards its local actions on this instance, because it becomes a device you own. The
   response of `mqtt_actions.adopt_device` reports how many triggers had them in `local_actions_discarded`, and the
   number is logged.
@@ -522,6 +524,7 @@ Every device gets a random UUID. Its state topic, which is also its command topi
   [docs/troubleshooting.md](docs/troubleshooting.md).
 - The export is best effort: nothing heals it, and it has no test buttons.
 - A forged tombstone removes the mirrors of a device until the owner publishes it again, and forces a new approval.
+  The local actions of the device are kept and apply again when it returns.
 - A follower mirrors at most 100 devices of other instances, and a config document may be at most 256 KiB.
 - Actions are readable by every client that can read the config topic. Do not put secrets into actions.
 - A test button press of a native device runs the actions only on the instance where it is pressed. On the legacy

@@ -4,7 +4,7 @@ slug: "local-actions-on-mirrors"
 status: verified
 # threats_open = count of OPEN threats at or above workflow.security_block_on severity (the blocking gate)
 threats_open: 0
-threats_total: 47
+threats_total: 59
 asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
@@ -68,7 +68,7 @@ created: "2026-10-21"
 | T-11-13 | Tampering | Manager local mutation API | high | mitigate | Recheck under `self._lock` (11 lock sites in `C/manager.py`), validate, immediate save, swap; failed-save tests | closed |
 | T-11-14 | Denial of service | Concurrent edit/approval/rebuild | medium | mitigate | Single Manager lock + immutable generation snapshot; `tests/test_local_actions_manager.py` (45 passed) | closed |
 | T-11-15 | Repudiation | Breaker release on edit | medium | mitigate | Release only after durable target-device save; `-k breaker` tests; adoption release fixed by G-04 (T-11-46) | closed |
-| T-11-16 | Tampering | Tombstone/prune distinction | high | mitigate | `MirrorRemovalCause` `C/const.py:268`; tombstone-after-prune tests in `tests/test_local_actions_lifecycle.py` | closed |
+| T-11-16 | Tampering | Tombstone/prune distinction | high | mitigate | Superseded by D-05 amended (WR-01, 11-18): `MirrorRemovalCause` removed; prune and tombstone both keep records, so no forged removal cause can discard them (see T-11-47); tombstone-after-prune tests in `tests/test_local_actions_lifecycle.py` | closed |
 | T-11-17 | Denial of service | Cross-Store adoption failure | high | mitigate | Rollback restores mirror+records before any publish; injected-failure tests; residual trip/issue gaps fixed by G-01/G-04 | closed |
 | T-11-18 | Elevation of privilege | Adoption with local replacement | high | mitigate | Approval gate stays owner-only; `test_every_trigger_replaced_keeps_pending_owner_hash_yaml_and_refused_adoption` | closed |
 | T-11-19 | Information disclosure | Adoption response/log | medium | mitigate | Response carries count only: `C/services.py:318` `local_actions_discarded`; adoption byte oracle | closed |
@@ -100,6 +100,18 @@ created: "2026-10-21"
 | T-11-45 | Tampering | Hub flow removing a live hub's local Store | medium | mitigate | Abort `single_instance_allowed` `C/config_flow.py:149`; `test_new_hub_flow_never_removes_the_local_actions_of_an_existing_hub` | closed |
 | T-11-46 | Elevation of privilege | Adoption rollback releasing a paused device | medium | mitigate | Tripped hash restored before mirror rebuild, `_restore_tripped` `C/manager.py:2851`; `test_failed_adoption_keeps_a_tripped_breaker_paused` | closed |
 | T-11-SC | Tampering | npm/pip/cargo installs | low | accept | See Accepted Risks AR-01 | closed |
+| T-11-47 | Tampering | Stray or forged empty config payload (`sync._async_remove` to `Manager.async_remove_mirror`) | high | mitigate | Tombstone removes only the runtime mirror, never writes the local Store: `C/sync.py:488`, `C/manager.py:2199`; `test_tombstone_keeps_records_byte_identical_and_publishes_nothing`, `test_tombstone_never_writes_the_local_store` | closed |
+| T-11-48 | Information disclosure | INFO log and kept records of a deleted device | low | accept | See Accepted Risks AR-04 | closed |
+| T-11-49 | Repudiation | `async_set_local_action` clearing `local_action_failed` | medium | mitigate | Cleared only after a durable save, only for `not record.actions`, only for the named identity: `C/manager.py:1856`; `test_only_a_durable_save_of_the_named_trigger_without_local_actions_clears_the_issue` (residual: a run still in flight can re-raise it, review WR-06) | closed |
+| T-11-50 | Tampering | `LocalActionsStore.async_load_records` shape branch | high | mitigate | `LocalActionsStoreUnreadableError` `C/local_actions_store.py:34`, raised `:125`, `_loaded` stays False; `test_shape_invalid_local_store_raises_the_unreadable_issue_and_is_never_overwritten` | closed |
+| T-11-51 | Elevation of privilege | JSON-corrupt local Store (Core returns None) | high | mitigate | `.corrupt` sibling check `C/local_actions_store.py:116`, `_corrupt_copies` `:199`; corrupt-copy Store and Manager tests (`test_corrupt_copy_beside_a_missing_*`) | closed |
+| T-11-52 | Denial of service | Leftover `.corrupt` copy after hub removal or for a new hub | medium | mitigate | `_remove_corrupt_copies` `C/local_actions_store.py:212`, fail-closed `LocalActionsStoreError`; `test_hub_removal_and_a_new_hub_delete_the_corrupt_copies_of_the_local_store`, `test_remove_records_deletes_the_corrupt_copies_of_its_own_key_only` | closed |
+| T-11-53 | Information disclosure | Error message, log line and unreadable issue text | low | accept | See Accepted Risks AR-05 | closed |
+| T-11-54 | Tampering | Save erasing rows of a newer minor format | medium | mitigate | Rows failing parse and unknown top-level keys written back on every save: `C/local_actions_store.py:158`; `test_rows_this_release_cannot_parse_survive_a_local_edit`, `test_preserved_rows_and_unknown_keys_are_written_back_after_the_records` (residual: unknown keys inside a parseable row are still dropped, review WR-05) | closed |
+| T-11-55 | Elevation of privilege | Preserved rows reaching execution | medium | mitigate | Preserved rows held only in `_preserved` `C/local_actions_store.py:64`, never in `_local_records`; Manager test (no local run, count 1) | closed |
+| T-11-56 | Repudiation | Removal warning under-reporting deletion | medium | mitigate | `async_local_action_device_count -> int \| None` `C/manager.py:604`, `local_action_removal_device_count` `:1788`, `settings_unreadable` step `C/config_flow.py:267`; loaded, unloaded and per-shape tests in `tests/test_hub_removal.py` | closed |
+| T-11-57 | Information disclosure | Removal warning text | low | accept | See Accepted Risks AR-06 | closed |
+| T-11-58 | Tampering | Contract docs still promising a tombstone discard | medium | mitigate | MIR-08, ROADMAP SC 5, 11-CONTEXT D-05 amendment and release notes updated (11-23 commits `b3ecda2`, `1e426b5`); 11-23 gates green | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
@@ -111,9 +123,12 @@ created: "2026-10-21"
 
 | Risk ID | Threat Ref | Rationale | Accepted By | Date |
 |---------|------------|-----------|-------------|------|
-| AR-01 | T-11-SC | No package was installed or upgraded in Phase 11: `git diff 762a3db..HEAD -- pyproject.toml uv.lock custom_components/mqtt_actions/manifest.json` is empty; the locked environment is retained | Plan threat models 11-01 to 11-17 (accept disposition) | 2026-10-21 |
+| AR-01 | T-11-SC | No package was installed or upgraded in Phase 11: `git diff 762a3db..HEAD -- pyproject.toml uv.lock custom_components/mqtt_actions/manifest.json` is empty; the locked environment is retained | Plan threat models 11-01 to 11-23 (accept disposition) | 2026-10-21 |
 | AR-02 | T-11-39 | Persistent issue data holds only kind and StateValue; placeholders are cut and escaped (T-11-23); no action, trace or variable is stored; the file is local like every Repairs issue | Plan 11-14 threat model (accept disposition) | 2026-10-21 |
 | AR-03 | T-11-43 | Fixed issue text without placeholders; no record, label, StateValue or error text reaches the issue | Plan 11-15 threat model (accept disposition) | 2026-10-21 |
+| AR-04 | T-11-48 | The INFO log carries the count only; kept records stay on this instance, are listed as not mirrored, are removable, and hub removal deletes them (D-08) | Plan 11-18 threat model (accept disposition) | 2026-10-21 |
+| AR-05 | T-11-53 | Fixed texts without placeholders; the error names the key and reason only, never stored content or a copy's content | Plan 11-20 threat model (accept disposition) | 2026-10-21 |
+| AR-06 | T-11-57 | Fixed text without placeholders while unreadable; the readable path shows only an integer count (D-04) | Plan 11-22 threat model (accept disposition) | 2026-10-21 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -124,6 +139,7 @@ created: "2026-10-21"
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-10-21 | 47 | 47 | 0 | gsd-secure-phase (L1 short-circuit, orchestrator grep verification; auditor not spawned) |
+| 2026-10-21 | 59 | 59 | 0 | gsd-secure-phase re-run after gap plans 11-18..11-23 (L1 short-circuit, orchestrator grep verification; auditor not spawned) |
 
 ---
 
@@ -135,3 +151,11 @@ created: "2026-10-21"
 - [x] `status: verified` set in frontmatter
 
 **Approval:** verified 2026-10-21
+
+## Security Audit 2026-10-21
+
+| Metric | Count |
+|---|---|
+| Threats found | 59 |
+| Closed | 59 |
+| Open | 0 |

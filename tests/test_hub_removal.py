@@ -536,6 +536,61 @@ def _seed_newer_local_store(hass_storage: dict[str, Any]) -> str:
     return _local_store_bytes(hass_storage)
 
 
+def _seed_newer_minor_local_store(hass_storage: dict[str, Any], data: dict[str, Any]) -> str:
+    """Write a version 1, minor 2 envelope that a newer release stamped; return its serialized bytes (WR-05)."""
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 2,
+        "key": LOCAL_ACTIONS_STORE_KEY,
+        "data": data,
+    }
+    return _local_store_bytes(hass_storage)
+
+
+NEWER_MINOR_DATA = {"records": LOCAL_ROWS, "groups": [{"future": True}]}
+
+
+async def test_newer_minor_local_store_is_never_written_by_the_start_or_the_settings(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-05, D-22, D-07: a minor 2 file keeps its bytes through a start, a reload and both settings states."""
+    before = _seed_newer_minor_local_store(hass_storage, NEWER_MINOR_DATA)
+
+    entry = await _setup(hass, make_hub_entry())
+    assert _local_store_bytes(hass_storage) == before, "a start must not re-stamp a newer minor local Store"
+
+    loaded = await open_hub_settings(hass, entry)
+    assert loaded["step_id"] == "settings"
+    assert loaded["description_placeholders"] == {"local_action_device_count": str(LOCAL_DEVICE_COUNT)}
+    assert _local_store_bytes(hass_storage) == before, "the settings of a loaded hub must not write the Store"
+
+    await restart_entry(hass, entry)
+    assert _local_store_bytes(hass_storage) == before, "a reload must not re-stamp a newer minor local Store"
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    unloaded = await open_hub_settings(hass, entry)
+    assert unloaded["step_id"] == "settings"
+    assert unloaded["description_placeholders"] == {"local_action_device_count": str(LOCAL_DEVICE_COUNT)}
+    assert _local_store_bytes(hass_storage) == before, "the settings of an unloaded hub must not write the Store"
+
+
+async def test_unloaded_hub_settings_count_never_writes_a_newer_minor_local_store(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-05, D-08: the count path alone, without a Manager start in between, never writes a minor 2 file."""
+    entry = await _setup(hass, make_hub_entry())
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    before = _seed_newer_minor_local_store(hass_storage, NEWER_MINOR_DATA)
+
+    result = await open_hub_settings(hass, entry)
+
+    assert result["step_id"] == "settings"
+    assert result["description_placeholders"] == {"local_action_device_count": str(LOCAL_DEVICE_COUNT)}
+    assert _local_store_bytes(hass_storage) == before
+
+
 async def test_removal_settings_say_the_saved_local_actions_cannot_be_read(
     hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
 ) -> None:
@@ -772,7 +827,7 @@ async def test_unloaded_hub_with_an_unreadable_local_store_says_cannot_be_read(
     assert _local_store_bytes(hass_storage) == before
 
 
-@pytest.mark.parametrize("shape", ["shape_invalid", "corrupt_copy"])
+@pytest.mark.parametrize("shape", ["shape_invalid", "shape_invalid_newer_minor", "corrupt_copy"])
 async def test_unloaded_hub_counts_unknown_for_every_unreadable_store_shape(
     hass: HomeAssistant,
     mqtt_mock: Any,
@@ -792,6 +847,13 @@ async def test_unloaded_hub_counts_unknown_for_every_unreadable_store_shape(
             "minor_version": 1,
             "key": LOCAL_ACTIONS_STORE_KEY,
             "data": {"records": {"0": LOCAL_ROWS[0]}},
+        }
+    elif shape == "shape_invalid_newer_minor":
+        hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
+            "version": 1,
+            "minor_version": 2,
+            "key": LOCAL_ACTIONS_STORE_KEY,
+            "data": {"records": "text", "v2": {"future": True}},
         }
     else:
         corrupt = _seed_corrupt_local_copy(hass)

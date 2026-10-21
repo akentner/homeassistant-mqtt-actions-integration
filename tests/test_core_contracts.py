@@ -53,6 +53,12 @@ FLUSH_FALLBACK_HINT = (
     "registry save about 10 s later (see the docstring of takeover.async_flush_registries); update the flush or accept "
     "the fallback and change this pin on purpose."
 )
+READ_ONLY_LOAD_HINT = (
+    "Home Assistant changed how a read-only Store loads a newer minor version: after the migration hook Core now "
+    "writes the result (or the hook no longer runs). LocalActionsStore.async_load relies on a Store built with "
+    "read_only=True returning the migrated data without a write (WR-05, D-22); read storage.Store._async_load_data and "
+    "_async_handle_write_data, then update the reader of local_actions_store.py or change this pin on purpose."
+)
 FLUSH_WARNING = "A registry could not be written ahead of its schedule after the native takeover"
 ENTITY_STORAGE_KEY = "core.entity_registry"
 DEVICE_STORAGE_KEY = "core.device_registry"
@@ -133,6 +139,28 @@ async def test_the_private_registry_flush_api_still_exists(hass: HomeAssistant) 
             and parameter.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
         ]
         assert required == [], FLUSH_FALLBACK_HINT
+
+
+async def test_a_read_only_store_returns_a_newer_minor_payload_without_writing(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """WR-05, D-22: Core saves the migration result, and a Store built read-only drops that save."""
+
+    class ReadOnlyReader(storage.Store[dict[str, Any]]):
+        async def _async_migrate_func(
+            self, old_major_version: int, old_minor_version: int, old_data: dict[str, Any]
+        ) -> dict[str, Any]:
+            return old_data
+
+    key = "mqtt_actions.read_only_pin"
+    envelope = {"version": 1, "minor_version": 2, "key": key, "data": {"records": [], "future": {"kept": True}}}
+    hass_storage[key] = envelope
+    before = json.dumps(hass_storage[key], sort_keys=True)
+
+    loaded = await ReadOnlyReader(hass, 1, key, minor_version=1, read_only=True).async_load()
+
+    assert loaded == {"records": [], "future": {"kept": True}}, READ_ONLY_LOAD_HINT
+    assert json.dumps(hass_storage[key], sort_keys=True) == before, READ_ONLY_LOAD_HINT
 
 
 async def test_a_refused_early_write_falls_back_to_the_scheduled_save(

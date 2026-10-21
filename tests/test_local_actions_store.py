@@ -364,6 +364,45 @@ async def test_migrate_newer_minor_version_loads_the_rows(hass: Any, hass_storag
     assert [local_record_data(record) for record in await _restarted(hass)] == [_row()]
 
 
+async def test_newer_minor_version_load_never_writes_the_store(hass: Any, hass_storage: dict[str, Any]) -> None:
+    """WR-05, D-22: a load reads a minor 2 file without any write call, so its bytes and its stamp stay."""
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = _envelope([_row(), _row(state_value="OFF", label="Off")], minor_version=2)
+    hass_storage[LOCAL_ACTIONS_STORE_KEY]["data"]["groups"] = [{"future": True}]
+    before = _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY)
+
+    with patch("homeassistant.helpers.storage.Store._async_write_data", new_callable=AsyncMock) as write:
+        loaded = await _restarted(hass)
+
+    assert len(loaded) == 2
+    write.assert_not_awaited()
+    assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == before, "the stored minor 2 file keeps its exact bytes"
+
+
+async def test_shape_invalid_newer_minor_store_is_unreadable_and_never_written(
+    hass: Any, hass_storage: dict[str, Any]
+) -> None:
+    """WR-05, T-11-60: a minor 2 payload without a record list is reported unreadable and never rewritten."""
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 2,
+        "key": LOCAL_ACTIONS_STORE_KEY,
+        "data": {"records": "text", "v2": {"future": True}},
+    }
+    before = _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY)
+    store = LocalActionsStore(hass)
+
+    with pytest.raises(HomeAssistantError) as caught:
+        await store.async_load_records()
+    # Matched by name, so this module still collects before the error class exists
+    assert type(caught.value).__name__ == "LocalActionsStoreUnreadableError"
+    assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == before, "the load did not rewrite the payload"
+
+    with pytest.raises(LocalActionsStoreError):
+        await store.async_save_records([_record()])
+
+    assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == before, "the refused save did not write either"
+
+
 def test_round_trip_pure_payload_functions() -> None:
     """The HA-free serializer and parser are inverse on valid records."""
     records = (_record(), _record(kind=SUBENTRY_SELECT, state_value="cozy", mode="replacement", actions=[]))

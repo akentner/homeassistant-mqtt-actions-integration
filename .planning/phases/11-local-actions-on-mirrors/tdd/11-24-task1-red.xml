@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.993" timestamp="2026-10-21T11:37:57.368423+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_hub_removal" name="test_newer_minor_local_store_is_never_written_by_the_start_or_the_settings" time="0.875"><failure message="AssertionError: a start must not re-stamp a newer minor local Store&#10;assert '{&quot;data&quot;: {&quot;g...&quot;version&quot;: 1}' == '{&quot;data&quot;: {&quot;g...&quot;version&quot;: 1}'&#10;  &#10;  Skipping 1106 identical leading characters in diff, use -v to show&#10;  - version&quot;: 2, &quot;version&quot;: 1}&#10;  ?           ^&#10;  + version&quot;: 1, &quot;version&quot;: 1}&#10;  ?           ^">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139781585021184'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...43', 'kind': 'select', 'label': 'away', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f217d741a60&gt;
+
+    async def test_newer_minor_local_store_is_never_written_by_the_start_or_the_settings(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """WR-05, D-22, D-07: a minor 2 file keeps its bytes through a start, a reload and the settings of both hub states."""
+        before = _seed_newer_minor_local_store(hass_storage, NEWER_MINOR_DATA)
+    
+        entry = await _setup(hass, make_hub_entry())
+&gt;       assert _local_store_bytes(hass_storage) == before, "a start must not re-stamp a newer minor local Store"
+E       AssertionError: a start must not re-stamp a newer minor local Store
+E       assert '{"data": {"g..."version": 1}' == '{"data": {"g..."version": 1}'
+E         
+E         Skipping 1106 identical leading characters in diff, use -v to show
+E         - version": 2, "version": 1}
+E         ?           ^
+E         + version": 1, "version": 1}
+E         ?           ^
+
+tests/test_hub_removal.py:560: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1823,7 +1823,7 @@ class Manager:
     def _clear_local_failure_naming(self, identity: LocalActionIdentity) -> None:
         """Delete the local failure issue of the device of `identity` only while it names exactly that trigger."""
         if self._local_failure_identity(identity.device_id) == identity:
-            ir.async_delete_issue(self._hass, DOMAIN, local_failure_issue_id(identity.device_id))
+            self._delete_local_failure_issue(identity.device_id)
 
     def _create_local_failure_issue(
         self, identity: LocalActionIdentity, device_name: str, label: str, error: str

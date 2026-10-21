@@ -603,16 +603,17 @@ async def async_remove_all_devices(
 
 async def async_local_action_device_count(
     hass: HomeAssistant, entry: ConfigEntry, *, local_store_key: str = LOCAL_ACTIONS_STORE_KEY
-) -> int:
+) -> int | None:
     """
     Return how many distinct devices have saved local actions on this instance, for the removal warning (D-08).
 
-    Devices, not triggers or action steps, and orphan-only devices count too. A loaded hub answers from the Manager's
-    records, which equal the file; an unloaded hub reads the file. A file that cannot be read counts as none, the
-    same as for a starting Manager. Counts only: no record leaves this function.
+    Devices, not triggers or action steps, and orphan-only devices count too. A loaded hub answers from the Manager,
+    which returns None while its local load was refused (WR-04); an unloaded hub reads the file. None means unknown:
+    the saved local actions cannot be read, and removal deletes them anyway, so it must never be shown as a number.
+    Counts only: no record leaves this function.
     """
     if entry.state is ConfigEntryState.LOADED and isinstance(manager := getattr(entry, "runtime_data", None), Manager):
-        return manager.local_action_counts().devices
+        return manager.local_action_removal_device_count()
     try:
         records = await LocalActionsStore(hass, local_store_key).async_load_records()
     except (HomeAssistantError, ValueError) as err:
@@ -660,6 +661,8 @@ class Manager:
         self._local_store = LocalActionsStore(hass, local_store_key)
         # Every saved local record, loaded before any mirror is restored; never pruned at a start (D-05, D-22)
         self._local_records: tuple[LocalActionRecord, ...] = ()
+        # False until a local load succeeded; a refused load leaves no records, so their number is unknown (WR-04)
+        self._local_actions_readable = False
         self._stored_last_acted: dict[str, str] = {}
         self._published: set[str] = set()
         # device id -> config hash at the time its breaker tripped; the counting window is never stored (D-17)
@@ -1232,6 +1235,7 @@ class Manager:
             self._local_records = await self._local_store.async_load_records()
         except Exception as err:  # noqa: BLE001 - whatever the load raises, the start goes on without local actions
             self._local_records = ()
+            self._local_actions_readable = False
             LOGGER.warning(
                 "The local actions of this instance cannot be read (%s); they are not used and not overwritten",
                 type(err).__name__,
@@ -1247,6 +1251,7 @@ class Manager:
                 translation_key=ISSUE_LOCAL_ACTIONS_UNREADABLE,
             )
         else:
+            self._local_actions_readable = True
             ir.async_delete_issue(self._hass, DOMAIN, ISSUE_LOCAL_ACTIONS_UNREADABLE)
             self._delete_local_failure_issues_without_record()
 
@@ -1771,6 +1776,22 @@ class Manager:
         return local_action_counts(
             self._local_records, {device_id: mirror.spec for device_id, mirror in self.mirrors.items()}
         )
+
+    @property
+    def local_actions_readable(self) -> bool:
+        """Return whether the last local load of this Manager succeeded; False before a load and after a refused one."""
+        return self._local_actions_readable
+
+    def local_action_removal_device_count(self) -> int | None:
+        """
+        Return how many distinct devices lose their saved local actions when the hub is removed (D-08).
+
+        None while the local load was refused: the Store holds local actions that cannot be read, so their number is
+        unknown and must never be shown as 0 (WR-04). The Store is not read again here.
+        """
+        if not self._local_actions_readable:
+            return None
+        return self.local_action_counts().devices
 
     def local_action_counts_by_device(self) -> dict[str, LocalActionCounts]:
         """

@@ -626,6 +626,7 @@ def test_fixable_issue_text_keeps_its_explanation(language: str) -> None:
 OPTION_STEPS = {
     "init",
     "settings",
+    "settings_unreadable",
     "local_actions",
     "local_actions_device",
     "local_actions_trigger",

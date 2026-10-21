@@ -216,7 +216,9 @@ class HubOptionsFlow(OptionsFlow):
         Show the delete choice, the export switch and the export prefix, and store what is submitted.
 
         The description warns how many devices lose their local actions when the hub is removed, in either removal
-        mode (D-08); the count is read again each time the form is shown.
+        mode (D-08); the count is read again each time the form is shown. While the saved local actions cannot be
+        read, the count is unknown, and the same fields show as step settings_unreadable, whose text says so instead
+        of a number (WR-04).
         """
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -250,13 +252,21 @@ class HubOptionsFlow(OptionsFlow):
         if user_input is not None:
             # A refused submit shows what the user typed, not the stored values
             suggested.update(user_input)
+        data_schema = self.add_suggested_values_to_schema(schema, suggested)
         local_devices = await async_local_action_device_count(self.hass, self.config_entry)
+        if local_devices is None:
+            # Unknown is never a number: the dedicated text says the local actions cannot be read and go anyway
+            return self.async_show_form(step_id="settings_unreadable", data_schema=data_schema, errors=errors)
         return self.async_show_form(
             step_id="settings",
-            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            data_schema=data_schema,
             errors=errors,
             description_placeholders={"local_action_device_count": str(local_devices)},
         )
+
+    async def async_step_settings_unreadable(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Handle the settings form shown while the saved local actions cannot be read, exactly as the settings."""
+        return await self.async_step_settings(user_input)
 
     # --- local actions of mirrored devices (D-06, D-11 to D-16) -------------------------------------------------
 

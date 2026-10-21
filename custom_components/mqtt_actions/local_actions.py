@@ -176,13 +176,19 @@ class ParsedLocalActions:
     """
     The records of a loaded local-actions payload.
 
-    `dropped` counts the stored rows left out: malformed ones and later duplicates of an identity. `shape_valid` is
-    False when the payload is not a mapping with a record list at all, which loads no record.
+    `dropped` counts the stored rows left out of `records`: malformed ones and later duplicates of an identity.
+    `preserved` holds copies of the malformed rows in stored order, for example of a mode a newer minor release adds,
+    and `extra` copies of the top-level keys other than the record list. Neither is ever a record: nothing preserved is
+    applied, run, counted or shown; it is only written back after the records on every save (D-07, WR-03). A later
+    duplicate of a parsed identity is not preserved, so removing a record never brings an older row back (D-10).
+    `shape_valid` is False when the payload is not a mapping with a record list at all, which loads no record.
     """
 
     records: tuple[LocalActionRecord, ...]
     dropped: int
     shape_valid: bool = True
+    preserved: tuple[Any, ...] = ()
+    extra: dict[str, Any] = dataclasses.field(default_factory=dict)
 
 
 def copy_local_records(records: Iterable[LocalActionRecord]) -> tuple[LocalActionRecord, ...]:
@@ -196,27 +202,44 @@ def parse_local_actions_payload(data: Any) -> ParsedLocalActions:
 
     Every row is validated on its own, so one malformed row never removes a valid one. Records are not matched against
     any device: orphan and kind-mismatched rows load like every other row. The first row of an identity wins, as in
-    `match_local_records`; later rows of the same identity are dropped.
+    `match_local_records`; later rows of the same identity are dropped. A row that fails to parse and every top-level
+    key other than the record list are kept as copies, to be written back unchanged (D-07, WR-03).
     """
     rows = data.get(LOCAL_ACTIONS_RECORDS) if isinstance(data, dict) else None
     if not isinstance(rows, list):
         return ParsedLocalActions((), 0, shape_valid=False)
     records: list[LocalActionRecord] = []
+    preserved: list[Any] = []
     seen: set[LocalActionIdentity] = set()
     for row in rows:
         try:
             record = parse_local_record(row)
         except LocalActionRecordInvalid:
+            preserved.append(copy.deepcopy(row))
             continue
         if record.identity not in seen:
             seen.add(record.identity)
             records.append(record)
-    return ParsedLocalActions(tuple(records), len(rows) - len(records))
+    extra = {key: copy.deepcopy(value) for key, value in data.items() if key != LOCAL_ACTIONS_RECORDS}
+    return ParsedLocalActions(tuple(records), len(rows) - len(records), preserved=tuple(preserved), extra=extra)
 
 
-def local_actions_payload(records: Iterable[LocalActionRecord]) -> dict[str, Any]:
-    """Return the stored payload of the records: raw JSON rows only, each with its own copy of the actions."""
-    return {LOCAL_ACTIONS_RECORDS: [local_record_data(record) for record in records]}
+def local_actions_payload(
+    records: Iterable[LocalActionRecord], *, preserved: Iterable[Any] = (), extra: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
+    """
+    Return the stored payload of the records: raw JSON rows only, each with its own copy of the actions.
+
+    The `extra` keys come first, then the record list: the record rows followed by the `preserved` rows, all as copies.
+    Preserved rows are rows this release cannot read; they are kept, never records (D-07, WR-03). An extra key named
+    like the record list never overrides it.
+    """
+    payload = {key: copy.deepcopy(value) for key, value in (extra or {}).items() if key != LOCAL_ACTIONS_RECORDS}
+    payload[LOCAL_ACTIONS_RECORDS] = [
+        *(local_record_data(record) for record in records),
+        *(copy.deepcopy(row) for row in preserved),
+    ]
+    return payload
 
 
 def migrate_local_actions_payload(old_major_version: int, old_minor_version: int, old_data: Any) -> Any:

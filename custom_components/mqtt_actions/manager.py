@@ -302,6 +302,16 @@ class Device:
         return self.spec.name
 
 
+def local_failure_issue_id(device_id: str) -> str:
+    """Return the id of the local failure issue of a device; independent of the owner's action_failed id (D-18)."""
+    return f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{device_id}"
+
+
+def _issue_text(text: str, limit: int) -> str:
+    """Return broker or run text as an issue placeholder: cut to its cap first, then markdown-escaped (T-11-23)."""
+    return escape_markdown(text[:limit])
+
+
 def _device_subentries(entry: ConfigEntry) -> list[ConfigSubentry]:
     """Return the device subentries of the hub entry: the Switch subentries followed by the Select subentries."""
     return [*entry.get_subentries_of_type(SUBENTRY_SWITCH), *entry.get_subentries_of_type(SUBENTRY_SELECT)]
@@ -1751,14 +1761,18 @@ class Manager:
                 shown(error),
             )
             self._create_local_failure_issue(identity, outcome.device_name, outcome.label, error)
-        elif outcome.status is OutcomeStatus.SUCCESS and self._local_failure_identity(identity.device_id) == identity:
-            ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{identity.device_id}")
+        elif outcome.status is OutcomeStatus.SUCCESS:
+            self._clear_local_failure_naming(identity)
 
     @callback
     def async_clear_local_failure_for_removed_trigger(self, identity: LocalActionIdentity) -> None:
         """Delete the local failure issue when it names the trigger whose customization was just removed (D-19)."""
+        self._clear_local_failure_naming(identity)
+
+    def _clear_local_failure_naming(self, identity: LocalActionIdentity) -> None:
+        """Delete the local failure issue of the device of `identity` only while it names exactly that trigger."""
         if self._local_failure_identity(identity.device_id) == identity:
-            ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{identity.device_id}")
+            ir.async_delete_issue(self._hass, DOMAIN, local_failure_issue_id(identity.device_id))
 
     def _create_local_failure_issue(
         self, identity: LocalActionIdentity, device_name: str, label: str, error: str
@@ -1773,22 +1787,22 @@ class Manager:
         ir.async_create_issue(
             self._hass,
             DOMAIN,
-            f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{identity.device_id}",
+            local_failure_issue_id(identity.device_id),
             data={"kind": identity.kind, "state_value": identity.state_value},
             is_fixable=False,
             severity=ir.IssueSeverity.ERROR,
             translation_key=ISSUE_LOCAL_ACTION_FAILED,
             translation_placeholders={
-                "device": escape_markdown(device_name[:MAX_TEXT_LENGTH]),
-                "trigger": escape_markdown(label[:MAX_TEXT_LENGTH]),
+                "device": _issue_text(device_name, MAX_TEXT_LENGTH),
+                "trigger": _issue_text(label, MAX_TEXT_LENGTH),
                 "time": dt_util.now().replace(microsecond=0).isoformat(),
-                "error": escape_markdown(error[:MAX_ISSUE_ERROR_LENGTH]),
+                "error": _issue_text(error, MAX_ISSUE_ERROR_LENGTH),
             },
         )
 
     def _local_failure_identity(self, device_id: str) -> LocalActionIdentity | None:
         """Return the identity of the trigger the local failure issue of a device names, None without one."""
-        issue = ir.async_get(self._hass).async_get_issue(DOMAIN, f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{device_id}")
+        issue = ir.async_get(self._hass).async_get_issue(DOMAIN, local_failure_issue_id(device_id))
         if issue is None or issue.data is None:
             return None
         kind, state_value = issue.data.get("kind"), issue.data.get("state_value")

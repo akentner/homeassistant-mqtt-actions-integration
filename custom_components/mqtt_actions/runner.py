@@ -27,7 +27,7 @@ from .const import (
     TRIGGER_SETUP,
 )
 from .document import DocumentRejectedError, analyze_actions, escape_markdown
-from .local_actions import BranchOutcome, effective_policy, reduce_local_outcome, summarize_trace
+from .local_actions import LOCAL_SAFE_POLICY, BranchOutcome, effective_policy, reduce_local_outcome, summarize_trace
 from .trust import DeniedServiceCallError, guard_actions
 
 if TYPE_CHECKING:
@@ -80,10 +80,14 @@ class ActionRunner:
         self._plans: dict[str, dict[str, EffectiveTriggerPlan]] = {}
         # device id -> number of runner-initiated stops; a run that overlaps one never proves a local success
         self._stops: dict[str, int] = {}
+        # device id -> the policy snapshot the current Script of a mirror was built with (D-03, MIR-11)
+        self._policies: dict[str, EffectivePolicy] = {}
         # Receives one BranchOutcome per run of a trigger with a local branch, after both branches settled
         self.on_local_outcome: Callable[[BranchOutcome], None] | None = None
 
-    async def async_build_device(self, spec: DeviceSpec, *, restricted: bool = False) -> None:
+    async def async_build_device(
+        self, spec: DeviceSpec, *, restricted: bool = False, on_swap: Callable[[], None] | None = None
+    ) -> None:
         """
         Build the one Script of the device and replace the previous one.
 
@@ -95,7 +99,8 @@ class ActionRunner:
         setup) and that trigger is left out while the others and the baseline tracking keep working. The runnable
         triggers become the branches of one `choose` that dispatches on the run variable `trigger_key`, so serial
         ordering and restart cancellation hold across all triggers of the device (D-10, D-11). Reconfiguring the
-        device rebuilds it; the previous Script is unloaded only after the new one is registered.
+        device rebuilds it; the previous Script is unloaded only after the new one is registered. `on_swap` runs at the
+        moment the new Script replaces the old one, with no await in between.
         """
         runnable: list[TriggerSpec] = []
         for trigger in spec.triggers.values():
@@ -112,6 +117,7 @@ class ActionRunner:
         script = await self._async_build_script(spec, runnable, restricted=restricted) if runnable else None
         previous = self._scripts.pop(spec.device_id, None)
         self._plans.pop(spec.device_id, None)
+        self._policies.pop(spec.device_id, None)
         if script is None:
             self._runnable.pop(spec.device_id, None)
             self._restricted.discard(spec.device_id)
@@ -122,11 +128,18 @@ class ActionRunner:
                 self._restricted.add(spec.device_id)
             else:
                 self._restricted.discard(spec.device_id)
+        if on_swap is not None:
+            on_swap()
         if previous is not None:
             await previous.async_unload()
 
     async def async_build_effective(
-        self, spec: DeviceSpec, plans: Sequence[EffectiveTriggerPlan], *, policy: EffectivePolicy | None = None
+        self,
+        spec: DeviceSpec,
+        plans: Sequence[EffectiveTriggerPlan],
+        *,
+        policy: EffectivePolicy | None = None,
+        on_swap: Callable[[], None] | None = None,
     ) -> None:
         """
         Build the one Script of a mirror from the effective plans of its triggers and replace the previous one.
@@ -139,12 +152,26 @@ class ActionRunner:
         inside the single device Script; there is no second Script and no step is patched.
 
         `policy` is the device-wide snapshot for the Script mode and queue bound; by default the owner's settings when
-        its exact hash is approved, the fixed safe local policy otherwise (D-03).
+        its exact hash is approved, the fixed safe local policy otherwise (D-03). The snapshot is recorded with the
+        Script (`policy_for`), and `on_swap` runs at the moment the Script is replaced or removed, with no await in
+        between, so the caller can hand the same snapshot to its tracker and breaker atomically (MIR-11).
         """
+        if policy is None:
+            policy = effective_policy(spec, plans[0].approval) if plans else LOCAL_SAFE_POLICY
+        snapshot = policy
+
+        def _swapped() -> None:
+            if spec.device_id in self._scripts:
+                self._policies[spec.device_id] = snapshot
+            if on_swap is not None:
+                on_swap()
+
         if all(plan.customization is None for plan in plans):
             if any(plan.owner_eligible for plan in plans):
-                await self.async_build_device(spec, restricted=True)
+                await self.async_build_device(spec, restricted=True, on_swap=_swapped)
             else:
+                # The unload removes the Script before its first await, so nothing runs between the two
+                _swapped()
                 await self.async_unload(spec.device_id)
             return
         built: list[EffectiveTriggerPlan] = []
@@ -152,9 +179,9 @@ class ActionRunner:
             checked = await self._async_check_branches(spec, plan)
             if checked.runnable:
                 built.append(checked.at_dispatch(f"0/choose/{len(built)}/sequence"))
-        policy = policy or effective_policy(spec, plans[0].approval)
         script = await self._async_build_effective_script(spec, built, policy) if built else None
         previous = self._scripts.pop(spec.device_id, None)
+        self._policies.pop(spec.device_id, None)
         if script is None:
             self._runnable.pop(spec.device_id, None)
             self._plans.pop(spec.device_id, None)
@@ -164,6 +191,7 @@ class ActionRunner:
             self._runnable[spec.device_id] = frozenset(plan.trigger_key for plan in built)
             self._plans[spec.device_id] = {plan.trigger_key: plan for plan in built}
             self._restricted.add(spec.device_id)
+        _swapped()
         if previous is not None:
             await previous.async_unload()
 
@@ -233,9 +261,8 @@ class ActionRunner:
         )
 
     def policy_for(self, device_id: str) -> EffectivePolicy | None:
-        """Return the policy snapshot the device Script was built with; skeleton (Plan 11-05 Task 3 RED)."""
-        del device_id
-        return None
+        """Return the policy snapshot the current Script of a mirror was built with, None without one."""
+        return self._policies.get(device_id)
 
     def plan_for(self, device_id: str, key: str) -> EffectiveTriggerPlan | None:
         """Return the effective plan the device Script was built with for a trigger, or None."""
@@ -493,6 +520,7 @@ class ActionRunner:
         self._restricted.discard(device_id)
         self._plans.pop(device_id, None)
         self._stops.pop(device_id, None)
+        self._policies.pop(device_id, None)
         if (script := self._scripts.pop(device_id, None)) is not None:
             await script.async_unload()
         if remove_issue:

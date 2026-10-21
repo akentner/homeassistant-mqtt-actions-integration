@@ -97,6 +97,7 @@ from .document import (
 )
 from .entities import device_info_for
 from .local_actions import (
+    LOCAL_SAFE_POLICY,
     LocalActionCounts,
     LocalActionIdentity,
     LocalActionMode,
@@ -270,7 +271,8 @@ class Device:
     mirror: MirrorInfo | None = None
     # The last accepted canonical StateValue of the state topic, None until one arrived; what a native entity shows
     value: str | None = None
-    # The device-wide execution policy of a mirror; skeleton (Plan 11-05 Task 3 RED)
+    # The device-wide execution policy of a mirror, the one snapshot its tracker, breaker and Script follow; None for an
+    # owned device, which follows its own subentry (D-03, MIR-11)
     policy: EffectivePolicy | None = None
 
     @property
@@ -1840,8 +1842,25 @@ class Manager:
         if device.mirror is None:
             return
         approval = str(self._mirror_approval(device))
+        # One snapshot for the Script, the tracker and the breaker: the owner's settings only for the exact approved
+        # hash, the fixed safe local policy otherwise; handed over at the moment the Script is swapped (D-03, MIR-11)
+        policy = effective_policy(device.spec, approval)
         plans = build_effective_trigger_plans(device.spec, approval, self._local_records)
-        await self.runner.async_build_effective(device.spec, plans, policy=effective_policy(device.spec, approval))
+        await self.runner.async_build_effective(
+            device.spec, plans, policy=policy, on_swap=partial(self._apply_policy, device, policy)
+        )
+
+    @callback
+    def _apply_policy(self, device: Device, policy: EffectivePolicy) -> None:
+        """
+        Give the tracker and the breaker of a mirror the policy its new Script was built with; no await, no reset.
+
+        The breaker keeps its window and its trip: only a changed owner document or a saved local edit releases it.
+        """
+        device.policy = policy
+        device.tracker.run_on_startup = policy.run_on_startup
+        device.breaker.max_runs = policy.breaker_max_runs
+        device.breaker.window = float(policy.breaker_window)
 
     async def async_remove_mirror(self, device_id: str) -> None:
         """
@@ -1979,7 +1998,12 @@ class Manager:
         )
 
     def _build_mirror(self, parsed: ParsedDocument, *, startup: bool) -> Device:
-        """Build the runtime state of a mirror: tracker, breaker and the recorded static analysis; no Script."""
+        """
+        Build the runtime state of a mirror: tracker, breaker and the recorded static analysis; no Script.
+
+        Tracker and breaker start on the safe local policy, never on owner metadata; the Script build that follows
+        before any subscription hands them the effective policy (D-03).
+        """
         spec = parsed.spec
         stored = self._stored_last_acted.get(parsed.device_id)
         device = Device(
@@ -1987,14 +2011,15 @@ class Manager:
             spec=spec,
             tracker=StateTracker(
                 last_acted=stored if stored in spec.accepted.values() else None,
-                run_on_startup=spec.run_on_startup,
+                run_on_startup=LOCAL_SAFE_POLICY.run_on_startup,
                 startup_pending=startup,
                 accepted=spec.accepted,
             ),
             # The canonical content stands in for the subentry fingerprint, so the persisted breaker hash still works
             signature=canonical_json(parsed.content),
-            breaker=self._new_breaker(spec),
+            breaker=self._breaker(LOCAL_SAFE_POLICY.breaker_max_runs, LOCAL_SAFE_POLICY.breaker_window),
             mirror=self._mirror_info(parsed, keep_native=parsed.device_id in self._native.mirrors),
+            policy=LOCAL_SAFE_POLICY,
         )
         self._restore_tripped(device)
         return device
@@ -2004,7 +2029,8 @@ class Manager:
         Apply a changed document of the pinned owner to an existing mirror; the device and its subscriptions stay.
 
         Like a reconfigured owned device it gets a fresh breaker with its issue deleted, and a baseline that is no
-        StateValue of the new spec becomes unknown (D-15 of Phase 2, A11).
+        StateValue of the new spec becomes unknown (D-15 of Phase 2, A11). Startup flag and breaker limits stay on the
+        current policy until the Script rebuild that follows hands over the new one (MIR-11).
         """
         spec = parsed.spec
         # A mirror that was native stays native, whatever the new document says (T-5-11)
@@ -2013,11 +2039,10 @@ class Manager:
         device.mirror = mirror
         self._remember_native_mirror(device)
         device.signature = canonical_json(parsed.content)
-        device.tracker.run_on_startup = spec.run_on_startup
         device.tracker.accepted = spec.accepted
         if device.tracker.last_acted is not None and device.tracker.last_acted not in spec.accepted.values():
             device.tracker.last_acted = None
-        device.breaker = self._new_breaker(spec)
+        device.breaker = self._breaker(device.breaker.max_runs, device.breaker.window)
         self._delete_breaker_issue(device.device_id)
         self._tripped.pop(device.device_id, None)
         self._schedule_save()
@@ -2454,7 +2479,11 @@ class Manager:
 
     def _new_breaker(self, spec: DeviceSpec) -> CircuitBreaker:
         """Build the breaker of a device from its configured limits (D-14)."""
-        return CircuitBreaker(spec.breaker_max_runs, float(spec.breaker_window), clock=self._breaker_clock)
+        return self._breaker(spec.breaker_max_runs, spec.breaker_window)
+
+    def _breaker(self, max_runs: int, window: float) -> CircuitBreaker:
+        """Build a breaker with the given limits on the manager clock."""
+        return CircuitBreaker(max_runs, float(window), clock=self._breaker_clock)
 
     def _breaker_clock(self) -> float:
         """Read the manager clock at call time so a replaced clock reaches breakers that already exist."""
@@ -2473,7 +2502,7 @@ class Manager:
             "Circuit breaker tripped for device %s: more than %d runs within %d seconds, so the device is paused",
             device.name,
             device.breaker.max_runs,
-            device.spec.breaker_window,
+            int(device.breaker.window),
         )
         self._create_breaker_issue(device)
         self._tripped[device.device_id] = _hash_fingerprint(device.signature)
@@ -2517,8 +2546,9 @@ class Manager:
             translation_placeholders={
                 # The name of a mirror comes from the broker
                 "device": escape_markdown(device.name) if device.mirror is not None else device.name,
-                "max_runs": str(device.spec.breaker_max_runs),
-                "window": str(device.spec.breaker_window),
+                # The limits the breaker applies: a mirror's effective policy, an owned device's own settings
+                "max_runs": str(device.breaker.max_runs),
+                "window": str(int(device.breaker.window)),
             },
         )
 

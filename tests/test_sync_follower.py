@@ -378,7 +378,12 @@ async def test_mirror_count_is_capped(
 async def test_mirror_carries_the_documents_settings(
     hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable
 ) -> None:
-    """Run mode, startup flag and breaker limits follow the document; the signature is the canonical content."""
+    """
+    Run mode, startup flag and breaker limits follow the document once it is approved; the signature is the content.
+
+    Before the exact hash is approved the tracker and the breaker use the safe local policy (Phase 11 D-03): owner
+    metadata gains no execution authority while unapproved.
+    """
     spec = make_spec(on=ON_ACTIONS, run_on_startup=True, run_mode="restart", breaker_max_runs=3, breaker_window=7)
     entry = await _setup(hass, make_hub_entry())
 
@@ -387,10 +392,15 @@ async def test_mirror_carries_the_documents_settings(
     mirror = _mirror(entry, spec.device_id)
     assert mirror.spec.run_mode == "restart"
     assert mirror.spec.run_on_startup is True
+    assert mirror.tracker.run_on_startup is False
+    assert (mirror.breaker.max_runs, mirror.breaker.window) == (5, 10.0)
+    assert mirror.signature == canonical_json(build_content(spec))
+
+    assert mirror.mirror is not None
+    assert await entry.runtime_data.async_approve(spec.device_id, mirror.mirror.actions_hash)
     assert mirror.tracker.run_on_startup is True
     assert mirror.tracker.startup_pending is False
     assert (mirror.breaker.max_runs, mirror.breaker.window) == (3, 7.0)
-    assert mirror.signature == canonical_json(build_content(spec))
 
 
 async def test_static_analysis_is_recorded_on_the_mirror(

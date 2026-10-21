@@ -586,7 +586,7 @@ async def test_approved_exact_hash_switches_every_policy_consumer_together(
 
     # New owner actions: the approval no longer matches, so every consumer falls back to the safe policy together
     changed = make_spec(device_id=spec.device_id, on=[{"action": "test.owner_other"}], **HOSTILE)
-    await deliver_config(hass, spec.device_id, document_payload(changed, rev=2))
+    await deliver_config(hass, spec.device_id, document_payload(changed, rev=2), retain=False)
     assert str(manager.approval_state(spec.device_id)) == "pending"
     _assert_coherent(manager, spec.device_id, LOCAL_SAFE_POLICY)
 

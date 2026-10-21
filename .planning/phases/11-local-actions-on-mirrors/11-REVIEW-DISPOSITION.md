@@ -9,7 +9,7 @@ findings:
     title: "Unknown keys inside a parseable row are dropped on save, contradicting the new \"saving here keeps them\" promise"
   - id: WR-06
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "An in-flight failing run re-creates the local failure issue after a mute or empty-additive save cleared it (WR-02 fix is racy)"
   - id: IN-08
     severity: info
@@ -67,7 +67,7 @@ findings:
     severity: warning
     disposition: fixed
     title: "The hub-removal warning reports 0 devices when the local Store is unreadable, but removal deletes the file anyway"
-open: 11
+open: 10
 total: 16
 recorded: 2026-10-21T08:41:32.564Z
 ---
@@ -77,7 +77,7 @@ recorded: 2026-10-21T08:41:32.564Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | WR-05 | warning | fixed | plan 11-24, b4e253e 94403a8 |
-| WR-06 | warning | open | - |
+| WR-06 | warning | fixed | plan 11-25, ca2782f |
 | IN-08 | info | open | - |
 | IN-09 | info | open | - |
 | IN-10 | info | open | - |

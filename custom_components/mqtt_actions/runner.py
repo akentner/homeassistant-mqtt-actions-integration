@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.core import Context
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.script import Script
+from homeassistant.helpers.trace import trace_get
 from homeassistant.util import dt as dt_util
 
 from .actions import ActionsInvalid, async_validate_actions
@@ -21,6 +22,7 @@ from .const import (
     TRIGGER_SETUP,
 )
 from .document import DocumentRejectedError, analyze_actions, escape_markdown
+from .local_actions import BranchOutcome, effective_policy, reduce_local_outcome, summarize_trace
 from .trust import DeniedServiceCallError, guard_actions
 
 if TYPE_CHECKING:
@@ -29,7 +31,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
-    from .local_actions import EffectiveTriggerPlan
+    from .local_actions import EffectivePolicy, EffectiveTriggerPlan
     from .model import DeviceSpec, TriggerSpec
 
 
@@ -71,6 +73,10 @@ class ActionRunner:
         self._restricted: set[str] = set()
         # device id -> trigger key -> the effective plan its current Script was built with; only customized mirrors
         self._plans: dict[str, dict[str, EffectiveTriggerPlan]] = {}
+        # device id -> number of runner-initiated stops; a run that overlaps one never proves a local success
+        self._stops: dict[str, int] = {}
+        # Receives one BranchOutcome per run of a trigger with a local branch, after both branches settled
+        self.on_local_outcome: Callable[[BranchOutcome], None] | None = None
 
     async def async_build_device(self, spec: DeviceSpec, *, restricted: bool = False) -> None:
         """
@@ -114,7 +120,9 @@ class ActionRunner:
         if previous is not None:
             await previous.async_unload()
 
-    async def async_build_effective(self, spec: DeviceSpec, plans: Sequence[EffectiveTriggerPlan]) -> None:
+    async def async_build_effective(
+        self, spec: DeviceSpec, plans: Sequence[EffectiveTriggerPlan], *, policy: EffectivePolicy | None = None
+    ) -> None:
         """
         Build the one Script of a mirror from the effective plans of its triggers and replace the previous one.
 
@@ -124,6 +132,9 @@ class ActionRunner:
         GuardedTemplate apply to the owner actions only, after the final validation; trusted local actions keep
         owned-device trust (D-02, T-11-05). Both branches of a trigger run as one native `parallel`, owner first,
         inside the single device Script; there is no second Script and no step is patched.
+
+        `policy` is the device-wide snapshot for the Script mode and queue bound; by default the owner's settings when
+        its exact hash is approved, the fixed safe local policy otherwise (D-03).
         """
         if all(plan.customization is None for plan in plans):
             if any(plan.owner_eligible for plan in plans):
@@ -136,7 +147,8 @@ class ActionRunner:
             checked = await self._async_check_branches(spec, plan)
             if checked.runnable:
                 built.append(checked.at_dispatch(f"0/choose/{len(built)}/sequence"))
-        script = await self._async_build_effective_script(spec, built) if built else None
+        policy = policy or effective_policy(spec, plans[0].approval)
+        script = await self._async_build_effective_script(spec, built, policy) if built else None
         previous = self._scripts.pop(spec.device_id, None)
         if script is None:
             self._runnable.pop(spec.device_id, None)
@@ -175,7 +187,9 @@ class ActionRunner:
                 local = False
         return plan.restricted_to(owner=owner, local=local)
 
-    async def _async_build_effective_script(self, spec: DeviceSpec, built: list[EffectiveTriggerPlan]) -> Script | None:
+    async def _async_build_effective_script(
+        self, spec: DeviceSpec, built: list[EffectiveTriggerPlan], policy: EffectivePolicy
+    ) -> Script | None:
         """Assemble the dispatcher of the effective plans, validate it, guard the owner subtrees, build the Script."""
         # Only the hashed hex key enters a template, never option names or user text (T-02-07)
         sequence = [
@@ -207,8 +221,8 @@ class ActionRunner:
             validated,
             spec.name,
             DOMAIN,
-            script_mode="queued" if spec.run_mode == RUN_MODE_SERIAL else "restart",
-            max_runs=SERIAL_QUEUE_LIMIT,
+            script_mode="queued" if policy.run_mode == RUN_MODE_SERIAL else "restart",
+            max_runs=policy.queue_limit,
             max_exceeded="WARNING",
             logger=LOGGER,
         )
@@ -311,6 +325,7 @@ class ActionRunner:
             return
         generation = self._generation.get(device_id, 0) + 1
         self._generation[device_id] = generation
+        plan = self.plan_for(device_id, trigger_key)
         self._entry.async_create_background_task(
             self._hass,
             self._async_run(
@@ -321,6 +336,8 @@ class ActionRunner:
                 generation=generation,
                 run_variables={**run_variables, "trigger_key": trigger_key, "test": test},
                 restricted=device_id in self._restricted,
+                local_plan=plan if plan is not None and plan.local_path is not None else None,
+                stops=self._stops.get(device_id, 0),
             ),
             name=f"{DOMAIN} {script.name}",
         )
@@ -335,6 +352,8 @@ class ActionRunner:
         generation: int,
         run_variables: dict[str, Any],
         restricted: bool,
+        local_plan: EffectiveTriggerPlan | None = None,
+        stops: int = 0,
     ) -> None:
         """
         Run the device's Script once; the Script mode queues or restarts.
@@ -347,12 +366,19 @@ class ActionRunner:
 
         A service name that resolved to a denied service stops the run of a restricted Script (D-05); it is logged with
         device, trigger and service name and shown in Repairs, never with action data.
+
+        A run of a trigger with a local branch gets a fresh task-local trace collector; after the run it is reduced
+        to one bounded BranchOutcome and cleared (D-18, D-19, T-11-08). Other runs are unchanged.
         """
         if self._scripts.get(device_id) is not script:
             return  # The device was unloaded or rebuilt before this run started
+        trace = trace_get() if local_plan is not None else None
+        # Set once the run returned a result or raised; a dropped run (None) or a cancelled task proves nothing
+        ran = False
         try:
             result = await script.async_run(run_variables, Context())
         except DeniedServiceCallError as err:
+            ran = True
             LOGGER.warning(
                 "Actions for %s of device %s were stopped: the service %s is not allowed for mirrored actions",
                 trigger_label,
@@ -361,12 +387,37 @@ class ActionRunner:
             )
             self.report_denied(device_id, device_name, trigger_label, err.service)
         except Exception as err:  # noqa: BLE001
+            ran = True
             # Only device and trigger names are logged, never the action data (T-01-10)
             LOGGER.exception("Actions for %s of device %s failed", trigger_label, device_name)
             self.report_failure(device_id, device_name, trigger_label, str(err), escape=restricted)
         else:
+            ran = result is not None
             if result is not None and self._generation.get(device_id) == generation:
                 self.clear_issue(device_id)
+        finally:
+            # Also on cancellation: a local error recorded before a restart or unload is still a local failure
+            if trace is not None and local_plan is not None:
+                proven = (
+                    ran
+                    and self._scripts.get(device_id) is script
+                    and self._generation.get(device_id) == generation
+                    and self._stops.get(device_id, 0) == stops
+                    and not self._hass.is_stopping
+                )
+                self._deliver_local_outcome(local_plan, trace, generation=generation, proven=proven)
+
+    def _deliver_local_outcome(
+        self, plan: EffectiveTriggerPlan, trace: dict[str, Any], *, generation: int, proven: bool
+    ) -> None:
+        """Reduce the run's trace to one BranchOutcome, discard the trace and hand the outcome to the listener."""
+        steps = summarize_trace(trace)
+        trace.clear()
+        status, error = reduce_local_outcome(plan, steps, proven=proven)
+        if self.on_local_outcome is not None:
+            self.on_local_outcome(
+                BranchOutcome(plan.device_id, plan.trigger_key, plan.label, status, error, generation)
+            )
 
     def report_failure(
         self, device_id: str, device_name: str, trigger: str, error: str, *, escape: bool = False
@@ -416,6 +467,7 @@ class ActionRunner:
 
     async def async_stop_runs(self, device_id: str) -> None:
         """Stop the running and queued runs of a device; its Script stays usable for later runs."""
+        self._stops[device_id] = self._stops.get(device_id, 0) + 1
         if (script := self._scripts.get(device_id)) is not None:
             await script.async_stop()
 

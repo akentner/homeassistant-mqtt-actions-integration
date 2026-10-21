@@ -18,6 +18,7 @@ drop, cancellation, supersession, a different trigger, an owner-only run) is no 
 import asyncio
 from typing import TYPE_CHECKING, Any
 
+import pytest
 from homeassistant.core import Context, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
@@ -910,3 +911,61 @@ async def test_pending_local_only_script_uses_the_safe_local_policy(hass: HomeAs
 
     assert script is not None
     assert (script.script_mode, script.max_runs) == ("queued", 10)
+
+
+async def test_dispatcher_wrapped_parallel_cancellation_raises_instead_of_returning(hass: HomeAssistant) -> None:
+    """
+    Core pin for the production shape: inside the choose dispatcher a stopped run ends as CancelledError.
+
+    The top-level pin above returns a normal result because `parallel` swallows the branch cancellation; one level
+    down the choose step re-raises it. The runner therefore delivers outcomes from a `finally`, never from the result.
+    """
+    probe = Probe(hass)
+    validated = await async_validate_actions(
+        hass,
+        [
+            {
+                "choose": [
+                    {
+                        "conditions": [{"condition": "template", "value_template": "{{ true }}"}],
+                        "sequence": [
+                            {
+                                "parallel": [
+                                    {"sequence": [{"action": "probe.owner"}]},
+                                    {"sequence": [{"action": "probe.hold"}]},
+                                ]
+                            }
+                        ],
+                    }
+                ]
+            }
+        ],
+    )
+    script = Script(hass, validated, "phase 11 dispatcher cancel pin", "probe", script_mode="queued", max_runs=10)
+    task = await _held_run(hass, script)
+
+    await script.async_stop()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert probe.events == ["probe.owner", "hold_start", "hold_cancelled"], HINT
+    await script.async_unload()
+
+
+async def test_outcome_local_error_before_a_cancel_stays_a_local_failure(hass: HomeAssistant) -> None:
+    """D-19: a continued local error followed by a stop is reported; the cancellation never hides it."""
+    probe = Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(
+        hass,
+        [{"action": "probe.owner"}],
+        [{"action": "probe.fail_local", "continue_on_error": True}, {"action": "probe.hold"}],
+    )
+    _start(runner, spec)
+    await _turns()
+
+    await runner.async_stop_runs(spec.device_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert "hold_cancelled" in probe.events, HINT
+    assert _statuses(outcomes) == [LOCAL_FAILED], HINT
+    assert outcomes[0].error == "LOCAL_FAILURE", HINT

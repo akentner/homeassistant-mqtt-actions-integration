@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from .const import (
     DEFAULT_BREAKER_MAX_RUNS,
     DEFAULT_BREAKER_WINDOW,
+    MAX_ISSUE_ERROR_LENGTH,
     RUN_MODE_SERIAL,
     SERIAL_QUEUE_LIMIT,
     SUBENTRY_SELECT,
@@ -387,3 +388,97 @@ def local_action_counts(records: Iterable[LocalActionRecord], specs: Mapping[str
         muted=sum(1 for record in replacements if not record.actions),
         orphan_only_devices=orphan_only,
     )
+
+
+# --- per-branch outcomes (D-18, D-19) ---------------------------------------------------------------------------------
+
+
+class OutcomeStatus(StrEnum):
+    """What one run proved about the local branch of its trigger."""
+
+    SUCCESS = "success"  # the local branch completed cleanly under the current Script, generation and stop epoch
+    FAILURE = "failure"  # a step at or below the local branch recorded an error, continued or not
+    NO_SUCCESS = "no_success"  # anything else: dropped, cancelled, superseded, stopped, aborted or ambiguous
+
+
+@dataclass(frozen=True, slots=True)
+class StepTrace:
+    """The bounded summary of one trace path: first error, a stop ran there, the step was a false condition."""
+
+    error: str | None
+    stopped: bool
+    condition_false: bool
+
+
+@dataclass(frozen=True, slots=True)
+class BranchOutcome:
+    """
+    The local outcome of one run of one trigger: identity, status, a bounded error and the run's generation.
+
+    It carries no trace content, no variables and no actions (T-11-08). `label` comes from the broker; a consumer
+    escapes it before it reaches markdown.
+    """
+
+    device_id: str
+    trigger_key: str
+    label: str
+    status: OutcomeStatus
+    error: str | None
+    generation: int
+
+
+def bounded_error(text: str) -> str:
+    """Return error text cut to the issue cap."""
+    return text[:MAX_ISSUE_ERROR_LENGTH]
+
+
+def summarize_trace(trace: Mapping[str, Iterable[Any]]) -> dict[str, StepTrace]:
+    """
+    Reduce a Core trace (path -> trace elements with `as_dict()`) to bounded step summaries, in trace order.
+
+    Only the error text, a stop result and a condition result are read; variables and parameters are dropped here.
+    """
+    steps: dict[str, StepTrace] = {}
+    for path, elements in trace.items():
+        error: str | None = None
+        stopped = False
+        condition_false = False
+        for element in elements:
+            data = element.as_dict()
+            if error is None and data.get("error"):
+                error = bounded_error(str(data["error"]))
+            result = data.get("result")
+            result = result if isinstance(result, dict) else {}
+            stopped = stopped or "stop" in result
+            condition_false = result.get("result") is False
+        steps[path] = StepTrace(error, stopped, condition_false)
+    return steps
+
+
+def _under(path: str, prefix: str) -> bool:
+    """Return True for the prefix itself and every path below it."""
+    return path == prefix or path.startswith(f"{prefix}/")
+
+
+def reduce_local_outcome(
+    plan: EffectiveTriggerPlan, steps: Mapping[str, StepTrace], *, proven: bool
+) -> tuple[OutcomeStatus, str | None]:
+    """
+    Classify the local branch of one run conservatively; never infer success from the outer result.
+
+    Any error at or below the local path is a failure, also a continued one or one hidden by an owner stop. Success
+    needs `proven` (the run ran under the current Script, generation and stop epoch), no stop anywhere in the run
+    (a stop ends the whole run), and a reached last top-level local step that is not a false condition. Everything
+    else, including an ambiguous trace, is no success and leaves an existing local issue alone.
+    """
+    if plan.local_path is None or not plan.local_actions:
+        return OutcomeStatus.NO_SUCCESS, None
+    for path, step in steps.items():
+        if step.error is not None and _under(path, plan.local_path):
+            return OutcomeStatus.FAILURE, bounded_error(step.error)
+    if not proven or any(step.stopped for step in steps.values()):
+        return OutcomeStatus.NO_SUCCESS, None
+    last = steps.get(f"{plan.local_path}/{len(plan.local_actions) - 1}")
+    if last is None or last.condition_false:
+        return OutcomeStatus.NO_SUCCESS, None
+    return OutcomeStatus.SUCCESS, None

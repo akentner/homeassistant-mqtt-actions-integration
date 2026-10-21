@@ -33,7 +33,7 @@ Order is fixed by the owner: release v1.0.1 first, then the review findings, the
 - [x] **MIR-05**: An empty "instead of" mutes the trigger on this instance
 - [x] **MIR-06**: Local actions survive owner content changes, renames, rev bumps, restarts and an owner re-pin
 - [x] **MIR-07**: Local actions of a Select option the owner removed are kept inactive, shown as orphaned in the flow, removable there, and re-attach when the same StateValue returns
-- [x] **MIR-08**: On a tombstone or an adoption, local actions are discarded and logged; `adopt_device` reports it in its response; nothing is discarded at start-up or on a transient prune
+- [x] **MIR-08**: On an adoption, local actions are discarded and logged; `adopt_device` reports it in its response. A tombstone removes the mirror but keeps its local actions inactive until the user removes them or the device returns; nothing is discarded at start-up, on a transient prune or on a tombstone (amended 2026-10-21, review WR-01)
 - [x] **MIR-09**: Device mode (observe, disabled) and the circuit breaker apply to local actions; a local edit releases a tripped breaker
 - [x] **MIR-10**: Test buttons and the re-trigger service run the effective actions on this instance; no new status or reason words appear on the broker
 - [x] **MIR-11**: While the owner's actions are unapproved, `run_on_startup`, run mode and breaker limits from the owner's document do not govern local runs; safe defaults apply

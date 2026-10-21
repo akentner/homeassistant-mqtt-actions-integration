@@ -23,9 +23,10 @@ been released, tagged or published.
   the owner actions**, and a locally muted trigger (instead of the owner actions, without local actions, after a separate
   confirmation). **Remove local customization** brings back the owner actions.
 - Lifecycle: local actions survive owner edits, renames, new revisions, restarts and a new pinned owner. Local actions
-  of a removed Select option stay inactive and reattach when the same state value returns. A start or a prune
-  discards nothing. A tombstone or an adoption discards them and logs the count. Removing the integration deletes
-  them, and the removal settings name how many devices are affected.
+  of a removed Select option stay inactive and reattach when the same state value returns. A start, a prune or a
+  tombstone discards nothing: the local actions of a deleted device stay inactive until you remove them, and apply
+  again if the device returns. An adoption discards them and logs the count. Removing the integration deletes them,
+  and the removal settings name how many devices are affected.
 - Repairs: local failures raise their own issue `local_action_failed`, independent of `action_failed`. An error that a
   local step handles with `continue_on_error` still raises it. Only a later successful run of the same trigger, or
   removing its customization, clears it.

@@ -231,7 +231,7 @@ Plans:
   4. Nothing local leaves the instance: the central config, actions hash, export, diagnostics content and adoption payload are byte-identical with and without local actions, existing approvals stay valid, and no new re-trigger status or reason word appears on the broker. Diagnostics show only counts of local actions (per device, orphaned). The approval issue says how many triggers are replaced locally, while the approval stays pending and adoption stays refused. (MIR-04, MIR-10, MIR-12, MIR-14)
   5. Local actions survive owner content changes, renames, rev bumps, restarts and an owner re-pin. Local actions of a Select option the owner removed stay inactive, are listed as orphaned in the options where the user can remove them, and re-attach when the same StateValue returns. A tombstone or an adoption discards them with a log entry and `adopt_device` reports it; start-up and transient prunes discard nothing. The README documents modes, mute, parallel semantics, this lifecycle, downgrade behavior and the `{{ state }}` template caveat. (MIR-06, MIR-07, MIR-08, MIR-15)
 
-**Plans**: 17/22 plans executed
+**Plans**: 17/23 plans executed
 
 Plans:
 **Wave 1**
@@ -282,7 +282,8 @@ Plans:
 - [x] 11-13-PLAN.md — Run the complete Phase 11 quality/security gate on the fixed code and freeze the Phase 12 handoff
 
 **Wave 16** *(blocked on Wave 15 completion)*
-- [ ] 11-18-PLAN.md — Review WR-01: a tombstone removes the mirror but keeps its local actions inactive; MIR-08, success criterion 5 and CONTEXT amended
+- [ ] 11-18-PLAN.md — Review WR-01: a tombstone removes the mirror but keeps its local actions inactive (code, README, troubleshooting, disposition)
+- [ ] 11-23-PLAN.md — Review WR-01 to WR-04 contract text: owner amendments in 11-CONTEXT.md; MIR-08, success criterion 5 and the release-notes draft carry the amended tombstone rule
 
 **Wave 17** *(blocked on Wave 16 completion)*
 - [ ] 11-19-PLAN.md — Review WR-02: saving the named trigger without local actions clears its local failure issue (en/de)

@@ -1275,6 +1275,7 @@ class Manager:
             ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_DENIED_CALL_PREFIX}{device_id}")
             await self._async_refresh_mirror_script(existing)
             self._sync_approval_issues(existing)
+            await self._async_refresh_local_labels(existing)
             return
         device = self._build_mirror(parsed, startup=False)
         # The Script exists before the first message can arrive, so an approved mirror never misses its startup window
@@ -1731,6 +1732,28 @@ class Manager:
         self._delete_breaker_issue(device_id)
         if self._tripped.pop(device_id, None) is not None:
             self._schedule_save()
+
+    async def _async_refresh_local_labels(self, mirror: Device) -> None:
+        """
+        Save the owner's current friendly names as the labels of the active records of a mirror (D-11).
+
+        Only the display label changes: identity, mode and actions stay, and inactive records keep their last known
+        label. Nothing is written when no label changed. The caller holds the lock; a failed save keeps the previous
+        labels in memory and on disk and never fails the owner update that triggered it.
+        """
+        active = match_local_records(mirror.spec, self._local_records).active
+        relabeled = {
+            record.identity: record.with_label(mirror.spec.triggers[key].friendly_name)
+            for key, record in active.items()
+            if record.label != mirror.spec.triggers[key].friendly_name
+        }
+        if not relabeled:
+            return
+        candidate = tuple(relabeled.get(record.identity, record) for record in self._local_records)
+        try:
+            self._local_records = await self._local_store.async_save_records(candidate)
+        except LocalActionsStoreError:
+            LOGGER.warning("The labels of %d local actions could not be refreshed", len(relabeled))
 
     def approval_state(self, device_id: str) -> ApprovalState:
         """

@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-10-PLAN.md
-last_updated: "2026-10-21T03:01:31.577Z"
+stopped_at: Completed 11-12-PLAN.md
+last_updated: "2026-10-21T03:15:47.340Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 396a54f2ad16d797c9fb3d3d64b7132889d0d1b6
+state_head: 8084f54eee8836e034b9d4fb700a48ce82b30650
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 49
-  completed_plans: 46
+  completed_plans: 47
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 11 of 13
+Plan: 12 of 13
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -161,6 +161,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P08 | 17 min | 3 tasks | 16 files |
 | Phase 11 P09 | 8 min | 2 tasks | 12 files |
 | Phase 11 P10 | 14min | 2 tasks | 8 files |
+| Phase 11 P12 | 12 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -368,6 +369,8 @@ Recent decisions affecting current work:
 - [Phase 11]: Diagnostics expose local actions as integers only: local_actions.{devices,triggers,orphaned_triggers,orphan_only_devices} and per-device local_action_triggers/local_action_orphans (D-04)
 - [Phase 11]: 11-10: Multi-instance isolation and the lifecycle oracle are test-only; production was already green, and RED evidence comes from reverted mutation probes
 - [Phase 11]: 11-10: Local-only lifecycle transitions (edit, remove, approval, test presses, refused or failed adoption, keep-mode removal) must publish nothing at all
+- [Phase 11]: 11-12: downgrade warning is a GitHub [!WARNING] alert in README Downgrading to 1.0.1; it states the round trip is unverified and deferred (MIR-F4), and a regex test rejects any verified claim
+- [Phase 11]: 11-12: the adopt_device docs row is checked against the handler return dict through ast, so local_actions_discarded cannot drift
 
 ### Pending Todos
 
@@ -403,8 +406,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T03:01:31.271Z
-Stopped at: Completed 11-10-PLAN.md
+Last session: 2026-10-21T03:15:47.029Z
+Stopped at: Completed 11-12-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

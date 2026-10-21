@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.007" timestamp="2026-10-21T04:33:59.359962+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_hub_removal" name="test_every_removal_path_deletes_the_local_store_and_local_issues[keep]" time="0.903"><failure message="AssertionError: assert 'mqtt_actions.local_actions' not in {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...43', 'kind': 'select', 'label': 'away', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140637005914736'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...43', 'kind': 'select', 'label': 'away', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7fe8a997b1c0&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7fe89ad0f320&gt;
+path = 'keep'
+
+    @pytest.mark.parametrize("path", ["keep", "delete", "unloaded"])
+    async def test_every_removal_path_deletes_the_local_store_and_local_issues(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        make_switch_subentry: Callable,
+        path: str,
+    ) -&gt; None:
+        """D-08: keep, delete and an unloaded hub all leave neither Store key nor any issue, local ones included."""
+        _seed_local_store(hass_storage)
+        options = {CONF_DELETE_DEVICES_ON_REMOVE: True} if path == "delete" else {}
+        entry = await _setup(hass, make_hub_entry([make_switch_subentry("Lamp", on=ON_ACTIONS)], options=options))
+        assert entry.runtime_data.local_action_counts().devices == LOCAL_DEVICE_COUNT
+        local_issues = [_create_local_issue(hass, device_id) for device_id in (LOCAL_A, LOCAL_C)]
+        assert set(local_issues) &lt;= set(_own_issues(hass))
+        if path == "unloaded":
+            assert await hass.config_entries.async_unload(entry.entry_id)
+            await hass.async_block_till_done(wait_background_tasks=True)
+            assert LOCAL_ACTIONS_STORE_KEY in hass_storage, "an unload is not a removal and keeps the local actions"
+    
+        assert await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+&gt;       assert LOCAL_ACTIONS_STORE_KEY not in hass_storage
+E       AssertionError: assert 'mqtt_actions.local_actions' not in {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...43', 'kind': 'select', 'label': 'away', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+
+tests/test_hub_removal.py:435: AssertionError</failure></testcase></testsuite></testsuites>

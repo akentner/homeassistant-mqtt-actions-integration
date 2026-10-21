@@ -159,7 +159,7 @@ failure issue (F-01).
 | F-01 | Low | FIXED | `manager.py:1835-1849` creates `local_action_failed` without `is_persistent`, so HA reloads it inactive with `data=None` after a restart (installed `issue_registry.py:287-296`); `manager.py:2162` deletes it on a transient prune through `_delete_device_issues` (`const.py:351`); `manager.py:1525` deletes it on adoption and the rollback at `manager.py:1466-1481` does not restore it; `docs/troubleshooting.md:208-209` documents the prune deletion | D-19, MIR-13, T-11-21; 11-06 hand-off ("must survive owner content changes and restarts") | The issue disappears only on a proven success of its trigger, on removal or discard of its customization (removal, tombstone discard, completed adoption) or on hub removal. It survives a restart, a transient prune and a failed adoption while the record exists. An issue whose record is gone is deleted at startup | `tests/test_local_actions_lifecycle.py::test_local_failure_issue_survives_restart_prune_and_failed_adoption_until_success_or_removal` | G-01 fixed in 6f381cb |
 | F-02 | Low | FIXED | `manager.py:1218-1232` catches every local Store load error, starts with `_local_records = ()` and logs one warning; `local_actions.py:320-334` then makes approved owner branches eligible on replaced and muted triggers; `manager.py:1906-1911` refuses later edits as a generic `save_failed` | D-05, MIR-05, MIR-06 (saved replacements and mutes silently stop applying); T-11-09 (refusal holds, but its effect is invisible) | Keep the refusal and never overwrite the file. When the local Store cannot be read, raise one instance-level Repairs issue in en and de: saved local actions, replacements and mutes are not applied and edits are refused. Delete it on a later successful load and on hub removal, and document it in troubleshooting | `tests/test_local_actions_manager.py::test_unreadable_local_store_raises_an_instance_issue_and_applies_no_overlay` | G-02 fixed in 44c5fe6 |
 | F-03 | Low | FIXED | `config_flow.py:145-153` creates a hub without touching a leftover local Store; `manager.py:657` and `manager.py:1218-1226` load any `mqtt_actions.local_actions` file; `local_actions.py:217-219` binds no hub to the payload; `manager.py:550-553` only logs a failed delete at removal; a removal on v1.0.1 cannot delete the file at all | D-08 (removing the integration deletes its local Store); D-02 trust expectation (stale trusted local actions run without any approval on a new hub) | A newly created hub (single config entry, so no hub exists at that moment) never starts with records left by an earlier hub: remove a leftover local actions Store before the entry is created. The README states that a removal on 1.0.1 leaves the file until a hub is added again on 1.1 | `tests/test_hub_removal.py::test_new_hub_never_loads_local_actions_left_by_an_earlier_hub` | G-03 fixed in c9c9c63 |
-| F-04 | Low | ROUTED | `manager.py:1527` (`_async_drop_mirror`) pops `_tripped` and `manager.py:1525` deletes the breaker issue; the main Store is saved without the trip before the subentry is created; the rollback at `manager.py:1466-1481` does not restore `_tripped`, so `_restore_tripped` (`manager.py:2790-2810`) finds nothing for the restored mirror | MIR-09 (the breaker applies to local actions, and only a local edit, a changed document or a reload releases it); Phase 2 D-17; T-11-17 (rollback restores the device). Pre-existing since Phase 4; it now also releases local actions | A failed adoption restores the tripped hash, saves it and leaves the restored mirror paused with its breaker issue | `tests/test_local_actions_lifecycle.py::test_failed_adoption_keeps_a_tripped_breaker_paused` | G-04 |
+| F-04 | Low | FIXED | `manager.py:1527` (`_async_drop_mirror`) pops `_tripped` and `manager.py:1525` deletes the breaker issue; the main Store is saved without the trip before the subentry is created; the rollback at `manager.py:1466-1481` does not restore `_tripped`, so `_restore_tripped` (`manager.py:2790-2810`) finds nothing for the restored mirror | MIR-09 (the breaker applies to local actions, and only a local edit, a changed document or a reload releases it); Phase 2 D-17; T-11-17 (rollback restores the device). Pre-existing since Phase 4; it now also releases local actions | A failed adoption restores the tripped hash, saves it and leaves the restored mirror paused with its breaker issue | `tests/test_local_actions_lifecycle.py::test_failed_adoption_keeps_a_tripped_breaker_paused` | G-04 fixed in 8eb4734 |
 | F-05 | Info | NO-CHANGE | `runner.py:53-61`; `README.md` "Parallel runs" | none: RESEARCH pitfall 4 and the "not a security sandbox" note accept the shared namespace; owner values reach local templates only as data | Evidence only | `tests/test_local_parallel.py::test_same_response_variable_is_one_shared_name_without_isolation` | none (no-change) |
 | F-06 | Info | NO-CHANGE | `runner.py:290-293` guards the owner subtree after the assembled validation, while D-02 says "before assembly" | none: validation creates new Template objects, so a guard before assembly would be lost; the owner subtree alone is guarded | Evidence only | `tests/test_local_parallel.py::test_one_additive_runner_applies_the_owner_only_guard_and_leaves_local_unwrapped` | none (no-change) |
 | F-07 | Info | NO-CHANGE | `manager.py:2902-2905`: with a tripped breaker, a test press is refused only when the trigger runs local actions; the re-trigger refuses every paused device (11-07 choice) | none: MIR-09 holds for every local run; the Phase 2 D-13 owner-only bypass is kept (RESEARCH pitfall 8); README "Trust, approval and the gates" documents it | Evidence only | `tests/test_local_actions_manager.py::test_test_button_and_retrigger_refuse_local_runs_while_the_breaker_is_tripped`, `::test_test_button_of_an_overlay_free_mirror_still_runs_while_paused` | none (no-change) |
@@ -340,7 +340,8 @@ gaps:
     finding: F-04
     threat: T-11-17 (also T-11-15)
     truth: "A failed adoption leaves a tripped mirror paused, with its breaker issue, because only a local edit, a changed owner document or a reload releases a breaker (MIR-09, Phase 2 D-17)"
-    status: failed
+    status: resolved
+    fixed_in: "8eb4734 (plan 11-17)"
     reason: "_async_drop_mirror pops _tripped and deletes the breaker issue, the main Store is saved without the trip, and the rollback restores approval, native flag, records and mirror but not the trip; the restored mirror runs local and owner actions again"
     artifacts:
       - path: "custom_components/mqtt_actions/manager.py"
@@ -369,14 +370,13 @@ first, and `depends_on: [11-11]`. G-01, G-02 and G-04 all change `manager.py`, s
 ## Ledger summary
 
 - 0 findings are open.
-- 1 finding is routed: F-04 (G-04).
-- 3 findings are fixed: F-01 (G-01, fixed in 6f381cb by plan 11-14), F-02 (G-02, fixed in 44c5fe6 by plan 11-15)
-  and F-03 (G-03, fixed in c9c9c63 by plan 11-16).
+- 0 findings are routed.
+- 4 findings are fixed: F-01 (G-01, fixed in 6f381cb by plan 11-14), F-02 (G-02, fixed in 44c5fe6 by plan 11-15),
+  F-03 (G-03, fixed in c9c9c63 by plan 11-16) and F-04 (G-04, fixed in 8eb4734 by plan 11-17).
 - 16 findings are closed as no-change: F-05 to F-20.
 
 By severity: 0 Critical, 0 High, 0 Medium, 4 Low, 16 Info.
 
-**Routed-gap count: 4, of which 3 are fixed (G-01, G-02, G-03) and 1 is still routed.** Next step: run
-`/gsd-plan-phase 11 --gaps` to plan 11-14 to 11-17 from the `## Gaps` section, then execute them. Each gap-closure
-plan sets its ledger row to FIXED with the fix commit and the regression test id. Plan 11-13 halts on its precondition
-while any row is ROUTED, and runs the final Phase 11 gate once all four rows show FIXED.
+**Routed-gap count: 4, all fixed (G-01, G-02, G-03, G-04); none is still routed.** Next step: Plan 11-13 may run.
+Its precondition (no OPEN or ROUTED findings row) holds, and it runs the final Phase 11 gate on code that contains
+every review fix.

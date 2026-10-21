@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-10-21T00:34:35.506Z"
+stopped_at: Completed 11-04-PLAN.md
+last_updated: "2026-10-21T00:49:28.629Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: d766715c92f0894563a5f6cdd5e99fcb4714c1e9
+state_head: 8dc8ecdff2eecd9f40b4a08a31e437db456c4fbf
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 49
-  completed_plans: 39
+  completed_plans: 40
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 4 of 13
+Plan: 5 of 13
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -154,6 +154,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P01 | 15 min | 3 tasks | 6 files |
 | Phase 11 P03 | 17 min | 3 tasks | 10 files |
 | Phase 11 P02 | 22 min | 2 tasks | 2 files |
+| Phase 11 P04 | 10 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -339,6 +340,8 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-02: 11-08 uses collapsed: False for the per-trigger section (a collapsed section re-folds after a base error)
 - [Phase 11]: 11-02: Action-list guidance goes into the section/step description; ActionSelector data_description is not rendered
 - [Phase 11]: 11-02: Local-action validation errors use errors[base]; Manager validation stays mandatory because ActionSelector passes raw frontend data
+- [Phase 11]: 11-04: local actions persist in a separate HA Store (mqtt_actions.local_actions, v1, payload {records: [row]}); HA's base Store swallows WriteError, so LocalActionsStore captures write errors and keeps the previous snapshot on a failed save
+- [Phase 11]: 11-04: a newer major local Store version fails the load and the adapter then refuses every save, so the newer file is never overwritten; test instances get distinct local keys via instance_store_keys
 
 ### Pending Todos
 
@@ -374,8 +377,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T00:34:35.259Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-10-21T00:49:28.341Z
+Stopped at: Completed 11-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-12-PLAN.md
-last_updated: "2026-10-21T03:15:47.340Z"
+stopped_at: Completed 11-11-PLAN.md
+last_updated: "2026-10-21T03:37:34.476Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 8084f54eee8836e034b9d4fb700a48ce82b30650
+state_head: 89501993929b8e3eb300f517de11e300a6f9fb58
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 49
-  completed_plans: 47
+  completed_plans: 48
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 12 of 13
+Plan: 13 of 13
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -162,6 +162,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P09 | 8 min | 2 tasks | 12 files |
 | Phase 11 P10 | 14min | 2 tasks | 8 files |
 | Phase 11 P12 | 12 min | 2 tasks | 7 files |
+| Phase 11 P11 | 17 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -371,6 +372,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-10: Local-only lifecycle transitions (edit, remove, approval, test presses, refused or failed adoption, keep-mode removal) must publish nothing at all
 - [Phase 11]: 11-12: downgrade warning is a GitHub [!WARNING] alert in README Downgrading to 1.0.1; it states the round trip is unverified and deferred (MIR-F4), and a regex test rejects any verified claim
 - [Phase 11]: 11-12: the adopt_device docs row is checked against the handler return dict through ast, so local_actions_discarded cannot drift
+- [Phase 11]: 11-11 review routed 4 Low findings to Phase 11 gaps G-01..G-04 (local issue lifecycle, visible refused local Store load, leftover local Store on a new hub, failed adoption keeps trip); 16 Info observations closed no-change; run /gsd-plan-phase 11 --gaps before 11-13
 
 ### Pending Todos
 
@@ -383,6 +385,7 @@ None.
 - [Phase 12]: Verification reports of Phases 1 to 8 read stale or human_needed; all refreshed in Phase 12 (QLT-01, extended to Phases 5, 6 and 8 by owner decision 2026-10-11)
 - [Owner follow-up]: Keep the bench (ha-a, ha-b, ha-c) and its tokens until the Phase 12 bench run; revoke the three tokens and tear down the bench state after v1.1.0 (see v1.0.1-phases/08-real-instance-verification/08-UAT.md)
 - [Open decision]: owner availability (AVL-01) stays deferred to v2
+- Phase 11 final gate (11-13) is blocked until gap plans 11-14..11-17 set F-01..F-04 to FIXED in 11-CROSS-FILE-REVIEW.md
 
 ### Quick Tasks Completed
 
@@ -406,8 +409,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T03:15:47.029Z
-Stopped at: Completed 11-12-PLAN.md
+Last session: 2026-10-21T03:37:34.165Z
+Stopped at: Completed 11-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

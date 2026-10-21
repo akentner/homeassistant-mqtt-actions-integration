@@ -231,7 +231,7 @@ Plans:
   4. Nothing local leaves the instance: the central config, actions hash, export, diagnostics content and adoption payload are byte-identical with and without local actions, existing approvals stay valid, and no new re-trigger status or reason word appears on the broker. Diagnostics show only counts of local actions (per device, orphaned). The approval issue says how many triggers are replaced locally, while the approval stays pending and adoption stays refused. (MIR-04, MIR-10, MIR-12, MIR-14)
   5. Local actions survive owner content changes, renames, rev bumps, restarts and an owner re-pin. Local actions of a Select option the owner removed stay inactive, are listed as orphaned in the options where the user can remove them, and re-attach when the same StateValue returns. A tombstone or an adoption discards them with a log entry and `adopt_device` reports it; start-up and transient prunes discard nothing. The README documents modes, mute, parallel semantics, this lifecycle, downgrade behavior and the `{{ state }}` template caveat. (MIR-06, MIR-07, MIR-08, MIR-15)
 
-**Plans**: 11/13 plans executed
+**Plans**: 12/13 plans executed
 
 Plans:
 **Wave 1**
@@ -264,7 +264,7 @@ Plans:
 - [x] 11-12-PLAN.md — Document local actions (README, operations, troubleshooting) and draft unpublished release notes
 
 **Wave 10** *(blocked on Wave 9 completion)*
-- [ ] 11-11-PLAN.md — Run the milestone-wide cross-file review and route every product finding into a bounded Phase 11 gap
+- [x] 11-11-PLAN.md — Run the milestone-wide cross-file review and route every product finding into a bounded Phase 11 gap
 
 **Wave 11** *(blocked on Wave 10 completion)*
 - [ ] 11-13-PLAN.md — Run the complete Phase 11 quality/security gate on the fixed code and freeze the Phase 12 handoff
@@ -309,7 +309,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | 9.1. UAT-02 Gap Closure (INSERTED) | 12/12 | Complete    | 2026-10-16 |
 | 9.2. CR-01 Cross-Instance Gap Closure (INSERTED) | 9/9 | Complete    | 2026-10-16 |
 | 10. Review Findings and Native Migration Extraction | 10/10 | Complete    | 2026-10-17 |
-| 11. Local Actions on Mirrors | 11/13 | In Progress | - |
+| 11. Local Actions on Mirrors | 12/13 | In Progress | - |
 | 12. Re-verification and v1.1.0 Release | 0/TBD | Not started | - |
 
 ## Backlog

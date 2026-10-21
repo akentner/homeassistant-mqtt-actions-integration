@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.022" timestamp="2026-10-21T03:59:09.824448+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_repairs_flow" name="test_approval_issue_is_created_fixable_with_hash_data" time="0.913"><failure message="AssertionError: assert {'device': 'P...ign instance'} == {'device': 'P...eplaced': '0'}&#10;  &#10;  Omitting 3 identical items, use -vv to show&#10;  Right contains 1 more item:&#10;  {'replaced': '0'}&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140155158814000'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f78781c0880&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f786a5bc9e0&gt;
+
+    async def test_approval_issue_is_created_fixable_with_hash_data(
+        hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable, make_switch_subentry: Callable
+    ) -&gt; None:
+        """A mirror with actions raises one fixable request bound to its hash; approved, empty and owned have none."""
+        pending_spec = make_spec(on=ON_ACTIONS, name="Pending")
+        approved_spec = make_spec(on=ON_ACTIONS, name="Approved")
+        empty_spec = make_spec(name="Empty")
+        own = make_switch_subentry("Own", on=ON_ACTIONS)
+        own_id = own["data"]["device_id"]
+        entry = await _setup(hass, make_hub_entry([own]))
+        manager = _manager(entry)
+        for spec in (pending_spec, approved_spec, empty_spec):
+            await _deliver(hass, spec.device_id, document_payload(spec))
+        assert await manager.async_approve(approved_spec.device_id, _actions_hash(entry, approved_spec.device_id))
+    
+        issue = _issue(hass, ISSUE_APPROVAL_PREFIX, pending_spec.device_id)
+        assert issue is not None
+        assert issue.is_fixable is True
+        assert issue.severity is ir.IssueSeverity.WARNING
+        assert issue.translation_key == "approval_required"
+        assert issue.data == {
+            "device_id": pending_spec.device_id,
+            "actions_hash": _actions_hash(entry, pending_spec.device_id),
+        }
+&gt;       assert issue.translation_placeholders == {
+            "device": "Pending",
+            "owner": escape_markdown(FOREIGN_OWNER_NAME),
+            "hash": _actions_hash(entry, pending_spec.device_id)[:APPROVAL_HASH_PREFIX_LENGTH],
+            # D-17: how many triggers this instance replaces locally; a mirror without local actions replaces none
+            "replaced": "0",
+        }
+E       AssertionError: assert {'device': 'P...ign instance'} == {'device': 'P...eplaced': '0'}
+E         
+E         Omitting 3 identical items, use -vv to show
+E         Right contains 1 more item:
+E         {'replaced': '0'}
+E         Use -v to get more diff
+
+tests/test_repairs_flow.py:132: AssertionError</failure></testcase></testsuite></testsuites>

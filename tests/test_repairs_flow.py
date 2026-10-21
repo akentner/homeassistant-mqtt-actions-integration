@@ -133,6 +133,8 @@ async def test_approval_issue_is_created_fixable_with_hash_data(
         "device": "Pending",
         "owner": escape_markdown(FOREIGN_OWNER_NAME),
         "hash": _actions_hash(entry, pending_spec.device_id)[:APPROVAL_HASH_PREFIX_LENGTH],
+        # D-17: how many triggers this instance replaces locally; a mirror without local actions replaces none
+        "replaced": "0",
     }
     for device_id in (approved_spec.device_id, empty_spec.device_id, own_id):
         assert _issue(hass, ISSUE_APPROVAL_PREFIX, device_id) is None
@@ -287,7 +289,9 @@ async def test_flow_shows_device_owner_yaml_hash_and_templates(
         "templated",
         "residual",
         "invalid",
+        "replaced",
     }
+    assert placeholders["replaced"] == "0"
     assert placeholders["startup"] == "false"
     assert placeholders["device"] == "Lamp"
     assert placeholders["owner"] == escape_markdown(FOREIGN_OWNER_NAME)

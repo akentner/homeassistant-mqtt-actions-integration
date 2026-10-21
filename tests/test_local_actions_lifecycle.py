@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import (
     async_fire_mqtt_message,
     async_fire_time_changed,
@@ -23,6 +24,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     DOMAIN,
+    ISSUE_APPROVAL_PREFIX,
     PAYLOAD_OFF,
     PAYLOAD_ON,
     PRUNE_GRACE_SECONDS,
@@ -38,6 +40,7 @@ from custom_components.mqtt_actions.manager import AdoptionError
 from custom_components.mqtt_actions.model import trigger_key
 from custom_components.mqtt_actions.portability import subentry_payload
 from custom_components.mqtt_actions.topics import state_topic
+from custom_components.mqtt_actions.trust import build_approval_view
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
 from tests.helpers import BASE, announce_presence, deliver_config, manager_of, restart_entry, seed_store, setup_entry
 
@@ -774,3 +777,85 @@ async def test_adopt_service_reports_the_discarded_count(
         "previous_owner": "Foreign instance",
         "local_actions_discarded": 2,
     }
+
+
+# --- Plan 11-07 Task 3: the approval names local replacements without moving owner authority (D-04, D-17) -------------
+
+
+def _approval_issue(hass: HomeAssistant, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{ISSUE_APPROVAL_PREFIX}{device_id}")
+
+
+async def test_approval_view_and_issue_count_active_replacements_only(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """MIR-12, D-17: active replacements, muted ones too, are counted; additive, orphan and other-kind ones are not."""
+    spec = make_spec(SUBENTRY_SELECT, options=[("a", "A", OWNER_ON), ("b", "B", OWNER_ON), ("c", "C", OWNER_ON)])
+    _seed_local(
+        hass_storage,
+        [
+            {**_row_data(spec.device_id, "gone", SUBENTRY_SELECT), "mode": "replacement"},  # an orphan
+            {**_row_data(spec.device_id, "a", SUBENTRY_SWITCH), "mode": "replacement"},  # the other kind
+            {**_row_data(OTHER_DEVICE, "a", SUBENTRY_SELECT), "mode": "replacement"},  # another device
+        ],
+    )
+    entry = await setup_entry(hass, make_hub_entry())
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+    manager = manager_of(entry)
+    view = await manager.async_approval_view(spec.device_id)
+    assert view is not None
+    assert view.replaced_trigger_count == 0, "inactive records replace nothing"
+    issue = _approval_issue(hass, spec.device_id)
+    assert issue is not None
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["replaced"] == "0"
+    ir.async_get(hass).async_ignore(DOMAIN, issue.issue_id, ignore=True)
+
+    for value, mode, actions in (
+        ("a", LocalActionMode.REPLACEMENT, LOCAL_B),
+        ("b", LocalActionMode.REPLACEMENT, []),
+        ("c", LocalActionMode.ADDITIVE, LOCAL_B),
+    ):
+        await manager.async_set_local_action(
+            local_trigger_identity(spec.device_id, SUBENTRY_SELECT, value), mode, actions
+        )
+
+    view = await manager.async_approval_view(spec.device_id)
+    assert view is not None
+    assert view.replaced_trigger_count == 2, "the replacement and the muted trigger, not the additive one"
+    issue = _approval_issue(hass, spec.device_id)
+    assert issue is not None, "a local edit never clears the owner approval request"
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["replaced"] == "2"
+    assert issue.dismissed_version is not None, "a count update keeps the user's dismissal"
+    assert str(manager.approval_state(spec.device_id)) == "pending"
+
+
+async def test_every_trigger_replaced_keeps_pending_owner_hash_yaml_and_refused_adoption(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-04, D-17, T-11-22: with every owner trigger replaced the approval still concerns the owner actions only."""
+    _entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry, approve=False)
+    info = manager.mirrors[spec.device_id].mirror
+    assert info is not None
+    owner_only = build_approval_view(spec, info, [])
+    await manager.async_set_local_action(
+        local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_OFF), LocalActionMode.REPLACEMENT, LOCAL_B
+    )
+
+    view = await manager.async_approval_view(spec.device_id)
+    assert view is not None
+    assert view.replaced_trigger_count == 2
+    assert view.actions_yaml == owner_only.actions_yaml, "the review shows the owner actions only"
+    assert "local" not in view.actions_yaml
+    assert (view.actions_hash, view.short_hash) == (owner_only.actions_hash, owner_only.short_hash)
+    assert view.actions_hash == info.actions_hash
+    assert str(manager.approval_state(spec.device_id)) == "pending", "replacing every trigger approves nothing"
+    issue = _approval_issue(hass, spec.device_id)
+    assert issue is not None
+    assert issue.data == {"device_id": spec.device_id, "actions_hash": info.actions_hash}
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["replaced"] == "2"
+    with pytest.raises(AdoptionError) as refused:
+        await manager.async_adopt_device(spec.device_id, force=True)
+    assert refused.value.reason == "not_approved"

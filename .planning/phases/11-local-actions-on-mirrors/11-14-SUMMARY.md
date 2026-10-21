@@ -189,7 +189,7 @@ In `tests/test_local_actions_manager.py::test_local_failure_raises_an_independen
 - `uv run pytest -q` on the G-01 target: 1 passed.
 - Five modules (lifecycle, manager, parallel, hub_removal, diagnostics): 143 passed.
 - Task 2: 3 passed. Lifecycle, manager and store: 99 passed.
-- `tests/test_docs.py`: 35 passed.
+- `tests/test_docs.py`: 34 passed.
 - `uv run ruff check .` and `uv run ruff format --check .`: clean.
 - `MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q`: **2062 passed, 2 xfailed**, with nothing deselected or skipped (baseline 2056).
 - Ledger verify command: passed. `const.py` is unchanged since the first 11-14 commit.

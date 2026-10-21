@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-11-PLAN.md
-last_updated: "2026-10-21T04:08:51.512Z"
+stopped_at: Completed 11-14-PLAN.md
+last_updated: "2026-10-21T04:28:57.364Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 3ff2594787ac15348d8312ba6c5c7d23968ccc50
+state_head: 107a5cc4fb26535d90e922aaa649c0b99a5a9854
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 53
-  completed_plans: 48
+  completed_plans: 49
   percent: 67
 ---
 
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 
 ## Current Position
 
-Phase: 11 (Local Actions on Mirrors) — READY TO EXECUTE
-Plan: 13 of 13
+Phase: 11 (Local Actions on Mirrors) — EXECUTING
+Plan: 14 of 17
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -163,6 +163,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P10 | 14min | 2 tasks | 8 files |
 | Phase 11 P12 | 12 min | 2 tasks | 7 files |
 | Phase 11 P11 | 17 min | 2 tasks | 1 files |
+| Phase 11 P14 | 14 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -373,6 +374,8 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-12: downgrade warning is a GitHub [!WARNING] alert in README Downgrading to 1.0.1; it states the round trip is unverified and deferred (MIR-F4), and a regex test rejects any verified claim
 - [Phase 11]: 11-12: the adopt_device docs row is checked against the handler return dict through ast, so local_actions_discarded cannot drift
 - [Phase 11]: 11-11 review routed 4 Low findings to Phase 11 gaps G-01..G-04 (local issue lifecycle, visible refused local Store load, leftover local Store on a new hub, failed adoption keeps trip); 16 Info observations closed no-change; run /gsd-plan-phase 11 --gaps before 11-13
+- [Phase 11]: G-01: local_action_failed is persistent; prune and adoption drop keep it (keep_local_failure); only a saved tombstone discard, a completed adoption, removal, a proven success or hub removal delete it
+- [Phase 11]: G-01: a start deletes a local failure issue without a saved record only after a successful local load; a refused load deletes nothing (T-11-40)
 
 ### Pending Todos
 
@@ -409,8 +412,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T03:37:34.165Z
-Stopped at: Completed 11-11-PLAN.md
+Last session: 2026-10-21T04:28:57.048Z
+Stopped at: Completed 11-14-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

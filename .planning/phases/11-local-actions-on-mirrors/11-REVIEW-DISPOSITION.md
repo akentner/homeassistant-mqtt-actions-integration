@@ -5,7 +5,7 @@ titles: json
 findings:
   - id: WR-01
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "Any tombstone on a config topic permanently discards local actions, while the mirror itself self-heals"
   - id: WR-02
     severity: warning
@@ -47,7 +47,7 @@ findings:
     severity: info
     disposition: open
     title: "`adopt_device` surfaces an untranslated internal error when the local discard cannot be saved"
-open: 11
+open: 10
 total: 11
 recorded: 2026-10-21T05:43:58.334Z
 ---
@@ -56,7 +56,7 @@ recorded: 2026-10-21T05:43:58.334Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| WR-01 | warning | open | - |
+| WR-01 | warning | fixed | plan 11-18, 17865da |
 | WR-02 | warning | open | - |
 | WR-03 | warning | open | - |
 | WR-04 | warning | open | - |

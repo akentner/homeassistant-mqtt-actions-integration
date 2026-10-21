@@ -26,7 +26,7 @@ been released, tagged or published.
   of a removed Select option stay inactive and reattach when the same state value returns. A start, a prune or a
   tombstone discards nothing: the local actions of a deleted device stay inactive until you remove them, and apply
   again if the device returns. An adoption discards them and logs the count. Removing the integration deletes them,
-  and the removal settings name how many devices are affected.
+  and the removal settings name how many devices are affected, or say that the saved local actions cannot be read.
 - Repairs: local failures raise their own issue `local_action_failed`, independent of `action_failed`. An error that a
   local step handles with `continue_on_error` still raises it. A later successful run of the same trigger, saving that
   trigger without local actions (locally muted, or additive with an empty list), or removing its customization clears

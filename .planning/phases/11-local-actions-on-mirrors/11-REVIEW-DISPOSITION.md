@@ -17,7 +17,7 @@ findings:
     title: "A corrupt or shape-invalid local Store is treated as empty: no `local_actions_unreadable` issue, mutes revert, and the next save overwrites it"
   - id: WR-04
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The hub-removal warning reports 0 devices when the local Store is unreadable, but removal deletes the file anyway"
   - id: IN-01
     severity: info
@@ -47,7 +47,7 @@ findings:
     severity: info
     disposition: open
     title: "`adopt_device` surfaces an untranslated internal error when the local discard cannot be saved"
-open: 8
+open: 7
 total: 11
 recorded: 2026-10-21T05:43:58.334Z
 ---
@@ -59,7 +59,7 @@ recorded: 2026-10-21T05:43:58.334Z
 | WR-01 | warning | fixed | plan 11-18, 17865da |
 | WR-02 | warning | fixed | plan 11-19, 5bc5ed4 |
 | WR-03 | warning | fixed | plans 11-20 6c09f99, 11-21 936e0d9 |
-| WR-04 | warning | open | - |
+| WR-04 | warning | fixed | plan 11-22, 142dd3c |
 | IN-01 | info | open | - |
 | IN-02 | info | open | - |
 | IN-03 | info | open | - |

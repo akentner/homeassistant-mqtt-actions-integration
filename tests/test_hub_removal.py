@@ -621,3 +621,50 @@ async def test_new_hub_flow_shows_an_error_when_leftover_local_actions_cannot_be
     assert result["errors"] == {"base": "local_actions_not_removed"}
     assert hass.config_entries.async_entries(DOMAIN) == []
     assert _local_store_bytes(hass_storage) == before
+
+
+# ------------------------------------------------- corrupt copies of the local Store (Plan 11-20, WR-03, D-08, G-03)
+
+# Literal on purpose: the id of the instance issue a refused local load raises (Plan 11-15)
+UNREADABLE_ISSUE_ID = "local_actions_unreadable"
+
+
+def _seed_corrupt_local_copy(hass: HomeAssistant) -> Path:
+    """Create the copy Home Assistant leaves after it could not parse the local Store file; return its path."""
+    storage = Path(hass.config.path(".storage"))
+    storage.mkdir(parents=True, exist_ok=True)
+    corrupt = storage / f"{LOCAL_ACTIONS_STORE_KEY}.corrupt.2026-10-21T00:00:00.000000+00:00"
+    corrupt.write_text("{not json", encoding="utf-8")
+    return corrupt
+
+
+async def test_hub_removal_and_a_new_hub_delete_the_corrupt_copies_of_the_local_store(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+    hass_tmp_config_dir: str,
+) -> None:
+    """D-08, G-03, T-11-52: both removal modes and a new hub delete the copies, so the next hub starts readable."""
+    # Before any Store exists, so every copy lives in a temporary configuration directory only
+    monkeypatch.setattr(hass.config, "config_dir", hass_tmp_config_dir)
+    registry = ir.async_get(hass)
+    for mode, options in (("keep", {}), ("delete", {CONF_DELETE_DEVICES_ON_REMOVE: True})):
+        corrupt = _seed_corrupt_local_copy(hass)
+        entry = await _setup(hass, make_hub_entry(options=options))
+        assert registry.async_get_issue(DOMAIN, UNREADABLE_ISSUE_ID) is not None, f"{mode}: premise: issue raised"
+
+        assert await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert not corrupt.exists(), f"{mode}: hub removal deletes the corrupt copy of the local Store (D-08)"
+        assert registry.async_get_issue(DOMAIN, UNREADABLE_ISSUE_ID) is None, f"{mode}: the issue goes too"
+
+    corrupt = _seed_corrupt_local_copy(hass)
+    result = await _submit_new_hub(hass)
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].state is ConfigEntryState.LOADED
+    assert registry.async_get_issue(DOMAIN, UNREADABLE_ISSUE_ID) is None, "a new hub starts with a readable Store"
+    assert not corrupt.exists(), "a new hub deletes the corrupt copy an earlier hub left behind (G-03)"

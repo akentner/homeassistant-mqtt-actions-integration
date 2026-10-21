@@ -1,0 +1,18 @@
+{
+  "command": "uv run pytest -q -p no:logging \"tests/test_local_actions_store.py::test_corrupt_copy_beside_a_missing_file_refuses_the_load_and_every_save\" --junitxml=.planning/phases/11-local-actions-on-mirrors/tdd/11-20-task2-red.xml",
+  "exitCode": 1,
+  "output": "<?xml version=\"1.0\" encoding=\"utf-8\"?><testsuites name=\"pytest tests\"><testsuite name=\"pytest\" errors=\"0\" failures=\"1\" skipped=\"0\" tests=\"1\" time=\"0.233\" timestamp=\"2026-10-21T10:01:48.050132+02:00\" hostname=\"lap-aleken-tux1\"><testcase classname=\"tests.test_local_actions_store\" name=\"test_corrupt_copy_beside_a_missing_file_refuses_the_load_and_every_save\" time=\"0.128\"><failure message=\"Failed: DID NOT RAISE &lt;class 'homeassistant.exceptions.HomeAssistantError'&gt;\">hass = &lt;HomeAssistant RUNNING&gt;, hass_storage = {}\n\n    async def test_corrupt_copy_beside_a_missing_file_refuses_the_load_and_every_save(\n        hass: Any, hass_storage: dict[str, Any]\n    ) -&gt; None:\n        \"\"\"WR-03, D-07, T-11-51: Home Assistant moved an unparsable file aside; the Store is unreadable, not empty.\"\"\"\n        corrupt = _corrupt_copy(hass)\n        before = corrupt.read_bytes()\n        store = LocalActionsStore(hass)\n    \n&gt;       with pytest.raises(HomeAssistantError) as caught:\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE &lt;class 'homeassistant.exceptions.HomeAssistantError'&gt;\n\ntests/test_local_actions_store.py:280: Failed</failure></testcase></testsuite></testsuites>",
+  "targetTest": "test_corrupt_copy_beside_a_missing_file_refuses_the_load_and_every_save",
+  "targetFile": "tests/test_local_actions_store.py",
+  "nodeId": "tests/test_local_actions_store.py::test_corrupt_copy_beside_a_missing_file_refuses_the_load_and_every_save",
+  "expected": "With no local Store entry and a file mqtt_actions.local_actions.corrupt.<time> in the temporary .storage folder, async_load_records raises LocalActionsStoreUnreadableError, a save raises LocalActionsStoreError, the copy keeps its bytes and no Store entry is written; after the copy is deleted a fresh Store loads () and saves.",
+  "actual": "pytest.raises fails with 'DID NOT RAISE <class homeassistant.exceptions.HomeAssistantError>' on the load: the current Store treats the None that Core returns as a missing file, loads no records and becomes writable (WR-03).",
+  "reportPath": ".planning/phases/11-local-actions-on-mirrors/tdd/11-20-task2-red.xml",
+  "runStartedAt": "2026-10-21T08:01:46.366127Z",
+  "reportModifiedAt": "2026-10-21T08:01:48.282990Z",
+  "consoleTail": [
+    "FAILED tests/test_local_actions_store.py::test_corrupt_copy_beside_a_missing_file_refuses_the_load_and_every_save",
+    "1 failed in 0.23s"
+  ],
+  "semanticAssessment": "Valid semantic RED. The target node was collected and executed (1 test, 0 errors, 0 skipped). The temporary configuration directory fixture and the corrupt copy were created; the test failed on the planned first assertion, the load raising, with DID NOT RAISE, because async_load_records never looks for a corrupt copy when the load returns None (WR-03). Not an import, collection or fixture fault."
+}

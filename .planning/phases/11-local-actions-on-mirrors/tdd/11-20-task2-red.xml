@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.233" timestamp="2026-10-21T10:01:48.050132+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_store" name="test_corrupt_copy_beside_a_missing_file_refuses_the_load_and_every_save" time="0.128"><failure message="Failed: DID NOT RAISE &lt;class 'homeassistant.exceptions.HomeAssistantError'&gt;">hass = &lt;HomeAssistant RUNNING&gt;, hass_storage = {}
+
+    async def test_corrupt_copy_beside_a_missing_file_refuses_the_load_and_every_save(
+        hass: Any, hass_storage: dict[str, Any]
+    ) -&gt; None:
+        """WR-03, D-07, T-11-51: Home Assistant moved an unparsable file aside; the Store is unreadable, not empty."""
+        corrupt = _corrupt_copy(hass)
+        before = corrupt.read_bytes()
+        store = LocalActionsStore(hass)
+    
+&gt;       with pytest.raises(HomeAssistantError) as caught:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE &lt;class 'homeassistant.exceptions.HomeAssistantError'&gt;
+
+tests/test_local_actions_store.py:280: Failed</failure></testcase></testsuite></testsuites>

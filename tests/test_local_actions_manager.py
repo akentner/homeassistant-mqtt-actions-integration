@@ -1333,6 +1333,54 @@ async def test_shape_invalid_local_store_raises_the_unreadable_issue_and_is_neve
     assert _local_store_bytes(hass_storage) == before, "an owner change never overwrites the unreadable local Store"
 
 
+# --- Plan 11-20 Task 2: a corrupt copy beside a missing local Store is unreadable (WR-03, D-07, T-11-51) -------------
+
+
+def _seed_corrupt_copy(hass: HomeAssistant) -> Path:
+    """Create the copy Home Assistant leaves after it could not parse the local Store file; return its path."""
+    storage = Path(hass.config.path(".storage"))
+    storage.mkdir(parents=True, exist_ok=True)
+    corrupt = storage / f"{LOCAL_STORE_KEY}.corrupt.2026-10-21T00:00:00.000000+00:00"
+    corrupt.write_text("{not json", encoding="utf-8")
+    return corrupt
+
+
+async def test_corrupt_copy_beside_a_missing_local_store_raises_the_unreadable_issue(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+    hass_tmp_config_dir: str,
+) -> None:
+    """WR-03, T-11-51: a missing file next to its .corrupt copy raises the issue until the user deletes the copy."""
+    # Before any Store exists, so the copy lives in a temporary configuration directory only
+    monkeypatch.setattr(hass.config, "config_dir", hass_tmp_config_dir)
+    corrupt = _seed_corrupt_copy(hass)
+    before = corrupt.read_bytes()
+    spec = make_spec(on=OWNER_ON)
+    entry = await setup_entry(hass, make_hub_entry())
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=True)
+
+    assert _unreadable_issue(hass) is not None, "a corrupt copy beside a missing file must raise the unreadable issue"
+    identity = local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON)
+    with pytest.raises(LocalActionError) as caught:
+        await manager_of(entry).async_set_local_action(identity, LocalActionMode.REPLACEMENT, LOCAL_ON)
+    assert caught.value.reason == "save_failed"
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert LOCAL_STORE_KEY not in hass_storage, "no empty local Store is written beside the copy"
+    assert corrupt.read_bytes() == before, "the copy is never changed"
+
+    corrupt.unlink()
+    await restart_entry(hass, entry)
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+
+    assert _unreadable_issue(hass) is None, "the next readable start deletes the issue"
+    await manager_of(entry).async_set_local_action(identity, LocalActionMode.REPLACEMENT, LOCAL_ON)
+    assert _stored_rows(hass_storage) == [_replacement_on(spec.device_id)], "an edit saves again"
+
+
 # --- Plan 11-15 Task 2: English and German text of the unreadable issue (G-02, D-06, MIR-15) --------------------------
 
 TRANSLATIONS_DIR = Path(__file__).resolve().parents[1] / "custom_components" / "mqtt_actions" / "translations"

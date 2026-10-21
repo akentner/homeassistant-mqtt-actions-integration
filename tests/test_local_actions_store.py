@@ -9,6 +9,7 @@ import copy
 import dataclasses
 import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
@@ -55,6 +56,23 @@ DEVICE = "aaaaaaaaaaaaaaaaaaaaaa"
 OTHER_DEVICE = "bbbbbbbbbbbbbbbbbbbbbb"
 # A marker that must never reach a log line: rows are dropped and logged by count only
 MARKER = "local-secret-marker"
+# The name Home Assistant gives a file it could not parse: "<path>.corrupt.<isotime>" (helpers/storage.py)
+CORRUPT_TIME = "2026-10-21T00:00:00.000000+00:00"
+
+
+@pytest.fixture
+def hass_config_dir(hass_tmp_config_dir: str) -> str:
+    """Give every test of this module a temporary configuration directory, so no corrupt copy ever leaves the test."""
+    return hass_tmp_config_dir
+
+
+def _corrupt_copy(hass: Any, key: str = LOCAL_ACTIONS_STORE_KEY, time: str = CORRUPT_TIME) -> Path:
+    """Create the copy Home Assistant leaves after a JSON decode error of a Store file; return its path."""
+    storage = Path(hass.config.path(".storage"))
+    storage.mkdir(parents=True, exist_ok=True)
+    copy_path = storage / f"{key}.corrupt.{time}"
+    copy_path.write_text("{not json", encoding="utf-8")
+    return copy_path
 
 
 def _row(**overrides: Any) -> dict[str, Any]:
@@ -249,6 +267,61 @@ async def test_null_payload_loads_no_records_like_a_missing_file(hass: Any, hass
     await store.async_save_records([_record()])
 
     assert hass_storage[LOCAL_ACTIONS_STORE_KEY] == _envelope([_row()]), "a later save writes a v1 payload"
+
+
+async def test_corrupt_copy_beside_a_missing_file_refuses_the_load_and_every_save(
+    hass: Any, hass_storage: dict[str, Any]
+) -> None:
+    """WR-03, D-07, T-11-51: Home Assistant moved an unparsable file aside; the Store is unreadable, not empty."""
+    corrupt = _corrupt_copy(hass)
+    before = corrupt.read_bytes()
+    store = LocalActionsStore(hass)
+
+    with pytest.raises(HomeAssistantError) as caught:
+        await store.async_load_records()
+    # Matched by name, so this module still collects before the error class exists
+    assert type(caught.value).__name__ == "LocalActionsStoreUnreadableError"
+    assert "{not json" not in str(caught.value), "the error names the reason, never the copy's content"
+    with pytest.raises(LocalActionsStoreError):
+        await store.async_save_records([_record()])
+
+    assert corrupt.read_bytes() == before, "the copy is never changed"
+    assert LOCAL_ACTIONS_STORE_KEY not in hass_storage, "no empty Store is written beside the copy"
+    assert store.records == ()
+
+    corrupt.unlink()
+    fresh = LocalActionsStore(hass)
+    assert await fresh.async_load_records() == (), "without the copy a missing file is an empty Store again"
+    await fresh.async_save_records([_record()])
+    assert hass_storage[LOCAL_ACTIONS_STORE_KEY] == _envelope([_row()])
+
+
+async def test_corrupt_copy_of_another_key_never_counts(hass: Any, hass_storage: dict[str, Any]) -> None:
+    """WR-03: only a copy of this Store's own key makes it unreadable, never one of another or a longer key."""
+    del hass_storage
+    _corrupt_copy(hass, STORE_KEY)
+    _corrupt_copy(hass, f"{LOCAL_ACTIONS_STORE_KEY}_other")
+
+    assert await _restarted(hass) == ()
+
+
+async def test_remove_records_deletes_the_corrupt_copies_of_its_own_key_only(
+    hass: Any, hass_storage: dict[str, Any]
+) -> None:
+    """D-08, G-03, T-11-52: removal deletes the copies of its own key, keeps every other copy and fails closed."""
+    del hass_storage
+    own = [_corrupt_copy(hass), _corrupt_copy(hass, time="2026-10-21T01:00:00.000000+00:00")]
+    other = _corrupt_copy(hass, STORE_KEY)
+
+    await LocalActionsStore(hass).async_remove_records()
+
+    assert [path.exists() for path in own] == [False, False], "both copies of the local key are deleted"
+    assert other.exists(), "a copy of another key is never touched"
+    assert await _restarted(hass) == (), "after the removal the local Store is readable and empty"
+
+    _corrupt_copy(hass)
+    with patch("pathlib.Path.unlink", side_effect=PermissionError), pytest.raises(LocalActionsStoreError):
+        await LocalActionsStore(hass).async_remove_records()
 
 
 async def test_newer_major_version_refuses_and_keeps_the_stored_bytes(hass: Any, hass_storage: dict[str, Any]) -> None:

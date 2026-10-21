@@ -379,6 +379,8 @@ data:
   number is logged.
 - **Removing the integration** deletes the local actions of this instance, whether or not the devices are kept on the
   broker. The removal settings in the options of the hub name the number of devices whose local actions go with it.
+  If the saved local actions cannot be read, the removal settings say so instead of a number, and removing the
+  integration deletes them as well.
 
 ### Local failures and diagnostics
 

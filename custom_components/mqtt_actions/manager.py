@@ -607,19 +607,22 @@ async def async_local_action_device_count(
     """
     Return how many distinct devices have saved local actions on this instance, for the removal warning (D-08).
 
-    Devices, not triggers or action steps, and orphan-only devices count too. A loaded hub answers from the Manager,
-    which returns None while its local load was refused (WR-04); an unloaded hub reads the file. None means unknown:
-    the saved local actions cannot be read, and removal deletes them anyway, so it must never be shown as a number.
-    Counts only: no record leaves this function.
+    Devices, not triggers or action steps, count: those of the records, orphan-only ones included, and those named
+    only by kept rows this release cannot parse, because removal deletes those rows too. A loaded hub answers from the
+    Manager, which returns None while its local load was refused (WR-04); an unloaded hub reads the file, and any read
+    error (a newer version, a payload without a record list, a corrupt copy beside a missing file) returns None. None
+    means unknown: the saved local actions cannot be read, and removal deletes them anyway, so it must never be shown
+    as a number. Reading never writes the Store. Counts only: no record leaves this function.
     """
     if entry.state is ConfigEntryState.LOADED and isinstance(manager := getattr(entry, "runtime_data", None), Manager):
         return manager.local_action_removal_device_count()
+    store = LocalActionsStore(hass, local_store_key)
     try:
-        records = await LocalActionsStore(hass, local_store_key).async_load_records()
-    except (HomeAssistantError, ValueError) as err:
+        records = await store.async_load_records()
+    except Exception as err:  # noqa: BLE001 - whatever the read raises, the count is unknown, never 0
         LOGGER.warning("The local actions could not be read to count them: %s", type(err).__name__)
-        return 0
-    return len({record.identity.device_id for record in records})
+        return None
+    return len({record.identity.device_id for record in records} | store.preserved_device_ids)
 
 
 class Manager:
@@ -1786,12 +1789,15 @@ class Manager:
         """
         Return how many distinct devices lose their saved local actions when the hub is removed (D-08).
 
-        None while the local load was refused: the Store holds local actions that cannot be read, so their number is
-        unknown and must never be shown as 0 (WR-04). The Store is not read again here.
+        The distinct device ids of the loaded records and of the kept rows this release cannot parse, which removal
+        deletes too. None while the local load was refused: the Store holds local actions that cannot be read, so
+        their number is unknown and must never be shown as 0 (WR-04). The Store is not read again here.
         """
         if not self._local_actions_readable:
             return None
-        return self.local_action_counts().devices
+        return len(
+            {record.identity.device_id for record in self._local_records} | self._local_store.preserved_device_ids
+        )
 
     def local_action_counts_by_device(self) -> dict[str, LocalActionCounts]:
         """

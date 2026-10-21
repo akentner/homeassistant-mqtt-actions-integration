@@ -79,7 +79,7 @@ The planner fills final task IDs, waves and threat references from PLAN frontmat
 | 11-05-T2 | MIR-06, MIR-09 | T-11-13, T-11-15 | Locked immediate-save edits preserve old state on failure | integration | `uv run pytest -q tests/test_local_actions_manager.py -k "edit or remove or save_failure or idempotent or breaker"` | New in phase | ✅ green |
 | 11-05-T3 | MIR-09, MIR-11 | T-11-12, T-11-14 | Safe local policy is coherent under edit/approval races | integration | `uv run pytest -q tests/test_local_actions_manager.py` | New in phase | ✅ green |
 | 11-06-T1 | MIR-06, MIR-07 | T-11-16 | Owner evolution retains records; exact return reattaches | lifecycle | `uv run pytest -q tests/test_local_actions_lifecycle.py -k "survive or orphan or repin or kind"` | New in phase | ✅ green |
-| 11-06-T2 | MIR-07, MIR-08 | T-11-16 | Prune retains; tombstone deletes even after prune | lifecycle | `uv run pytest -q tests/test_local_actions_lifecycle.py -k "prune or tombstone"` | New in phase | ✅ green |
+| 11-06-T2 | MIR-07, MIR-08 | T-11-16 | Prune retains; tombstone after prune (superseded by 11-18-T1: a tombstone now keeps records inactive) | lifecycle | `uv run pytest -q tests/test_local_actions_lifecycle.py -k "prune or tombstone"` | New in phase | ✅ green |
 | 11-06-T3 | MIR-08, MIR-12 | T-11-17, T-11-18, T-11-19 | Adoption discard is reported and rolls back on failure; existing adoption suites stay green | lifecycle/service | `uv run pytest -q tests/test_local_actions_lifecycle.py tests/test_multi_instance_ops.py tests/test_services.py -k adopt` | New/existing | ✅ green |
 | 11-07-T1 | MIR-09, MIR-10 | T-11-20 | State/test/retrigger share effective gates and wire vocabulary | integration | `uv run pytest -q tests/test_local_actions_manager.py -k "test_button or retrigger" tests/test_retrigger.py` | New/existing | ✅ green |
 | 11-07-T2 | MIR-03, MIR-13 | T-11-21, T-11-23 | Local issue clears only for exact proven recovery/removal | integration | `uv run pytest -q tests/test_local_parallel.py tests/test_local_actions_manager.py -k "issue or failure or clear"` | New in phase | ✅ green |
@@ -107,6 +107,22 @@ The planner fills final task IDs, waves and threat references from PLAN frontmat
 | 11-17-T2 | MIR-09 | T-11-46 | All tiers green; the ledger has no OPEN or ROUTED row | phase gate | `MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q` | Existing | ✅ green |
 | 11-13-T1 | MIR-01–MIR-15 | T-11-35, T-11-36 | Precondition: no OPEN/ROUTED finding; Phase 11 suites, FIXED regression ids, Ruff/format, full required-broker suite, hassfest/HACS pass | phase gate | `MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q` | Existing | ✅ green (HACS 6b not run locally, see Manual-Only) |
 | 11-13-T2 | MIR-01–MIR-15 | T-11-35 | Phase 12 boundary frozen; frontend verdict PASS; MIR-F4 deferred | handoff | ledger section greps in 11-13 | New in phase | ✅ green |
+| 11-18-T1 | MIR-07, MIR-08 | T-11-47 | A tombstone removes the mirror and keeps its local records inactive and reattachable; it never writes the local Store (WR-01, D-05 amended) | lifecycle | `uv run pytest -q tests/test_local_actions_lifecycle.py tests/test_local_invariants.py -k tombstone` | New (gap) | ✅ green |
+| 11-18-T2 | MIR-15 | T-11-48 | README and troubleshooting say a tombstone keeps local actions | static | `uv run pytest -q tests/test_docs.py` | Existing | ✅ green |
+| 11-18-T3 | MIR-07, MIR-08 | T-11-47 | All tiers green; disposition WR-01 fixed | phase gate | `MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q` | Existing | ✅ green |
+| 11-19-T1 | MIR-05, MIR-13 | T-11-49 | Only a durable save of the named trigger without local actions clears its local failure issue (WR-02, D-19 amended) | integration | `uv run pytest -q tests/test_local_actions_manager.py -k "without_local_actions or local_failure_issue_survives"` | New (gap) | ✅ green |
+| 11-19-T2 | MIR-15 | T-11-21 | en/de issue text, troubleshooting and README name every way the issue clears | static | `uv run pytest -q tests/test_docs.py tests/test_translations.py` | Existing | ✅ green |
+| 11-19-T3 | MIR-13, MIR-15 | T-11-49 | Release-notes draft; all tiers green; disposition WR-02 fixed | phase gate | `MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q` | Existing | ✅ green |
+| 11-20-T1 | MIR-05, MIR-06 | T-11-09, T-11-50, T-11-51 | A shape-invalid local Store raises the unreadable issue, applies no overlay and is never overwritten (WR-03) | integration | `uv run pytest -q tests/test_local_actions_manager.py tests/test_local_actions_store.py -k "shape or null or newer or round_trip"` | New (gap) | ✅ green |
+| 11-20-T2 | MIR-05, MIR-06 | T-11-44, T-11-52 | A .corrupt copy beside a missing file is unreadable; removal deletes only the copies of its own key | integration | `uv run pytest -q tests/test_local_actions_store.py tests/test_local_actions_manager.py tests/test_hub_removal.py -k corrupt` | New (gap) | ✅ green |
+| 11-20-T3 | MIR-15 | T-11-53 | en/de issue text and troubleshooting explain the corrupt copy and recovery | static | `uv run pytest -q tests/test_local_actions_manager.py tests/test_translations.py tests/test_docs.py` | Existing | ✅ green |
+| 11-21-T1 | MIR-06 | T-11-09, T-11-54 | Rows and top-level keys this release cannot parse survive a local edit and every save (WR-03 forward compatibility, D-07 extended) | integration | `uv run pytest -q tests/test_local_actions_store.py tests/test_local_actions_manager.py -k "preserved or cannot_parse or duplicate_identity or forgets_preserved"` | New (gap) | ✅ green |
+| 11-21-T2 | MIR-15 | T-11-55 | README note on local actions of newer versions; all tiers green; disposition WR-03 fixed | static/phase gate | `uv run pytest -q tests/test_docs.py` | Existing | ✅ green |
+| 11-22-T1 | MIR-08 | T-11-56 | A loaded hub whose local load was refused shows the dedicated en/de "cannot be read" removal warning (WR-04, D-08 extended) | flow | `uv run pytest -q tests/test_hub_removal.py -k "unreadable or readable or removal_settings"` | New (gap) | ✅ green |
+| 11-22-T2 | MIR-08, MIR-15 | T-11-57 | An unloaded hub answers unknown for every unreadable Store; readable counts include preserved rows | flow | `uv run pytest -q tests/test_hub_removal.py -k "unreadable or preserved_rows or removal_settings"` | New (gap) | ✅ green |
+| 11-22-T3 | MIR-08 | T-11-56 | Release-notes draft; all tiers green; disposition WR-04 fixed | phase gate | `MQTT_ACTIONS_REQUIRE_BROKER=1 uv run pytest -q` | Existing | ✅ green |
+| 11-23-T1 | MIR-08 | T-11-58 | Owner decisions of 2026-10-21 recorded as amendments in 11-CONTEXT.md | static | amendments-block greps in 11-23 | Existing | ✅ green |
+| 11-23-T2 | MIR-08 | T-11-58 | MIR-08, ROADMAP success criterion 5 and release notes carry the amended tombstone rule | static | MIR-08 / SC 5 greps in 11-23 | Existing | ✅ green |
 
 ## Wave 0 Requirements
 
@@ -139,6 +155,7 @@ The planner fills final task IDs, waves and threat references from PLAN frontmat
 - [x] Set `nyquist_compliant: true` only after validation actually passes.
 
 **Approval:** approved 2026-10-21 (Nyquist audit: every per-task command re-run green; full required-broker suite 2072 passed, 2 pre-Phase-11 xfailed).
+Re-audited 2026-10-21 after gap-closure plans 11-18..11-23 (WR-01..WR-04): every new per-task pytest command is covered by the full suite, 2100 passed, 2 pre-Phase-11 xfailed.
 
 ## Validation Audit 2026-10-21
 

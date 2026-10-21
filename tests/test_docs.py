@@ -737,3 +737,12 @@ def test_troubleshooting_explains_when_the_local_failure_issue_clears() -> None:
         "the issue goes with it",
     ):
         assert phrase in entry, f"the local_action_failed entry never says {phrase!r}"
+
+
+def test_troubleshooting_says_the_local_failure_issue_survives_restart_prune_and_failed_adoption() -> None:
+    """G-01, D-19, MIR-15: the issue lives as long as its customization; a prune no longer removes it."""
+    entry = _plain(_section(_page(TROUBLESHOOTING), "`local_action_failed`"))
+    assert entry, "the troubleshooting page has no local_action_failed section"
+    for phrase in ("survives a restart", "prune", "failed adoption", "the issue goes with it"):
+        assert phrase in entry, f"the local_action_failed entry never says {phrase!r}"
+    assert "a prune or an adoption, the issue goes with it" not in entry, "a prune no longer removes the issue"

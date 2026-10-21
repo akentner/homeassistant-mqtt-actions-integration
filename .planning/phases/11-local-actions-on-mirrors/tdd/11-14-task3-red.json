@@ -1,0 +1,18 @@
+{
+  "command": "uv run pytest -q -p no:logging \"tests/test_docs.py::test_troubleshooting_says_the_local_failure_issue_survives_restart_prune_and_failed_adoption\" --junitxml=.planning/phases/11-local-actions-on-mirrors/tdd/11-14-task3-red.xml",
+  "exitCode": 1,
+  "output": "<?xml version=\"1.0\" encoding=\"utf-8\"?><testsuites name=\"pytest tests\"><testsuite name=\"pytest\" errors=\"0\" failures=\"1\" skipped=\"0\" tests=\"1\" time=\"0.233\" timestamp=\"2026-10-21T06:24:13.954691+02:00\" hostname=\"lap-aleken-tux1\"><testcase classname=\"tests.test_docs\" name=\"test_troubleshooting_says_the_local_failure_issue_survives_restart_prune_and_failed_adoption\" time=\"0.124\"><failure message=\"AssertionError: the local_action_failed entry never says 'survives a restart'&#10;assert 'survives a restart' in ' meaning: the local actions of a trigger of a mirrored device failed on this instance. there is one issue per device,...bstone of its owner, a prune or an adoption, the issue goes with it, and removing the integration deletes it as well. '\">def test_troubleshooting_says_the_local_failure_issue_survives_restart_prune_and_failed_adoption() -&gt; None:\n        \"\"\"G-01, D-19, MIR-15: the issue lives as long as its customization; a prune no longer removes it.\"\"\"\n        entry = _plain(_section(_page(TROUBLESHOOTING), \"`local_action_failed`\"))\n        assert entry, \"the troubleshooting page has no local_action_failed section\"\n        for phrase in (\"survives a restart\", \"prune\", \"failed adoption\", \"the issue goes with it\"):\n&gt;           assert phrase in entry, f\"the local_action_failed entry never says {phrase!r}\"\nE           AssertionError: the local_action_failed entry never says 'survives a restart'\nE           assert 'survives a restart' in ' meaning: the local actions of a trigger of a mirrored device failed on this instance. there is one issue per device,...bstone of its owner, a prune or an adoption, the issue goes with it, and removing the integration deletes it as well. '\n\ntests/test_docs.py:747: AssertionError</failure></testcase></testsuite></testsuites>",
+  "targetTest": "test_troubleshooting_says_the_local_failure_issue_survives_restart_prune_and_failed_adoption",
+  "targetFile": "tests/test_docs.py",
+  "nodeId": "tests/test_docs.py::test_troubleshooting_says_the_local_failure_issue_survives_restart_prune_and_failed_adoption",
+  "expected": "The normalized local_action_failed troubleshooting entry contains 'survives a restart', 'prune', 'failed adoption' and 'the issue goes with it', and no longer contains 'a prune or an adoption, the issue goes with it'.",
+  "actual": "The entry does not contain 'survives a restart' (AssertionError on the first phrase assertion); it still lists the prune among the events that remove the issue.",
+  "reportPath": ".planning/phases/11-local-actions-on-mirrors/tdd/11-14-task3-red.xml",
+  "runStartedAt": "2026-10-21T04:24:12.302085Z",
+  "reportModifiedAt": "2026-10-21T04:24:14.187810Z",
+  "consoleTail": [
+    "FAILED tests/test_docs.py::test_troubleshooting_says_the_local_failure_issue_survives_restart_prune_and_failed_adoption",
+    "1 failed in 0.23s"
+  ],
+  "semanticAssessment": "Valid semantic RED. The target node was collected and executed (1 test, 0 errors, 0 skipped). The page and the local_action_failed section were found and normalized (the non-empty premise passed). The test failed on the first planned phrase assertion: the entry never says that the issue survives a restart, because docs/troubleshooting.md still documents the old lifecycle in which a prune or an adoption removes the issue. That is the MIR-15 documentation half of G-01, not a fixture or parsing fault."
+}

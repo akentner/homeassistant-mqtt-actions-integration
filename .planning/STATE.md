@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
-status: executing
-stopped_at: Completed 11-21-PLAN.md
-last_updated: "2026-10-21T08:18:47.198Z"
+status: verifying
+stopped_at: Completed 11-22-PLAN.md
+last_updated: "2026-10-21T08:31:04.624Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: cc3e79d382131f8926214f4e394f32bcbfc57ff4
+state_head: eff1476b2449c32f410df23fd886b03332714c31
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 59
-  completed_plans: 58
+  completed_plans: 59
   percent: 67
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
 Plan: 23 of 23
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-21 — Phase 11 execution started
 
 Progress: [███████░░░] 67%
@@ -173,6 +173,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P19 | 7 min | 3 tasks | 14 files |
 | Phase 11 P20 | 9 min | 3 tasks | 13 files |
 | Phase 11 P21 | 6min | 2 tasks | 11 files |
+| Phase 11 P22 | 10 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -400,6 +401,8 @@ Recent decisions affecting current work:
 - [Phase 11]: async_remove_records deletes the corrupt copies of its own key only, so hub removal and the new-hub cleanup leave a readable Store (D-08)
 - [Phase 11]: Local Store rows that fail parse and unknown top-level keys are kept verbatim and written back after the parsed records on every save; never applied, counted or shown (WR-03, D-07 extended)
 - [Phase 11]: Later duplicates of a parsed identity are not preserved; async_remove_records forgets preserved rows and keys (D-10, D-08)
+- [Phase 11]: 11-22: the removal warning count is None whenever the saved local actions cannot be read (loaded or unloaded hub); the options flow then shows step settings_unreadable with fixed en/de text instead of a number (WR-04, D-08)
+- [Phase 11]: 11-22: readable removal counts include devices named only by preserved rows, since removal deletes those rows too
 
 ### Pending Todos
 
@@ -436,8 +439,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T08:18:46.762Z
-Stopped at: Completed 11-21-PLAN.md
+Last session: 2026-10-21T08:31:04.187Z
+Stopped at: Completed 11-22-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

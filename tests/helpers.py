@@ -203,6 +203,12 @@ def manager_of(entry: MockConfigEntry) -> Manager:
     return entry.runtime_data
 
 
+async def open_hub_settings(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, Any]:
+    """Open the hub options and choose the settings step of its menu; return the settings form (Plan 11-08)."""
+    menu = await hass.config_entries.options.async_init(entry.entry_id)
+    return await hass.config_entries.options.async_configure(menu["flow_id"], {"next_step_id": "settings"})
+
+
 async def legacy_mirror(hass: HomeAssistant, make_hub_entry: Callable, spec: Any) -> tuple[MockConfigEntry, str]:
     """Set up a follower with an unmarked mirror whose legacy core MQTT entities exist; return it and the topic."""
     entry = await setup_entry(hass, make_hub_entry())

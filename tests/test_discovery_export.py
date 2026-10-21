@@ -31,6 +31,7 @@ from tests.documents import make_spec
 from tests.helpers import (
     CORE_PREFIX,
     create_mqtt_row,
+    open_hub_settings,
 )
 
 if TYPE_CHECKING:
@@ -253,7 +254,7 @@ async def _native_entry(
 
 
 async def _submit(hass: HomeAssistant, entry: MockConfigEntry, user_input: dict[str, Any]) -> dict[str, Any]:
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await open_hub_settings(hass, entry)
     result = await hass.config_entries.options.async_configure(result["flow_id"], user_input)
     await hass.async_block_till_done(wait_background_tasks=True)
     return result
@@ -265,7 +266,7 @@ async def test_the_options_flow_offers_the_export_and_stores_what_is_submitted(
     """The form carries the delete choice, the export switch and the prefix; only submitted keys are stored."""
     entry = await _setup(hass, make_hub_entry())
 
-    form = await hass.config_entries.options.async_init(entry.entry_id)
+    form = await open_hub_settings(hass, entry)
     assert form["type"] is FlowResultType.FORM
     fields = {
         field["name"]: field
@@ -293,7 +294,7 @@ async def test_the_options_flow_offers_the_export_and_stores_what_is_submitted(
         CONF_DISCOVERY_EXPORT: True,
         CONF_EXPORT_PREFIX: "my/export",
     }
-    again = await hass.config_entries.options.async_init(entry.entry_id)
+    again = await open_hub_settings(hass, entry)
     suggested = {key.schema: key.description.get("suggested_value") for key in again["data_schema"].schema}
     assert suggested[CONF_DISCOVERY_EXPORT] is True
     assert suggested[CONF_EXPORT_PREFIX] == "my/export"
@@ -409,7 +410,7 @@ def test_the_option_strings_exist_in_both_languages() -> None:
     """The two fields and the prefix error have a text in English and German."""
     for language in ("en", "de"):
         translations = json.loads((TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8"))
-        step = translations["options"]["step"]["init"]
+        step = translations["options"]["step"]["settings"]
         for key in (CONF_DISCOVERY_EXPORT, CONF_EXPORT_PREFIX):
             assert step["data"][key]
             assert step["data_description"][key]

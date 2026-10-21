@@ -241,6 +241,14 @@
     "step": {
       "init": {
         "title": "MQTT Actions options",
+        "description": "Choose what to change.",
+        "menu_options": {
+          "settings": "Removal and Discovery export settings",
+          "local_actions": "Local actions of mirrored devices"
+        }
+      },
+      "settings": {
+        "title": "MQTT Actions options",
         "description": "Choose what happens to your devices when you remove this integration. The choice is read at the moment of removal, so set it before you remove the integration. You can also switch on an optional MQTT Discovery export of your devices for external consumers that are not Home Assistant.",
         "data": {
           "delete_devices_on_remove": "Delete all devices when this integration is removed",
@@ -252,10 +260,58 @@
           "discovery_export": "Off by default. Home Assistant needs no discovery for the devices of this integration, so the export is only for other consumers of the broker. It lists each device with a single, disabled-by-default entity, without test buttons. It is best effort: nothing heals it if it is deleted on the broker.",
           "export_prefix": "The topic prefix of the export. The default is not watched by Home Assistant. If you enter the discovery prefix that Home Assistant itself listens to, it creates a disabled duplicate of each device. No wildcards, no empty levels, no leading $."
         }
+      },
+      "local_actions": {
+        "title": "Local actions",
+        "description": "Local actions run only on this instance when a device mirrored from another instance changes its state. They need no approval and are never shared with other instances. Choose a device.",
+        "data": {
+          "device": "Device"
+        }
+      },
+      "local_actions_device": {
+        "title": "Local actions of {device}",
+        "description": "Choose a trigger of {device}. Each trigger shows whether it has local actions in addition to the owner actions, instead of them, or is locally muted.",
+        "data": {
+          "trigger": "Trigger"
+        }
+      },
+      "local_actions_trigger": {
+        "title": "Local customization",
+        "description": "{trigger} ({state_value}) of {device} has a local customization on this instance.",
+        "menu_options": {
+          "local_actions_edit": "Edit the mode and the local actions",
+          "local_actions_device": "Back to the triggers"
+        }
+      },
+      "local_actions_edit": {
+        "title": "Local actions for {trigger}",
+        "description": "Set how the local actions of {trigger} ({state_value}) of {device} combine with the owner actions. Saving applies at once and returns to the triggers; nothing is restarted.",
+        "sections": {
+          "local_actions": {
+            "name": "Local actions",
+            "description": "Actions that run only on this instance, with its full access. In addition to the owner actions, both run in parallel. Instead of the owner actions, only these run. If the trigger is no longer present on the owner, the customization stays inactive until it returns.",
+            "data": {
+              "mode": "Mode",
+              "actions": "Actions"
+            },
+            "data_description": {
+              "mode": "Local actions never approve the owner actions: the owner actions keep their own approval on this instance."
+            }
+          }
+        }
       }
     },
     "error": {
-      "invalid_export_prefix": "The export prefix must not be empty, must not contain # or +, must not start or end with a slash, must not contain empty levels, and must not start with $."
+      "invalid_export_prefix": "The export prefix must not be empty, must not contain # or +, must not start or end with a slash, must not contain empty levels, and must not start with $.",
+      "not_loaded": "MQTT Actions is not loaded, so nothing was saved. Try again when the integration is running.",
+      "stale_target": "This trigger or device changed while the dialog was open, so nothing was saved. Choose it again.",
+      "invalid_mode": "The mode is not valid, so nothing was saved.",
+      "invalid_local_actions": "The local actions are invalid, so nothing was saved: {error}",
+      "save_failed": "The local actions could not be saved, so nothing changed. Check the log and try again."
+    },
+    "abort": {
+      "not_loaded": "MQTT Actions is not loaded. Try again when the integration is running.",
+      "no_local_devices": "There is no device from another instance on this instance, so there is nothing to customize locally."
     }
   },
   "entity": {
@@ -392,6 +448,18 @@
       "options": {
         "serial": "Serial (queue runs)",
         "restart": "Restart (cancel the running run)"
+      }
+    },
+    "local_mode": {
+      "options": {
+        "additive": "In addition to the owner actions",
+        "replacement": "Instead of the owner actions"
+      }
+    },
+    "local_trigger_status": {
+      "options": {
+        "additive": "additional to the owner actions",
+        "replacement": "instead of the owner actions"
       }
     }
   },

@@ -34,6 +34,7 @@ from tests.helpers import (
     block_discovery_delivery,
     legacy_mirror,
     loop_back_discovery,
+    open_hub_settings,
     store_the_mirror_as_native,
 )
 
@@ -230,7 +231,7 @@ async def test_the_discovery_issue_follows_a_deferred_device_and_the_export_opti
     assert _manager(entry).is_native(device_id) is False
     assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_DISCOVERY_DISABLED) is not None
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await open_hub_settings(hass, entry)
     await hass.config_entries.options.async_configure(result["flow_id"], {CONF_DISCOVERY_EXPORT: True})
     await hass.async_block_till_done(wait_background_tasks=True)
     assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_DISCOVERY_DISABLED) is not None

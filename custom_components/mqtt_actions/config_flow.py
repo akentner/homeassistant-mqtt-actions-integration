@@ -18,7 +18,9 @@ from homeassistant.config_entries import (
     SubentryFlowResult,
 )
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
+from homeassistant.helpers.translation import async_get_translations
 
 from .actions import ActionsInvalid, async_validate_actions, find_device_ids
 from .const import (
@@ -52,6 +54,18 @@ from .const import (
     SUBENTRY_SWITCH,
 )
 from .document import escape_markdown
+from .local_actions import LocalActionMode
+from .manager import (
+    LOCAL_ACTION_INVALID_ACTIONS,
+    LOCAL_ACTION_INVALID_MODE,
+    LOCAL_ACTION_NOT_RUNNING,
+    LOCAL_ACTION_SAVE_FAILED,
+    LOCAL_ACTION_STALE_TARGET,
+    LocalActionDevice,
+    LocalActionError,
+    LocalActionTrigger,
+    Manager,
+)
 from .model import invalid_name, validate_breaker, validate_option
 from .topics import InvalidBaseTopic, validate_base_topic
 
@@ -68,6 +82,28 @@ CONF_OPTION = "option"
 
 # Settings every device stores, in the order they are read back from a draft
 SETTINGS_KEYS: tuple[str, ...] = (CONF_RUN_ON_STARTUP, CONF_RUN_MODE, CONF_BREAKER_MAX_RUNS, CONF_BREAKER_WINDOW)
+
+# Fields and section of the local actions editor of the hub options (D-06, D-13)
+CONF_DEVICE = "device"
+CONF_TRIGGER = "trigger"
+CONF_LOCAL_SECTION = "local_actions"
+CONF_LOCAL_MODE = "mode"
+CONF_LOCAL_ACTIONS = "actions"
+# Translation keys of the mode selector and of the direct markers of a trigger label (D-16)
+LOCAL_MODE_TRANSLATION_KEY = "local_mode"
+LOCAL_STATUS_TRANSLATION_KEY = "local_trigger_status"
+LOCAL_STATUS_MARKERS: tuple[str, ...] = ("additive", "replacement")
+# Separator between the identifying part of a picker label and its markers
+LABEL_SEPARATOR = " — "
+
+# Why the Manager refused a local edit (LocalActionError.reason) -> base error of the editor
+LOCAL_ERRORS: dict[str, str] = {
+    LOCAL_ACTION_NOT_RUNNING: "not_loaded",
+    LOCAL_ACTION_STALE_TARGET: "stale_target",
+    LOCAL_ACTION_INVALID_MODE: "invalid_mode",
+    LOCAL_ACTION_INVALID_ACTIONS: "invalid_local_actions",
+    LOCAL_ACTION_SAVE_FAILED: "save_failed",
+}
 
 # Action fields in check order, with the label shown in the invalid_actions error
 ACTION_FIELDS: tuple[tuple[str, str], ...] = (
@@ -140,14 +176,30 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class HubOptionsFlow(OptionsFlow):
     """
-    Hub options: what removing the hub does to the devices (D-11) and the optional MQTT Discovery export (D-03).
+    Hub options: a menu of the hub settings and the local actions of mirrored devices (D-06).
 
-    A plain options flow, not a reload-on-change one. The delete choice is only read when the entry is removed. The
-    export options are applied by the manager from the entry update, which publishes or clears the export topics.
+    The settings are what removing the hub does to the devices (D-11) and the optional MQTT Discovery export (D-03).
     Only submitted keys are stored, so an omitted export key means the default: off, and the default prefix.
+
+    The local actions editor is a thin client of the Manager (T-11-24): device, then trigger, then mode and actions.
+    Each confirmed save or removal goes to the Manager at once, which validates, rechecks the target and stores it in
+    its own Store; the flow never writes a local customization into the entry options or a subentry. A draft lives
+    only in this flow, so leaving it, or closing the dialog, drops nothing but the unsaved edit (D-13).
     """
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    def __init__(self) -> None:
+        """Start without a chosen device, trigger or draft."""
+        super().__init__()
+        self._local_device: LocalActionDevice | None = None
+        self._local_target: LocalActionTrigger | None = None
+        # The submitted but not yet saved mode and actions of the chosen trigger
+        self._local_draft: dict[str, Any] | None = None
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:  # noqa: ARG002
+        """Offer the hub settings and the local actions of mirrored devices."""
+        return self.async_show_menu(step_id="init", menu_options=["settings", "local_actions"])
+
+    async def async_step_settings(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the delete choice, the export switch and the export prefix, and store what is submitted."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -182,10 +234,238 @@ class HubOptionsFlow(OptionsFlow):
             # A refused submit shows what the user typed, not the stored values
             suggested.update(user_input)
         return self.async_show_form(
-            step_id="init",
+            step_id="settings",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
             errors=errors,
         )
+
+    # --- local actions of mirrored devices (D-06, D-11 to D-16) -------------------------------------------------
+
+    def _local_manager(self) -> Manager | None:
+        """Return the Manager of the hub while it is loaded, else None; read at every step, never kept."""
+        entry = self.config_entry
+        if entry.state is not ConfigEntryState.LOADED:
+            return None
+        return entry.runtime_data
+
+    async def async_step_local_actions(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Choose the device: every current mirror, then devices known only from saved local records (D-12)."""
+        if (manager := self._local_manager()) is None:
+            return self.async_abort(reason="not_loaded")
+        devices = manager.local_action_devices()
+        if not devices:
+            return self.async_abort(reason="no_local_devices")
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            chosen = next((device for device in devices if device.device_id == user_input[CONF_DEVICE]), None)
+            if chosen is not None:
+                self._local_device = chosen
+                return await self.async_step_local_actions_device()
+            errors["base"] = "stale_target"
+        texts = await self._local_texts()
+        schema = probatio.Schema(
+            {
+                probatio.Required(CONF_DEVICE): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value=device.device_id, label=self._device_label(device, texts))
+                            for device in devices
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="local_actions", data_schema=schema, errors=errors)
+
+    async def async_step_local_actions_device(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """
+        Choose the trigger of the device; the labels name it and show its local mode directly (D-11, D-16).
+
+        The value of an option is the stable identity (kind and StateValue), never the shown text. Returning here
+        drops any unsaved draft (D-13).
+        """
+        if (manager := self._local_manager()) is None:
+            return self.async_abort(reason="not_loaded")
+        if self._local_device is None:
+            return await self.async_step_local_actions()
+        rows = manager.local_action_triggers(self._local_device.device_id)
+        if not rows:
+            return await self.async_step_local_actions()
+        self._local_target = None
+        self._local_draft = None
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            chosen = next((row for row in rows if _trigger_value(row) == user_input[CONF_TRIGGER]), None)
+            if chosen is not None:
+                self._local_target = chosen
+                if chosen.record is None:
+                    return await self.async_step_local_actions_edit()
+                return await self.async_step_local_actions_trigger()
+            errors["base"] = "stale_target"
+        return await self._async_show_trigger_picker(rows, errors)
+
+    async def _async_show_trigger_picker(
+        self, rows: Sequence[LocalActionTrigger], errors: dict[str, str]
+    ) -> ConfigFlowResult:
+        """Show the trigger selection of the chosen device with the given errors."""
+        texts = await self._local_texts()
+        schema = probatio.Schema(
+            {
+                probatio.Required(CONF_TRIGGER): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(value=_trigger_value(row), label=self._trigger_label(row, texts))
+                            for row in rows
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                )
+            }
+        )
+        return self.async_show_form(
+            step_id="local_actions_device",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"device": escape_markdown(self._local_device_name())},
+        )
+
+    async def async_step_local_actions_trigger(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:  # noqa: ARG002
+        """Offer what can be done with a trigger that already has a saved local customization."""
+        if self._local_target is None:
+            return await self.async_step_local_actions_device()
+        return self.async_show_menu(
+            step_id="local_actions_trigger",
+            menu_options=["local_actions_edit", "local_actions_device"],
+            description_placeholders=self._target_placeholders(),
+        )
+
+    async def async_step_local_actions_edit(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """
+        Edit the mode and the local actions of the chosen trigger; a new customization starts additive (D-15).
+
+        A submit is saved through the Manager at once and returns to the trigger selection (D-13). The Manager owns
+        validation and the target recheck; a refusal shows a base error and keeps the submitted values.
+        """
+        if self._local_target is None:
+            return await self.async_step_local_actions_device()
+        if user_input is None:
+            return self._show_local_editor(self._local_values())
+        values = user_input.get(CONF_LOCAL_SECTION) or {}
+        self._local_draft = {
+            CONF_LOCAL_MODE: values.get(CONF_LOCAL_MODE, str(LocalActionMode.ADDITIVE)),
+            CONF_LOCAL_ACTIONS: copy.deepcopy(values.get(CONF_LOCAL_ACTIONS) or []),
+        }
+        return await self._async_save_local(self._local_draft[CONF_LOCAL_MODE], self._local_draft[CONF_LOCAL_ACTIONS])
+
+    async def _async_save_local(self, mode: str, actions: list[dict[str, Any]]) -> ConfigFlowResult:
+        """Save the draft through the Manager; back to the trigger selection, or the editor with a base error."""
+        target = self._local_target
+        manager = self._local_manager()
+        if target is None:
+            return await self.async_step_local_actions_device()
+        placeholders: dict[str, str] = {}
+        if manager is None:
+            errors = {"base": LOCAL_ERRORS[LOCAL_ACTION_NOT_RUNNING]}
+        else:
+            try:
+                await manager.async_set_local_action(target.identity, mode, actions)
+            except LocalActionError as err:
+                errors = {"base": LOCAL_ERRORS.get(err.reason, LOCAL_ERRORS[LOCAL_ACTION_SAVE_FAILED])}
+                if err.reason == LOCAL_ACTION_INVALID_ACTIONS:
+                    # The validation message, capped; the submitted action data is never echoed (T-01-09)
+                    placeholders["error"] = str(err.__cause__ or err)[:MAX_FLOW_ERROR_LENGTH]
+            else:
+                return await self.async_step_local_actions_device()
+        return self._show_local_editor(self._local_values(), errors, placeholders)
+
+    def _local_values(self) -> dict[str, Any]:
+        """Return the editor values: the unsaved draft, else the saved record, else a new additive customization."""
+        if self._local_draft is not None:
+            return self._local_draft
+        record = self._local_target.record if self._local_target is not None else None
+        if record is not None:
+            return {CONF_LOCAL_MODE: str(record.mode), CONF_LOCAL_ACTIONS: record.copy_actions()}
+        return {CONF_LOCAL_MODE: str(LocalActionMode.ADDITIVE), CONF_LOCAL_ACTIONS: []}
+
+    def _show_local_editor(
+        self,
+        values: Mapping[str, Any],
+        errors: dict[str, str] | None = None,
+        placeholders: Mapping[str, str] | None = None,
+    ) -> ConfigFlowResult:
+        """
+        Show the editor: one expanded section with the mode and the action selector (11-02 frontend smoke).
+
+        The section stays expanded, because a collapsed one folds again after a base error; the guidance for the
+        action list lives in the section description, because the action selector shows no field description.
+        """
+        fields = probatio.Schema(
+            {
+                probatio.Required(CONF_LOCAL_MODE, default=str(LocalActionMode.ADDITIVE)): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[str(LocalActionMode.ADDITIVE), str(LocalActionMode.REPLACEMENT)],
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key=LOCAL_MODE_TRANSLATION_KEY,
+                    )
+                ),
+                probatio.Optional(CONF_LOCAL_ACTIONS, default=[]): selector.ActionSelector(),
+            }
+        )
+        schema = probatio.Schema({probatio.Required(CONF_LOCAL_SECTION): section(fields, {"collapsed": False})})
+        return self.async_show_form(
+            step_id="local_actions_edit",
+            data_schema=self.add_suggested_values_to_schema(schema, {CONF_LOCAL_SECTION: dict(values)}),
+            errors=errors or {},
+            description_placeholders={**self._target_placeholders(), **(placeholders or {})},
+        )
+
+    def _local_device_name(self) -> str:
+        """Return the name of the chosen device; a device known only from records shows its id."""
+        device = self._local_device
+        if device is None:
+            return ""
+        return device.name or device.device_id
+
+    def _target_placeholders(self) -> dict[str, str]:
+        """Return the escaped device name, trigger label and StateValue; all come from the broker (T-11-26)."""
+        target = self._local_target
+        return {
+            "device": escape_markdown(self._local_device_name()),
+            "trigger": escape_markdown(target.label if target is not None else ""),
+            "state_value": escape_markdown(target.state_value if target is not None else ""),
+        }
+
+    async def _local_texts(self) -> dict[str, str]:
+        """
+        Return the translated markers of the picker labels, in the language of this instance.
+
+        A selector option label is plain text the frontend does not translate, so the markers are looked up here.
+        """
+        translations = await async_get_translations(self.hass, self.hass.config.language, "selector", [DOMAIN])
+        prefix = f"component.{DOMAIN}.selector.{LOCAL_STATUS_TRANSLATION_KEY}.options."
+        return {marker: translations.get(prefix + marker, marker) for marker in LOCAL_STATUS_MARKERS}
+
+    @staticmethod
+    def _device_label(device: LocalActionDevice, texts: Mapping[str, str]) -> str:  # noqa: ARG004
+        """Return the label of a device: its name, or its id while only records know it."""
+        return device.name or device.device_id
+
+    @staticmethod
+    def _trigger_label(row: LocalActionTrigger, texts: Mapping[str, str]) -> str:
+        """Return friendly name and StateValue of a trigger, followed by its direct mode marker (D-11, D-16)."""
+        name = row.label
+        if row.label.strip().lower() != row.state_value.strip().lower():
+            name = f"{row.label} ({row.state_value})"
+        markers: list[str] = []
+        if row.record is not None:
+            markers.append(texts[str(row.record.mode)])
+        return LABEL_SEPARATOR.join((name, *markers))
+
+
+def _trigger_value(row: LocalActionTrigger) -> str:
+    """Return the option value of a trigger row: its stable identity within the device, never the shown text."""
+    return json.dumps([row.identity.kind, row.identity.state_value])
 
 
 class _DeviceSubentryFlow(ConfigSubentryFlow):

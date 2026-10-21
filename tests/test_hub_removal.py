@@ -30,6 +30,7 @@ from custom_components.mqtt_actions.const import (
 )
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 from tests.fake_broker import FakeBroker, FakeGateway
+from tests.helpers import open_hub_settings
 from tests.log_helpers import own_warnings
 
 if TYPE_CHECKING:
@@ -101,9 +102,9 @@ async def test_hub_has_options_flow_with_delete_choice(
 ) -> None:
     entry = await _setup(hass, make_hub_entry())
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await open_hub_settings(hass, entry)
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "init"
+    assert result["step_id"] == "settings"
     fields = {
         field["name"]: field
         for field in probatio.to_field_list(result["data_schema"], custom_serializer=cv.custom_serializer)
@@ -119,7 +120,7 @@ async def test_hub_has_options_flow_with_delete_choice(
     assert entry.options == {CONF_DELETE_DEVICES_ON_REMOVE: True}
 
     # The stored choice is what the form shows the next time
-    again = await hass.config_entries.options.async_init(entry.entry_id)
+    again = await open_hub_settings(hass, entry)
     (key,) = (key for key in again["data_schema"].schema if key.schema == CONF_DELETE_DEVICES_ON_REMOVE)
     assert key.description["suggested_value"] is True
     # A hub still has no reconfigure step (D-01)
@@ -133,7 +134,7 @@ async def test_saving_the_option_publishes_nothing(
     devices_before = dict(entry.runtime_data.devices)
     mqtt_mock.async_publish.reset_mock()
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await open_hub_settings(hass, entry)
     await hass.config_entries.options.async_configure(result["flow_id"], {CONF_DELETE_DEVICES_ON_REMOVE: True})
     await hass.async_block_till_done(wait_background_tasks=True)
 

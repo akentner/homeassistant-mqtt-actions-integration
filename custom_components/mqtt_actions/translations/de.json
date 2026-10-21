@@ -241,6 +241,14 @@
     "step": {
       "init": {
         "title": "MQTT-Actions-Optionen",
+        "description": "Wähle, was du ändern möchtest.",
+        "menu_options": {
+          "settings": "Einstellungen für Entfernen und Discovery-Export",
+          "local_actions": "Lokale Aktionen gespiegelter Geräte"
+        }
+      },
+      "settings": {
+        "title": "MQTT-Actions-Optionen",
         "description": "Lege fest, was mit deinen Geräten passiert, wenn du diese Integration entfernst. Die Auswahl wird beim Entfernen gelesen, stelle sie also vor dem Entfernen der Integration ein. Außerdem kannst du einen optionalen MQTT-Discovery-Export deiner Geräte für externe Verbraucher einschalten, die nicht Home Assistant sind.",
         "data": {
           "delete_devices_on_remove": "Alle Geräte löschen, wenn diese Integration entfernt wird",
@@ -252,10 +260,58 @@
           "discovery_export": "Standardmäßig aus. Home Assistant braucht für die Geräte dieser Integration keine Discovery, der Export ist also nur für andere Verbraucher des Brokers. Er führt jedes Gerät mit einer einzigen, standardmäßig deaktivierten Entität auf, ohne Test-Buttons. Er wird nur nach bestem Bemühen veröffentlicht: Wird er auf dem Broker gelöscht, stellt ihn nichts wieder her.",
           "export_prefix": "Das Topic-Präfix des Exports. Das Standardpräfix wird von Home Assistant nicht beobachtet. Gibst du das Discovery-Präfix ein, auf das Home Assistant selbst lauscht, legt es von jedem Gerät ein deaktiviertes Duplikat an. Keine Wildcards, keine leeren Ebenen, kein führendes $."
         }
+      },
+      "local_actions": {
+        "title": "Lokale Aktionen",
+        "description": "Lokale Aktionen laufen nur auf dieser Instanz, wenn ein von einer anderen Instanz gespiegeltes Gerät seinen Zustand ändert. Sie brauchen keine Freigabe und werden nie mit anderen Instanzen geteilt. Wähle ein Gerät.",
+        "data": {
+          "device": "Gerät"
+        }
+      },
+      "local_actions_device": {
+        "title": "Lokale Aktionen von {device}",
+        "description": "Wähle einen Auslöser von {device}. Jeder Auslöser zeigt, ob er lokale Aktionen zusätzlich zu den Aktionen der Besitzerin oder statt ihrer hat oder lokal stummgeschaltet ist.",
+        "data": {
+          "trigger": "Auslöser"
+        }
+      },
+      "local_actions_trigger": {
+        "title": "Lokale Anpassung",
+        "description": "{trigger} ({state_value}) von {device} hat auf dieser Instanz eine lokale Anpassung.",
+        "menu_options": {
+          "local_actions_edit": "Modus und lokale Aktionen bearbeiten",
+          "local_actions_device": "Zurück zu den Auslösern"
+        }
+      },
+      "local_actions_edit": {
+        "title": "Lokale Aktionen für {trigger}",
+        "description": "Lege fest, wie die lokalen Aktionen von {trigger} ({state_value}) von {device} mit den Aktionen der Besitzerin zusammenwirken. Speichern wirkt sofort und führt zurück zu den Auslösern; nichts wird neu gestartet.",
+        "sections": {
+          "local_actions": {
+            "name": "Lokale Aktionen",
+            "description": "Aktionen, die nur auf dieser Instanz laufen, mit ihrem vollen Zugriff. Zusätzlich zu den Aktionen der Besitzerin laufen beide parallel. Statt der Aktionen der Besitzerin laufen nur diese. Ist der Auslöser bei der Besitzerin nicht mehr vorhanden, bleibt die Anpassung inaktiv, bis er zurückkommt.",
+            "data": {
+              "mode": "Modus",
+              "actions": "Aktionen"
+            },
+            "data_description": {
+              "mode": "Lokale Aktionen geben die Aktionen der Besitzerin nie frei: Diese behalten auf dieser Instanz ihre eigene Freigabe."
+            }
+          }
+        }
       }
     },
     "error": {
-      "invalid_export_prefix": "Das Export-Präfix darf nicht leer sein, kein # oder + enthalten, nicht mit einem Schrägstrich beginnen oder enden, keine leeren Ebenen enthalten und nicht mit $ beginnen."
+      "invalid_export_prefix": "Das Export-Präfix darf nicht leer sein, kein # oder + enthalten, nicht mit einem Schrägstrich beginnen oder enden, keine leeren Ebenen enthalten und nicht mit $ beginnen.",
+      "not_loaded": "MQTT Actions ist nicht geladen, deshalb wurde nichts gespeichert. Versuche es erneut, wenn die Integration läuft.",
+      "stale_target": "Dieser Auslöser oder dieses Gerät hat sich geändert, während der Dialog offen war, deshalb wurde nichts gespeichert. Wähle ihn erneut.",
+      "invalid_mode": "Der Modus ist ungültig, deshalb wurde nichts gespeichert.",
+      "invalid_local_actions": "Die lokalen Aktionen sind ungültig, deshalb wurde nichts gespeichert: {error}",
+      "save_failed": "Die lokalen Aktionen konnten nicht gespeichert werden, deshalb hat sich nichts geändert. Prüfe das Log und versuche es erneut."
+    },
+    "abort": {
+      "not_loaded": "MQTT Actions ist nicht geladen. Versuche es erneut, wenn die Integration läuft.",
+      "no_local_devices": "Auf dieser Instanz gibt es kein Gerät einer anderen Instanz, daher gibt es nichts lokal anzupassen."
     }
   },
   "entity": {
@@ -392,6 +448,18 @@
       "options": {
         "serial": "Seriell (Ausführungen einreihen)",
         "restart": "Neustart (laufende Ausführung abbrechen)"
+      }
+    },
+    "local_mode": {
+      "options": {
+        "additive": "Zusätzlich zu den Aktionen der Besitzerin",
+        "replacement": "Statt der Aktionen der Besitzerin"
+      }
+    },
+    "local_trigger_status": {
+      "options": {
+        "additive": "zusätzlich zu den Aktionen der Besitzerin",
+        "replacement": "statt der Aktionen der Besitzerin"
       }
     }
   },

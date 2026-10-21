@@ -83,7 +83,9 @@ class LocalActionRecord:
 
     `state_value` is the value as the user saw it and `label` the last known friendly name; both are for display only.
     `actions` is a raw, JSON-serializable list owned by the record: it is deep-copied in and out (T-11-06). An empty
-    list with `REPLACEMENT` is a deliberate mute; an empty list with `ADDITIVE` adds no branch.
+    list with `REPLACEMENT` is a deliberate mute; an empty list with `ADDITIVE` adds no branch. `extra` holds deep
+    copies of the stored keys of the row that this release does not know, for example of a newer minor release. Nothing
+    reads it at runtime; it is written back unchanged on every save (WR-05, D-07). It is payload, never identity.
     """
 
     identity: LocalActionIdentity
@@ -91,6 +93,7 @@ class LocalActionRecord:
     label: str
     mode: LocalActionMode
     actions: list[dict[str, Any]]
+    extra: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def copy_actions(self) -> list[dict[str, Any]]:
         """Return a deep copy of the local actions."""
@@ -117,10 +120,22 @@ def _actions(value: Any) -> list[dict[str, Any]]:
     return copy.deepcopy(value)
 
 
-def make_local_record(  # noqa: PLR0913 - one record is six independent facts
-    device_id: str, kind: str, state_value: str, *, label: str, mode: LocalActionMode | str, actions: Any
+def make_local_record(  # noqa: PLR0913 - one record is six independent facts and the keys kept from a newer release
+    device_id: str,
+    kind: str,
+    state_value: str,
+    *,
+    label: str,
+    mode: LocalActionMode | str,
+    actions: Any,
+    extra: Any = None,
 ) -> LocalActionRecord:
-    """Return a validated record of the local customization of one trigger; raise LocalActionRecordInvalid."""
+    """
+    Return a validated record of the local customization of one trigger; raise LocalActionRecordInvalid.
+
+    `extra` is the mapping of keys this release does not know that the record keeps (WR-05). The record gets a deep
+    copy of it without the six known keys, so a known key can never come from `extra`.
+    """
     _text(device_id, "device_id", required=True)
     if kind not in LOCAL_KINDS:
         msg = "local record field kind is invalid"
@@ -131,12 +146,16 @@ def make_local_record(  # noqa: PLR0913 - one record is six independent facts
     except ValueError as err:
         msg = "local record field mode is invalid"
         raise LocalActionRecordInvalid(msg) from err
+    if extra is not None and not isinstance(extra, dict):
+        msg = "local record field extra is not a mapping"
+        raise LocalActionRecordInvalid(msg)
     return LocalActionRecord(
         local_trigger_identity(device_id, kind, state_value),
         state_value,
         _text(label, "label"),
         checked_mode,
         _actions(actions),
+        {key: copy.deepcopy(value) for key, value in (extra or {}).items() if key not in RECORD_KEYS},
     )
 
 
@@ -152,11 +171,17 @@ def parse_local_record(raw: Any) -> LocalActionRecord:
         label=raw["label"],
         mode=raw["mode"],
         actions=raw["actions"],
+        extra={key: value for key, value in raw.items() if key not in RECORD_KEYS},
     )
 
 
 def local_record_data(record: LocalActionRecord) -> dict[str, Any]:
-    """Return the stored v1 row of a record, with its own copy of the actions."""
+    """
+    Return the stored row of a record, with its own copies of the actions and of the unknown keys it kept.
+
+    The six known keys come first, in `RECORD_KEYS` order; the kept keys follow and never override a known one. A record
+    without kept keys is exactly the v1 row (WR-05).
+    """
     return {
         "device_id": record.identity.device_id,
         "kind": record.identity.kind,
@@ -164,6 +189,7 @@ def local_record_data(record: LocalActionRecord) -> dict[str, Any]:
         "label": record.label,
         "mode": str(record.mode),
         "actions": record.copy_actions(),
+        **{key: copy.deepcopy(value) for key, value in record.extra.items() if key not in RECORD_KEYS},
     }
 
 
@@ -179,8 +205,10 @@ class ParsedLocalActions:
     `dropped` counts the stored rows left out of `records`: malformed ones and later duplicates of an identity.
     `preserved` holds copies of the malformed rows in stored order, for example of a mode a newer minor release adds,
     and `extra` copies of the top-level keys other than the record list. Neither is ever a record: nothing preserved is
-    applied, run, counted or shown; it is only written back after the records on every save (D-07, WR-03). A later
-    duplicate of a parsed identity is not preserved, so removing a record never brings an older row back (D-10).
+    applied, run, counted or shown; it is only written back after the records on every save (D-07, WR-03). A row that
+    parses keeps its unknown keys on its record and is applied without their meaning; only rows that fail to parse are
+    preserved (WR-05). A later duplicate of a parsed identity is not preserved, so removing a record never brings an
+    older row back (D-10).
     `shape_valid` is False when the payload is not a mapping with a record list at all, which loads no record.
     """
 
@@ -192,8 +220,11 @@ class ParsedLocalActions:
 
 
 def copy_local_records(records: Iterable[LocalActionRecord]) -> tuple[LocalActionRecord, ...]:
-    """Return the records with their own deep copies of the actions, so no caller shares nested data with another."""
-    return tuple(dataclasses.replace(record, actions=record.copy_actions()) for record in records)
+    """Return the records with their own deep copies of the actions and kept keys, so no caller shares nested data."""
+    return tuple(
+        dataclasses.replace(record, actions=record.copy_actions(), extra=copy.deepcopy(record.extra))
+        for record in records
+    )
 
 
 def parse_local_actions_payload(data: Any) -> ParsedLocalActions:
@@ -248,6 +279,12 @@ def migrate_local_actions_payload(old_major_version: int, old_minor_version: int
 
     Version 1 is the only major version, so the hook upgrades nothing yet: a minor-only difference keeps the rows,
     which the parser then checks one by one. Any other major version is refused rather than reset (D-07).
+
+    Contract for every future minor migration: it must be idempotent. Loading never writes (WR-05, D-22), but an
+    explicit save here (an edit, a removal, a label refresh, an adoption discard or restore) writes this release's minor
+    version over a newer minor file and keeps every row, unknown row key and unknown top-level key. A later minor
+    release therefore runs its migration again over data that already has its shape, so a migration fills missing
+    fields and never transforms present ones.
     """
     if old_major_version != LOCAL_ACTIONS_STORE_VERSION:
         msg = f"local actions Store version {old_major_version}.{old_minor_version} is not supported"

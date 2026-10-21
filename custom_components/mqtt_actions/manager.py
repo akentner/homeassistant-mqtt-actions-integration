@@ -1826,6 +1826,7 @@ class Manager:
         The raw actions are validated, but the raw copy is what is saved; the complete candidate set is written before
         anything changes in memory, so a failed save leaves the previous record, Script and breaker (D-22, T-11-13).
         A saved edit rebuilds only its device, runs nothing retroactively and releases that device's tripped breaker.
+        The saved row keeps the keys of its stored row that this release does not know (WR-05).
         A saved record without local actions (a mute, or additive with an empty list) cannot fail locally any more, so
         it also ends the local failure issue that names its trigger; a failed save raises before and clears nothing
         (D-19 as amended on 2026-10-21, WR-02).
@@ -1833,10 +1834,11 @@ class Manager:
         async with self._lock:
             identity = self._checked_local_identity(identity)
             trigger = self._local_trigger(identity)
+            existing = self._local_record(identity)
             # A current trigger names the shown value and its friendly name; a retained record keeps its own (D-11)
             if trigger is not None:
                 state_value, label = trigger.value, trigger.friendly_name
-            elif (existing := self._local_record(identity)) is not None:
+            elif existing is not None:
                 state_value, label = existing.state_value, existing.label
             else:
                 raise LocalActionError(LOCAL_ACTION_STALE_TARGET)
@@ -1853,6 +1855,7 @@ class Manager:
                     label=label,
                     mode=checked_mode,
                     actions=actions,
+                    extra=None if existing is None else existing.extra,
                 )
             except (ActionsInvalid, LocalActionRecordInvalid) as err:
                 raise LocalActionError(LOCAL_ACTION_INVALID_ACTIONS) from err

@@ -37,7 +37,7 @@ from custom_components.mqtt_actions.local_actions_store import LocalActionsStore
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 from tests.documents import document_payload, make_spec
 from tests.fake_broker import FakeBroker, FakeGateway
-from tests.helpers import open_hub_settings
+from tests.helpers import open_hub_settings, restart_entry
 from tests.log_helpers import own_warnings
 
 if TYPE_CHECKING:
@@ -520,6 +520,89 @@ def test_removal_settings_text_renders_the_device_count(language: str, rendered:
     description = raw["options"]["step"]["settings"]["description"]
     assert "{local_action_device_count}" in description
     assert rendered in description.format(local_action_device_count=LOCAL_DEVICE_COUNT)
+
+
+# ------------------------------------------ unreadable local actions in the removal settings (Plan 11-22, WR-04)
+
+
+def _seed_newer_local_store(hass_storage: dict[str, Any]) -> str:
+    """Write the local rows as a version 2 envelope this release refuses; return its serialized bytes."""
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
+        "version": 2,
+        "minor_version": 1,
+        "key": LOCAL_ACTIONS_STORE_KEY,
+        "data": {"records": LOCAL_ROWS},
+    }
+    return _local_store_bytes(hass_storage)
+
+
+async def test_removal_settings_say_the_saved_local_actions_cannot_be_read(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-04, D-08: a loaded hub whose local load was refused never names a count; a dedicated step says why."""
+    before = _seed_newer_local_store(hass_storage)
+    entry = await _setup(hass, make_hub_entry())
+
+    result = await open_hub_settings(hass, entry)
+
+    assert result["step_id"] == "settings_unreadable", "unreadable local actions must never be counted as 0 devices"
+    assert result["type"] is FlowResultType.FORM
+    assert not result.get("description_placeholders")
+    # Opening the settings never rewrites the local Store
+    assert _local_store_bytes(hass_storage) == before
+
+
+async def test_settings_unreadable_step_stores_the_options_and_shows_field_errors(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """The dedicated step stores the same options as the settings step and shows its field errors on itself."""
+    _seed_newer_local_store(hass_storage)
+    entry = await _setup(hass, make_hub_entry())
+
+    result = await open_hub_settings(hass, entry)
+    assert result["step_id"] == "settings_unreadable"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {CONF_DELETE_DEVICES_ON_REMOVE: True})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_DELETE_DEVICES_ON_REMOVE] is True
+
+    result = await open_hub_settings(hass, entry)
+    assert result["step_id"] == "settings_unreadable"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {CONF_EXPORT_PREFIX: "a/+/b"})
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "settings_unreadable"
+    assert result["errors"] == {CONF_EXPORT_PREFIX: "invalid_export_prefix"}
+
+
+async def test_manager_reports_whether_its_local_actions_were_readable(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """A refused local load leaves the Manager unreadable; a successful load at the next start makes it readable."""
+    _seed_newer_local_store(hass_storage)
+    entry = await _setup(hass, make_hub_entry())
+    assert entry.runtime_data.local_actions_readable is False
+
+    _seed_local_store(hass_storage)
+    await restart_entry(hass, entry)
+
+    assert entry.runtime_data.local_actions_readable is True
+
+
+@pytest.mark.parametrize(
+    ("language", "phrases"),
+    [("en", ("cannot be read", "deletes them")), ("de", ("nicht gelesen werden", "gelöscht"))],
+)
+def test_removal_settings_unreadable_text_says_cannot_be_read_and_deleted(language: str, phrases: tuple[str]) -> None:
+    """MIR-15: both languages say the saved local actions cannot be read and go anyway, without a number."""
+    steps = json.loads((TRANSLATIONS / f"{language}.json").read_text(encoding="utf-8"))["options"]["step"]
+    unreadable = steps.get("settings_unreadable", {})
+    description = unreadable.get("description", "")
+    for phrase in phrases:
+        assert phrase in description, phrase
+    assert "{" not in description, "the unreadable text has no placeholder"
+    assert unreadable.get("title") == steps["settings"]["title"]
+    assert set(unreadable.get("data", {})) == set(steps["settings"]["data"])
+    assert set(unreadable.get("data_description", {})) == set(steps["settings"]["data_description"])
 
 
 async def test_local_removal_seam_removes_only_the_given_local_key(

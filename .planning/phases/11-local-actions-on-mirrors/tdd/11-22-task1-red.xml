@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.986" timestamp="2026-10-21T10:22:33.804407+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_hub_removal" name="test_removal_settings_say_the_saved_local_actions_cannot_be_read" time="0.875"><failure message="AssertionError: unreadable local actions must never be counted as 0 devices&#10;assert 'settings' == 'settings_unreadable'&#10;  &#10;  - settings_unreadable&#10;  + settings">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140179155838560'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...43', 'kind': 'select', 'label': 'away', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 2}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f7e026b14e0&gt;
+
+    async def test_removal_settings_say_the_saved_local_actions_cannot_be_read(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """WR-04, D-08: a loaded hub whose local load was refused never names a count; a dedicated step says why."""
+        before = _seed_newer_local_store(hass_storage)
+        entry = await _setup(hass, make_hub_entry())
+    
+        result = await open_hub_settings(hass, entry)
+    
+&gt;       assert result["step_id"] == "settings_unreadable", "unreadable local actions must never be counted as 0 devices"
+E       AssertionError: unreadable local actions must never be counted as 0 devices
+E       assert 'settings' == 'settings_unreadable'
+E         
+E         - settings_unreadable
+E         + settings
+
+tests/test_hub_removal.py:548: AssertionError</failure></testcase></testsuite></testsuites>

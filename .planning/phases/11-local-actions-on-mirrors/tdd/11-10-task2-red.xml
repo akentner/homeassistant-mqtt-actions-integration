@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.442" timestamp="2026-10-21T04:53:46.224490+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_invariants" name="test_every_lifecycle_transition_publishes_no_local_content" time="0.333"><failure message="AssertionError: the tombstone after a prune still deletes the records&#10;assert 2 == 0&#10; +  where 2 = records_of('b54a0b4e-6757-4e8e-86a8-a9ff8e2daac6')&#10; +    where records_of = _Lifecycle(alpha=Instance(hass=&lt;HomeAssistant RUNNING&gt;, entry=&lt;ConfigEntry entry_id=01M5E62304TRR1CTZWXSD7MQ5T version...4-4338-ac8e-3b2f91a6a786'}]}}}, freezer=&lt;freezegun.api.FrozenDateTimeFactory object at 0x7f4079cb4590&gt;, clock=[1180.0]).records_of&#10; +    and   'b54a0b4e-6757-4e8e-86a8-a9ff8e2daac6' = _Lifecycle(alpha=Instance(hass=&lt;HomeAssistant RUNNING&gt;, entry=&lt;ConfigEntry entry_id=01M5E62304TRR1CTZWXSD7MQ5T version...4-4338-ac8e-3b2f91a6a786'}]}}}, freezer=&lt;freezegun.api.FrozenDateTimeFactory object at 0x7f4079cb4590&gt;, clock=[1180.0]).lamp_id">hass = &lt;HomeAssistant RUNNING&gt;
+hass_storage = {'core.config_entries': {'data': {'entries': [{'created_at': '2026-10-21T02:53:46.372367+00:00', 'data': {'base_topic'...nd': 'switch', 'label': 'ON', ...}]}, 'key': 'mqtt_actions.local_actions.beta', 'minor_version': 1, 'version': 1}, ...}
+fake_broker = &lt;tests.fake_broker.FakeBroker object at 0x7f407c05e7b0&gt;
+make_instance = &lt;tests.fake_broker.InstanceFactory object at 0x7f407c05e900&gt;
+make_switch_subentry = &lt;function make_switch_subentry.&lt;locals&gt;._make at 0x7f407c06b480&gt;
+make_select_subentry = &lt;function make_select_subentry.&lt;locals&gt;._make at 0x7f407ae09e80&gt;
+freezer = &lt;freezegun.api.FrozenDateTimeFactory object at 0x7f4079cb4590&gt;
+
+    async def test_every_lifecycle_transition_publishes_no_local_content(
+        hass: HomeAssistant,
+        hass_storage: dict[str, Any],
+        fake_broker: FakeBroker,
+        make_instance: Callable,
+        make_switch_subentry: Callable,
+        make_select_subentry: Callable,
+        freezer: FrozenDateTimeFactory,
+    ) -&gt; None:
+        """
+        D-04, D-05, D-21, T-11-32: each named transition of a local record is run, and none publishes local content.
+    
+        The table names every transition the plan requires; each step's publications of both gateways are scanned on their
+        own, so a leak names its transition, and the complete history plus the retained state is scanned at the end. The
+        re-trigger answers use only the existing status and reason words.
+        """
+        lamp, mode = _subentries(make_switch_subentry, make_select_subentry)
+        spare = make_switch_subentry("Spare", on=OWNER_ON)
+        alpha = await make_instance("alpha", hass=hass, subentries=[lamp, mode, spare])
+        beta = await make_instance("beta")
+        _register_services(alpha, beta)
+        await _settle(alpha, beta)
+        clock = [1000.0]
+        ctx = _Lifecycle(alpha, beta, lamp, mode, spare, fake_broker, hass_storage, freezer, clock)
+        alpha.manager.clock = lambda: clock[0]
+        await _restart_seeded(hass_storage, _sentinel_records(_device_id(lamp), _device_id(mode)), alpha, beta)
+        alpha.manager.clock = lambda: clock[0]
+        for instance in (alpha, beta):
+            await instance.manager.presence.async_publish_heartbeat()
+        await _settle(alpha, beta)
+    
+        assert tuple(name for name, _step in LIFECYCLE) == REQUIRED_TRANSITIONS
+        leaks: dict[str, list[tuple[str, str]]] = {}
+        published: dict[str, int] = {}
+        seen = dict.fromkeys((alpha.gateway, beta.gateway), 0)
+        for name, step in LIFECYCLE:
+&gt;           await step(ctx)
+
+tests/test_local_invariants.py:869: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+ctx = _Lifecycle(alpha=Instance(hass=&lt;HomeAssistant RUNNING&gt;, entry=&lt;ConfigEntry entry_id=01M5E62304TRR1CTZWXSD7MQ5T version...4-4338-ac8e-3b2f91a6a786'}]}}}, freezer=&lt;freezegun.api.FrozenDateTimeFactory object at 0x7f4079cb4590&gt;, clock=[1180.0])
+
+    async def _step_tombstone_after_prune(ctx: _Lifecycle) -&gt; None:
+        await _prune_on_beta(ctx, ctx.lamp_id)
+        assert ctx.records_of(ctx.lamp_id) == 2, "premise: the prune kept the records"
+        await _remove_owned(ctx.alpha, ctx.lamp_id)
+        await _settle(ctx.alpha, ctx.beta)
+&gt;       assert ctx.records_of(ctx.lamp_id) == 0, "the tombstone after a prune still deletes the records"
+E       AssertionError: the tombstone after a prune still deletes the records
+E       assert 2 == 0
+E        +  where 2 = records_of('b54a0b4e-6757-4e8e-86a8-a9ff8e2daac6')
+E        +    where records_of = _Lifecycle(alpha=Instance(hass=&lt;HomeAssistant RUNNING&gt;, entry=&lt;ConfigEntry entry_id=01M5E62304TRR1CTZWXSD7MQ5T version...4-4338-ac8e-3b2f91a6a786'}]}}}, freezer=&lt;freezegun.api.FrozenDateTimeFactory object at 0x7f4079cb4590&gt;, clock=[1180.0]).records_of
+E        +    and   'b54a0b4e-6757-4e8e-86a8-a9ff8e2daac6' = _Lifecycle(alpha=Instance(hass=&lt;HomeAssistant RUNNING&gt;, entry=&lt;ConfigEntry entry_id=01M5E62304TRR1CTZWXSD7MQ5T version...4-4338-ac8e-3b2f91a6a786'}]}}}, freezer=&lt;freezegun.api.FrozenDateTimeFactory object at 0x7f4079cb4590&gt;, clock=[1180.0]).lamp_id
+
+tests/test_local_invariants.py:740: AssertionError</failure></testcase></testsuite></testsuites>

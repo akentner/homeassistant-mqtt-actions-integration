@@ -18,16 +18,20 @@ registry (a mock here), never through the gateway, so it is outside this oracle 
 """
 
 import json
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
 from homeassistant.helpers.json import json_dumps
 from pytest_homeassistant_custom_component.common import async_fire_time_changed, async_mock_service
 
+from custom_components.mqtt_actions import retrigger as retrigger_module
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     CONF_DISCOVERY_EXPORT,
+    CONF_ON_CHANGE_TO_ON,
     DEFAULT_EXPORT_PREFIX,
     PRUNE_GRACE_SECONDS,
     STORE_KEY,
@@ -45,14 +49,16 @@ from custom_components.mqtt_actions.document import (
     canonical_json,
     serialize_document,
 )
-from custom_components.mqtt_actions.manager import async_remove_all_devices
+from custom_components.mqtt_actions.local_actions import local_trigger_identity
+from custom_components.mqtt_actions.manager import AdoptionError, async_remove_all_devices, async_remove_local_state
 from custom_components.mqtt_actions.model import SWITCH_OFF_KEY, SWITCH_ON_KEY, spec_from_data
+from custom_components.mqtt_actions.mqtt_gateway import IncomingMessage
 from custom_components.mqtt_actions.portability import subentry_payload
 from custom_components.mqtt_actions.topics import config_topic, discovery_topic
 from tests.fake_broker import FakeBroker, FakeGateway
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Awaitable, Callable, Iterable
 
     from freezegun.api import FrozenDateTimeFactory
     from homeassistant.config_entries import ConfigSubentryData
@@ -540,3 +546,342 @@ async def test_no_publication_carries_local_content_across_the_lifecycle(
     assert _leaks([alpha.gateway, beta.gateway], fake_broker.retained) == []
     # The authored local publish never reaches the gateway, whatever ran: no gateway topic is the authored one
     assert all(M_TOPIC not in topic for topic, _payload, _retain in history)
+
+
+# --- the complete lifecycle table (Plan 11-10) -----------------------------------------------------------------------
+
+# Every transition a local record can live through; the oracle below runs each one and scans what it published
+REQUIRED_TRANSITIONS = (
+    "startup_with_local_store",
+    "local_edit",
+    "local_remove",
+    "owner_approval",
+    "owner_content_change",
+    "state_change",
+    "native_test_button",
+    "legacy_test_topic",
+    "retrigger",
+    "reconnect",
+    "resync",
+    "transient_prune",
+    "reattach",
+    "tombstone_after_prune",
+    "adoption_failure",
+    "adoption_success",
+    "hub_removal_keep",
+    "hub_removal_delete",
+)
+
+# The transitions that stay on this instance: they publish nothing, not even a clean message
+SILENT_TRANSITIONS = frozenset(
+    {
+        "local_edit",
+        "local_remove",
+        "owner_approval",
+        "native_test_button",
+        "legacy_test_topic",
+        "adoption_failure",
+        "hub_removal_keep",
+    }
+)
+
+
+@dataclass
+class _Lifecycle:
+    """The owner alpha of Lamp, Mode and Spare, the follower beta with the sentinel Store, and the shared harness."""
+
+    alpha: Instance
+    beta: Instance
+    lamp: ConfigSubentryData
+    mode: ConfigSubentryData
+    spare: ConfigSubentryData
+    broker: FakeBroker
+    storage: dict[str, Any]
+    freezer: FrozenDateTimeFactory
+    clock: list[float]
+
+    @property
+    def lamp_id(self) -> str:
+        return _device_id(self.lamp)
+
+    @property
+    def mode_id(self) -> str:
+        return _device_id(self.mode)
+
+    @property
+    def spare_id(self) -> str:
+        return _device_id(self.spare)
+
+    def records_of(self, device_id: str) -> int:
+        """Return how many local records beta keeps for a device, from its running manager."""
+        counts = self.beta.manager.local_action_counts_by_device().get(device_id)
+        return 0 if counts is None else counts.records
+
+    def tick(self) -> None:
+        """Advance the owner's manager clock past every per-call interval (resync, re-trigger)."""
+        self.clock[0] += 60
+
+
+async def _prune_on_beta(ctx: _Lifecycle, device_id: str) -> None:
+    """
+    Prune one mirror on beta while its owner is online: beta restarts, the retained document is gone, the grace ends.
+
+    The broker loses the document silently (no live message), as after a lost retained store; the owner stays online.
+    """
+    await ctx.beta.stop()
+    ctx.broker.retained.pop(config_topic(BASE, device_id))
+    await ctx.beta.start()
+    await _settle(ctx.alpha, ctx.beta)
+    ctx.freezer.tick(timedelta(seconds=PRUNE_GRACE_SECONDS + 1))
+    for instance in (ctx.alpha, ctx.beta):
+        async_fire_time_changed(instance.hass)
+    await _settle(ctx.alpha, ctx.beta)
+    assert device_id not in ctx.beta.manager.mirrors, "premise: the online owner lacks the document, so beta prunes"
+
+
+async def _step_startup(ctx: _Lifecycle) -> None:
+    for device_id in (ctx.lamp_id, ctx.mode_id, ctx.spare_id):
+        assert device_id in ctx.beta.manager.mirrors
+    assert ctx.records_of(ctx.lamp_id) == 3, "premise: the sentinel Store loaded at the start"
+
+
+async def _step_local_edit(ctx: _Lifecycle) -> None:
+    lamp_on = local_trigger_identity(ctx.lamp_id, SUBENTRY_SWITCH, "ON")
+    await ctx.beta.manager.async_set_local_action(lamp_on, MODE_REPLACEMENT, _local_actions())
+    await ctx.beta.manager.async_set_local_action(
+        local_trigger_identity(ctx.spare_id, SUBENTRY_SWITCH, "ON"), MODE_ADDITIVE, _local_actions()
+    )
+    assert ctx.records_of(ctx.spare_id) == 1
+
+
+async def _step_local_remove(ctx: _Lifecycle) -> None:
+    await ctx.beta.manager.async_remove_local_action(local_trigger_identity(ctx.lamp_id, SUBENTRY_SWITCH, "OFF"))
+    assert ctx.records_of(ctx.lamp_id) == 2
+
+
+async def _step_owner_approval(ctx: _Lifecycle) -> None:
+    await _approve_all(ctx.beta)
+    for device_id in (ctx.lamp_id, ctx.mode_id, ctx.spare_id):
+        assert str(ctx.beta.manager.approval_state(device_id)) == "approved"
+
+
+async def _step_owner_content_change(ctx: _Lifecycle) -> None:
+    subentry = next(item for item in ctx.alpha.entry.subentries.values() if item.unique_id == ctx.lamp_id)
+    ctx.alpha.hass.config_entries.async_update_subentry(
+        ctx.alpha.entry, subentry, data={**subentry.data, CONF_ON_CHANGE_TO_ON: [*OWNER_ON, *OWNER_COZY]}
+    )
+    await ctx.alpha.manager.async_reconcile()
+    await _settle(ctx.alpha, ctx.beta)
+    assert str(ctx.beta.manager.approval_state(ctx.lamp_id)) == "pending", "premise: new owner actions need approval"
+    assert ctx.records_of(ctx.lamp_id) == 2, "an owner content change keeps the local records"
+    await _approve_all(ctx.beta)
+
+
+async def _step_state_change(ctx: _Lifecycle) -> None:
+    for device_id, value in ((ctx.lamp_id, "OFF"), (ctx.lamp_id, "ON"), (ctx.mode_id, "bright"), (ctx.mode_id, "cozy")):
+        await ctx.alpha.manager.async_send_state(device_id, value)
+        await _settle(ctx.alpha, ctx.beta)
+
+
+async def _step_native_test_button(ctx: _Lifecycle) -> None:
+    for instance in (ctx.alpha, ctx.beta):
+        await instance.manager.async_press_test(ctx.lamp_id, SWITCH_ON_KEY)
+        await instance.manager.async_press_test(ctx.lamp_id, SWITCH_OFF_KEY)
+
+
+async def _step_legacy_test_topic(ctx: _Lifecycle) -> None:
+    for payload in ("ON", "OFF"):
+        ctx.beta.manager.test_message_handler(ctx.lamp_id)(IncomingMessage(payload=payload, retain=False))
+
+
+async def _step_retrigger(ctx: _Lifecycle) -> None:
+    ctx.tick()
+    beta_result = await ctx.beta.manager.retrigger.async_retrigger(ctx.lamp_id, "ON")
+    alpha_result = await ctx.alpha.manager.retrigger.async_retrigger(ctx.mode_id, "cozy")
+    assert {entry["status"] for entry in beta_result["instances"]} == {"executed"}
+    assert {entry["status"] for entry in alpha_result["instances"]} == {"executed"}
+
+
+async def _step_reconnect(ctx: _Lifecycle) -> None:
+    ctx.alpha.gateway.reconnect()
+    ctx.beta.gateway.reconnect()
+
+
+async def _step_resync(ctx: _Lifecycle) -> None:
+    ctx.tick()
+    assert await ctx.alpha.manager.async_resync() is True
+    assert await ctx.beta.manager.async_resync() is True
+
+
+async def _step_transient_prune(ctx: _Lifecycle) -> None:
+    before = ctx.storage[ctx.beta.local_store_key]["data"]
+    await _prune_on_beta(ctx, ctx.mode_id)
+    assert ctx.storage[ctx.beta.local_store_key]["data"] == before, "a prune never changes the local Store"
+    listed = {device.device_id: device for device in ctx.beta.manager.local_action_devices()}
+    assert listed[ctx.mode_id].mirrored is False
+    assert listed[ctx.mode_id].records == 3
+
+
+async def _step_reattach(ctx: _Lifecycle) -> None:
+    ctx.tick()
+    assert await ctx.alpha.manager.async_resync() is True
+    await _settle(ctx.alpha, ctx.beta)
+    assert ctx.mode_id in ctx.beta.manager.mirrors, "premise: the owner's republish brings the mirror back"
+    counts = ctx.beta.manager.local_action_counts_by_device()[ctx.mode_id]
+    # cozy and bright attach again; the orphan option stays inactive
+    assert (counts.records, counts.active, counts.inactive) == (3, 2, 1)
+
+
+async def _step_tombstone_after_prune(ctx: _Lifecycle) -> None:
+    await _prune_on_beta(ctx, ctx.lamp_id)
+    assert ctx.records_of(ctx.lamp_id) == 2, "premise: the prune kept the records"
+    await _remove_owned(ctx.alpha, ctx.lamp_id)
+    await _settle(ctx.alpha, ctx.beta)
+    assert ctx.records_of(ctx.lamp_id) == 0, "the tombstone after a prune still deletes the records"
+    stored = ctx.storage[ctx.beta.local_store_key]["data"]["records"]
+    assert [row for row in stored if row["device_id"] == ctx.lamp_id] == []
+
+
+async def _step_adoption_failure(ctx: _Lifecycle) -> None:
+    before = json.dumps(ctx.storage[ctx.beta.local_store_key]["data"], sort_keys=True)
+    with pytest.raises(AdoptionError) as refused:
+        await ctx.beta.manager.async_adopt_device(ctx.spare_id)
+    assert refused.value.reason == "owner_not_offline"
+    with (
+        patch.object(ctx.beta.hass.config_entries, "async_add_subentry", side_effect=RuntimeError("boom")),
+        pytest.raises(RuntimeError),
+    ):
+        await ctx.beta.manager.async_adopt_device(ctx.spare_id, force=True)
+    await _settle(ctx.alpha, ctx.beta)
+    assert ctx.spare_id in ctx.beta.manager.mirrors
+    assert json.dumps(ctx.storage[ctx.beta.local_store_key]["data"], sort_keys=True) == before
+    assert ctx.records_of(ctx.spare_id) == 1
+
+
+async def _step_adoption_success(ctx: _Lifecycle) -> None:
+    await ctx.alpha.stop()
+    await _settle(ctx.alpha, ctx.beta)
+    result = await ctx.beta.manager.async_adopt_device(ctx.spare_id, force=True)
+    assert result.local_actions_discarded == 1
+    assert ctx.spare_id in ctx.beta.manager.devices
+    assert ctx.records_of(ctx.spare_id) == 0
+
+
+async def _step_hub_removal_keep(ctx: _Lifecycle) -> None:
+    alpha = ctx.alpha
+    await async_remove_local_state(
+        alpha.hass, alpha.entry, store_key=alpha.store_key, local_store_key=alpha.local_store_key
+    )
+    assert alpha.local_store_key not in ctx.storage
+
+
+async def _step_hub_removal_delete(ctx: _Lifecycle) -> None:
+    beta = ctx.beta
+    await beta.stop()
+    await async_remove_all_devices(
+        beta.hass, beta.entry, gateway=beta.gateway, store_key=beta.store_key, local_store_key=beta.local_store_key
+    )
+    assert beta.local_store_key not in ctx.storage
+
+
+LIFECYCLE: tuple[tuple[str, Callable[[_Lifecycle], Awaitable[None]]], ...] = (
+    ("startup_with_local_store", _step_startup),
+    ("local_edit", _step_local_edit),
+    ("local_remove", _step_local_remove),
+    ("owner_approval", _step_owner_approval),
+    ("owner_content_change", _step_owner_content_change),
+    ("state_change", _step_state_change),
+    ("native_test_button", _step_native_test_button),
+    ("legacy_test_topic", _step_legacy_test_topic),
+    ("retrigger", _step_retrigger),
+    ("reconnect", _step_reconnect),
+    ("resync", _step_resync),
+    ("transient_prune", _step_transient_prune),
+    ("reattach", _step_reattach),
+    ("tombstone_after_prune", _step_tombstone_after_prune),
+    ("adoption_failure", _step_adoption_failure),
+    ("adoption_success", _step_adoption_success),
+    ("hub_removal_keep", _step_hub_removal_keep),
+    ("hub_removal_delete", _step_hub_removal_delete),
+)
+
+
+def _step_leaks(entries: Iterable[tuple[str, str, bool]]) -> list[tuple[str, str]]:
+    """Return (marker, topic) for every publication of one transition that carries a marker, in any letter case."""
+    return [
+        (marker, topic)
+        for topic, payload, _retain in entries
+        for marker in MARKERS
+        if marker.lower() in topic.lower() or marker.lower() in payload.lower()
+    ]
+
+
+def _ack_words(gateways: Iterable[FakeGateway]) -> tuple[set[str], set[str]]:
+    """Return every status and reason word of every re-trigger answer the gateways published."""
+    statuses: set[str] = set()
+    reasons: set[str] = set()
+    for gateway in gateways:
+        for topic, payload, _retain in gateway.published:
+            if topic.endswith("/acks"):
+                answer = json.loads(payload)
+                statuses.add(answer["status"])
+                if "reason" in answer:
+                    reasons.add(answer["reason"])
+    return statuses, reasons
+
+
+async def test_every_lifecycle_transition_publishes_no_local_content(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    fake_broker: FakeBroker,
+    make_instance: Callable,
+    make_switch_subentry: Callable,
+    make_select_subentry: Callable,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """
+    D-04, D-05, D-21, T-11-32: each named transition of a local record is run, and none publishes local content.
+
+    The table names every transition the plan requires; each step's publications of both gateways are scanned on their
+    own, so a leak names its transition, and the complete history plus the retained state is scanned at the end. The
+    re-trigger answers use only the existing status and reason words.
+    """
+    lamp, mode = _subentries(make_switch_subentry, make_select_subentry)
+    spare = make_switch_subentry("Spare", on=OWNER_ON)
+    alpha = await make_instance("alpha", hass=hass, subentries=[lamp, mode, spare])
+    beta = await make_instance("beta")
+    _register_services(alpha, beta)
+    await _settle(alpha, beta)
+    clock = [1000.0]
+    ctx = _Lifecycle(alpha, beta, lamp, mode, spare, fake_broker, hass_storage, freezer, clock)
+    alpha.manager.clock = lambda: clock[0]
+    await _restart_seeded(hass_storage, _sentinel_records(_device_id(lamp), _device_id(mode)), alpha, beta)
+    alpha.manager.clock = lambda: clock[0]
+    for instance in (alpha, beta):
+        await instance.manager.presence.async_publish_heartbeat()
+    await _settle(alpha, beta)
+
+    assert tuple(name for name, _step in LIFECYCLE) == REQUIRED_TRANSITIONS
+    leaks: dict[str, list[tuple[str, str]]] = {}
+    published: dict[str, int] = {}
+    seen = dict.fromkeys((alpha.gateway, beta.gateway), 0)
+    for name, step in LIFECYCLE:
+        await step(ctx)
+        await _settle(alpha, beta)
+        entries = [entry for gateway, count in seen.items() for entry in gateway.published[count:]]
+        seen = {gateway: len(gateway.published) for gateway in seen}
+        published[name] = len(entries)
+        leaks[name] = _step_leaks(entries)
+
+    assert leaks == {name: [] for name in REQUIRED_TRANSITIONS}, f"publications per transition: {published}"
+    # Local-only transitions publish nothing at all; every other one did publish, so its scan was not vacuous
+    assert {name for name, count in published.items() if count == 0} == SILENT_TRANSITIONS, published
+    history = [*alpha.gateway.published, *beta.gateway.published]
+    assert any(retain for _topic, _payload, retain in history)
+    assert any(not retain for _topic, _payload, retain in history)
+    assert _leaks([alpha.gateway, beta.gateway], fake_broker.retained) == []
+    assert all(M_TOPIC not in topic for topic, _payload, _retain in history)
+    statuses, reasons = _ack_words([alpha.gateway, beta.gateway])
+    assert statuses, "premise: the re-trigger answers were published"
+    assert statuses <= frozenset(retrigger_module._STATUS_WORDS)
+    assert reasons <= frozenset(retrigger_module._REASON_WORDS)

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Context
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.script import Script
+from homeassistant.helpers.script import SCRIPT_MODE_QUEUED, SCRIPT_MODE_RESTART, Script
 from homeassistant.helpers.trace import trace_get
 from homeassistant.util import dt as dt_util
 
@@ -48,6 +48,11 @@ def _branch_sequence(plan: EffectiveTriggerPlan) -> list[dict[str, Any]]:
         return [{"parallel": [{"sequence": owner}, {"sequence": local}]}]
     sequence = owner if owner is not None else local
     return sequence if sequence is not None else []
+
+
+def _script_mode(run_mode: str) -> str:
+    """Return the Script mode of a run mode: serial queues the runs, restart cancels the running one."""
+    return SCRIPT_MODE_QUEUED if run_mode == RUN_MODE_SERIAL else SCRIPT_MODE_RESTART
 
 
 def _replace_at(node: Any, parts: list[str], replace: Callable[[Any], Any]) -> Any:
@@ -254,7 +259,7 @@ class ActionRunner:
             validated,
             spec.name,
             DOMAIN,
-            script_mode="queued" if policy.run_mode == RUN_MODE_SERIAL else "restart",
+            script_mode=_script_mode(policy.run_mode),
             max_runs=policy.queue_limit,
             max_exceeded="WARNING",
             logger=LOGGER,
@@ -315,7 +320,7 @@ class ActionRunner:
             validated,
             spec.name,
             DOMAIN,
-            script_mode="queued" if spec.run_mode == RUN_MODE_SERIAL else "restart",
+            script_mode=_script_mode(spec.run_mode),
             max_runs=SERIAL_QUEUE_LIMIT,
             max_exceeded="WARNING",
             logger=LOGGER,

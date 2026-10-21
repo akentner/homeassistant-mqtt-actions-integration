@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.017" timestamp="2026-10-21T03:33:57.788363+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_services" name="test_adopt_service_promotes_a_mirror" time="0.899"><failure message="AssertionError: assert {'adopted': T...6137e83dda19'} == {'adopted': T...6137e83dda19'}&#10;  &#10;  Omitting 3 identical items, use -vv to show&#10;  Right contains 1 more item:&#10;  {'local_actions_discarded': 0}&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140215021319712'&gt;
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f866163f3d0&gt;
+
+    async def test_adopt_service_promotes_a_mirror(hass: HomeAssistant, mqtt_mock: Any, make_hub_entry: Callable) -&gt; None:
+        """D-10: the call turns the approved mirror of an offline owner into an owned device under the same uuid."""
+        entry = await _setup(hass, make_hub_entry())
+        manager: Manager = entry.runtime_data
+        foreign = await _foreign_mirror(hass, entry)
+        device_id = foreign.device_id
+        mirror_companion = _companion_id(hass, entry, device_id)
+        mqtt_mock.async_publish.reset_mock()
+    
+        result = await _call(hass, SERVICE_ADOPT_DEVICE, {"device_id": mirror_companion}, response=True)
+    
+&gt;       assert result == {
+            "uuid": device_id,
+            "adopted": True,
+            "previous_owner": FOREIGN_OWNER_NAME,
+            # No local action was saved for the mirror, so the adoption discarded none (D-05)
+            "local_actions_discarded": 0,
+        }
+E       AssertionError: assert {'adopted': T...6137e83dda19'} == {'adopted': T...6137e83dda19'}
+E         
+E         Omitting 3 identical items, use -vv to show
+E         Right contains 1 more item:
+E         {'local_actions_discarded': 0}
+E         Use -v to get more diff
+
+tests/test_services.py:767: AssertionError</failure></testcase></testsuite></testsuites>

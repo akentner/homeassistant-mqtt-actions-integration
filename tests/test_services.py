@@ -764,7 +764,13 @@ async def test_adopt_service_promotes_a_mirror(hass: HomeAssistant, mqtt_mock: A
 
     result = await _call(hass, SERVICE_ADOPT_DEVICE, {"device_id": mirror_companion}, response=True)
 
-    assert result == {"uuid": device_id, "adopted": True, "previous_owner": FOREIGN_OWNER_NAME}
+    assert result == {
+        "uuid": device_id,
+        "adopted": True,
+        "previous_owner": FOREIGN_OWNER_NAME,
+        # No local action was saved for the mirror, so the adoption discarded none (D-05)
+        "local_actions_discarded": 0,
+    }
     assert device_id in manager.devices
     assert device_id not in manager.mirrors
     subentry = next(item for item in entry.subentries.values() if item.unique_id == device_id)

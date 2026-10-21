@@ -6,11 +6,14 @@ option leaves its record inactive and the exact StateValue return reattaches it 
 """
 
 import copy
+import json
 import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
+import pytest
+from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import (
     async_fire_mqtt_message,
     async_fire_time_changed,
@@ -19,16 +22,21 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
+    DOMAIN,
     PAYLOAD_OFF,
     PAYLOAD_ON,
     PRUNE_GRACE_SECONDS,
+    SERVICE_ADOPT_DEVICE,
     STORE_MIRRORS,
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
+from custom_components.mqtt_actions.document import build_content
 from custom_components.mqtt_actions.local_actions import LocalActionMode, local_trigger_identity
-from custom_components.mqtt_actions.local_actions_store import LocalActionsStore
+from custom_components.mqtt_actions.local_actions_store import LocalActionsStore, LocalActionsStoreError
+from custom_components.mqtt_actions.manager import AdoptionError
 from custom_components.mqtt_actions.model import trigger_key
+from custom_components.mqtt_actions.portability import subentry_payload
 from custom_components.mqtt_actions.topics import state_topic
 from tests.documents import FOREIGN_OWNER, document_payload, make_spec
 from tests.helpers import BASE, announce_presence, deliver_config, manager_of, restart_entry, seed_store, setup_entry
@@ -36,7 +44,6 @@ from tests.helpers import BASE, announce_presence, deliver_config, manager_of, r
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    import pytest
     from freezegun.api import FrozenDateTimeFactory
     from homeassistant.core import HomeAssistant
 
@@ -586,3 +593,184 @@ async def test_tombstone_save_failure_keeps_the_records_and_removes_the_mirror(
     assert spec.device_id not in manager.mirrors
     assert hass_storage[LOCAL_STORE_KEY] == before
     assert manager.local_action_counts().records == 3
+
+
+# --- Task 3: adoption discards only when it completes, reports the count, rolls back on failure (D-04, D-05) --------
+
+
+async def _adoptable_mirror(
+    hass: HomeAssistant, hass_storage: dict[str, Any], make_hub_entry: Callable, *, approve: bool = True
+) -> tuple[Any, Manager, DeviceSpec]:
+    """
+    Start a follower with the mirror of an offline owner and three records: ON and OFF of the mirror, one elsewhere.
+
+    The OFF record of the mirror is a kind mismatch (Select kind), so an inactive record of the device is counted too.
+    """
+    spec = make_spec(name="Foreign lamp", on=OWNER_ON)
+    _seed_local(
+        hass_storage,
+        [
+            {**_row_data(spec.device_id), "mode": "replacement"},
+            {**_row_data(spec.device_id, PAYLOAD_OFF, SUBENTRY_SELECT), "mode": "replacement"},
+            _row_data(OTHER_DEVICE),
+        ],
+    )
+    entry = await setup_entry(hass, make_hub_entry())
+    await announce_presence(hass, "offline")
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+    manager = manager_of(entry)
+    if approve:
+        info = manager.mirrors[spec.device_id].mirror
+        assert info is not None
+        assert await manager.async_approve(spec.device_id, info.actions_hash) is True
+    return entry, manager, spec
+
+
+async def test_adoption_refused_for_a_pending_owner_keeps_records_even_with_every_trigger_replaced(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-04, T-11-18: replacing every trigger locally never satisfies the owner approval that adoption requires."""
+    _entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry, approve=False)
+    await manager.async_set_local_action(
+        local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_OFF), LocalActionMode.REPLACEMENT, []
+    )
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+    assert str(manager.approval_state(spec.device_id)) == "pending"
+    mqtt_mock.async_publish.reset_mock()
+
+    for force in (False, True):
+        with pytest.raises(AdoptionError) as refused:
+            await manager.async_adopt_device(spec.device_id, force=force)
+        assert refused.value.reason == "not_approved"
+
+    assert spec.device_id in manager.mirrors
+    assert hass_storage[LOCAL_STORE_KEY] == before, "a refused adoption keeps every record"
+    assert mqtt_mock.async_publish.call_count == 0
+
+
+async def test_adoption_discards_records_before_any_publish_and_reports_the_count(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """D-05: the completed adoption saves the discard before the owned device publishes, and says how many."""
+    entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry)
+    mqtt_mock.async_publish.reset_mock()
+    publishes_at_save: list[int] = []
+    original_save = LocalActionsStore.async_save_records
+
+    async def _save(self: LocalActionsStore, records: Any) -> Any:
+        publishes_at_save.append(mqtt_mock.async_publish.call_count)
+        return await original_save(self, records)
+
+    monkeypatch.setattr(LocalActionsStore, "async_save_records", _save)
+
+    with caplog.at_level(logging.INFO):
+        result = await manager.async_adopt_device(spec.device_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert (type(result).__name__, result.previous_owner, result.local_actions_discarded) == (
+        "AdoptionResult",
+        "Foreign instance",
+        2,
+    )
+    assert spec.device_id in manager.devices
+    assert _stored_rows(hass_storage) == [_row_data(OTHER_DEVICE)]
+    assert publishes_at_save == [0], "the discard is durable before the adopted device publishes anything"
+    assert mqtt_mock.async_publish.call_count > 0, "premise: the adopted device publishes afterwards"
+    subentry = next(item for item in entry.subentries.values() if item.unique_id == spec.device_id)
+    assert dict(subentry.data) == subentry_payload(build_content(spec), spec.device_id)
+    assert "test.local" not in json.dumps(dict(subentry.data)), "no local content enters the adopted subentry"
+    assert [device.device_id for device in manager.local_action_devices()] == [OTHER_DEVICE]
+    messages = _own_messages(caplog)
+    assert any("2 local actions" in message for message in messages), messages
+    assert not any("test.local" in message for message in messages)
+
+
+async def test_adopt_wrapper_still_returns_the_previous_owner_name(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """The existing `async_adopt` contract stays a plain str; it discards the same way."""
+    _entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry)
+
+    assert await manager.async_adopt(spec.device_id) == "Foreign instance"
+    assert _stored_rows(hass_storage) == [_row_data(OTHER_DEVICE)]
+
+
+async def test_adoption_local_save_failure_changes_nothing_and_publishes_nothing(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-11-17: when the discard cannot be saved the adoption stops before anything changed."""
+    entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry)
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+    counts = manager.local_action_counts()
+    mqtt_mock.async_publish.reset_mock()
+
+    with (
+        patch.object(LocalActionsStore, "_async_write_data", AsyncMock(side_effect=OSError("disk full"))),
+        pytest.raises(LocalActionsStoreError),
+    ):
+        await manager.async_adopt_device(spec.device_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert spec.device_id in manager.mirrors
+    assert spec.device_id not in manager.devices
+    assert entry.subentries == {}
+    assert str(manager.approval_state(spec.device_id)) == "approved"
+    assert hass_storage[LOCAL_STORE_KEY] == before
+    assert manager.local_action_counts() == counts
+    assert mqtt_mock.async_publish.call_count == 0
+    # Nothing was half done: the next attempt adopts and discards normally
+    assert (await manager.async_adopt_device(spec.device_id)).local_actions_discarded == 2
+
+
+async def test_adoption_subentry_failure_restores_mirror_and_records_and_publishes_nothing(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-11-17: a failed subentry creation rolls back the local discard as well as the mirror."""
+    local_calls = async_mock_service(hass, "test", "local_on")
+    owner_calls = async_mock_service(hass, "test", "owner_on")
+    entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry)
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+    counts = manager.local_action_counts()
+    mqtt_mock.async_publish.reset_mock()
+
+    with (
+        patch.object(hass.config_entries, "async_add_subentry", side_effect=RuntimeError("boom")),
+        pytest.raises(RuntimeError),
+    ):
+        await manager.async_adopt_device(spec.device_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert spec.device_id in manager.mirrors
+    assert entry.subentries == {}
+    assert str(manager.approval_state(spec.device_id)) == "approved"
+    assert hass_storage[LOCAL_STORE_KEY] == before, "the discard is undone on disk"
+    assert manager.local_action_counts() == counts
+    assert mqtt_mock.async_publish.call_count == 0
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=True)
+    await _state(hass, spec.device_id, PAYLOAD_ON)
+    assert (len(local_calls), owner_calls) == (1, []), "the restored mirror runs its local replacement again"
+
+
+async def test_adopt_service_reports_the_discarded_count(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """The admin response names how many local actions the adoption discarded, next to the unchanged fields."""
+    entry, _manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry)
+    companion = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, spec.device_id), entry.entry_id)
+    assert companion is not None
+
+    result = await hass.services.async_call(
+        DOMAIN, SERVICE_ADOPT_DEVICE, {"device_id": companion.id}, blocking=True, return_response=True
+    )
+
+    assert result == {
+        "uuid": spec.device_id,
+        "adopted": True,
+        "previous_owner": "Foreign instance",
+        "local_actions_discarded": 2,
+    }

@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-14-PLAN.md
-last_updated: "2026-10-21T04:28:57.364Z"
+stopped_at: Completed 11-15-PLAN.md
+last_updated: "2026-10-21T04:39:22.647Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 107a5cc4fb26535d90e922aaa649c0b99a5a9854
+state_head: 1c1ff189fd18ecafd8511ea47f43f6aab93f34fd
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 53
-  completed_plans: 49
+  completed_plans: 50
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 14 of 17
+Plan: 15 of 17
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -164,6 +164,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P12 | 12 min | 2 tasks | 7 files |
 | Phase 11 P11 | 17 min | 2 tasks | 1 files |
 | Phase 11 P14 | 14 min | 3 tasks | 12 files |
+| Phase 11 P15 | 8 min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -376,6 +377,8 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-11 review routed 4 Low findings to Phase 11 gaps G-01..G-04 (local issue lifecycle, visible refused local Store load, leftover local Store on a new hub, failed adoption keeps trip); 16 Info observations closed no-change; run /gsd-plan-phase 11 --gaps before 11-13
 - [Phase 11]: G-01: local_action_failed is persistent; prune and adoption drop keep it (keep_local_failure); only a saved tombstone discard, a completed adoption, removal, a proven success or hub removal delete it
 - [Phase 11]: G-01: a start deletes a local failure issue without a saved record only after a successful local load; a refused load deletes nothing (T-11-40)
+- [Phase 11]: G-02: a refused local Store load raises the instance issue local_actions_unreadable (non-fixable, non-persistent, ERROR, no placeholders); a successful load and hub removal delete it; LocalActionsStore and its never-overwrite refusal are unchanged (T-11-09)
+- [Phase 11]: G-02 edge assumption: an envelope that is readable but has no record list is a readable, empty Store and raises no issue; only a newer major, an unknown version or an unreadable file count as refused
 
 ### Pending Todos
 
@@ -412,8 +415,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T04:28:57.048Z
-Stopped at: Completed 11-14-PLAN.md
+Last session: 2026-10-21T04:39:22.327Z
+Stopped at: Completed 11-15-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

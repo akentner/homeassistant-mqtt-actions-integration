@@ -231,7 +231,7 @@ Plans:
   4. Nothing local leaves the instance: the central config, actions hash, export, diagnostics content and adoption payload are byte-identical with and without local actions, existing approvals stay valid, and no new re-trigger status or reason word appears on the broker. Diagnostics show only counts of local actions (per device, orphaned). The approval issue says how many triggers are replaced locally, while the approval stays pending and adoption stays refused. (MIR-04, MIR-10, MIR-12, MIR-14)
   5. Local actions survive owner content changes, renames, rev bumps, restarts and an owner re-pin. Local actions of a Select option the owner removed stay inactive, are listed as orphaned in the options where the user can remove them, and re-attach when the same StateValue returns. A tombstone or an adoption discards them with a log entry and `adopt_device` reports it; start-up and transient prunes discard nothing. The README documents modes, mute, parallel semantics, this lifecycle, downgrade behavior and the `{{ state }}` template caveat. (MIR-06, MIR-07, MIR-08, MIR-15)
 
-**Plans**: 12/13 plans executed
+**Plans**: 12/17 plans executed
 
 Plans:
 **Wave 1**
@@ -267,6 +267,18 @@ Plans:
 - [x] 11-11-PLAN.md — Run the milestone-wide cross-file review and route every product finding into a bounded Phase 11 gap
 
 **Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 11-14-PLAN.md — Gap G-01: keep the local failure issue through restart, prune and failed adoption until success or removal
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 11-15-PLAN.md — Gap G-02: show an unreadable local actions Store as one instance Repairs issue (en/de), keep the refusal
+
+**Wave 13** *(blocked on Wave 12 completion)*
+- [ ] 11-16-PLAN.md — Gap G-03: remove a leftover local actions Store before a new hub is created
+
+**Wave 14** *(blocked on Wave 13 completion)*
+- [ ] 11-17-PLAN.md — Gap G-04: a failed adoption keeps a tripped breaker paused
+
+**Wave 15** *(blocked on Wave 14 completion)*
 - [ ] 11-13-PLAN.md — Run the complete Phase 11 quality/security gate on the fixed code and freeze the Phase 12 handoff
 
 **UI hint**: yes

@@ -30,13 +30,18 @@ class LocalActionsStoreError(HomeAssistantError):
     """Raised when the local actions cannot be saved; the previous durable and in-memory snapshot stays."""
 
 
+class LocalActionsStoreUnreadableError(HomeAssistantError):
+    """Raised when stored local actions exist but cannot be read; nothing is rewritten and every save is refused."""
+
+
 class LocalActionsStore(Store[dict[str, Any]]):
     """
     The HA Store of the local action records of one instance.
 
     The snapshot is replaced only by a successful load or save, and every record handed out carries its own copy of
-    the actions. A payload of a newer major version fails the load and turns every later save into an error, so it is
-    never overwritten (T-11-09). Loading never rewrites the Store except through the migration hook (D-22).
+    the actions. A payload this release cannot read fails the load and turns every later save into an error, so it is
+    never overwritten (T-11-09): a newer major version, and a payload that is not a mapping with a record list (D-07).
+    Loading never rewrites the Store except through the migration hook (D-22).
     """
 
     def __init__(self, hass: HomeAssistant, key: str = LOCAL_ACTIONS_STORE_KEY) -> None:
@@ -78,8 +83,9 @@ class LocalActionsStore(Store[dict[str, Any]]):
         """
         Load and parse the records; malformed rows are dropped one by one and logged by count only.
 
-        Raises the Store's UnsupportedStorageVersionError for a newer major version, and LocalActionsStoreVersionError
-        for any other unreadable one; the Store is then left unloaded and refuses every save.
+        Raises the Store's UnsupportedStorageVersionError for a newer major version, LocalActionsStoreVersionError for
+        any other unreadable version, and LocalActionsStoreUnreadableError for a payload without a record list. The
+        Store is then left unloaded and refuses every save. Null data and a missing file load as no records.
         """
         async with self._lock:
             self._loaded = False
@@ -90,8 +96,10 @@ class LocalActionsStore(Store[dict[str, Any]]):
             else:
                 parsed = parse_local_actions_payload(stored)
                 if not parsed.shape_valid:
-                    LOGGER.warning("The local actions Store %s holds no record list; no local actions loaded", self.key)
-                elif parsed.dropped:
+                    # Left unloaded on purpose: a later save would replace records this release cannot read (WR-03)
+                    msg = f"The local actions Store {self.key} holds no record list"
+                    raise LocalActionsStoreUnreadableError(msg)
+                if parsed.dropped:
                     LOGGER.warning("Dropped %d malformed local action records from %s", parsed.dropped, self.key)
                 records = parsed.records
             self._records = records

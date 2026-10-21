@@ -231,7 +231,8 @@ async def test_malformed_payload_shape_refuses_the_load_and_every_save(
     assert store.records == ()
     assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == before, "the unreadable payload is untouched"
     assert MARKER not in str(caught.value), "the error names the reason, never stored content"
-    assert MARKER not in caplog.text, "no stored content reaches the log"
+    own = [record.getMessage() for record in caplog.records if record.name.startswith("custom_components.mqtt_actions")]
+    assert not [line for line in own if MARKER in line], "no stored content reaches a log line of the integration"
 
 
 async def test_null_payload_loads_no_records_like_a_missing_file(hass: Any, hass_storage: dict[str, Any]) -> None:

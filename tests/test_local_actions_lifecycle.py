@@ -389,7 +389,7 @@ async def test_kind_mismatched_record_stays_inactive_through_owner_changes(
     assert change.active is False
 
 
-# --- Task 2: transient prune keeps, a tombstone destroys, even after a prune (D-05, D-08) ----------------------------
+# --- Task 2: a transient prune and a tombstone both keep the local records (D-05 amended, D-08, WR-01) ---------------
 
 OTHER_DEVICE = "0f0e0d0c-0b0a-4908-8706-050403020100"
 
@@ -485,70 +485,72 @@ async def test_startup_cleanup_of_a_cached_mirror_keeps_local_records(
     assert hass_storage[LOCAL_STORE_KEY] == before
 
 
-async def test_tombstone_discards_records_saves_at_once_and_publishes_nothing(
+async def test_tombstone_keeps_records_byte_identical_and_publishes_nothing(
     hass: HomeAssistant,
     mqtt_mock: Any,
     hass_storage: dict[str, Any],
     make_hub_entry: Callable,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """D-05: a tombstone deletes every record of the device, saves without delay and logs the count only."""
+    """D-05 amended, WR-01: a tombstone removes the mirror and keeps its records untouched; it logs the count only."""
     spec = make_spec(on=OWNER_ON)
     _entry, manager = await _cached_mirror_with_records(hass, hass_storage, make_hub_entry, spec)
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
     mqtt_mock.async_publish.reset_mock()
 
     with caplog.at_level(logging.INFO):
         await deliver_config(hass, spec.device_id, "", retain=False)
 
+    assert hass_storage[LOCAL_STORE_KEY] == before, "an empty config payload carries no owner: the Store stays as is"
     assert spec.device_id not in manager.mirrors
-    assert _stored_rows(hass_storage) == [_row_data(OTHER_DEVICE)], "only the tombstoned device loses its records"
-    assert [device.device_id for device in manager.local_action_devices()] == [OTHER_DEVICE]
-    assert mqtt_mock.async_publish.call_count == 0, "deleting local records publishes nothing"
+    listed = {device.device_id: device for device in manager.local_action_devices()}
+    assert set(listed) == {spec.device_id, OTHER_DEVICE}
+    assert listed[spec.device_id].mirrored is False
+    assert listed[spec.device_id].records == 2
+    assert mqtt_mock.async_publish.call_count == 0, "keeping local records publishes nothing"
     messages = _own_messages(caplog)
     assert any("2 local actions" in message for message in messages), messages
     assert not any("test.local_on" in message for message in messages), "no action content reaches the log"
 
 
-async def test_tombstone_after_prune_still_discards_records(
+async def test_tombstone_after_prune_keeps_records(
     hass: HomeAssistant,
     mqtt_mock: Any,
     hass_storage: dict[str, Any],
     make_hub_entry: Callable,
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """D-05: the tombstone that follows an earlier prune deletes the records although no mirror exists any more."""
+    """D-05 amended: a tombstone that follows an earlier prune is a no-op for the local records too."""
     spec = make_spec(on=OWNER_ON)
     _entry, manager = await _cached_mirror_with_records(hass, hass_storage, make_hub_entry, spec)
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
     await _prune(hass, freezer)
     assert spec.device_id not in manager.mirrors, "premise: the prune removed the mirror"
-    assert len(_stored_rows(hass_storage) or []) == 3, "premise: the prune kept the records"
     mqtt_mock.async_publish.reset_mock()
 
     await deliver_config(hass, spec.device_id, "", retain=False)
 
-    assert _stored_rows(hass_storage) == [_row_data(OTHER_DEVICE)]
-    assert [device.device_id for device in manager.local_action_devices()] == [OTHER_DEVICE]
+    assert hass_storage[LOCAL_STORE_KEY] == before, "neither the prune nor the tombstone changed the local Store"
+    listed = {device.device_id: device for device in manager.local_action_devices()}
+    assert listed[spec.device_id].records == 2
     assert mqtt_mock.async_publish.call_count == 0
 
 
-async def test_tombstone_cause_reaches_the_manager_without_a_mirror(
+async def test_tombstone_without_a_mirror_keeps_records(
     hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
 ) -> None:
-    """The manager seam: a tombstone of an id without a mirror deletes its records instead of returning early."""
-    from custom_components.mqtt_actions.manager import MirrorRemovalCause
-
+    """A tombstone of an id with records but no mirror leaves the local Store unchanged and the device listed."""
     _seed_local(hass_storage, [_row_data(OTHER_DEVICE), _row_data(OTHER_DEVICE, PAYLOAD_OFF)])
+    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
     manager = manager_of(await setup_entry(hass, make_hub_entry()))
     assert OTHER_DEVICE not in manager.mirrors
 
-    async with manager.lock:
-        await manager.async_remove_mirror(OTHER_DEVICE, cause=MirrorRemovalCause.TRANSIENT_PRUNE)
-    assert len(_stored_rows(hass_storage) or []) == 2, "a prune cause keeps the records"
+    await deliver_config(hass, OTHER_DEVICE, "", retain=False)
 
-    async with manager.lock:
-        await manager.async_remove_mirror(OTHER_DEVICE, cause=MirrorRemovalCause.TOMBSTONE)
-    assert _stored_rows(hass_storage) == []
-    assert manager.local_action_devices() == ()
+    assert hass_storage[LOCAL_STORE_KEY] == before
+    listed = {device.device_id: device for device in manager.local_action_devices()}
+    assert listed[OTHER_DEVICE].mirrored is False
+    assert listed[OTHER_DEVICE].records == 2
 
 
 async def test_tombstone_on_an_owned_id_keeps_its_records(
@@ -585,20 +587,40 @@ async def test_tombstone_without_records_writes_nothing(
     assert LOCAL_STORE_KEY not in hass_storage
 
 
-async def test_tombstone_save_failure_keeps_the_records_and_removes_the_mirror(
+async def test_tombstone_never_writes_the_local_store(
     hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
 ) -> None:
-    """D-22: when the discard cannot be saved the records stay, on disk and in memory; the mirror still goes."""
+    """T-11-47: a tombstone never reaches a local Store write; the mirror still goes and every record stays."""
     spec = make_spec(on=OWNER_ON)
     _entry, manager = await _cached_mirror_with_records(hass, hass_storage, make_hub_entry, spec)
-    before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+    write = AsyncMock(side_effect=OSError("disk full"))
 
-    with patch.object(LocalActionsStore, "_async_write_data", AsyncMock(side_effect=OSError("disk full"))):
+    with patch.object(LocalActionsStore, "_async_write_data", write):
         await deliver_config(hass, spec.device_id, "", retain=False)
 
+    assert write.await_count == 0, "a tombstone must not write the local Store"
     assert spec.device_id not in manager.mirrors
-    assert hass_storage[LOCAL_STORE_KEY] == before
     assert manager.local_action_counts().records == 3
+
+
+async def test_tombstoned_device_records_apply_again_when_the_owner_publishes_it_again(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """MIR-02, MIR-07: after a stray clear the owner republishes; the kept record attaches and runs without approval."""
+    owner_calls = async_mock_service(hass, "test", "owner_on")
+    local_calls = async_mock_service(hass, "test", "local_on")
+    spec = make_spec(on=OWNER_ON)
+    _entry, manager, _rows = await _switch_with_local_on(hass, hass_storage, make_hub_entry, spec)
+
+    await deliver_config(hass, spec.device_id, "", retain=False)
+    assert spec.device_id not in manager.mirrors, "premise: the tombstone removed the mirror"
+    await deliver_config(hass, spec.device_id, document_payload(spec), retain=False)
+
+    assert spec.device_id in manager.mirrors, "the republished document brings the mirror back"
+    _assert_one_active_on_record(manager, spec)
+    await _local_on_runs(hass, spec.device_id)
+    assert len(local_calls) == 1, "the kept local record applies again"
+    assert owner_calls == [], "an approval does not outlive a mirror (A10): the owner actions stay pending"
 
 
 # --- Task 3: adoption discards only when it completes, reports the count, rolls back on failure (D-04, D-05) --------
@@ -1040,10 +1062,10 @@ async def test_local_failure_issue_survives_restart_prune_and_failed_adoption_un
     assert _local_issue(hass, spec.device_id) is None, "removing the customization deletes the issue"
 
 
-async def test_tombstone_and_completed_adoption_delete_the_local_failure_issue(
+async def test_tombstone_keeps_and_completed_adoption_deletes_the_local_failure_issue(
     hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
 ) -> None:
-    """D-05, D-19: a saved tombstone discard and a completed adoption end the customization, and its issue with it."""
+    """D-05 amended, D-19: a tombstone keeps the record and its issue; removal or a completed adoption ends both."""
     FailingLocal(hass)
     async_mock_service(hass, "test", "owner_on")
     tombstoned = make_spec(name="Tombstoned lamp", on=OWNER_ON)
@@ -1057,7 +1079,10 @@ async def test_tombstone_and_completed_adoption_delete_the_local_failure_issue(
 
     await deliver_config(hass, tombstoned.device_id, "", retain=False)
     assert tombstoned.device_id not in manager.mirrors
-    assert _local_issue(hass, tombstoned.device_id) is None, "a saved tombstone discard deletes the issue"
+    assert _local_issue(hass, tombstoned.device_id) is not None, "a tombstone keeps the record, so it keeps the issue"
+    assert manager.local_action_counts_by_device()[tombstoned.device_id].records == 1
+    await manager.async_remove_local_action(local_trigger_identity(tombstoned.device_id, SUBENTRY_SWITCH, PAYLOAD_ON))
+    assert _local_issue(hass, tombstoned.device_id) is None, "removing the kept customization deletes the issue"
 
     info = manager.mirrors[adopted.device_id].mirror
     assert info is not None

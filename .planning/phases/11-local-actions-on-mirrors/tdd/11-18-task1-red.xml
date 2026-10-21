@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.018" timestamp="2026-10-21T09:34:11.686929+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_lifecycle" name="test_tombstone_keeps_records_byte_identical_and_publishes_nothing" time="0.896"><failure message="AssertionError: an empty config payload carries no owner: the Store stays as is&#10;assert {'data': {'re... 'version': 1} == {'data': {'re... 'version': 1}&#10;  &#10;  Omitting 3 identical items, use -vv to show&#10;  Differing items:&#10;  {'data': {'records': [{'actions': [{'action': 'test.local_on', 'data': {...}}], 'device_id': '0f0e0d0c-0b0a-4908-8706-050403020100', 'kind': 'switch', 'label': 'ON', ...}]}} != {'data': {'records': [{'actions': [{'action': 'test.local_on', 'data': {...}}], 'device_id': '46f379b0-c4f7-4357-960c-...cal_on', 'data': {...}}], 'device_id': '0f0e0d0c-0b0a-4908-8706-050403020100', 'kind': 'switch', 'label': 'ON', ...}]}}&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140124230387088'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at..."serial","run_on_startup":false,"schema_version":1}'}}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f7144b692d0&gt;
+caplog = &lt;_pytest.logging.LogCaptureFixture object at 0x7f7144b66510&gt;
+
+    async def test_tombstone_keeps_records_byte_identical_and_publishes_nothing(
+        hass: HomeAssistant,
+        mqtt_mock: Any,
+        hass_storage: dict[str, Any],
+        make_hub_entry: Callable,
+        caplog: pytest.LogCaptureFixture,
+    ) -&gt; None:
+        """D-05 amended, WR-01: a tombstone removes the mirror and keeps its records untouched; it logs the count only."""
+        spec = make_spec(on=OWNER_ON)
+        _entry, manager = await _cached_mirror_with_records(hass, hass_storage, make_hub_entry, spec)
+        before = copy.deepcopy(hass_storage[LOCAL_STORE_KEY])
+        mqtt_mock.async_publish.reset_mock()
+    
+        with caplog.at_level(logging.INFO):
+            await deliver_config(hass, spec.device_id, "", retain=False)
+    
+&gt;       assert hass_storage[LOCAL_STORE_KEY] == before, "an empty config payload carries no owner: the Store stays as is"
+E       AssertionError: an empty config payload carries no owner: the Store stays as is
+E       assert {'data': {'re... 'version': 1} == {'data': {'re... 'version': 1}
+E         
+E         Omitting 3 identical items, use -vv to show
+E         Differing items:
+E         {'data': {'records': [{'actions': [{'action': 'test.local_on', 'data': {...}}], 'device_id': '0f0e0d0c-0b0a-4908-8706-050403020100', 'kind': 'switch', 'label': 'ON', ...}]}} != {'data': {'records': [{'actions': [{'action': 'test.local_on', 'data': {...}}], 'device_id': '46f379b0-c4f7-4357-960c-...cal_on', 'data': {...}}], 'device_id': '0f0e0d0c-0b0a-4908-8706-050403020100', 'kind': 'switch', 'label': 'ON', ...}]}}
+E         Use -v to get more diff
+
+tests/test_local_actions_lifecycle.py:504: AssertionError</failure></testcase></testsuite></testsuites>

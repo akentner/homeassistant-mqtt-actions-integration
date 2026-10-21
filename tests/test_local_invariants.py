@@ -735,11 +735,15 @@ async def _step_reattach(ctx: _Lifecycle) -> None:
 async def _step_tombstone_after_prune(ctx: _Lifecycle) -> None:
     await _prune_on_beta(ctx, ctx.lamp_id)
     assert ctx.records_of(ctx.lamp_id) == 2, "premise: the prune kept the records"
+    lamp_rows = [
+        row for row in ctx.storage[ctx.beta.local_store_key]["data"]["records"] if row["device_id"] == ctx.lamp_id
+    ]
     await _remove_owned(ctx.alpha, ctx.lamp_id)
     await _settle(ctx.alpha, ctx.beta)
-    assert ctx.records_of(ctx.lamp_id) == 0, "the tombstone after a prune still deletes the records"
+    # D-05 amended (WR-01): an empty config payload carries no owner, so the tombstone keeps the records
+    assert ctx.records_of(ctx.lamp_id) == 2, "the tombstone after a prune keeps the records"
     stored = ctx.storage[ctx.beta.local_store_key]["data"]["records"]
-    assert [row for row in stored if row["device_id"] == ctx.lamp_id] == []
+    assert [row for row in stored if row["device_id"] == ctx.lamp_id] == lamp_rows
 
 
 async def _step_adoption_failure(ctx: _Lifecycle) -> None:

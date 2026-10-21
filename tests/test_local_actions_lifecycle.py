@@ -26,11 +26,13 @@ from custom_components.mqtt_actions.const import (
     CONF_DEVICE_ID,
     DOMAIN,
     ISSUE_APPROVAL_PREFIX,
+    ISSUE_CIRCUIT_BREAKER_PREFIX,
     PAYLOAD_OFF,
     PAYLOAD_ON,
     PRUNE_GRACE_SECONDS,
     SERVICE_ADOPT_DEVICE,
     STORE_MIRRORS,
+    STORE_TRIPPED,
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
@@ -758,6 +760,58 @@ async def test_adoption_subentry_failure_restores_mirror_and_records_and_publish
     await _state(hass, spec.device_id, PAYLOAD_OFF, retain=True)
     await _state(hass, spec.device_id, PAYLOAD_ON)
     assert (len(local_calls), owner_calls) == (1, []), "the restored mirror runs its local replacement again"
+
+
+# Literal on purpose: the production key of the main Store (STORE_KEY)
+MAIN_STORE_KEY = "mqtt_actions.state"
+
+
+def _breaker_issue(hass: HomeAssistant, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{ISSUE_CIRCUIT_BREAKER_PREFIX}{device_id}")
+
+
+async def _trip_by_local_runs(hass: HomeAssistant, manager: Manager, spec: DeviceSpec) -> None:
+    """Toggle the adoptable mirror, whose ON edge runs its local replacement, until the safe breaker trips."""
+    for _ in range(10):
+        await _state(hass, spec.device_id, PAYLOAD_OFF)
+        await _state(hass, spec.device_id, PAYLOAD_ON)
+        if manager.device(spec.device_id).breaker.tripped:
+            break
+    assert manager.device(spec.device_id).breaker.tripped, "premise: repeated local runs trip the safe breaker"
+    assert _breaker_issue(hass, spec.device_id) is not None
+
+
+async def test_failed_adoption_keeps_a_tripped_breaker_paused(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """MIR-09, Phase 2 D-17, T-11-17: a failed adoption releases no breaker; the trip is saved at once (G-04)."""
+    local_calls = async_mock_service(hass, "test", "local_on")
+    owner_calls = async_mock_service(hass, "test", "owner_on")
+    entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry)
+    await _trip_by_local_runs(hass, manager, spec)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    mqtt_mock.async_publish.reset_mock()
+
+    for attempt in (1, 2):
+        with (
+            patch.object(hass.config_entries, "async_add_subentry", side_effect=RuntimeError("boom")),
+            pytest.raises(RuntimeError),
+        ):
+            await manager.async_adopt_device(spec.device_id)
+
+        assert manager.device(spec.device_id).breaker.tripped, f"attempt {attempt}: the restored mirror stays paused"
+        assert _breaker_issue(hass, spec.device_id) is not None, attempt
+        # Read before any clock advance or wait: the trip must not depend on a delayed save
+        assert spec.device_id in hass_storage[MAIN_STORE_KEY]["data"][STORE_TRIPPED], attempt
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert spec.device_id in manager.mirrors
+        assert entry.subentries == {}
+        assert str(manager.approval_state(spec.device_id)) == "approved"
+        calls = (len(local_calls), len(owner_calls))
+        await _state(hass, spec.device_id, PAYLOAD_OFF)
+        await _state(hass, spec.device_id, PAYLOAD_ON)
+        assert (len(local_calls), len(owner_calls)) == calls, f"attempt {attempt}: a paused mirror runs nothing"
+        assert mqtt_mock.async_publish.call_count == 0, attempt
 
 
 async def test_adopt_service_reports_the_discarded_count(

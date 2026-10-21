@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.123" timestamp="2026-10-21T06:50:38.910124+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_lifecycle" name="test_failed_adoption_keeps_a_tripped_breaker_paused" time="0.893"><failure message="AssertionError: attempt 1: the restored mirror stays paused&#10;assert False&#10; +  where False = CircuitBreaker(max_runs=5, window=10.0, clock=&lt;bound method Manager._breaker_clock of &lt;custom_components.mqtt_actions.manager.Manager object at 0x7f33e0184ec0&gt;&gt;, tripped=False).tripped&#10; +    where CircuitBreaker(max_runs=5, window=10.0, clock=&lt;bound method Manager._breaker_clock of &lt;custom_components.mqtt_actions.manager.Manager object at 0x7f33e0184ec0&gt;&gt;, tripped=False) = Device(device_id='74ade2b4-f37f-44ac-ba6c-390f6aafc281', spec=DeviceSpec(kind='switch', device_id='74ade2b4-f37f-44ac-...policy=EffectivePolicy(run_on_startup=False, run_mode='serial', breaker_max_runs=5, breaker_window=10, queue_limit=10)).breaker&#10; +      where Device(device_id='74ade2b4-f37f-44ac-ba6c-390f6aafc281', spec=DeviceSpec(kind='switch', device_id='74ade2b4-f37f-44ac-...policy=EffectivePolicy(run_on_startup=False, run_mode='serial', breaker_max_runs=5, breaker_window=10, queue_limit=10)) = device('74ade2b4-f37f-44ac-ba6c-390f6aafc281')&#10; +        where device = &lt;custom_components.mqtt_actions.manager.Manager object at 0x7f33e0184ec0&gt;.device&#10; +        and   '74ade2b4-f37f-44ac-ba6c-390f6aafc281' = DeviceSpec(kind='switch', device_id='74ade2b4-f37f-44ac-ba6c-390f6aafc281', name='Foreign lamp', run_on_startup=False,... 'b4dc66dde806': TriggerSpec(value='OFF', key='b4dc66dde806', label='onChangeToOff', friendly_name='OFF', actions=[])}).device_id">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139860782672128'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f33e4b81170&gt;
+
+    async def test_failed_adoption_keeps_a_tripped_breaker_paused(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """MIR-09, Phase 2 D-17, T-11-17: a failed adoption releases no breaker; the trip is saved at once (G-04)."""
+        local_calls = async_mock_service(hass, "test", "local_on")
+        owner_calls = async_mock_service(hass, "test", "owner_on")
+        entry, manager, spec = await _adoptable_mirror(hass, hass_storage, make_hub_entry)
+        await _trip_by_local_runs(hass, manager, spec)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        mqtt_mock.async_publish.reset_mock()
+    
+        for attempt in (1, 2):
+            with (
+                patch.object(hass.config_entries, "async_add_subentry", side_effect=RuntimeError("boom")),
+                pytest.raises(RuntimeError),
+            ):
+                await manager.async_adopt_device(spec.device_id)
+    
+&gt;           assert manager.device(spec.device_id).breaker.tripped, f"attempt {attempt}: the restored mirror stays paused"
+E           AssertionError: attempt 1: the restored mirror stays paused
+E           assert False
+E            +  where False = CircuitBreaker(max_runs=5, window=10.0, clock=&lt;bound method Manager._breaker_clock of &lt;custom_components.mqtt_actions.manager.Manager object at 0x7f33e0184ec0&gt;&gt;, tripped=False).tripped
+E            +    where CircuitBreaker(max_runs=5, window=10.0, clock=&lt;bound method Manager._breaker_clock of &lt;custom_components.mqtt_actions.manager.Manager object at 0x7f33e0184ec0&gt;&gt;, tripped=False) = Device(device_id='74ade2b4-f37f-44ac-ba6c-390f6aafc281', spec=DeviceSpec(kind='switch', device_id='74ade2b4-f37f-44ac-...policy=EffectivePolicy(run_on_startup=False, run_mode='serial', breaker_max_runs=5, breaker_window=10, queue_limit=10)).breaker
+E            +      where Device(device_id='74ade2b4-f37f-44ac-ba6c-390f6aafc281', spec=DeviceSpec(kind='switch', device_id='74ade2b4-f37f-44ac-...policy=EffectivePolicy(run_on_startup=False, run_mode='serial', breaker_max_runs=5, breaker_window=10, queue_limit=10)) = device('74ade2b4-f37f-44ac-ba6c-390f6aafc281')
+E            +        where device = &lt;custom_components.mqtt_actions.manager.Manager object at 0x7f33e0184ec0&gt;.device
+E            +        and   '74ade2b4-f37f-44ac-ba6c-390f6aafc281' = DeviceSpec(kind='switch', device_id='74ade2b4-f37f-44ac-ba6c-390f6aafc281', name='Foreign lamp', run_on_startup=False,... 'b4dc66dde806': TriggerSpec(value='OFF', key='b4dc66dde806', label='onChangeToOff', friendly_name='OFF', actions=[])}).device_id
+
+tests/test_local_actions_lifecycle.py:802: AssertionError</failure></testcase></testsuite></testsuites>

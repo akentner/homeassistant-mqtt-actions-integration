@@ -86,7 +86,9 @@ async def async_remove_entry(hass: HomeAssistant, entry: MqttActionsConfigEntry)
     Replaces the unconditional delete of Phase 1 (D-15). Home Assistant runs this after the unload and offers no dialog,
     so the choice is the hub option stored before the removal. Keep leaves every retained message alone, including the
     `offline` availability of the unload, so other instances show the orphans as unavailable and never prune them; it
-    touches MQTT not at all. Both modes remove the local Store and every integration issue.
+    touches MQTT not at all. Both modes remove the main Store, the separate local actions Store of mirrors (D-08) and
+    every integration issue, the local failure issues included; the Manager already stopped, so no late save of it can
+    recreate a removed file.
     """
     if entry.options.get(CONF_DELETE_DEVICES_ON_REMOVE, False):
         await async_remove_all_devices(hass, entry)

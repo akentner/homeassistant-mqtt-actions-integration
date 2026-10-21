@@ -1718,6 +1718,18 @@ class Manager:
             self._local_records, {device_id: mirror.spec for device_id, mirror in self.mirrors.items()}
         )
 
+    def local_action_counts_by_device(self) -> dict[str, LocalActionCounts]:
+        """
+        Return the counts of every device id that has saved local records, against the current mirrors (D-04).
+
+        An owned device or one without a mirror counts all its records as inactive. Counts only; no record content.
+        """
+        by_device: dict[str, list[LocalActionRecord]] = {}
+        for record in self._local_records:
+            by_device.setdefault(record.identity.device_id, []).append(record)
+        specs = {device_id: mirror.spec for device_id, mirror in self.mirrors.items()}
+        return {device_id: local_action_counts(records, specs) for device_id, records in by_device.items()}
+
     async def async_set_local_action(
         self, identity: LocalActionIdentity, mode: LocalActionMode | str, actions: Any
     ) -> LocalActionChange:

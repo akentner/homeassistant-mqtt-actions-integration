@@ -26,6 +26,7 @@ is not in the file.
 | `hub` | The settings of this instance, see below |
 | `roster` | This instance and every peer it heard a heartbeat from, online or not, see below |
 | `devices` | One row for every device this instance owns and every mirror it holds, see below |
+| `local_actions` | How many local actions of mirrored devices this instance keeps, as counts only, see below |
 
 The `hub` section:
 
@@ -60,6 +61,22 @@ Each row of `devices`:
 | `breaker` | `ok`, or `tripped` when the circuit breaker paused the device |
 | `rev` | The revision of the shared configuration |
 | `hash` | The content hash of the shared configuration, not the approval hash and never any action text |
+| `local_action_triggers` | How many triggers of this device have a local customization on this instance |
+| `local_action_orphans` | How many of those match no current trigger of the device, for example a removed Select option |
+
+The `local_actions` section counts the local customizations of mirrored devices on this instance. It holds four
+whole numbers and nothing else:
+
+| Key | Meaning |
+|-----|---------|
+| `devices` | How many devices have at least one local customization, including devices without a current mirror |
+| `triggers` | How many triggers have a local customization, across all devices |
+| `orphaned_triggers` | How many of those match no current trigger: a removed option, the other device kind, or no mirror |
+| `orphan_only_devices` | How many devices have local customizations of which none matches a current trigger |
+
+A device that has local customizations but no current mirror has no row in `devices`. It is counted in `devices`,
+`triggers`, `orphaned_triggers` and `orphan_only_devices` of the `local_actions` section only. Its id is not shown.
+The local customizations never change the `hash` of a device, because they are not part of the shared configuration.
 
 ## What the file never contains
 
@@ -69,6 +86,10 @@ broker ACL, so read the full id from the availability topic when you need it.
 The file never contains actions, whether as YAML, templates, entity ids or service data. It never contains the options
 or the state values of a device, and it never contains device names. It never contains broker credentials or host names,
 because the settings of the MQTT integration are not read at all.
+
+For the local actions of mirrored devices the file never contains the local actions themselves, their labels, the
+state values they react to, their templates, the errors of a failed run or the traces of any run. Only the counts above
+are included. They are taken from the integration as numbers, so no record reaches the file in the first place.
 
 The file does contain the names of the instances and the base topic, because it shows the structure of the setup and
 those are the labels a reader needs to follow it. If your instance names or your base topic reveal something you do not

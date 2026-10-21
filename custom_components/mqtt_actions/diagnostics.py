@@ -5,6 +5,9 @@ The file is meant to be attached to a bug report, so the result is built from an
 by name and the builder never reads actions, options, state values, entity ids, service data, device names or the MQTT
 config entry. Instance ids are cut to their first characters. `async_redact_data` runs over the finished result as a
 safety net for a key that someone adds to the allow-list by mistake.
+
+The local actions of mirrors appear as integers only (D-04, D-14): the builder takes the Manager's counts and never
+receives a record, a label, a StateValue, an action, a Template, an error or a trace, so nothing depends on redaction.
 """
 
 from typing import TYPE_CHECKING, Any
@@ -14,9 +17,12 @@ from homeassistant.components.diagnostics import async_redact_data
 from .document import build_content, content_hash
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
+    from .local_actions import LocalActionCounts
     from .manager import Device, Manager
 
 # An instance id is shown by its first characters only; enough to tell instances apart, too short to be a handle
@@ -73,9 +79,21 @@ def _roster(manager: Manager) -> list[dict[str, Any]]:
     ]
 
 
-def _device_row(manager: Manager, device: Device) -> dict[str, Any]:
+def _local_actions(manager: Manager) -> dict[str, int]:
+    """Return the instance-wide local action counts; devices without a mirror (orphan-only) are included."""
+    counts = manager.local_action_counts()
+    return {
+        "devices": int(counts.devices),
+        "triggers": int(counts.records),
+        "orphaned_triggers": int(counts.inactive),
+        "orphan_only_devices": int(counts.orphan_only_devices),
+    }
+
+
+def _device_row(manager: Manager, device: Device, local: Mapping[str, LocalActionCounts]) -> dict[str, Any]:
     """Return the allow-listed row of an owned device or a mirror; no name and no action content."""
     info = device.mirror
+    counts = local.get(device.device_id)
     return {
         "uuid": device.device_id,
         "kind": device.spec.kind,
@@ -88,15 +106,19 @@ def _device_row(manager: Manager, device: Device) -> dict[str, Any]:
         # The content hash of the shared content, never the approval hash and never any action text
         "rev": manager.revision(device.device_id) if info is None else info.rev,
         "hash": content_hash(build_content(device.spec)) if info is None else info.content_hash,
+        # How many triggers carry a local customization here, and how many of those match no current trigger
+        "local_action_triggers": 0 if counts is None else int(counts.records),
+        "local_action_orphans": 0 if counts is None else int(counts.inactive),
     }
 
 
 def _devices(manager: Manager) -> list[dict[str, Any]]:
-    return [_device_row(manager, device) for device in (*manager.devices.values(), *manager.mirrors.values())]
+    local = manager.local_action_counts_by_device()
+    return [_device_row(manager, device, local) for device in (*manager.devices.values(), *manager.mirrors.values())]
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:  # noqa: ARG001
-    """Return the diagnostics of the hub entry: hub options, roster and one row per owned device and mirror."""
+    """Return the diagnostics of the hub entry: hub options, roster, device rows and the local action counts."""
     manager: Manager | None = getattr(entry, "runtime_data", None)
     if manager is None:
         return {"loaded": False}
@@ -105,5 +127,6 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "hub": _hub(manager),
         "roster": _roster(manager),
         "devices": _devices(manager),
+        "local_actions": _local_actions(manager),
     }
     return async_redact_data(result, TO_REDACT)

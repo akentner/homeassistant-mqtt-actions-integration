@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-17-PLAN.md
-last_updated: "2026-10-21T04:56:54.328Z"
+stopped_at: Completed 11-13-PLAN.md
+last_updated: "2026-10-21T05:14:08.068Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 2c17a101512dfc1e745af36b0c95f924b563ac43
+state_head: a30660b154571f195b95cd342f1089984095e2c9
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 53
-  completed_plans: 52
+  completed_plans: 53
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 17 of 17
+Plan: 14 of 17
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -167,6 +167,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P15 | 8 min | 2 tasks | 10 files |
 | Phase 11 P16 | 7min | 3 tasks | 10 files |
 | Phase 11 P17 | 7 min | 2 tasks | 3 files |
+| Phase 11 P13 | 9min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -385,6 +386,7 @@ Recent decisions affecting current work:
 - [Phase 11]: G-03 guard: abort single_instance_allowed when a non-ignored hub exists at submit, before the removal (T-11-45)
 - [Phase 11]: G-03 failure path: LocalActionsStoreError creates no entry and shows local_actions_not_removed in en and de (T-11-44)
 - [Phase 11]: G-04: a failed adoption restores the tripped hash before the mirror rebuild and saves it right after the restore, so the restored mirror stays paused with its breaker issue (MIR-09, D-17)
+- [Phase 11]: 11-13: final Phase 11 gate green on 9bec171 (2072 passed, 2 pre-Phase-11 xfails, 0 skipped; Ruff, hassfest clean); HACS NOT RUN on the unpushed branch, must pass on the first push before Phase 12 release work
 
 ### Pending Todos
 
@@ -421,8 +423,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T04:56:54.002Z
-Stopped at: Completed 11-17-PLAN.md
+Last session: 2026-10-21T05:14:07.727Z
+Stopped at: Completed 11-13-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

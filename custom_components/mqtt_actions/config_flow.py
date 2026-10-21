@@ -55,7 +55,7 @@ from .const import (
 )
 from .document import escape_markdown
 from .local_actions import LocalActionMode
-from .local_actions_store import LocalActionsStore
+from .local_actions_store import LocalActionsStore, LocalActionsStoreError
 from .manager import (
     LOCAL_ACTION_INVALID_ACTIONS,
     LOCAL_ACTION_INVALID_MODE,
@@ -144,16 +144,24 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
                 # The same rule the parser applies: a longer name would make every document of this instance unreadable
                 errors[CONF_INSTANCE_NAME] = "instance_name_invalid"
             if not errors:
+                # A hub that appeared since the flow started owns the local Store; never remove it (T-11-45)
+                if self._async_current_entries(include_ignore=False):
+                    return self.async_abort(reason="single_instance_allowed")
                 # A leftover local Store of an earlier, removed hub must not reach the new one (D-08, D-02, G-03)
-                await LocalActionsStore(self.hass).async_remove_records()
-                return self.async_create_entry(
-                    title=instance_name,
-                    data={
-                        CONF_BASE_TOPIC: base_topic,
-                        CONF_INSTANCE_NAME: instance_name,
-                        CONF_INSTANCE_ID: str(uuid.uuid4()),
-                    },
-                )
+                try:
+                    await LocalActionsStore(self.hass).async_remove_records()
+                except LocalActionsStoreError:
+                    # Fail closed: no hub is created over local actions it did not write (T-11-44)
+                    errors["base"] = "local_actions_not_removed"
+                else:
+                    return self.async_create_entry(
+                        title=instance_name,
+                        data={
+                            CONF_BASE_TOPIC: base_topic,
+                            CONF_INSTANCE_NAME: instance_name,
+                            CONF_INSTANCE_ID: str(uuid.uuid4()),
+                        },
+                    )
 
         schema = probatio.Schema(
             {

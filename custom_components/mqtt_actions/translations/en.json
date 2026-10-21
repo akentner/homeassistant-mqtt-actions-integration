@@ -17,7 +17,8 @@
     "error": {
       "invalid_base_topic": "The base topic must not be empty, must not contain # or +, must not start or end with a slash, must not contain empty levels, and must not start with $.",
       "instance_name_required": "The instance name must not be empty.",
-      "instance_name_invalid": "The instance name must be printable and at most 64 characters long."
+      "instance_name_invalid": "The instance name must be printable and at most 64 characters long.",
+      "local_actions_not_removed": "Local actions left by an earlier MQTT Actions hub could not be deleted, so the hub was not created. Try again. If this error comes back, check the Home Assistant log."
     },
     "abort": {
       "mqtt_required": "The MQTT integration must be set up first.",

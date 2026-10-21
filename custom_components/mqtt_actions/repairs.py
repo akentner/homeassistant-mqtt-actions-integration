@@ -80,6 +80,8 @@ class ApprovalRepairFlow(RepairsFlow):
                     "templated": view.templated,
                     "residual": view.residual,
                     "invalid": view.invalid,
+                    # D-17: local replacements are named, but the approval covers the owner actions shown above only
+                    "replaced": str(view.replaced_trigger_count),
                 },
             )
         return await self._async_submit(manager, view)

@@ -125,6 +125,10 @@ class ApprovalView:
     `run_on_startup`, `run_mode`, `breaker_max_runs` and `breaker_window` are part of what the approval hash binds, so
     the dialog states them next to the actions (D-16). The run mode is one of two validated words and the limits are
     validated integers, so none of them needs escaping.
+
+    `replaced_trigger_count` is a count only (D-17): how many owner triggers this instance replaces locally. Local
+    actions may already run whatever the approval says; the approval concerns the owner actions only, so the count is
+    neither part of the YAML nor of the hash, and it never changes what is approved or whether adoption is allowed.
     """
 
     device_id: str
@@ -141,6 +145,7 @@ class ApprovalView:
     templated: str
     residual: str
     invalid: str
+    replaced_trigger_count: int = 0
 
 
 def _clean(text: str, *, keep_layout: bool = False) -> str:
@@ -185,9 +190,13 @@ def _actions_yaml(spec: DeviceSpec) -> tuple[str, bool]:
     return text[:APPROVAL_YAML_MAX_CHARS], len(text) > APPROVAL_YAML_MAX_CHARS
 
 
-def build_approval_view(spec: DeviceSpec, info: MirrorInfo, deep_invalid_labels: Iterable[str]) -> ApprovalView:
+def build_approval_view(
+    spec: DeviceSpec, info: MirrorInfo, deep_invalid_labels: Iterable[str], *, replaced_trigger_count: int = 0
+) -> ApprovalView:
     """
     Build the approval view of a mirror from its spec, the recorded analysis and the labels that fail deep validation.
+
+    `replaced_trigger_count` is the count-only local state the Manager supplies; the owner spec alone fills the rest.
 
     Nothing from the broker is shown raw: names go through `escape_markdown`, the YAML through the dumper (which quotes
     hostile strings) and a character and fence filter, and the lists through one-line cleaning with a cap.
@@ -208,4 +217,5 @@ def build_approval_view(spec: DeviceSpec, info: MirrorInfo, deep_invalid_labels:
         templated=_bullets(info.templated, APPROVAL_TEMPLATED_MAX_LINES),
         residual=_bullets(info.residual, APPROVAL_TEMPLATED_MAX_LINES),
         invalid=_bullets(deep_invalid_labels, APPROVAL_TEMPLATED_MAX_LINES),
+        replaced_trigger_count=replaced_trigger_count,
     )

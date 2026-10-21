@@ -1866,6 +1866,7 @@ class Manager:
         if (mirror := self.mirrors.get(device_id)) is None:
             return
         await self._async_refresh_mirror_script(mirror)
+        self._refresh_approval_count(mirror)
         # A local edit is a release, like a changed configuration (D-03, D-15); only after a durable save
         mirror.breaker.reset()
         self._delete_breaker_issue(device_id)
@@ -1936,7 +1937,23 @@ class Manager:
                 await async_validate_actions(self._hass, actions)
             except ActionsInvalid:
                 invalid.append(label)
-        return build_approval_view(spec, info, invalid)
+        return build_approval_view(
+            spec, info, invalid, replaced_trigger_count=self.local_replaced_trigger_count(device_id)
+        )
+
+    def local_replaced_trigger_count(self, device_id: str) -> int:
+        """
+        Return how many owner triggers of a mirror an active local replacement excludes, a muted one included (D-17).
+
+        Count only: additive, orphan and other-kind records replace nothing, and the count never changes approval.
+        """
+        if (mirror := self.mirrors.get(device_id)) is None:
+            return 0
+        counts = local_action_counts(
+            (record for record in self._local_records if record.identity.device_id == device_id),
+            {device_id: mirror.spec},
+        )
+        return counts.replaced + counts.muted
 
     @callback
     def _sync_approval_issues(self, device: Device) -> None:
@@ -1974,21 +1991,38 @@ class Manager:
             return
         if self._approvals.get(device_id) == info.actions_hash or not spec_has_actions(device.spec):
             return
+        self._create_approval_issue(device, info)
+
+    @callback
+    def _create_approval_issue(self, device: Device, info: MirrorInfo) -> None:
+        """Create or update the approval request of a mirror; an update keeps a dismissal, only a delete resets it."""
+        device_id = device.device_id
         ir.async_create_issue(
             self._hass,
             DOMAIN,
-            approval_id,
+            f"{ISSUE_APPROVAL_PREFIX}{device_id}",
             # Only the id and the hash: the flow reads everything else from the manager at the moment it shows it
             data={"device_id": device_id, "actions_hash": info.actions_hash},
             is_fixable=True,
             severity=ir.IssueSeverity.WARNING,
             translation_key="approval_required",
             translation_placeholders={
-                "device": name,
-                "owner": owner,
+                "device": escape_markdown(device.name),
+                "owner": escape_markdown(info.owner_name),
                 "hash": info.actions_hash[:APPROVAL_HASH_PREFIX_LENGTH],
+                # D-17: a count only; local replacements never approve, clear or reclassify the owner request
+                "replaced": str(self.local_replaced_trigger_count(device_id)),
             },
         )
+
+    @callback
+    def _refresh_approval_count(self, device: Device) -> None:
+        """Update the replaced-trigger count of an existing approval request; never create, delete or reclassify it."""
+        if (info := device.mirror) is None:
+            return
+        if ir.async_get(self._hass).async_get_issue(DOMAIN, f"{ISSUE_APPROVAL_PREFIX}{device.device_id}") is None:
+            return
+        self._create_approval_issue(device, info)
 
     async def _async_refresh_mirror_script(self, device: Device) -> None:
         """

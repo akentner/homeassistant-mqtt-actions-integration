@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from .const import (
     DEFAULT_BREAKER_MAX_RUNS,
     DEFAULT_BREAKER_WINDOW,
+    LOCAL_ACTIONS_RECORDS,
     MAX_ISSUE_ERROR_LENGTH,
     RUN_MODE_SERIAL,
     SERIAL_QUEUE_LIMIT,
@@ -163,6 +164,36 @@ def local_record_data(record: LocalActionRecord) -> dict[str, Any]:
         "mode": str(record.mode),
         "actions": record.copy_actions(),
     }
+
+
+class LocalActionsStoreVersionError(ValueError):
+    """Raised for a stored local-actions payload of a version this release cannot read; nothing is rewritten."""
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedLocalActions:
+    """The records of a loaded local-actions payload, and how many stored rows were dropped as malformed."""
+
+    records: tuple[LocalActionRecord, ...]
+    dropped: int
+
+
+def parse_local_actions_payload(data: Any) -> ParsedLocalActions:
+    """Return the valid records of a stored payload; every malformed row is dropped on its own."""
+    del data
+    return ParsedLocalActions((), 0)
+
+
+def local_actions_payload(records: Iterable[LocalActionRecord]) -> dict[str, Any]:
+    """Return the stored payload of the records, each row with its own copy of the actions."""
+    del records
+    return {LOCAL_ACTIONS_RECORDS: []}
+
+
+def migrate_local_actions_payload(old_major_version: int, old_minor_version: int, old_data: Any) -> Any:
+    """Return a stored payload upgraded to the current version; raise LocalActionsStoreVersionError if unreadable."""
+    del old_major_version, old_minor_version
+    return old_data
 
 
 @dataclass(frozen=True, slots=True)

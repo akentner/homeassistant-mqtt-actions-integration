@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.240" timestamp="2026-10-21T02:42:02.995384+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_store" name="test_round_trip_one_additive_record_through_a_separate_store" time="0.126"><failure message="AssertionError: the save returns the saved snapshot&#10;assert () == (LocalActionR... [1, 2]}}}]),)&#10;  &#10;  Right contains one more item: LocalActionRecord(identity=LocalActionIdentity(device_id='aaaaaaaaaaaaaaaaaaaaaa', kind='switch', state_value='on'), s...ADDITIVE: 'additive'&gt;, actions=[{'action': 'test.local_on', 'data': {'source': 'local', 'nested': {'level': [1, 2]}}}])&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;, hass_storage = {}
+
+    async def test_round_trip_one_additive_record_through_a_separate_store(hass: Any, hass_storage: dict[str, Any]) -&gt; None:
+        """D-07, D-22: one saved overlay is written at once under its own key and survives a restart unchanged."""
+        record = _record()
+        store = LocalActionsStore(hass)
+        await store.async_load_records()
+    
+        saved = await store.async_save_records([record])
+    
+&gt;       assert saved == (record,), "the save returns the saved snapshot"
+E       AssertionError: the save returns the saved snapshot
+E       assert () == (LocalActionR... [1, 2]}}}]),)
+E         
+E         Right contains one more item: LocalActionRecord(identity=LocalActionIdentity(device_id='aaaaaaaaaaaaaaaaaaaaaa', kind='switch', state_value='on'), s...ADDITIVE: 'additive'&gt;, actions=[{'action': 'test.local_on', 'data': {'source': 'local', 'nested': {'level': [1, 2]}}}])
+E         Use -v to get more diff
+
+tests/test_local_actions_store.py:88: AssertionError</failure></testcase></testsuite></testsuites>

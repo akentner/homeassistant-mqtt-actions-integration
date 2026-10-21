@@ -144,6 +144,13 @@ STORE_NATIVE: Final = "native"
 STORE_PREVIOUS_STATES: Final = "previous_states"
 STORE_SAVE_DELAY: Final = 5.0
 
+# Local actions of mirrors (D-07): a separate Store file with its own version, so a save of the main Store by an older
+# release never reads or rewrites it. The payload is `{"records": [row, ...]}`; one row per customized trigger
+LOCAL_ACTIONS_STORE_KEY: Final = f"{DOMAIN}.local_actions"
+LOCAL_ACTIONS_STORE_VERSION: Final = 1
+LOCAL_ACTIONS_STORE_MINOR_VERSION: Final = 1
+LOCAL_ACTIONS_RECORDS: Final = "records"
+
 # Owner-side defense of the published truth (D-15, D-17, D-18): how many published content hashes per device count as
 # the owner's own echo, and the minimum time between two republishes caused by foreign writes of one device
 PUBLISHED_HASH_HISTORY: Final = 8

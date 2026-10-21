@@ -4,17 +4,17 @@ milestone: v1.1
 milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
-status: executing
-stopped_at: Completed 11-24-PLAN.md
-last_updated: "2026-10-21T09:45:40.896Z"
+status: verifying
+stopped_at: Completed 11-25-PLAN.md
+last_updated: "2026-10-21T09:56:26.646Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 2ed0c436ce9dea228bb90d5a1d4029d8dc91d570
+state_head: 9891339591c3e8cd2d935af76b2b5b47ba1f71df
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 61
-  completed_plans: 60
+  completed_plans: 61
   percent: 67
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
 Plan: 25 of 25
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-21 — Phase 11 execution started
 
 Progress: [███████░░░] 67%
@@ -175,6 +175,7 @@ Progress: [███████░░░] 67%
 | Phase 11 P21 | 6min | 2 tasks | 11 files |
 | Phase 11 P22 | 10 min | 3 tasks | 14 files |
 | Phase 11 P24 | 8 min | 3 tasks | 17 files |
+| Phase 11 P25 | 40 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -406,6 +407,7 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-22: readable removal counts include devices named only by preserved rows, since removal deletes those rows too
 - [Phase 11]: 11-24: loading the local actions Store never writes it; LocalActionsStore.async_load reads through a read_only=True reader, so a newer minor file keeps its bytes and stamp (WR-05, D-22)
 - [Phase 11]: 11-24: unknown keys of a parsable local row are kept on LocalActionRecord.extra and written back on every save; explicit saves stamp this minor, so future minor migrations must be idempotent
+- [Phase 11]: 11-25: a local FAILURE outcome is dropped when the current record of its identity has no local actions (WR-06, D-19 as amended)
 
 ### Pending Todos
 
@@ -442,8 +444,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-21T09:45:40.533Z
-Stopped at: Completed 11-24-PLAN.md
+Last session: 2026-10-21T09:56:26.279Z
+Stopped at: Completed 11-25-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

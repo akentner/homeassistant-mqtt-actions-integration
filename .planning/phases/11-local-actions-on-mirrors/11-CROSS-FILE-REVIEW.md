@@ -461,3 +461,43 @@ the branch (`branches: ["**"]`). Phase 12 must not start its release work before
 
 Gates 1 to 5 and 6a passed with exit 0. HACS (6b) was not run on this build and is recorded as an open item, not as a
 pass.
+
+## Phase 12 Boundary
+
+**Plan:** 11-13 Task 2. This section freezes what Phase 11 proved and what it hands to Phase 12. It makes no release
+claim: no version bump, no tag and no published release exist for v1.1.0.
+
+### Phase 11 evidence
+
+- **Automated gate (see Final Gate):** on `9bec171`, the Phase 11 targeted suites (265 passed), the four FIXED
+  regression ids, Ruff lint and format, the unit tier (1874 passed, 2 xfailed), the multi_instance tier (180 passed),
+  the required-broker full suite (2072 passed, 2 xfailed, 0 skipped) and the hassfest container (0 invalid
+  integrations) all exit 0. The two xfails date from Phase 8. Phase 11 added no skip or xfail, and no gate uses
+  `--deselect`.
+- **HACS:** not run on this build. The scheduled Validate run on `main` at the merge base `3dc9093` passed, and the
+  files HACS reads are unchanged since then except the README text. The first branch push must show a green
+  `HACS` job (open item above).
+- **Frontend smoke, as recorded in `11-FRONTEND-SMOKE.md`:** `Verdict: PASS`, captured 2026-10-21T00:27Z on the bench
+  instance `ha-a` (Core 2026.9.4, frontend 20260826.7), en and de, all 8 interactions PASS, approved by the user under
+  the `blocking-human` gate of plan 11-02 Task 2. Its scope is the one recorded there: a disposable form with the
+  section and the ActionSelector. The real `HubOptionsFlow` menus, the trigger picker, the dynamic labels and both
+  confirmations are not in that smoke. Plan 11-08 lists them as coverage item D6 (`human_judgment: true`), so they
+  belong to the human UAT of Phase 11 (`/gsd-verify-work 11`). The backend tests do not stand in for this look.
+- **Review dispositions:** 20 findings. F-01 to F-04 (Low) are FIXED by the gap-closure plans 11-14 (`6f381cb`),
+  11-15 (`44c5fe6`), 11-16 (`c9c9c63`) and 11-17 (`8eb4734`), each with a regression test that passes in the final
+  gate. F-05 to F-20 (Info) are NO-CHANGE with evidence. No finding is OPEN, ROUTED or deferred to Phase 12.
+
+### Stays with Phase 12 and MIR-F4
+
+- **Final-build cross-instance bench (QLT-05):** ha-b adds local actions to a device owned by ha-a in "in addition
+  to" mode, in "instead of" mode and on an owner device without actions, on real instances and on the tagged SHA.
+  Phase 11 probes and the in-memory multi_instance tier do not count as this bench.
+- **Full historical re-verification (QLT-01):** current verification reports of the final build for Phases 1 to 8
+  (archived) and 9 to 11, plus Phase 12's own.
+- **Version bump, tag and release (QLT-04, REL-02):** the manifest bump to 1.1.0 before the bench run, UAT-02 and
+  UAT-04 on exactly that SHA, the user's tag push, and green release, hassfest and HACS runs for `v1.1.0`.
+- **Real downgrade round trip (MIR-F4):** v1.1 → v1.0.1 → v1.1 on the bench stays deferred. Phase 11 did not run it.
+  The README and the release notes only warn that approved owner actions may run again on v1.0.1.
+
+Any failed Phase 12 check is a gap: its fix goes into an inserted Phase 11.x, and the affected verifications and
+the bench run are repeated on the new SHA.

@@ -81,6 +81,7 @@ from .const import (
     STORE_VERSION,
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
+    ManualRunResult,
     MirrorRemovalCause,
 )
 from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
@@ -2680,19 +2681,26 @@ class Manager:
             self._log_ignored(device, msg.payload)
             return
         if (trigger := device.spec.triggers.get(trigger_key(value))) is not None:
-            self._enqueue_test(device, trigger)
+            self.run_manual(device, trigger, pause_spares_owner=True)
 
     async def async_press_test(self, device_id: str, key: str) -> None:
         """
         Run the actions of one trigger of a device as a test, the way a native test button does (MIG-03).
 
         The press never touches the tracker, the baseline or the state topic, and nothing is published. It passes the
-        same mode gate as the test topic; an unknown device id or trigger key does nothing.
+        same gates as the test topic; an unknown device id or trigger key does nothing.
         """
         if (device := self._device(device_id)) is None or (trigger := device.spec.triggers.get(key)) is None:
             return
-        if not self._test_blocked(device):
-            self._enqueue_test(device, trigger)
+        if self.run_manual(device, trigger, pause_spares_owner=True) in {
+            ManualRunResult.DISABLED,
+            ManualRunResult.OBSERVING,
+        }:
+            LOGGER.debug(
+                "The test press of device %s runs no actions in %s mode",
+                shown(device.name),
+                self.effective_mode(device_id),
+            )
 
     def _test_blocked(self, device: Device) -> bool:
         """Return whether the mode stops a test run; the test buttons follow the mode of the state topic (D-14)."""
@@ -2702,14 +2710,30 @@ class Manager:
         return True
 
     @callback
-    def _enqueue_test(self, device: Device, trigger: TriggerSpec) -> None:
-        """Enqueue the actions of a trigger as a test run, unless the runner has no Script for it (T-04-19)."""
+    def run_manual(self, device: Device, trigger: TriggerSpec | None, *, pause_spares_owner: bool) -> ManualRunResult:
+        """
+        Run one trigger as a test: the one gate of native and legacy test presses and of the re-trigger (MIR-10).
+
+        The gate order is mode, circuit breaker, effective runnability, so every entry point runs exactly the effective
+        actions a state change runs: owner and local branches as the current Script holds them (D-03). A test run
+        never touches the tracker, the baseline, the breaker count, the revision or the state topic (D-13).
+
+        A tripped breaker refuses every run of local actions (MIR-09). With `pause_spares_owner`, a test press of
+        owner-only actions still runs while paused, as it always did; the re-trigger refuses every paused device.
+        """
         device_id = device.device_id
+        if (mode := self.effective_mode(device_id)) == MODE_DISABLED:
+            return ManualRunResult.DISABLED
+        if mode == MODE_OBSERVE:
+            return ManualRunResult.OBSERVING
+        if device.breaker.tripped and (
+            not pause_spares_owner or trigger is None or self._runs_local(device_id, trigger.key)
+        ):
+            return ManualRunResult.PAUSED
+        if trigger is None:
+            return ManualRunResult.NOT_RUNNABLE
         if not self.runner.can_run(device_id, trigger.key):
-            return
-        # A pause stops local actions on every entry point (MIR-09); owner-only test presses keep bypassing it (D-13)
-        if device.breaker.tripped and self.runs_local(device_id, trigger.key):
-            return
+            return self._not_runnable(device, trigger)
         self.runner.enqueue(
             device_id,
             device.name,
@@ -2718,13 +2742,27 @@ class Manager:
             {"device_id": device_id, "state": trigger.value},
             test=True,
         )
+        return ManualRunResult.EXECUTED
 
-    def runs_local(self, device_id: str, key: str) -> bool:
+    def _not_runnable(self, device: Device, trigger: TriggerSpec) -> ManualRunResult:
+        """
+        Explain why the current Script cannot run a trigger, from its effective plan rather than the approval alone.
+
+        A muted trigger runs nothing whatever the approval says; otherwise an owner that is pending or blocked is the
+        reason, and else the trigger either has no actions or none that validated here.
+        """
+        if self._mutes_trigger(device.device_id, trigger.key):
+            return ManualRunResult.NO_ACTIONS
+        if self.approval_state(device.device_id) in {ApprovalState.PENDING, ApprovalState.BLOCKED}:
+            return ManualRunResult.NOT_APPROVED
+        return ManualRunResult.NOT_RUNNABLE if trigger.actions else ManualRunResult.NO_ACTIONS
+
+    def _runs_local(self, device_id: str, key: str) -> bool:
         """Return True when the current Script of the device runs local actions for the trigger."""
         plan = self.runner.plan_for(device_id, key)
         return plan is not None and plan.local_path is not None
 
-    def mutes_trigger(self, device_id: str, key: str) -> bool:
+    def _mutes_trigger(self, device_id: str, key: str) -> bool:
         """Return True when an active local replacement without actions mutes the trigger of a mirror (D-14)."""
         if (mirror := self.mirrors.get(device_id)) is None or (trigger := mirror.spec.triggers.get(key)) is None:
             return False

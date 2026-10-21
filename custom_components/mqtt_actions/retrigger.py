@@ -38,8 +38,6 @@ from .const import (
     DOMAIN,
     LOGGER,
     MAX_TRACKED_INSTANCES,
-    MODE_DISABLED,
-    MODE_OBSERVE,
     REASON_BAD_STATE,
     REASON_NO_ACTIONS,
     REASON_NO_STATE,
@@ -51,11 +49,11 @@ from .const import (
     RETRIGGER_DEVICE_INTERVAL_SECONDS,
     RETRIGGER_MAX_AGE_SECONDS,
     RETRIGGER_SEEN_LIMIT,
+    ManualRunResult,
 )
 from .model import invalid_name, shown, trigger_key
 from .presence import valid_text, valid_uuid, within_size_cap
 from .topics import acks_topic, is_valid_device_id, parse_retrigger_topic, retrigger_topic, retrigger_wildcard
-from .trust import ApprovalState
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -69,6 +67,16 @@ _STATUS_WORDS = frozenset({ACK_EXECUTED, ACK_NOT_APPROVED, ACK_PAUSED, ACK_OBSER
 _REASON_WORDS = frozenset(
     {REASON_UNKNOWN_DEVICE, REASON_BAD_STATE, REASON_NO_ACTIONS, REASON_NOT_RUNNABLE, REASON_OFFLINE}
 )
+# The acknowledgement of each decision of the shared test-run gate; only words that already exist (MIR-10)
+_ANSWERS: dict[ManualRunResult, tuple[str, str | None]] = {
+    ManualRunResult.EXECUTED: (ACK_EXECUTED, None),
+    ManualRunResult.DISABLED: (ACK_DISABLED, None),
+    ManualRunResult.OBSERVING: (ACK_OBSERVING, None),
+    ManualRunResult.PAUSED: (ACK_PAUSED, None),
+    ManualRunResult.NOT_APPROVED: (ACK_NOT_APPROVED, None),
+    ManualRunResult.NOT_RUNNABLE: (ACK_ERROR, REASON_NOT_RUNNABLE),
+    ManualRunResult.NO_ACTIONS: (ACK_ERROR, REASON_NO_ACTIONS),
+}
 
 
 class RetriggerError(Exception):
@@ -411,48 +419,16 @@ class RetriggerCoordinator:
         """
         if not self._admit(device_id, request):
             return None
-        if (device := self._manager.device(device_id)) is None:
+        manager = self._manager
+        if (device := manager.device(device_id)) is None:
             return ACK_ERROR, REASON_UNKNOWN_DEVICE
         if (value := device.spec.accepted.get(request.state.strip().lower())) is None:
             return ACK_ERROR, REASON_BAD_STATE
-        if (stopped := self._stopped(device)) is not None:
-            return stopped
-        return self._run(device, value)
-
-    def _stopped(self, device: Device) -> tuple[str, str | None] | None:
-        """Return the answer of a device that runs nothing because of its mode or its circuit breaker, else None."""
-        mode = self._manager.effective_mode(device.device_id)
-        if mode == MODE_DISABLED:
-            return ACK_DISABLED, None
-        if mode == MODE_OBSERVE:
+        # The shared gate of the test presses: mode, circuit breaker and the effective actions (D-03, MIR-10)
+        result = manager.run_manual(device, device.spec.triggers.get(trigger_key(value)), pause_spares_owner=False)
+        if result is ManualRunResult.OBSERVING:
             LOGGER.info("Observe mode: a re-trigger of device %s ran no actions", shown(device.name))
-            return ACK_OBSERVING, None
-        if device.breaker.tripped:
-            return ACK_PAUSED, None
-        return None
-
-    def _run(self, device: Device, value: str) -> tuple[str, str | None]:
-        """Enqueue the actions of the trigger of a StateValue like a test press, or explain why they cannot run."""
-        manager = self._manager
-        trigger = device.spec.triggers.get(trigger_key(value))
-        if trigger is None:
-            return ACK_ERROR, REASON_NOT_RUNNABLE
-        if not manager.runner.can_run(device.device_id, trigger.key):
-            # A muted trigger runs nothing whatever the approval of the owner says (D-03, D-14)
-            if manager.mutes_trigger(device.device_id, trigger.key):
-                return ACK_ERROR, REASON_NO_ACTIONS
-            if manager.approval_state(device.device_id) in {ApprovalState.PENDING, ApprovalState.BLOCKED}:
-                return ACK_NOT_APPROVED, None
-            return ACK_ERROR, REASON_NOT_RUNNABLE if trigger.actions else REASON_NO_ACTIONS
-        manager.runner.enqueue(
-            device.device_id,
-            device.name,
-            trigger.label,
-            trigger.key,
-            {"device_id": device.device_id, "state": value},
-            test=True,
-        )
-        return ACK_EXECUTED, None
+        return _ANSWERS[result]
 
     async def _async_acknowledge(
         self, device_id: str, request: RetriggerRequest, status: str, reason: str | None

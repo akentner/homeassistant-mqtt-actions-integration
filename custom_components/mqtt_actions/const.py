@@ -277,6 +277,23 @@ class MirrorRemovalCause(StrEnum):
     TOMBSTONE = "tombstone"
 
 
+class ManualRunResult(StrEnum):
+    """
+    What the shared gate of a native or legacy test press and of a re-trigger decided (D-03, MIR-10).
+
+    Local words only: the re-trigger maps each one to its existing acknowledgement status and reason, so local actions
+    add no word to the broker.
+    """
+
+    EXECUTED = "executed"
+    DISABLED = "disabled"
+    OBSERVING = "observing"
+    PAUSED = "paused"
+    NOT_APPROVED = "not_approved"
+    NOT_RUNNABLE = "not_runnable"
+    NO_ACTIONS = "no_actions"
+
+
 # Logging: unknown payloads are logged as a truncated repr so a payload cannot grow or forge a log line
 MAX_LOGGED_PAYLOAD_LENGTH: Final = 40
 

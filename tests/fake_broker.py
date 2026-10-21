@@ -29,6 +29,7 @@ from custom_components.mqtt_actions.const import (
     CONF_INSTANCE_NAME,
     DEFAULT_BASE_TOPIC,
     DOMAIN,
+    LOCAL_ACTIONS_STORE_KEY,
     STORE_KEY,
 )
 from custom_components.mqtt_actions.manager import Manager
@@ -169,6 +170,11 @@ class FakeGateway(MqttGateway):
             self.broker.replay(subscription)
 
 
+def instance_store_keys(name: str) -> tuple[str, str]:
+    """Return the main and the local Store key of a named test instance."""
+    return f"{STORE_KEY}.{name}", LOCAL_ACTIONS_STORE_KEY
+
+
 @dataclass
 class Instance:
     """
@@ -183,6 +189,7 @@ class Instance:
     gateway: FakeGateway
     name: str
     store_key: str = STORE_KEY
+    local_store_key: str = LOCAL_ACTIONS_STORE_KEY
     extra: dict[str, Any] = field(default_factory=dict)
     real_setup: bool = False
 

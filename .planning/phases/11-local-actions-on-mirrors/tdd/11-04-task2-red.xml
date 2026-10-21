@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.240" timestamp="2026-10-21T02:45:15.502047+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_store" name="test_instance_local_stores_see_only_their_own_records" time="0.139"><failure message="AssertionError: assert (LocalActionR... [1, 2]}}}]),) == (LocalActionR... [1, 2]}}}]),)&#10;  &#10;  At index 0 diff: LocalActionRecord(identity=LocalActionIdentity(device_id='bbbbbbbbbbbbbbbbbbbbbb', kind='switch', state_value='on'), state_value='ON', label='follower', mode=&lt;LocalActionMode.ADDITIVE: 'additive'&gt;, actions=[{'action': 'test.local_on', 'data': {'source': 'local', 'nested': {'level': [1, 2]}}}]) != LocalActionRecord(identity=LocalActionIdentity(device_id='aaaaaaaaaaaaaaaaaaaaaa', kind='switch', state_value='on'), state_value='ON', label='owner', mode=&lt;LocalActionMode.ADDITIVE: 'additive'&gt;, actions=[{'action': 'test.local_on', 'data': {'source': 'local', 'nested': {'level': [1, 2]}}}])&#10;  Use -v to get more diff">hass = &lt;HomeAssistant RUNNING&gt;
+
+    async def test_instance_local_stores_see_only_their_own_records(hass: Any, hass_storage: dict[str, Any]) -&gt; None:
+        """T-11-11: two instances on one shared storage mock never read each other's overlays."""
+        del hass_storage
+        owner_key, follower_key = instance_store_keys("owner")[1], instance_store_keys("follower")[1]
+        owner_record, follower_record = _record(label="owner"), _record(device_id=OTHER_DEVICE, label="follower")
+        for key, record in ((owner_key, owner_record), (follower_key, follower_record)):
+            store = LocalActionsStore(hass, key)
+            await store.async_load_records()
+            await store.async_save_records([record])
+    
+&gt;       assert await _restarted(hass, owner_key) == (owner_record,)
+E       AssertionError: assert (LocalActionR... [1, 2]}}}]),) == (LocalActionR... [1, 2]}}}]),)
+E         
+E         At index 0 diff: LocalActionRecord(identity=LocalActionIdentity(device_id='bbbbbbbbbbbbbbbbbbbbbb', kind='switch', state_value='on'), state_value='ON', label='follower', mode=&lt;LocalActionMode.ADDITIVE: 'additive'&gt;, actions=[{'action': 'test.local_on', 'data': {'source': 'local', 'nested': {'level': [1, 2]}}}]) != LocalActionRecord(identity=LocalActionIdentity(device_id='aaaaaaaaaaaaaaaaaaaaaa', kind='switch', state_value='on'), state_value='ON', label='owner', mode=&lt;LocalActionMode.ADDITIVE: 'additive'&gt;, actions=[{'action': 'test.local_on', 'data': {'source': 'local', 'nested': {'level': [1, 2]}}}])
+E         Use -v to get more diff
+
+tests/test_local_actions_store.py:428: AssertionError</failure></testcase></testsuite></testsuites>

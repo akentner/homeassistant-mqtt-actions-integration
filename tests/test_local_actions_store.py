@@ -6,18 +6,30 @@ the Store writes immediately, never through a delayed save. Restarts are a secon
 """
 
 import copy
+import dataclasses
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.exceptions import UnsupportedStorageVersionError
 from homeassistant.helpers.storage import Store
+from homeassistant.util.file import WriteError
 
 from custom_components.mqtt_actions.const import (
     LOCAL_ACTIONS_STORE_KEY,
     LOCAL_ACTIONS_STORE_VERSION,
+    STORE_APPROVALS,
+    STORE_DEVICE_MODES,
+    STORE_INSTANCE_MODE,
     STORE_KEY,
+    STORE_LAST_ACTED,
+    STORE_MIRRORS,
+    STORE_PUBLISHED,
+    STORE_REVS,
+    STORE_TRANSFERS,
+    STORE_TRIPPED,
     STORE_VERSION,
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
@@ -32,7 +44,12 @@ from custom_components.mqtt_actions.local_actions import (
     migrate_local_actions_payload,
     parse_local_actions_payload,
 )
-from custom_components.mqtt_actions.local_actions_store import LocalActionsStore
+from custom_components.mqtt_actions.local_actions_store import LocalActionsStore, LocalActionsStoreError
+from tests.fake_broker import Instance, instance_store_keys
+from tests.helpers import manager_of, setup_entry
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 DEVICE = "aaaaaaaaaaaaaaaaaaaaaa"
 OTHER_DEVICE = "bbbbbbbbbbbbbbbbbbbbbb"
@@ -287,3 +304,126 @@ async def test_round_trip_main_store_key_is_never_touched(hass: Any, hass_storag
     await store.async_save_records([_record()])
 
     assert _bytes(hass_storage, STORE_KEY) == main_before
+
+
+# --- Task 2: isolation from the main Store and other instances, failed saves, removal (D-05, D-07, T-11-10/11) ---
+
+# The explicit key set of the v1.0.1 main serializer: an older release writes exactly these keys and nothing else
+V101_MAIN_KEYS = (
+    STORE_LAST_ACTED,
+    STORE_MIRRORS,
+    STORE_APPROVALS,
+    STORE_PUBLISHED,
+    STORE_TRIPPED,
+    STORE_REVS,
+    STORE_TRANSFERS,
+    STORE_INSTANCE_MODE,
+    STORE_DEVICE_MODES,
+)
+
+
+async def test_old_main_store_save_leaves_the_local_store_byte_identical(
+    hass: Any, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-07: neither today's main save nor a simulated v1.0.1 serializer reads or rewrites the local Store."""
+    del mqtt_mock
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = _envelope([_row(), _row(device_id=OTHER_DEVICE, label="Orphan")])
+    before = _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY)
+    entry = await setup_entry(hass, make_hub_entry())
+
+    await manager_of(entry).async_save_now()
+    assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == before, "today's main save leaves the local bytes"
+    stored_main = hass_storage[STORE_KEY]["data"]
+    await Store(hass, STORE_VERSION, STORE_KEY).async_save({key: stored_main[key] for key in V101_MAIN_KEYS})
+
+    assert set(hass_storage[STORE_KEY]["data"]) == set(V101_MAIN_KEYS), "premise: the old serializer drops extra keys"
+    assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == before, "a v1.0.1 main save leaves the local bytes"
+    assert len(await _restarted(hass)) == 2, "the overlays are still there for the next upgrade"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [WriteError("disk full"), OSError("disk gone")],
+    ids=["write-error-the-base-store-only-logs", "error-the-base-store-raises"],
+)
+async def test_failed_save_keeps_the_previous_durable_and_in_memory_snapshot(
+    hass: Any, hass_storage: dict[str, Any], error: Exception
+) -> None:
+    """T-11-10, D-22: a failed write raises, the stored bytes and the returned records stay the previous ones."""
+    previous = _record(label="previous")
+    store = LocalActionsStore(hass)
+    await store.async_load_records()
+    await store.async_save_records([previous])
+    stored_before = _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY)
+
+    with (
+        patch("homeassistant.helpers.storage.Store._async_write_data", new=AsyncMock(side_effect=error)),
+        pytest.raises(LocalActionsStoreError),
+    ):
+        await store.async_save_records([_record(label="next", state_value="OFF")])
+
+    assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == stored_before, "the durable snapshot is the previous one"
+    assert store.records == (previous,), "the in-memory snapshot is the previous one"
+    assert await _restarted(hass) == (previous,)
+    assert await store.async_save_records([]) == (), "the Store saves again once writing works"
+
+
+async def test_save_before_load_and_duplicate_identities_write_nothing(hass: Any, hass_storage: dict[str, Any]) -> None:
+    """A save never overwrites a Store it has not read, and one identity never gets two records."""
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = _envelope([_row()])
+    before = _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY)
+    store = LocalActionsStore(hass)
+
+    with pytest.raises(LocalActionsStoreError):
+        await store.async_save_records([])
+    await store.async_load_records()
+    with pytest.raises(LocalActionsStoreError):
+        await store.async_save_records([_record(state_value="ON"), _record(state_value=" on ", label="twin")])
+
+    assert _bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY) == before
+
+
+async def test_remove_deletes_only_the_selected_local_key(hass: Any, hass_storage: dict[str, Any]) -> None:
+    """D-05: removing one instance's local Store leaves the other local key and the main Store alone."""
+    key_a, key_b = instance_store_keys("a")[1], instance_store_keys("b")[1]
+    for key in (key_a, key_b):
+        store = LocalActionsStore(hass, key)
+        await store.async_load_records()
+        await store.async_save_records([_record()])
+    await Store(hass, STORE_VERSION, STORE_KEY).async_save({STORE_APPROVALS: {}})
+    others = {key: _bytes(hass_storage, key) for key in (key_b, STORE_KEY)}
+    store_a = LocalActionsStore(hass, key_a)
+    await store_a.async_load_records()
+
+    await store_a.async_remove_records()
+
+    assert key_a not in hass_storage, "the selected local Store is gone at once"
+    assert {key: _bytes(hass_storage, key) for key in (key_b, STORE_KEY)} == others
+    assert store_a.records == ()
+    assert await _restarted(hass, key_a) == ()
+
+
+def test_instance_store_keys_are_distinct_per_instance_and_from_production() -> None:
+    """T-11-11: every test instance gets its own main and local key; none is the production local key."""
+    names = ("owner", "follower", "third")
+    keys = [key for name in names for key in instance_store_keys(name)]
+
+    assert len(set(keys)) == len(keys), "no two instances, and no main and local key, share a Store"
+    assert LOCAL_ACTIONS_STORE_KEY not in keys
+    assert all(key.endswith(f".{name}") for name in names for key in instance_store_keys(name))
+    defaults = {item.name: item.default for item in dataclasses.fields(Instance)}
+    assert defaults["local_store_key"] == LOCAL_ACTIONS_STORE_KEY, "a bare Instance defaults to the production key"
+
+
+async def test_instance_local_stores_see_only_their_own_records(hass: Any, hass_storage: dict[str, Any]) -> None:
+    """T-11-11: two instances on one shared storage mock never read each other's overlays."""
+    del hass_storage
+    owner_key, follower_key = instance_store_keys("owner")[1], instance_store_keys("follower")[1]
+    owner_record, follower_record = _record(label="owner"), _record(device_id=OTHER_DEVICE, label="follower")
+    for key, record in ((owner_key, owner_record), (follower_key, follower_record)):
+        store = LocalActionsStore(hass, key)
+        await store.async_load_records()
+        await store.async_save_records([record])
+
+    assert await _restarted(hass, owner_key) == (owner_record,)
+    assert await _restarted(hass, follower_key) == (follower_record,)

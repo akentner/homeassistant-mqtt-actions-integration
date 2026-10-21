@@ -124,3 +124,6 @@ class LocalActionsStore(Store[dict[str, Any]]):
                 raise LocalActionsStoreError(msg) from error
             self._records = snapshot
             return copy_local_records(snapshot)
+
+    async def async_remove_records(self) -> None:
+        """Remove the Store file."""

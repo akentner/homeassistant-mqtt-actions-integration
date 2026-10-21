@@ -232,6 +232,11 @@ class ActionRunner:
             logger=LOGGER,
         )
 
+    def policy_for(self, device_id: str) -> EffectivePolicy | None:
+        """Return the policy snapshot the device Script was built with; skeleton (Plan 11-05 Task 3 RED)."""
+        del device_id
+        return None
+
     def plan_for(self, device_id: str, key: str) -> EffectiveTriggerPlan | None:
         """Return the effective plan the device Script was built with for a trigger, or None."""
         return self._plans.get(device_id, {}).get(key)

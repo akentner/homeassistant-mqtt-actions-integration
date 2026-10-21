@@ -20,13 +20,21 @@ from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 from custom_components.mqtt_actions.const import (
     DOMAIN,
     ISSUE_CIRCUIT_BREAKER_PREFIX,
+    MODE_DISABLED,
+    MODE_OBSERVE,
     PAYLOAD_OFF,
     PAYLOAD_ON,
+    RUN_MODE_RESTART,
     STORE_MIRRORS,
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
-from custom_components.mqtt_actions.local_actions import LocalActionMode, local_trigger_identity
+from custom_components.mqtt_actions.local_actions import (
+    LOCAL_SAFE_POLICY,
+    EffectivePolicy,
+    LocalActionMode,
+    local_trigger_identity,
+)
 from custom_components.mqtt_actions.local_actions_store import LocalActionsStore
 from custom_components.mqtt_actions.manager import LocalActionError, Manager
 from custom_components.mqtt_actions.model import trigger_key
@@ -494,3 +502,171 @@ async def test_editor_rows_list_current_triggers_then_inactive_records_as_copies
     counts = manager.local_action_counts()
     assert (counts.records, counts.devices, counts.active, counts.inactive, counts.muted) == (3, 2, 1, 2, 1)
     assert counts.orphan_only_devices == 1
+
+
+# --- Plan 11-05 Task 3: one coherent device-wide policy (D-03, D-09, MIR-11) ------------------------------------------
+
+# Owner metadata that would change every consumer if it were trusted before approval
+HOSTILE = {"run_on_startup": True, "run_mode": RUN_MODE_RESTART, "breaker_max_runs": 1, "breaker_window": 60}
+
+
+def _incoherence(manager: Manager, device_id: str, expected: EffectivePolicy | None) -> list[str]:
+    """Return how tracker, breaker and Script of a mirror deviate from one policy snapshot; empty when coherent."""
+    device = manager.device(device_id)
+    if device is None or expected is None:
+        return [f"no device or no policy ({device!r}, {expected!r})"]
+    found: list[str] = []
+    if device.policy != expected:
+        found.append(f"device policy {device.policy} != {expected}")
+    if device.tracker.run_on_startup is not expected.run_on_startup:
+        found.append("tracker run_on_startup")
+    if (device.breaker.max_runs, device.breaker.window) != (expected.breaker_max_runs, expected.breaker_window):
+        found.append(f"breaker {device.breaker.max_runs}/{device.breaker.window}")
+    script = manager.runner.script_for(device_id, trigger_key(PAYLOAD_ON))
+    if script is not None:
+        if manager.runner.policy_for(device_id) is not device.policy:
+            found.append("the Script was built from another snapshot")
+        if script.script_mode != ("queued" if expected.run_mode == "serial" else "restart"):
+            found.append(f"script mode {script.script_mode}")
+        if script.max_runs != expected.queue_limit:
+            found.append(f"script queue {script.max_runs}")
+    return found
+
+
+def _assert_coherent(manager: Manager, device_id: str, expected: EffectivePolicy) -> None:
+    """Every consumer of a mirror's device-wide policy reads the same snapshot: tracker, breaker and Script."""
+    assert _incoherence(manager, device_id, expected) == []
+
+
+async def test_pending_local_policy_is_false_serial_5_10_10_whatever_the_owner_says(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-03, T-11-12: unapproved owner startup, run mode and breaker limits never govern trusted local runs."""
+    local_calls = async_mock_service(hass, "test", "local_on")
+    async_mock_service(hass, "test", "owner_on")
+    spec = make_spec(on=[{"action": "test.owner_on"}], **HOSTILE)
+    _seed_local_store(hass_storage, [_additive_on(spec.device_id)])
+    entry = await setup_entry(hass, make_hub_entry())
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+    await restart_entry(hass, entry)
+    manager = manager_of(entry)
+    assert str(manager.approval_state(spec.device_id)) == "pending"
+
+    assert (
+        EffectivePolicy(run_on_startup=False, run_mode="serial", breaker_max_runs=5, breaker_window=10, queue_limit=10)
+        == LOCAL_SAFE_POLICY
+    )
+
+    # The retained replay of a start runs nothing: startup execution is off for local actions
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=True)
+    assert local_calls == [], "an unapproved owner's run_on_startup must not start local actions"
+    # Two real edges: the owner's breaker (1 run per 60 s) would trip at the second, the safe one allows five
+    for _ in range(2):
+        await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+        await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert len(local_calls) == 2
+    assert not manager.device(spec.device_id).breaker.tripped
+    _assert_coherent(manager, spec.device_id, LOCAL_SAFE_POLICY)
+
+
+async def test_approved_exact_hash_switches_every_policy_consumer_together(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-03: the exact approved hash hands the owner's settings to tracker, breaker and Script at once, and back."""
+    spec = make_spec(on=[{"action": "test.owner_on"}], **HOSTILE)
+    _seed_local_store(hass_storage, [_additive_on(spec.device_id)])
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    _assert_coherent(manager, spec.device_id, LOCAL_SAFE_POLICY)
+
+    assert await manager.async_approve(spec.device_id, manager.mirrors[spec.device_id].mirror.actions_hash)
+    owner_policy = EffectivePolicy(
+        run_on_startup=True, run_mode=RUN_MODE_RESTART, breaker_max_runs=1, breaker_window=60, queue_limit=10
+    )
+    _assert_coherent(manager, spec.device_id, owner_policy)
+
+    # New owner actions: the approval no longer matches, so every consumer falls back to the safe policy together
+    changed = make_spec(device_id=spec.device_id, on=[{"action": "test.owner_other"}], **HOSTILE)
+    await deliver_config(hass, spec.device_id, document_payload(changed, rev=2))
+    assert str(manager.approval_state(spec.device_id)) == "pending"
+    _assert_coherent(manager, spec.device_id, LOCAL_SAFE_POLICY)
+
+
+async def test_policy_snapshot_stays_coherent_through_concurrent_approval_and_edits(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MIR-11, T-11-14: however edits and approval interleave, no run decision sees two policy generations."""
+    async_mock_service(hass, "test", "local_on")
+    async_mock_service(hass, "test", "owner_on")
+    spec = make_spec(on=[{"action": "test.owner_on"}], **HOSTILE)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    identity = local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, "on")
+    seen: list[EffectivePolicy | None] = []
+    incoherent: list[list[str]] = []
+    original = Manager._run_trigger
+
+    def _run_trigger(self: Manager, device: Any, value: str) -> None:
+        # Checked at every run decision, while builds of the other tasks may be half way through their awaits; an
+        # assertion here would be swallowed by the MQTT dispatcher, so the findings are collected instead
+        seen.append(device.policy)
+        if found := _incoherence(self, device.device_id, device.policy):
+            incoherent.append(found)
+        original(self, device, value)
+
+    monkeypatch.setattr(Manager, "_run_trigger", _run_trigger)
+
+    async def _toggle() -> None:
+        for _ in range(4):
+            async_fire_mqtt_message(hass, state_topic(BASE, spec.device_id), PAYLOAD_ON)
+            await asyncio.sleep(0)
+            async_fire_mqtt_message(hass, state_topic(BASE, spec.device_id), PAYLOAD_OFF)
+            await asyncio.sleep(0)
+
+    actions_hash = manager.mirrors[spec.device_id].mirror.actions_hash
+    await asyncio.gather(
+        manager.async_set_local_action(identity, LocalActionMode.ADDITIVE, LOCAL_ON),
+        _toggle(),
+        manager.async_approve(spec.device_id, actions_hash),
+        _toggle(),
+        manager.async_set_local_action(identity, LocalActionMode.REPLACEMENT, LOCAL_ON),
+        _toggle(),
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert seen, "premise: run decisions happened during the interleaving"
+    assert incoherent == [], "a run decision saw tracker, breaker and Script of different policy generations"
+    rows = _stored_rows(hass_storage)
+    assert rows is not None
+    assert len(rows) == 1, "concurrent edits of one identity leave one record"
+    owner_policy = EffectivePolicy(
+        run_on_startup=True, run_mode=RUN_MODE_RESTART, breaker_max_runs=1, breaker_window=60, queue_limit=10
+    )
+    _assert_coherent(manager, spec.device_id, owner_policy)
+
+
+@pytest.mark.parametrize("refusal", ["observe", "disabled", "tripped"])
+async def test_observe_disabled_and_tripped_breaker_refuse_local_runs(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable, refusal: str
+) -> None:
+    """D-03, D-14: the device modes and a tripped breaker gate local runs like owner runs."""
+    local_on = async_mock_service(hass, "test", "local_on")
+    local_off = async_mock_service(hass, "test", "local_off")
+    spec = make_spec(on=[{"action": "test.owner_on"}])
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    if refusal == "tripped":
+        await _trip_by_local_runs(hass, manager, spec)
+    else:
+        await manager.async_set_local_action(
+            local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, "on"), LocalActionMode.ADDITIVE, LOCAL_ON
+        )
+        await manager.async_set_device_mode(spec.device_id, MODE_OBSERVE if refusal == "observe" else MODE_DISABLED)
+    calls = (len(local_on), len(local_off))
+
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+
+    assert (len(local_on), len(local_off)) == calls, f"{refusal} must refuse every local run"

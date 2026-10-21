@@ -132,6 +132,7 @@ if TYPE_CHECKING:
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 
     from .document import ActionAnalysis, ParsedDocument
+    from .local_actions import EffectivePolicy
     from .trust import ApprovalView
 
 
@@ -269,6 +270,8 @@ class Device:
     mirror: MirrorInfo | None = None
     # The last accepted canonical StateValue of the state topic, None until one arrived; what a native entity shows
     value: str | None = None
+    # The device-wide execution policy of a mirror; skeleton (Plan 11-05 Task 3 RED)
+    policy: EffectivePolicy | None = None
 
     @property
     def name(self) -> str:

@@ -87,7 +87,6 @@ from .const import (
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
     ManualRunResult,
-    MirrorRemovalCause,
 )
 from .discovery import AvailabilityState, DiscoveryPublisher, button_component_key
 from .document import (
@@ -2164,7 +2163,7 @@ class Manager:
         device.breaker.max_runs = policy.breaker_max_runs
         device.breaker.window = float(policy.breaker_window)
 
-    async def async_remove_mirror(self, device_id: str, *, cause: MirrorRemovalCause) -> None:
+    async def async_remove_mirror(self, device_id: str) -> None:
         """
         Remove the mirror of a device its owner deleted, and everything this instance keeps about it (D-09, SYN-05).
 
@@ -2174,27 +2173,24 @@ class Manager:
         except the local failure issue. Leftover registry entries are cleaned last, and only when no entity of the
         device is live.
 
-        The local records of the device and their failure issue stay after a prune. A tombstone discards them, also
-        when an earlier prune already removed the mirror (D-05, D-19).
+        A prune and a tombstone both keep the local records of the device and their failure issue: an empty retained
+        config payload carries no owner, so any broker client can send one (D-05 amended, WR-01). The records stay
+        inactive and listed until the device returns or the user removes them. Only an adoption, an explicit removal
+        and the hub removal delete local records. The local Store is never written here.
         """
         if device_id in self.devices:
             # An owned id is never a mirror; unloading its Script here would kill the owner's own device
             return
-        if (device := self.mirrors.pop(device_id, None)) is not None:
-            await self._async_unload_removed_mirror(device)
-        if cause is MirrorRemovalCause.TOMBSTONE:
-            await self._async_discard_tombstoned_records(device_id)
-
-    async def _async_discard_tombstoned_records(self, device_id: str) -> None:
-        """Discard the local records of a deleted device durably; a failed save keeps them and is logged by count."""
-        try:
-            discarded = await self._async_discard_local_records(device_id)
-        except LocalActionsStoreError:
-            LOGGER.warning("The local actions of a device its owner deleted could not be discarded, so they are kept")
+        if (device := self.mirrors.pop(device_id, None)) is None:
             return
-        self._delete_local_failure_issue(device_id)
-        if discarded:
-            LOGGER.info("Discarded %d local actions of a device its owner deleted", discarded)
+        await self._async_unload_removed_mirror(device)
+        kept = sum(1 for record in self._local_records if record.identity.device_id == device_id)
+        if kept:
+            LOGGER.info(
+                "Kept %d local actions of a removed mirror; they stay inactive until the device returns or you remove "
+                "them",
+                kept,
+            )
 
     async def _async_discard_local_records(self, device_id: str) -> int:
         """
@@ -2219,7 +2215,7 @@ class Manager:
             device.unsubscribe_test()
         await self.runner.async_unload(device_id, remove_issue=True)
         self._delete_breaker_issue(device_id)
-        # The records stay after a prune, and so does their failure issue; a tombstone discard deletes it (D-19)
+        # The records stay after a prune and after a tombstone, and so does their failure issue (D-05 amended, D-19)
         self._delete_device_issues(device_id, keep_local_failure=True)
         self._stored_last_acted.pop(device_id, None)
         self._tripped.pop(device_id, None)
@@ -2893,8 +2889,8 @@ class Manager:
         """
         Delete every per-device Repairs issue of a device: the prefix of each issue family plus the device id.
 
-        With `keep_local_failure` the local failure issue stays: it belongs to the local records, which a prune, an
-        unload or the drop of an adopted mirror keep (D-19).
+        With `keep_local_failure` the local failure issue stays: it belongs to the local records, which a prune, a
+        tombstone, an unload or the drop of an adopted mirror keep (D-05 amended, D-19).
         """
         for prefix in ISSUE_DEVICE_PREFIXES:
             if keep_local_failure and prefix == ISSUE_LOCAL_ACTION_FAILED_PREFIX:

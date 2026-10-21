@@ -54,7 +54,6 @@ from .const import (
     REPUBLISH_THROTTLE_SECONDS,
     SCHEMA_VERSION,
     SIGNAL_ROSTER_UPDATED,
-    MirrorRemovalCause,
 )
 from .discovery import DiscoveryContent, classify_discovery
 from .document import (
@@ -301,7 +300,7 @@ class SyncManager:
                 ]
                 for device_id in stale:
                     # A missing document only suggests a deletion: the mirror goes, its local records stay (D-05)
-                    await manager.async_remove_mirror(device_id, cause=MirrorRemovalCause.TRANSIENT_PRUNE)
+                    await manager.async_remove_mirror(device_id)
                     self._seen.discard(device_id)
                 if stale:
                     LOGGER.info(
@@ -488,21 +487,21 @@ class SyncManager:
 
     async def _async_remove(self, device_id: str) -> None:
         """
-        Remove the mirror and the local records of a device whose config topic was cleared (D-05, D-09).
+        Remove the mirror of a device whose config topic was cleared; its local records stay (D-05 amended, D-09).
 
-        The tombstone is passed on even when no mirror exists any more, for example after an earlier prune, so its
-        local records are discarded; an id without mirror and records is a no-op, and an owned id is never touched.
+        An empty payload carries no owner, so any broker client can send one: the mirror goes, and the local records
+        stay inactive until the device returns or the user removes them (WR-01). An id without a mirror is a no-op,
+        and an owned id is never touched.
         """
         manager = self._manager
         try:
             async with manager.lock:
-                if manager.running and device_id not in manager.devices:
-                    if device_id in manager.mirrors:
-                        LOGGER.debug(
-                            "The config document of mirrored device %s was cleared, so its mirror is removed",
-                            _shown(device_id),
-                        )
-                    await manager.async_remove_mirror(device_id, cause=MirrorRemovalCause.TOMBSTONE)
+                if manager.running and device_id not in manager.devices and device_id in manager.mirrors:
+                    LOGGER.debug(
+                        "The config document of mirrored device %s was cleared, so its mirror is removed",
+                        _shown(device_id),
+                    )
+                    await manager.async_remove_mirror(device_id)
         except Exception:  # noqa: BLE001 - nothing a broker sends may reach a log
             LOGGER.warning("The mirror of device %s could not be removed", _shown(device_id))
 

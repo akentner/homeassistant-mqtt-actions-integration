@@ -265,18 +265,6 @@ REASON_NO_STATE: Final = "no_state"
 PRUNE_GRACE_SECONDS: Final = 30.0
 
 
-class MirrorRemovalCause(StrEnum):
-    """
-    Why a mirror is removed; only a tombstone has the authority to destroy local data (D-05).
-
-    A prune infers a deletion from a missing document while the owner is online, so it removes the runtime mirror and
-    keeps the local records; a tombstone is the owner's explicit deletion and also discards them.
-    """
-
-    TRANSIENT_PRUNE = "transient_prune"
-    TOMBSTONE = "tombstone"
-
-
 class ManualRunResult(StrEnum):
     """
     What the shared gate of a native or legacy test press and of a re-trigger decided (D-03, MIR-10).

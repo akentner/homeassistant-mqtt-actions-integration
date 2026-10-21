@@ -1,0 +1,18 @@
+{
+  "command": "uv run pytest -q -p no:logging \"tests/test_docs.py::test_docs_say_a_tombstone_keeps_local_actions\" --junitxml=.planning/phases/11-local-actions-on-mirrors/tdd/11-18-task2-red.xml",
+  "exitCode": 1,
+  "output": "<?xml version=\"1.0\" encoding=\"utf-8\"?><testsuites name=\"pytest tests\"><testsuite name=\"pytest\" errors=\"0\" failures=\"1\" skipped=\"0\" tests=\"1\" time=\"0.235\" timestamp=\"2026-10-21T09:36:37.866366+02:00\" hostname=\"lap-aleken-tux1\"><testcase classname=\"tests.test_docs\" name=\"test_docs_say_a_tombstone_keeps_local_actions\" time=\"0.125\"><failure message=\"AssertionError: the Tombstone bullet never says 'kept'&#10;assert 'kept' in '- tombstone. when the owner deletes the device, its tombstone discards the local actions of the device on this instance, and the number is logged.'\">def test_docs_say_a_tombstone_keeps_local_actions() -&gt; None:\n        \"\"\"\n        WR-01, D-05 amended, MIR-15: a tombstone keeps local actions inactive; only adoption discards them.\n    \n        The README Lifecycle bullet, the Limitations bullet on a forged tombstone and the troubleshooting entry of the\n        local failure issue all say that the local actions of a tombstoned device are kept.\n        \"\"\"\n        text = README.read_text(encoding=\"utf-8\")\n        lifecycle = _bullets(_section(text, \"lifecycle\"))\n        tombstone = next((item for item in lifecycle if item.startswith(\"- **tombstone.**\")), None)\n        assert tombstone is not None, \"the README Lifecycle section has no **Tombstone.** bullet\"\n        tombstone = _plain(tombstone)\n        for phrase in (\"kept\", \"inactive\", \"not mirrored\", \"remove\", \"apply again\"):\n&gt;           assert phrase in tombstone, f\"the Tombstone bullet never says {phrase!r}\"\nE           AssertionError: the Tombstone bullet never says 'kept'\nE           assert 'kept' in '- tombstone. when the owner deletes the device, its tombstone discards the local actions of the device on this instance, and the number is logged.'\n\ntests/test_docs.py:669: AssertionError</failure></testcase></testsuite></testsuites>",
+  "targetTest": "test_docs_say_a_tombstone_keeps_local_actions",
+  "targetFile": "tests/test_docs.py",
+  "nodeId": "tests/test_docs.py::test_docs_say_a_tombstone_keeps_local_actions",
+  "expected": "The README Lifecycle bullet '**Tombstone.**' says the local actions are kept, inactive, listed as not mirrored, removable, and apply again when the device returns, without 'discard'; the Limitations bullet on a forged tombstone says the local actions are kept; the troubleshooting local_action_failed sentence starting at '(a tombstone)' says 'kept' and not 'discarded'.",
+  "actual": "AssertionError 'the Tombstone bullet never says kept' at tests/test_docs.py:669: the README Tombstone bullet still reads 'its tombstone discards the local actions of the device on this instance, and the number is logged.'",
+  "reportPath": ".planning/phases/11-local-actions-on-mirrors/tdd/11-18-task2-red.xml",
+  "runStartedAt": "2026-10-21T07:36:36.206443Z",
+  "reportModifiedAt": "2026-10-21T07:36:38.100041Z",
+  "consoleTail": [
+    "FAILED tests/test_docs.py::test_docs_say_a_tombstone_keeps_local_actions - As...",
+    "1 failed in 0.23s"
+  ],
+  "semanticAssessment": "Valid semantic RED. The target node was collected and executed (1 test, 0 errors, 0 skipped). The bullet lookup found the README **Tombstone.** bullet (no StopIteration or IndexError), and the test failed on its first content assertion, the planned 'kept' phrase, because the README still documents the pre-WR-01 discard. Not a collection, import or fixture fault."
+}

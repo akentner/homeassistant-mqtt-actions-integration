@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.235" timestamp="2026-10-21T09:36:37.866366+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_docs" name="test_docs_say_a_tombstone_keeps_local_actions" time="0.125"><failure message="AssertionError: the Tombstone bullet never says 'kept'&#10;assert 'kept' in '- tombstone. when the owner deletes the device, its tombstone discards the local actions of the device on this instance, and the number is logged.'">def test_docs_say_a_tombstone_keeps_local_actions() -&gt; None:
+        """
+        WR-01, D-05 amended, MIR-15: a tombstone keeps local actions inactive; only adoption discards them.
+    
+        The README Lifecycle bullet, the Limitations bullet on a forged tombstone and the troubleshooting entry of the
+        local failure issue all say that the local actions of a tombstoned device are kept.
+        """
+        text = README.read_text(encoding="utf-8")
+        lifecycle = _bullets(_section(text, "lifecycle"))
+        tombstone = next((item for item in lifecycle if item.startswith("- **tombstone.**")), None)
+        assert tombstone is not None, "the README Lifecycle section has no **Tombstone.** bullet"
+        tombstone = _plain(tombstone)
+        for phrase in ("kept", "inactive", "not mirrored", "remove", "apply again"):
+&gt;           assert phrase in tombstone, f"the Tombstone bullet never says {phrase!r}"
+E           AssertionError: the Tombstone bullet never says 'kept'
+E           assert 'kept' in '- tombstone. when the owner deletes the device, its tombstone discards the local actions of the device on this instance, and the number is logged.'
+
+tests/test_docs.py:669: AssertionError</failure></testcase></testsuite></testsuites>

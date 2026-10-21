@@ -639,7 +639,7 @@ def test_readme_documents_every_local_actions_topic() -> None:
         "response variables": ("response variable", "share one namespace"),
         "orphans": ("no longer present on the owner", "inactive", "edit", "reattach"),
         "kind identity": ("device kind", "saved for another device type"),
-        "tombstone": ("tombstone", "discarded", "logged"),
+        "tombstone": ("tombstone", "kept", "inactive", "not mirrored", "apply again"),
         "transient prune": ("prune", "kept"),
         "adoption": ("adopt", "local_actions_discarded"),
         "integration removal": ("removing the integration", "number of devices"),
@@ -651,6 +651,38 @@ def test_readme_documents_every_local_actions_topic() -> None:
     for topic, phrases in topics.items():
         for phrase in phrases:
             assert phrase in local, f"the local actions section never says {phrase!r} ({topic})"
+
+
+def test_docs_say_a_tombstone_keeps_local_actions() -> None:
+    """
+    WR-01, D-05 amended, MIR-15: a tombstone keeps local actions inactive; only adoption discards them.
+
+    The README Lifecycle bullet, the Limitations bullet on a forged tombstone and the troubleshooting entry of the
+    local failure issue all say that the local actions of a tombstoned device are kept.
+    """
+    text = README.read_text(encoding="utf-8")
+    lifecycle = _bullets(_section(text, "lifecycle"))
+    tombstone = next((item for item in lifecycle if item.startswith("- **tombstone.**")), None)
+    assert tombstone is not None, "the README Lifecycle section has no **Tombstone.** bullet"
+    tombstone = _plain(tombstone)
+    for phrase in ("kept", "inactive", "not mirrored", "remove", "apply again"):
+        assert phrase in tombstone, f"the Tombstone bullet never says {phrase!r}"
+    assert "discard" not in tombstone, "the Tombstone bullet still says that a tombstone discards local actions"
+
+    limitations = _bullets(_section(text, "limitations"))
+    forged = next((item for item in limitations if "forged tombstone" in item), None)
+    assert forged is not None, "the Limitations section has no bullet on a forged tombstone"
+    forged = _plain(forged)
+    for phrase in ("local actions", "kept"):
+        assert phrase in forged, f"the forged tombstone bullet never says {phrase!r}"
+
+    entry = _normalize(_section(_page(TROUBLESHOOTING), "`local_action_failed`"))
+    assert "(a tombstone)" in entry, "the local_action_failed entry never mentions a tombstone"
+    sentence = entry[entry.index("(a tombstone)") :].split(". ", 1)[0]
+    assert "kept" in sentence, f"the tombstone sentence of local_action_failed never says 'kept': {sentence!r}"
+    assert "discarded" not in sentence, (
+        f"the tombstone sentence of local_action_failed still says 'discarded': {sentence!r}"
+    )
 
 
 def test_readme_warns_prominently_about_a_downgrade_to_1_0_1() -> None:

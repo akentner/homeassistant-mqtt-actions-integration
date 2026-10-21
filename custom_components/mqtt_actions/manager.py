@@ -1479,6 +1479,8 @@ class Manager:
                 await self._async_restore_local_records(previous_records)
             await self.sync.async_restore_mirror(device_id, info.payload)
             raise
+        # The customization ended with the completed adoption, so its failure issue goes too (D-19)
+        self._delete_local_failure_issue(device_id)
         LOGGER.info("Adopted device %s from an instance that is offline or was forced", shown(spec.name))
         if discarded:
             LOGGER.info("Discarded %d local actions of the adopted device", discarded)
@@ -1508,10 +1510,10 @@ class Manager:
         """
         Release a mirror without clearing anything: no broker message and no registry cleanup of core MQTT.
 
-        Both subscriptions end, the Script is unloaded, the per-device issues, the approval and the companion device go
-        and the sync side forgets the mirror. The stored mode and the baseline stay for the owned device that follows.
-        With `keep_companion` the companion device stays: the owned device that replaces a native mirror uses the same
-        identifier, so its entities keep their registry entries.
+        Both subscriptions end, the Script is unloaded, the per-device issues except the local failure issue, the
+        approval and the companion device go and the sync side forgets the mirror. The stored mode and the baseline
+        stay for the owned device that follows. With `keep_companion` the companion device stays: the owned device
+        that replaces a native mirror uses the same identifier, so its entities keep their registry entries.
         """
         device_id = mirror.device_id
         self.mirrors.pop(device_id, None)
@@ -1522,7 +1524,8 @@ class Manager:
         if mirror.unsubscribe_test is not None:
             mirror.unsubscribe_test()
         await self.runner.async_unload(device_id, remove_issue=True)
-        self._delete_device_issues(device_id)
+        # The local failure issue lives as long as the records: a completed adoption deletes it after the discard
+        self._delete_device_issues(device_id, keep_local_failure=True)
         self._approvals.pop(device_id, None)
         self._tripped.pop(device_id, None)
         if not keep_companion:
@@ -1830,7 +1833,9 @@ class Manager:
 
         Every placeholder comes from the broker or from a run, so each is cut and escaped (T-11-23); no action, trace
         or variable is part of it. The issue data keeps the identity of the named trigger, so a later success or
-        removal can be matched after a reload of the integration.
+        removal can be matched after a reload of the integration. The issue is persistent: a restart of Home Assistant
+        brings it back active with its data and text, because only a success or the end of its customization may end
+        it (D-19, T-11-21).
         """
         ir.async_create_issue(
             self._hass,
@@ -1838,6 +1843,7 @@ class Manager:
             local_failure_issue_id(identity.device_id),
             data={"kind": identity.kind, "state_value": identity.state_value},
             is_fixable=False,
+            is_persistent=True,
             severity=ir.IssueSeverity.ERROR,
             translation_key=ISSUE_LOCAL_ACTION_FAILED,
             translation_placeholders={
@@ -2112,11 +2118,12 @@ class Manager:
 
         The caller holds the lock and has decided that the removal is final: a tombstone or a prune with positive
         evidence. Nothing is published, the topics belong to the owner. Both subscriptions end, the Script state is
-        unloaded, the persisted payload, baseline and tripped hash are forgotten and every per-device issue is deleted.
-        Leftover registry entries are cleaned last, and only when no entity of the device is live.
+        unloaded, the persisted payload, baseline and tripped hash are forgotten and every per-device issue is deleted
+        except the local failure issue. Leftover registry entries are cleaned last, and only when no entity of the
+        device is live.
 
-        The local records of the device stay after a prune. A tombstone discards them, also when an earlier prune
-        already removed the mirror (D-05).
+        The local records of the device and their failure issue stay after a prune. A tombstone discards them, also
+        when an earlier prune already removed the mirror (D-05, D-19).
         """
         if device_id in self.devices:
             # An owned id is never a mirror; unloading its Script here would kill the owner's own device
@@ -2133,6 +2140,7 @@ class Manager:
         except LocalActionsStoreError:
             LOGGER.warning("The local actions of a device its owner deleted could not be discarded, so they are kept")
             return
+        self._delete_local_failure_issue(device_id)
         if discarded:
             LOGGER.info("Discarded %d local actions of a device its owner deleted", discarded)
 
@@ -2159,7 +2167,8 @@ class Manager:
             device.unsubscribe_test()
         await self.runner.async_unload(device_id, remove_issue=True)
         self._delete_breaker_issue(device_id)
-        self._delete_device_issues(device_id)
+        # The records stay after a prune, and so does their failure issue; a tombstone discard deletes it (D-19)
+        self._delete_device_issues(device_id, keep_local_failure=True)
         self._stored_last_acted.pop(device_id, None)
         self._tripped.pop(device_id, None)
         # An approval does not outlive its mirror (A10): a returning device is a new request
@@ -2828,10 +2837,22 @@ class Manager:
         )
 
     @callback
-    def _delete_device_issues(self, device_id: str) -> None:
-        """Delete every per-device Repairs issue of a device: the prefix of each issue family plus the device id."""
+    def _delete_device_issues(self, device_id: str, *, keep_local_failure: bool = False) -> None:
+        """
+        Delete every per-device Repairs issue of a device: the prefix of each issue family plus the device id.
+
+        With `keep_local_failure` the local failure issue stays: it belongs to the local records, which a prune, an
+        unload or the drop of an adopted mirror keep (D-19).
+        """
         for prefix in ISSUE_DEVICE_PREFIXES:
+            if keep_local_failure and prefix == ISSUE_LOCAL_ACTION_FAILED_PREFIX:
+                continue
             ir.async_delete_issue(self._hass, DOMAIN, f"{prefix}{device_id}")
+
+    @callback
+    def _delete_local_failure_issue(self, device_id: str) -> None:
+        """Delete the local failure issue of a device whose customization ended (D-19)."""
+        ir.async_delete_issue(self._hass, DOMAIN, local_failure_issue_id(device_id))
 
     @callback
     def _delete_breaker_issue(self, device_id: str) -> None:

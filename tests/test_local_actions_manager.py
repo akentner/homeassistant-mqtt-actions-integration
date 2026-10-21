@@ -918,7 +918,7 @@ async def test_local_failure_raises_an_independent_issue_naming_the_trigger_and_
     issue = _local_issue(hass, spec.device_id)
     assert issue is not None, "a failed local run must raise the local failure issue"
     assert issue.is_fixable is False
-    assert issue.is_persistent is False, "dismissal and restart behave like the owner action_failed issue"
+    assert issue.is_persistent is True, "the issue survives a Home Assistant restart with its trigger identity (G-01)"
     assert issue.severity == ir.IssueSeverity.ERROR
     assert issue.translation_key == "local_action_failed"
     placeholders = issue.translation_placeholders

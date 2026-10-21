@@ -210,6 +210,16 @@ a prune of the mirror and a failed adoption, as long as the local customization 
 deletes the device (a tombstone) or you adopt it, its local actions are discarded and the issue goes with it. Removing
 the integration deletes it as well, and a start deletes an issue whose local customization no longer exists.
 
+### `local_actions_unreadable`
+
+**Meaning:** the saved local actions of this instance cannot be read. Until they can, local actions, replacements and
+mutes are not applied: approved owner actions run on every trigger, also on triggers you replaced or muted here.
+Editing local actions is refused, and the file is not changed. **Why:** a newer version of MQTT Actions saved the file
+in a format this version cannot read, or the file is damaged. MQTT Actions does not overwrite it, so the newer or
+damaged file and your local actions in it stay as they are. **What to do:** update MQTT Actions to the version that
+saved the file, or restore the file from a backup, then restart Home Assistant or reload the integration. The issue
+disappears at the next start that can read the file. Removing the integration deletes the file and the issue.
+
 ### `mqtt_discovery_disabled`
 
 **Meaning:** this instance still needs MQTT discovery, but discovery is disabled in the MQTT integration. That is the

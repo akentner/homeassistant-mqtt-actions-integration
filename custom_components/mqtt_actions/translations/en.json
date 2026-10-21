@@ -374,6 +374,10 @@
       "title": "Local actions failed",
       "description": "The local actions for {trigger} of {device} failed at {time}: {error}\n\nOnly the local actions of this instance are affected, not the owner actions and not other instances. The issue names the latest local trigger that failed. It disappears when the local actions of that trigger run successfully, or when you remove its local customization in the options of MQTT Actions."
     },
+    "local_actions_unreadable": {
+      "title": "Local actions cannot be read",
+      "description": "The saved local actions of this instance cannot be read. A newer version of MQTT Actions saved them, or the file is damaged.\n\nUntil they can be read, local actions, replacements and mutes are not applied. Approved owner actions run on every trigger, also on triggers you replaced or muted here. Editing local actions is refused, and the file is not changed.\n\nUpdate MQTT Actions to the version that saved them, or restore the file from a backup. Then restart Home Assistant or reload the integration."
+    },
     "mqtt_discovery_disabled": {
       "title": "MQTT discovery is disabled",
       "description": "MQTT Actions creates its entities through MQTT discovery, but discovery is disabled in the MQTT integration. No entity of MQTT Actions appears until discovery is enabled again in the MQTT integration options."

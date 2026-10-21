@@ -374,6 +374,10 @@
       "title": "Lokale Aktionen sind fehlgeschlagen",
       "description": "Die lokalen Aktionen für {trigger} von {device} sind um {time} fehlgeschlagen: {error}\n\nBetroffen sind nur die lokalen Aktionen dieser Instanz, nicht die Aktionen der Besitzerin und nicht andere Instanzen. Das Problem nennt den zuletzt fehlgeschlagenen lokalen Auslöser. Es verschwindet, wenn die lokalen Aktionen dieses Auslösers erfolgreich laufen oder wenn du seine lokale Anpassung in den Optionen von MQTT Actions entfernst."
     },
+    "local_actions_unreadable": {
+      "title": "Lokale Aktionen können nicht gelesen werden",
+      "description": "Die gespeicherten lokalen Aktionen dieser Instanz können nicht gelesen werden. Eine neuere Version von MQTT Actions hat sie gespeichert, oder die Datei ist beschädigt.\n\nBis sie wieder lesbar sind, werden lokale Aktionen, Ersetzungen und Stummschaltungen nicht angewendet. Freigegebene Aktionen der Besitzerin laufen bei jedem Auslöser, auch bei Auslösern, die du hier ersetzt oder stummgeschaltet hast. Lokale Aktionen können nicht bearbeitet werden, und die Datei bleibt unverändert.\n\nAktualisiere MQTT Actions auf die Version, die sie gespeichert hat, oder stelle die Datei aus einem Backup wieder her. Starte danach Home Assistant neu oder lade die Integration neu."
+    },
     "mqtt_discovery_disabled": {
       "title": "MQTT Discovery ist deaktiviert",
       "description": "MQTT Actions erstellt seine Entitäten über MQTT Discovery, aber Discovery ist in der MQTT-Integration deaktiviert. Es erscheint keine Entität von MQTT Actions, bis Discovery in den Optionen der MQTT-Integration wieder aktiviert wird."

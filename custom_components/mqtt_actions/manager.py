@@ -1475,6 +1475,8 @@ class Manager:
         # Durable before the owned device exists; LocalActionsStoreError here leaves everything as it was (T-11-17)
         discarded = await self._async_discard_local_records(device_id)
         approval = self._approvals.get(device_id)
+        # The drop below releases the breaker; a failed adoption is no release, so the rollback needs it (D-17, MIR-09)
+        tripped = self._tripped.get(device_id)
         # The previous owners, newest last, never more than the marker may carry (T-04-52)
         self._transfers[device_id] = [*info.transferred_from, info.owner][-MAX_TRANSFER_HISTORY:]
         # The first publish of the adopter is the old rev plus one, whatever the hash is (D-09)
@@ -1512,7 +1514,7 @@ class Manager:
             if discarded:
                 # Before the mirror returns, so its rebuilt Script carries the local branches again
                 await self._async_restore_local_records(previous_records)
-            await self.sync.async_restore_mirror(device_id, info.payload)
+            await self._async_restore_adopted_mirror(device_id, info.payload, tripped)
             raise
         # The customization ended with the completed adoption, so its failure issue goes too (D-19)
         self._delete_local_failure_issue(device_id)
@@ -1527,6 +1529,21 @@ class Manager:
             # The next setup runs the pass for it: the migrate payload, the takeover and the retained clear
             self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
         return discarded
+
+    async def _async_restore_adopted_mirror(self, device_id: str, payload: str, tripped: str | None) -> None:
+        """
+        Bring back the mirror of a failed adoption, paused again if its breaker was tripped; the caller holds the lock.
+
+        A failed adoption is no release, so only a local edit, a changed owner document or a reload ends the pause
+        (MIR-09, D-17 of Phase 2). The trip goes back before the rebuild, which then pauses the mirror and raises its
+        breaker issue. It is saved after the restore, together with the mirror payload: the start keeps a trip only
+        for a stored mirror, so a stop before the delayed save of the mirror would lose it otherwise.
+        """
+        if tripped is not None:
+            self._tripped[device_id] = tripped
+        await self.sync.async_restore_mirror(device_id, payload)
+        if tripped is not None:
+            await self._store.async_save(self._data_to_save())
 
     async def _async_restore_local_records(self, records: tuple[LocalActionRecord, ...]) -> None:
         """

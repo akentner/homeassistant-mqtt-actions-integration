@@ -126,4 +126,16 @@ class LocalActionsStore(Store[dict[str, Any]]):
             return copy_local_records(snapshot)
 
     async def async_remove_records(self) -> None:
-        """Remove the Store file."""
+        """
+        Remove this Store's file and forget its records; no other key is touched. Raise LocalActionsStoreError.
+
+        Allowed even after a refused load: removing is the user's explicit choice. A later save writes a new file.
+        """
+        async with self._lock:
+            try:
+                await self.async_remove()
+            except Exception as err:
+                msg = f"The local actions of {self.key} could not be removed"
+                raise LocalActionsStoreError(msg) from err
+            self._records = ()
+            self._loaded = True

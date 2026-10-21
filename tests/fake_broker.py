@@ -171,8 +171,13 @@ class FakeGateway(MqttGateway):
 
 
 def instance_store_keys(name: str) -> tuple[str, str]:
-    """Return the main and the local Store key of a named test instance."""
-    return f"{STORE_KEY}.{name}", LOCAL_ACTIONS_STORE_KEY
+    """
+    Return the main and the local Store key of a named test instance.
+
+    Every hass of a test shares one storage mock, so each instance needs keys of its own; a global production key
+    would let two instances read each other's local actions (T-11-11).
+    """
+    return f"{STORE_KEY}.{name}", f"{LOCAL_ACTIONS_STORE_KEY}.{name}"
 
 
 @dataclass
@@ -271,9 +276,15 @@ class InstanceFactory:
         )
         entry.add_to_hass(hass)
         gateway = FakeGateway(self._broker, hass)
-        store_key = f"{STORE_KEY}.{name}"
+        store_key, local_store_key = instance_store_keys(name)
         instance = Instance(
-            hass=hass, entry=entry, gateway=gateway, name=name, store_key=store_key, real_setup=real_setup
+            hass=hass,
+            entry=entry,
+            gateway=gateway,
+            name=name,
+            store_key=store_key,
+            local_store_key=local_store_key,
+            real_setup=real_setup,
         )
         if real_setup:
             self._patch_gateways()

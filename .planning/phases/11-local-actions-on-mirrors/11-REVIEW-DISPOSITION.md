@@ -9,7 +9,7 @@ findings:
     title: "Any tombstone on a config topic permanently discards local actions, while the mirror itself self-heals"
   - id: WR-02
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "The local failure issue cannot clear after the user mutes the trigger or empties its additive actions"
   - id: WR-03
     severity: warning
@@ -47,7 +47,7 @@ findings:
     severity: info
     disposition: open
     title: "`adopt_device` surfaces an untranslated internal error when the local discard cannot be saved"
-open: 10
+open: 9
 total: 11
 recorded: 2026-10-21T05:43:58.334Z
 ---
@@ -57,7 +57,7 @@ recorded: 2026-10-21T05:43:58.334Z
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
 | WR-01 | warning | fixed | plan 11-18, 17865da |
-| WR-02 | warning | open | - |
+| WR-02 | warning | fixed | plan 11-19, 5bc5ed4 |
 | WR-03 | warning | open | - |
 | WR-04 | warning | open | - |
 | IN-01 | info | open | - |

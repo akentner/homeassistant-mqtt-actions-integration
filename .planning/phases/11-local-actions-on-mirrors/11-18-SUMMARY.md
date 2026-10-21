@@ -239,7 +239,7 @@ None. No external service configuration is required.
 
 ## Next Phase Readiness
 
-- Plan 11-19 can use `Full suite: 2074 passed, 2 xfailed` as its baseline.
+- Plan 11-19 can use the full-suite count recorded above (2074 passed, 2 xfailed) as its baseline.
 - Plan 11-23 still has to carry the amended D-05 rule into REQUIREMENTS MIR-08, ROADMAP success criterion 5, 11-CONTEXT.md and the release-notes draft.
 
 ## Self-Check: PASSED

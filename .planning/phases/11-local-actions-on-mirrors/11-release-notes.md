@@ -28,8 +28,9 @@ been released, tagged or published.
   again if the device returns. An adoption discards them and logs the count. Removing the integration deletes them,
   and the removal settings name how many devices are affected.
 - Repairs: local failures raise their own issue `local_action_failed`, independent of `action_failed`. An error that a
-  local step handles with `continue_on_error` still raises it. Only a later successful run of the same trigger, or
-  removing its customization, clears it.
+  local step handles with `continue_on_error` still raises it. A later successful run of the same trigger, saving that
+  trigger without local actions (locally muted, or additive with an empty list), or removing its customization clears
+  it.
 - Templates: `{{ state }}` is the canonical state value of the trigger that runs. A live entity lookup can show a newer
   value or, for a Select, the friendly name.
 

@@ -5,7 +5,9 @@ Screenshot: `11-frontend-smoke.png`. It is a 2x2 composite of real browser captu
 
 Verdict: PASS
 
-The verdict is the executor's record from the automated browser run. Task 2 of plan 11-02 still requires explicit human approval.
+The verdict is the executor's record from the automated browser run.
+
+Human approval (plan 11-02, Task 2, gate `blocking-human`): approved on 2026-10-21 by Alexander Kentner after reviewing `11-frontend-smoke.png` and this file (en/de, all 8 interactions PASS). Verbatim response: "approved — Beleg geprüft (Screenshot + 11-FRONTEND-SMOKE.md, en/de, alle 8 Interaktionen PASS)."
 
 ## Versions
 

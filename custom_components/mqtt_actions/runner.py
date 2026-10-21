@@ -1,4 +1,9 @@
-"""Execution of configured action sequences: one Script per device, failures surfaced in the log and Repairs."""
+"""
+Execution of configured action sequences: one Script per device, failures surfaced in the log and Repairs.
+
+A mirror with local customizations is built from effective trigger plans (local_actions.py): owner and local branches
+of a trigger share the one device Script, and every run of a local branch is reduced to one BranchOutcome.
+"""
 
 import copy
 from typing import TYPE_CHECKING, Any
@@ -482,6 +487,7 @@ class ActionRunner:
         self._generation.pop(device_id, None)
         self._restricted.discard(device_id)
         self._plans.pop(device_id, None)
+        self._stops.pop(device_id, None)
         if (script := self._scripts.pop(device_id, None)) is not None:
             await script.async_unload()
         if remove_issue:

@@ -298,7 +298,7 @@ def _adoption_refused(manager: Manager, device_id: str, err: AdoptionError) -> S
 
 async def _async_handle_adopt(call: ServiceCall) -> dict[str, Any]:
     """
-    Take over an approved mirror whose owner is offline, or on `force`, and return the old owner's name.
+    Take over an approved mirror whose owner is offline, or on `force`; return the old owner and the local discard.
 
     The device may be owned or a mirror here; the manager refuses anything that is not a mirror, an unapproved or
     blocked mirror even with `force`, and an owner that is not known to be offline without it (D-10, T-04-50).
@@ -307,10 +307,16 @@ async def _async_handle_adopt(call: ServiceCall) -> dict[str, Any]:
     manager = async_get_loaded_manager(hass)
     device_id = resolve_device(hass, manager, call.data[CONF_DEVICE_ID])
     try:
-        previous_owner = await manager.async_adopt(device_id, force=call.data[CONF_FORCE])
+        result = await manager.async_adopt_device(device_id, force=call.data[CONF_FORCE])
     except AdoptionError as err:
         raise _adoption_refused(manager, device_id, err) from err
-    return {"uuid": device_id, "adopted": True, "previous_owner": previous_owner}
+    return {
+        "uuid": device_id,
+        "adopted": True,
+        "previous_owner": result.previous_owner,
+        # A count only: the local actions themselves never leave this instance (D-04, D-05)
+        "local_actions_discarded": result.local_actions_discarded,
+    }
 
 
 @callback

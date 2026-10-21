@@ -250,6 +250,18 @@ class AdoptionError(Exception):
         self.owner_name = owner_name
 
 
+@dataclass(frozen=True, slots=True)
+class AdoptionResult:
+    """
+    What a completed adoption reports: the old owner's name and how many local records it discarded (D-05).
+
+    Counts only; the discarded local actions never leave this instance and never enter the adopted subentry (D-04).
+    """
+
+    previous_owner: str
+    local_actions_discarded: int
+
+
 # The content hash recorded for an adopted device before its first publish: it can never equal a sha256 hex digest, so
 # the first publish of the adopter always counts as a change and publishes the old rev plus one (D-09)
 ADOPTED_HASH = "adopted"
@@ -1316,8 +1328,12 @@ class Manager:
             return True
 
     async def async_adopt(self, device_id: str, *, force: bool = False) -> str:
+        """Adopt like `async_adopt_device` and return only the old owner's name."""
+        return (await self.async_adopt_device(device_id, force=force)).previous_owner
+
+    async def async_adopt_device(self, device_id: str, *, force: bool = False) -> AdoptionResult:
         """
-        Turn the mirror of an orphaned device into an owned device of this instance and return the old owner's name.
+        Turn the mirror of an orphaned device into an owned device of this instance and report the result.
 
         The device keeps its uuid, its state topic and its baseline, so its entities stay; this instance publishes a new
         document with itself as owner and the old owner in the transfer marker (SYN-07, D-09, D-10). Preconditions, in
@@ -1326,6 +1342,10 @@ class Manager:
         become owned ones (`not_approved`, T-04-50); the owner is offline according to the roster, unless `force`
         (`owner_not_offline`, T-04-51). The whole change runs under the manager lock, so no late document of the old
         owner can re-create the mirror halfway. Raises AdoptionError.
+
+        Local records never satisfy the approval check. A completed adoption discards the local records of the device
+        and reports how many; a refused or failed one keeps them (D-04, D-05). A local Store that cannot save the
+        discard raises LocalActionsStoreError before anything changed.
         """
         async with self._lock:
             mirror = self.mirrors.get(device_id) if self._running and device_id not in self.devices else None
@@ -1337,12 +1357,16 @@ class Manager:
                 raise AdoptionError(ADOPT_NOT_APPROVED, info.owner_name)
             if not force and not self.presence.owner_offline(info.owner):
                 raise AdoptionError(ADOPT_OWNER_NOT_OFFLINE, info.owner_name)
-            await self._async_adopt_locked(mirror, info)
-            return info.owner_name
+            discarded = await self._async_adopt_locked(mirror, info)
+            return AdoptionResult(info.owner_name, discarded)
 
-    async def _async_adopt_locked(self, mirror: Device, info: MirrorInfo) -> None:
+    async def _async_adopt_locked(self, mirror: Device, info: MirrorInfo) -> int:
         """
-        Replace a mirror by an owned device with the same id; the caller holds the lock and checked the preconditions.
+        Replace a mirror by an owned device with the same id and return how many local records were discarded.
+
+        The caller holds the lock and checked the preconditions. The discard of the local records is saved first, so
+        it is durable before the owned device can run or publish, and a failed save stops the adoption before anything
+        changed. A failed subentry creation restores the records, then the mirror, whose Script then has them again.
 
         Nothing is cleared on the broker and the registry of core MQTT is not touched: the discovery of the device
         stays, and the new owner publishes it again with its own availability when the device is added. A native mirror
@@ -1357,6 +1381,9 @@ class Manager:
             title=spec.name,
             unique_id=device_id,
         )
+        previous_records = self._local_records
+        # Durable before the owned device exists; LocalActionsStoreError here leaves everything as it was (T-11-17)
+        discarded = await self._async_discard_local_records(device_id)
         approval = self._approvals.get(device_id)
         # The previous owners, newest last, never more than the marker may carry (T-04-52)
         self._transfers[device_id] = [*info.transferred_from, info.owner][-MAX_TRANSFER_HISTORY:]
@@ -1392,9 +1419,14 @@ class Manager:
             if info.native:
                 # The payload is kept as received and may carry no marker: only the set keeps the mirror native
                 self._native.mirrors.add(device_id)
+            if discarded:
+                # Before the mirror returns, so its rebuilt Script carries the local branches again
+                await self._async_restore_local_records(previous_records)
             await self.sync.async_restore_mirror(device_id, info.payload)
             raise
         LOGGER.info("Adopted device %s from an instance that is offline or was forced", shown(spec.name))
+        if discarded:
+            LOGGER.info("Discarded %d local actions of the adopted device", discarded)
         # The update listener of the entry reconciles too, once the lock is free, and then finds nothing to do
         await self._async_reconcile_locked()
         if info.native:
@@ -1402,6 +1434,20 @@ class Manager:
         if queue_takeover:
             # The next setup runs the pass for it: the migrate payload, the takeover and the retained clear
             self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
+        return discarded
+
+    async def _async_restore_local_records(self, records: tuple[LocalActionRecord, ...]) -> None:
+        """
+        Put back the record set a failed adoption discarded; the caller holds the lock.
+
+        Memory gets the records back in any case, so the restored mirror keeps its local actions. A failed save is
+        logged by count only: the Store then holds the smaller set until the next saved edit writes the full one.
+        """
+        try:
+            self._local_records = await self._local_store.async_save_records(records)
+        except LocalActionsStoreError:
+            self._local_records = copy_local_records(records)
+            LOGGER.warning("The %d local actions of a failed adoption could not be saved again", len(records))
 
     async def _async_drop_mirror(self, mirror: Device, *, keep_companion: bool = False) -> None:
         """

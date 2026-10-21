@@ -55,6 +55,7 @@ from .const import (
 )
 from .document import escape_markdown
 from .local_actions import LocalActionMode
+from .local_actions_store import LocalActionsStore
 from .manager import (
     LOCAL_ACTION_INVALID_ACTIONS,
     LOCAL_ACTION_INVALID_MODE,
@@ -143,6 +144,8 @@ class MqttActionsConfigFlow(ConfigFlow, domain=DOMAIN):
                 # The same rule the parser applies: a longer name would make every document of this instance unreadable
                 errors[CONF_INSTANCE_NAME] = "instance_name_invalid"
             if not errors:
+                # A leftover local Store of an earlier, removed hub must not reach the new one (D-08, D-02, G-03)
+                await LocalActionsStore(self.hass).async_remove_records()
                 return self.async_create_entry(
                     title=instance_name,
                     data={

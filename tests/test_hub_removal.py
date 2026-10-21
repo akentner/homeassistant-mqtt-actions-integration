@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import probatio
 import pytest
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
@@ -546,4 +546,34 @@ async def test_local_removal_seam_removes_only_the_given_local_key(
 
     # Without the keyword the production local key goes
     await manager_module.async_remove_local_state(hass, entry)
+    assert LOCAL_ACTIONS_STORE_KEY not in hass_storage
+
+
+# ---------------------------------------------------------------------- leftover local actions (Plan 11-16, G-03)
+
+
+async def _submit_new_hub(hass: HomeAssistant) -> dict[str, Any]:
+    """Run the hub user flow with the schema defaults and return the submit result."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    assert result["type"] is FlowResultType.FORM
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    return result
+
+
+async def test_new_hub_never_loads_local_actions_left_by_an_earlier_hub(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any]
+) -> None:
+    """G-03, D-08, D-02: a new hub removes a leftover local Store before its entry exists and starts without it."""
+    _seed_local_store(hass_storage)
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+    result = await _submit_new_hub(hass)
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    entry = result["result"]
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.runtime_data.local_action_counts().devices == 0, (
+        "a new hub must not load the local actions of an earlier, removed hub"
+    )
     assert LOCAL_ACTIONS_STORE_KEY not in hass_storage

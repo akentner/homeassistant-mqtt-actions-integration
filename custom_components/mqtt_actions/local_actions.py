@@ -482,8 +482,10 @@ class BranchOutcome:
     """
     The local outcome of one run of one trigger: identity, status, a bounded error and the run's generation.
 
-    It carries no trace content, no variables and no actions (T-11-08). `label` comes from the broker; a consumer
-    escapes it before it reaches markdown.
+    It carries no trace content, no variables and no actions (T-11-08). `label` and `device_name` come from the broker;
+    a consumer escapes them before they reach markdown. `identity` is the record identity of the trigger, so a consumer
+    can match the outcome to a customization even when the mirror is not registered yet or the option is gone later.
+    Generation 0 marks a failure found while the Script was built, not in a run.
     """
 
     device_id: str
@@ -492,6 +494,8 @@ class BranchOutcome:
     status: OutcomeStatus
     error: str | None
     generation: int
+    identity: LocalActionIdentity | None = None
+    device_name: str = ""
 
 
 def bounded_error(text: str) -> str:
@@ -525,6 +529,11 @@ def summarize_trace(trace: Mapping[str, Iterable[Any]]) -> dict[str, StepTrace]:
 def _under(path: str, prefix: str) -> bool:
     """Return True for the prefix itself and every path below it."""
     return path == prefix or path.startswith(f"{prefix}/")
+
+
+def branch_error(steps: Mapping[str, StepTrace], path: str) -> str | None:
+    """Return the first bounded error recorded at or below a branch path, None when the branch recorded none."""
+    return next((step.error for at, step in steps.items() if step.error is not None and _under(at, path)), None)
 
 
 def reduce_local_outcome(

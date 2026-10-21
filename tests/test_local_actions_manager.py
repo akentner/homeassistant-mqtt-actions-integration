@@ -1045,7 +1045,10 @@ async def test_local_failure_issue_survives_an_orphaned_option_until_its_record_
     await _state(hass, spec.device_id, "cozy", retain=False)
     assert _named_trigger(hass, spec.device_id) == escape_markdown("*Gemütlich*")
 
-    reduced = make_spec(SUBENTRY_SELECT, device_id=spec.device_id, options=[("bright", "Hell", [])])
+    # A Select keeps at least two options, so the owner swaps cozy for party
+    reduced = make_spec(
+        SUBENTRY_SELECT, device_id=spec.device_id, options=[("bright", "Hell", []), ("party", "Party", [])]
+    )
     await deliver_config(hass, spec.device_id, document_payload(reduced, rev=2), retain=False)
     assert [row.present for row in manager.local_action_triggers(spec.device_id) if row.state_value == "cozy"] == [
         False

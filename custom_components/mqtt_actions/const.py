@@ -304,6 +304,9 @@ TRIGGER_SETUP: Final = "setup"
 
 # Repairs issues
 ISSUE_ACTION_FAILED_PREFIX: Final = "action_failed_"
+# Local actions of a mirror have their own failure issue, independent of the owner's (D-18)
+ISSUE_LOCAL_ACTION_FAILED_PREFIX: Final = "local_action_failed_"
+ISSUE_LOCAL_ACTION_FAILED: Final = "local_action_failed"
 ISSUE_CIRCUIT_BREAKER_PREFIX: Final = "circuit_breaker_"
 ISSUE_DOC_OVERWRITTEN_PREFIX: Final = "doc_overwritten_"
 ISSUE_OWNERSHIP_CLAIM_PREFIX: Final = "ownership_claim_"
@@ -345,5 +348,6 @@ ISSUE_DEVICE_PREFIXES: Final = (
     ISSUE_APPROVAL_PREFIX,
     ISSUE_BLOCKED_PREFIX,
     ISSUE_TRANSFERRED_PREFIX,
+    ISSUE_LOCAL_ACTION_FAILED_PREFIX,
 )
 MAX_ISSUE_ERROR_LENGTH: Final = 500

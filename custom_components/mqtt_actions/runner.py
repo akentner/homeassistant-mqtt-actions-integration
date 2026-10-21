@@ -27,7 +27,17 @@ from .const import (
     TRIGGER_SETUP,
 )
 from .document import DocumentRejectedError, analyze_actions, escape_markdown
-from .local_actions import LOCAL_SAFE_POLICY, BranchOutcome, effective_policy, reduce_local_outcome, summarize_trace
+from .local_actions import (
+    LOCAL_SAFE_POLICY,
+    BranchOutcome,
+    OutcomeStatus,
+    bounded_error,
+    branch_error,
+    effective_policy,
+    local_trigger_identity,
+    reduce_local_outcome,
+    summarize_trace,
+)
 from .trust import DeniedServiceCallError, guard_actions
 
 if TYPE_CHECKING:
@@ -64,6 +74,24 @@ def _replace_at(node: Any, parts: list[str], replace: Callable[[Any], Any]) -> A
         index = int(head)
         return [*node[:index], _replace_at(node[index], rest, replace), *node[index + 1 :]]
     return {**node, head: _replace_at(node[head], rest, replace)}
+
+
+def _owner_error(plan: EffectiveTriggerPlan | None, trace: dict[str, Any] | None, err: Exception) -> str | None:
+    """
+    Return the error text of a failed run for the owner issue, None when the run failed only in its local branch.
+
+    Without a local branch every exception is the owner's, as before. With one, the trace decides (D-18): an error under
+    the owner path is the owner's, an exception with errors only under the local path is reported by the local outcome,
+    and anything the trace cannot place (the dispatcher itself) stays a device failure.
+    """
+    if plan is None or trace is None or plan.local_path is None:
+        return str(err)
+    steps = summarize_trace(trace)
+    if plan.owner_path is not None and (owner := branch_error(steps, plan.owner_path)) is not None:
+        return owner
+    if branch_error(steps, plan.local_path) is not None:
+        return None
+    return str(err)
 
 
 class ActionRunner:
@@ -215,12 +243,21 @@ class ActionRunner:
             try:
                 await async_validate_actions(self._hass, plan.local_actions)
             except ActionsInvalid as err:
-                # Local actions are validated when they are saved; this only catches what changed since then
-                LOGGER.error(
-                    "Invalid local actions for %s of device %s: %s",
-                    plan.label,
-                    spec.name,
-                    str(err)[:MAX_ISSUE_ERROR_LENGTH],
+                # Local actions are validated when they are saved; this only catches what changed since then. It is a
+                # local failure of the trigger, never an owner setup error (D-18)
+                error = bounded_error(str(err))
+                LOGGER.error("Invalid local actions for %s of device %s: %s", plan.label, spec.name, error)
+                self._emit_local(
+                    BranchOutcome(
+                        spec.device_id,
+                        plan.trigger_key,
+                        plan.label,
+                        OutcomeStatus.FAILURE,
+                        error,
+                        0,
+                        identity=local_trigger_identity(plan.device_id, plan.kind, plan.state_value),
+                        device_name=spec.name,
+                    )
                 )
                 local = False
         return plan.restricted_to(owner=owner, local=local)
@@ -430,12 +467,16 @@ class ActionRunner:
             self.report_denied(device_id, device_name, trigger_label, err.service)
         except Exception as err:  # noqa: BLE001
             ran = True
-            # Only device and trigger names are logged, never the action data (T-01-10)
-            LOGGER.exception("Actions for %s of device %s failed", trigger_label, device_name)
-            self.report_failure(device_id, device_name, trigger_label, str(err), escape=restricted)
+            # An exception the local branch forwarded is reported by the local outcome, never as an owner failure
+            if (owner_error := _owner_error(local_plan, trace, err)) is not None:
+                # Only device and trigger names are logged, never the action data (T-01-10)
+                LOGGER.exception("Actions for %s of device %s failed", trigger_label, device_name)
+                self.report_failure(device_id, device_name, trigger_label, owner_error, escape=restricted)
         else:
             ran = result is not None
-            if result is not None and self._generation.get(device_id) == generation:
+            # Only a run the owner branch took part in can clear the owner issue; a local-only run proves nothing
+            owner_ran = local_plan is None or local_plan.owner_path is not None
+            if result is not None and owner_ran and self._generation.get(device_id) == generation:
                 self.clear_issue(device_id)
         finally:
             # Also on cancellation: a local error recorded before a restart or unload is still a local failure
@@ -447,19 +488,34 @@ class ActionRunner:
                     and self._stops.get(device_id, 0) == stops
                     and not self._hass.is_stopping
                 )
-                self._deliver_local_outcome(local_plan, trace, generation=generation, proven=proven)
+                self._deliver_local_outcome(
+                    local_plan, trace, generation=generation, proven=proven, device_name=device_name
+                )
 
     def _deliver_local_outcome(
-        self, plan: EffectiveTriggerPlan, trace: dict[str, Any], *, generation: int, proven: bool
+        self, plan: EffectiveTriggerPlan, trace: dict[str, Any], *, generation: int, proven: bool, device_name: str
     ) -> None:
         """Reduce the run's trace to one BranchOutcome, discard the trace and hand the outcome to the listener."""
         steps = summarize_trace(trace)
         trace.clear()
         status, error = reduce_local_outcome(plan, steps, proven=proven)
-        if self.on_local_outcome is not None:
-            self.on_local_outcome(
-                BranchOutcome(plan.device_id, plan.trigger_key, plan.label, status, error, generation)
+        self._emit_local(
+            BranchOutcome(
+                plan.device_id,
+                plan.trigger_key,
+                plan.label,
+                status,
+                error,
+                generation,
+                identity=local_trigger_identity(plan.device_id, plan.kind, plan.state_value),
+                device_name=device_name,
             )
+        )
+
+    def _emit_local(self, outcome: BranchOutcome) -> None:
+        """Hand one local outcome to the listener, if one is attached."""
+        if self.on_local_outcome is not None:
+            self.on_local_outcome(outcome)
 
     def report_failure(
         self, device_id: str, device_name: str, trigger: str, error: str, *, escape: bool = False

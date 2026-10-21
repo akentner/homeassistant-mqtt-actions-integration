@@ -26,6 +26,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
 from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
 
 from . import takeover
 from .actions import ActionsInvalid, async_validate_actions, validate_spec_structure
@@ -52,11 +53,15 @@ from .const import (
     ISSUE_DISCOVERY_DISABLED,
     ISSUE_DUPLICATE_INSTANCE_ID,
     ISSUE_KEPT_DUPLICATES,
+    ISSUE_LOCAL_ACTION_FAILED,
+    ISSUE_LOCAL_ACTION_FAILED_PREFIX,
     ISSUE_NATIVE_CUTOVER_WAITING,
     LOCAL_ACTIONS_STORE_KEY,
     LOGGER,
+    MAX_ISSUE_ERROR_LENGTH,
     MAX_LOGGED_PAYLOAD_LENGTH,
     MAX_MIRRORS,
+    MAX_TEXT_LENGTH,
     MAX_TRANSFER_HISTORY,
     MODE_DISABLED,
     MODE_OBSERVE,
@@ -100,12 +105,14 @@ from .document import (
 from .entities import device_info_for
 from .local_actions import (
     LOCAL_SAFE_POLICY,
+    BranchOutcome,
     LocalActionCounts,
     LocalActionIdentity,
     LocalActionMode,
     LocalActionRecord,
     LocalActionRecordInvalid,
     LocalMatch,
+    OutcomeStatus,
     build_effective_trigger_plans,
     copy_local_records,
     effective_policy,
@@ -592,6 +599,7 @@ class Manager:
         self._lock = asyncio.Lock()
         self.gateway = gateway if gateway is not None else MqttGateway(hass)
         self.runner = ActionRunner(hass, entry)
+        self.runner.on_local_outcome = self.async_report_local_outcome
         self.devices: dict[str, Device] = {}
         # Read-only mirrors of devices other instances own; never in `devices`, never a subentry (D-08)
         self.mirrors: dict[str, Device] = {}
@@ -1717,7 +1725,76 @@ class Manager:
             if self._local_record(identity) is None:
                 raise LocalActionError(LOCAL_ACTION_STALE_TARGET)
             await self._async_commit_local_records(self._local_candidate(identity, None), identity.device_id)
+            self.async_clear_local_failure_for_removed_trigger(identity)
             return LocalActionChange(identity, None, active=False)
+
+    @callback
+    def async_report_local_outcome(self, outcome: BranchOutcome) -> None:
+        """
+        Turn the local outcome of one run, or of a build, into the local failure issue of its device (D-18, D-19).
+
+        A failure creates or updates the one issue of the device: it names the latest failed local trigger and its
+        bounded error. Only a proven success of exactly that trigger clears it; no success, a success of another
+        trigger and every owner result leave it alone (T-11-21). A failure whose customization is gone by now is
+        dropped, because nothing could ever clear it.
+        """
+        if (identity := outcome.identity) is None:
+            return
+        if outcome.status is OutcomeStatus.FAILURE:
+            if self._local_record(identity) is None:
+                return
+            error = (outcome.error or "")[:MAX_ISSUE_ERROR_LENGTH]
+            LOGGER.error(
+                "Local actions for %s of device %s failed: %s",
+                shown(outcome.label),
+                shown(outcome.device_name),
+                shown(error),
+            )
+            self._create_local_failure_issue(identity, outcome.device_name, outcome.label, error)
+        elif outcome.status is OutcomeStatus.SUCCESS and self._local_failure_identity(identity.device_id) == identity:
+            ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{identity.device_id}")
+
+    @callback
+    def async_clear_local_failure_for_removed_trigger(self, identity: LocalActionIdentity) -> None:
+        """Delete the local failure issue when it names the trigger whose customization was just removed (D-19)."""
+        if self._local_failure_identity(identity.device_id) == identity:
+            ir.async_delete_issue(self._hass, DOMAIN, f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{identity.device_id}")
+
+    def _create_local_failure_issue(
+        self, identity: LocalActionIdentity, device_name: str, label: str, error: str
+    ) -> None:
+        """
+        Create or update the local failure issue of a device; a dismissed issue stays dismissed, like the owner's.
+
+        Every placeholder comes from the broker or from a run, so each is cut and escaped (T-11-23); no action, trace
+        or variable is part of it. The issue data keeps the identity of the named trigger, so a later success or
+        removal can be matched after a reload of the integration.
+        """
+        ir.async_create_issue(
+            self._hass,
+            DOMAIN,
+            f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{identity.device_id}",
+            data={"kind": identity.kind, "state_value": identity.state_value},
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key=ISSUE_LOCAL_ACTION_FAILED,
+            translation_placeholders={
+                "device": escape_markdown(device_name[:MAX_TEXT_LENGTH]),
+                "trigger": escape_markdown(label[:MAX_TEXT_LENGTH]),
+                "time": dt_util.now().replace(microsecond=0).isoformat(),
+                "error": escape_markdown(error[:MAX_ISSUE_ERROR_LENGTH]),
+            },
+        )
+
+    def _local_failure_identity(self, device_id: str) -> LocalActionIdentity | None:
+        """Return the identity of the trigger the local failure issue of a device names, None without one."""
+        issue = ir.async_get(self._hass).async_get_issue(DOMAIN, f"{ISSUE_LOCAL_ACTION_FAILED_PREFIX}{device_id}")
+        if issue is None or issue.data is None:
+            return None
+        kind, state_value = issue.data.get("kind"), issue.data.get("state_value")
+        if not isinstance(kind, str) or not isinstance(state_value, str):
+            return None
+        return LocalActionIdentity(device_id, kind, state_value)
 
     def _checked_local_identity(self, identity: LocalActionIdentity) -> LocalActionIdentity:
         """Return the identity with its StateValue normalized; raise LocalActionError while not running."""

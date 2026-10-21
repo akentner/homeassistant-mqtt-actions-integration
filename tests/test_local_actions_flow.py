@@ -7,6 +7,7 @@ draft that is never confirmed never reaches the Manager.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
 TRANSLATIONS = Path(__file__).parent.parent / "custom_components" / DOMAIN / "translations"
 LOCAL_ON = [{"action": "test.local_on", "data": {"source": "local"}}]
 ADDITIONAL_EN = "additional to the owner actions"
+VARIABLE = re.compile(r"\{(\w+)\}")
 
 
 def _flat(language: str) -> dict[str, str]:
@@ -61,10 +63,14 @@ def _assert_translated(result: dict[str, Any]) -> None:
             else:
                 keys.append(f"{step}.data.{key.schema}")
     keys.extend(f"options.error.{error}" for error in (result.get("errors") or {}).values())
+    supplied = set(result.get("description_placeholders") or {})
     for language in ("en", "de"):
         flat = _flat(language)
         missing = [key for key in keys if not flat.get(key)]
         assert missing == [], f"{language} lacks {missing}"
+        # A variable the flow does not supply would be shown raw, as {name}
+        unsupplied = {key: VARIABLE.findall(flat[key]) for key in keys if set(VARIABLE.findall(flat[key])) - supplied}
+        assert unsupplied == {}, f"{language} texts use variables the flow does not supply: {unsupplied}"
 
 
 def _options(result: dict[str, Any], field: str) -> dict[str, str]:

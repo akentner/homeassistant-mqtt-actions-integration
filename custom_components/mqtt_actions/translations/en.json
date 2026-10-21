@@ -370,6 +370,10 @@
       "title": "An action failed",
       "description": "The actions for {trigger} of {device} failed at {time}: {error}"
     },
+    "local_action_failed": {
+      "title": "Local actions failed",
+      "description": "The local actions for {trigger} of {device} failed at {time}: {error}\n\nOnly the local actions of this instance are affected, not the owner actions and not other instances. The issue names the latest local trigger that failed. It disappears when the local actions of that trigger run successfully, or when you remove its local customization in the options of MQTT Actions."
+    },
     "mqtt_discovery_disabled": {
       "title": "MQTT discovery is disabled",
       "description": "MQTT Actions creates its entities through MQTT discovery, but discovery is disabled in the MQTT integration. No entity of MQTT Actions appears until discovery is enabled again in the MQTT integration options."
@@ -412,7 +416,7 @@
         "step": {
           "confirm": {
             "title": "Approve the actions of a device from another instance",
-            "description": "You are about to approve the device **{device}** from the instance **{owner}**.\n\nThe actions below run on this Home Assistant instance, with its full access, whenever the state of the device changes. If run on startup is true, they also run on the first state received after every start of Home Assistant, every reload of the integration and every reconnect to the broker.\n\nRun on startup: **{startup}**\n\nRun mode: **{run_mode}**. The circuit breaker pauses the device after more than **{breaker_max_runs}** runs within **{breaker_window}** seconds. The run mode and both limits are part of this approval, and a change of any of them asks for approval again.\n\n```yaml\n{actions}\n```\n\nTemplated service names (the real service is only known when the action runs):\n\n{templated}\n\nSteps that call scripts, automations, scenes, buttons, device actions or events, or turn something on or off generically (these are not restricted):\n\n{residual}\n\nTriggers whose actions do not validate on this instance:\n\n{invalid}\n\nThis approval is bound to the hash {hash}. It lapses when the owner changes the actions, and you are asked again. Nothing runs until you submit."
+            "description": "You are about to approve the device **{device}** from the instance **{owner}**.\n\nThe actions below run on this Home Assistant instance, with its full access, whenever the state of the device changes. If run on startup is true, they also run on the first state received after every start of Home Assistant, every reload of the integration and every reconnect to the broker.\n\nRun on startup: **{startup}**\n\nRun mode: **{run_mode}**. The circuit breaker pauses the device after more than **{breaker_max_runs}** runs within **{breaker_window}** seconds. The run mode and both limits are part of this approval, and a change of any of them asks for approval again.\n\n```yaml\n{actions}\n```\n\nTemplated service names (the real service is only known when the action runs):\n\n{templated}\n\nSteps that call scripts, automations, scenes, buttons, device actions or events, or turn something on or off generically (these are not restricted):\n\n{residual}\n\nTriggers whose actions do not validate on this instance:\n\n{invalid}\n\nLocal actions on this instance: **{replaced}** triggers of this device are replaced locally, so their owner actions do not run here even after the approval. Local actions need no approval and may already run on this instance. This approval concerns only the owner actions shown above: it changes no local action, and a local replacement never approves the owner actions.\n\nThis approval is bound to the hash {hash}. It lapses when the owner changes the actions, and you are asked again. The owner actions do not run until you submit."
           }
         },
         "abort": {

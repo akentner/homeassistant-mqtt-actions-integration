@@ -193,6 +193,16 @@ error, and there is one issue per device. **Why:** an action raised an error, fo
 exists. **What to do:** read the error, correct the actions of the device, and the issue disappears after the next
 successful run. The log has more detail.
 
+### `local_action_failed`
+
+**Meaning:** the local actions of a trigger of a mirrored device failed on this instance. There is one issue per
+device, next to and independent of `action_failed`. It names the latest local trigger that failed, the time and the
+error. **Why:** a local action raised an error, for example an entity that does not exist on this instance. The owner
+actions and other instances are not affected. **What to do:** open the options of MQTT Actions, choose Local actions,
+the device and the trigger, and correct its local actions. The issue disappears when that trigger's local actions run
+successfully, or when you remove its local customization. A success of another trigger or of the owner actions does
+not clear it. Removing the device deletes the issue with the device.
+
 ### `mqtt_discovery_disabled`
 
 **Meaning:** this instance still needs MQTT discovery, but discovery is disabled in the MQTT integration. That is the

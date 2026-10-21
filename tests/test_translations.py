@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from custom_components.mqtt_actions.config_flow import LOCAL_STATUS_MARKERS
 from custom_components.mqtt_actions.const import DOMAIN
 
 TRANSLATIONS_DIR = Path(__file__).parent.parent / "custom_components" / DOMAIN / "translations"
@@ -53,6 +54,7 @@ NEW_ISSUES = {
     "denied_service_call": {"device", "trigger", "service"},
     "native_cutover_waiting": {"instances"},
     "kept_duplicates": {"count", "customized", "rejected"},
+    "local_action_failed": {"device", "trigger", "time", "error"},
 }
 
 # Fixable issues show their text in the confirm step of the fix flow (hassfest rejects an issue-level description next
@@ -70,6 +72,7 @@ FIXABLE_ISSUES = {
         "templated",
         "residual",
         "invalid",
+        "replaced",
     },
     "duplicate_instance_id": {"instance", "devices"},
     "transferred": {"device", "claimant"},
@@ -112,9 +115,22 @@ FIXABLE_WORDING = {
         "en": ("adopted the device", "stopped publishing"),
         "de": ("übernommen", "aufgehört"),
     },
+    # D-17: local actions may already run, and the approval concerns the owner actions only
     "approval_required": {
-        "en": ("Nothing runs until you submit", "bound to the hash"),
-        "de": ("Es läuft nichts, bis du bestätigst", "an den Hash"),
+        "en": (
+            "The owner actions do not run until you submit",
+            "bound to the hash",
+            "may already run",
+            "concerns only the owner actions",
+            "a local replacement never approves the owner actions",
+        ),
+        "de": (
+            "Die Aktionen der Besitzerin laufen nicht, bis du bestätigst",
+            "an den Hash",
+            "können bereits laufen",
+            "gilt ausschließlich für die Aktionen der Besitzerin",
+            "eine lokale Ersetzung gibt die Aktionen der Besitzerin nie frei",
+        ),
     },
 }
 
@@ -128,6 +144,18 @@ ESCAPED_FLOW_PLACEHOLDERS = {
     "config_subentries.select.step.remove_confirm.description": ("friendly_name", "state_value"),
     f"{DUPLICATE_FLOW}.step.confirm.description": ("instance",),
     f"{TRANSFERRED_FLOW}.step.confirm.description": ("device", "claimant"),
+    "options.step.local_actions_device.title": ("device",),
+    "options.step.local_actions_device.description": ("device",),
+    "options.step.local_actions_edit.title": ("trigger",),
+    **{
+        f"options.step.{step}.description": ("device", "trigger", "state_value")
+        for step in (
+            "local_actions_trigger",
+            "local_actions_edit",
+            "local_actions_confirm_mute",
+            "local_actions_confirm_remove",
+        )
+    },
 }
 MARKDOWN_CONTROL = r"\\`*_\[\]<>|~#"
 
@@ -387,7 +415,9 @@ def test_issue_strings_use_expected_variables(language: str) -> None:
         "templated",
         "residual",
         "invalid",
+        "replaced",
     }
+    assert _variables(flat["issues.local_action_failed.description"]) == {"device", "trigger", "time", "error"}
     assert _variables(flat["issues.mirror_blocked.description"]) == {"device", "owner", "services"}
     assert _variables(flat["issues.denied_service_call.description"]) == {"device", "trigger", "service"}
 
@@ -590,3 +620,106 @@ def test_fixable_issue_text_keeps_its_explanation(language: str) -> None:
         if phrase not in flat[f"issues.{issue}.fix_flow.step.confirm.description"]
     ]
     assert missing == []
+
+
+# The hub options steps (Plan 11-08): a menu of the settings and the local actions editor of mirrored devices
+OPTION_STEPS = {
+    "init",
+    "settings",
+    "local_actions",
+    "local_actions_device",
+    "local_actions_trigger",
+    "local_actions_edit",
+    "local_actions_confirm_mute",
+    "local_actions_confirm_remove",
+}
+# Step text -> the variables the flow supplies for it
+LOCAL_OPTION_TEXTS = {
+    "options.step.init.title": set(),
+    "options.step.init.description": set(),
+    "options.step.init.menu_options.settings": set(),
+    "options.step.init.menu_options.local_actions": set(),
+    "options.step.local_actions.title": set(),
+    "options.step.local_actions.description": set(),
+    "options.step.local_actions.data.device": set(),
+    "options.step.local_actions_device.title": {"device"},
+    "options.step.local_actions_device.description": {"device"},
+    "options.step.local_actions_device.data.trigger": set(),
+    "options.step.local_actions_trigger.title": set(),
+    "options.step.local_actions_trigger.description": {"device", "trigger", "state_value"},
+    **{
+        f"options.step.local_actions_trigger.menu_options.{option}": set()
+        for option in ("local_actions_edit", "local_actions_confirm_remove", "local_actions_device")
+    },
+    "options.step.local_actions_edit.title": {"trigger"},
+    "options.step.local_actions_edit.description": {"device", "trigger", "state_value"},
+    **{
+        f"options.step.local_actions_edit.sections.local_actions.{key}": set()
+        for key in ("name", "description", "data.mode", "data.actions", "data_description.mode")
+    },
+    "options.step.local_actions_confirm_mute.title": set(),
+    "options.step.local_actions_confirm_mute.description": {"device", "trigger", "state_value"},
+    **{
+        f"options.step.local_actions_confirm_mute.menu_options.{option}": set()
+        for option in ("local_actions_mute_confirmed", "local_actions_edit", "local_actions_device")
+    },
+    "options.step.local_actions_confirm_remove.title": set(),
+    "options.step.local_actions_confirm_remove.description": {"device", "trigger", "state_value"},
+    **{
+        f"options.step.local_actions_confirm_remove.menu_options.{option}": set()
+        for option in ("local_actions_remove_confirmed", "local_actions_device")
+    },
+    "options.error.not_loaded": set(),
+    "options.error.stale_target": set(),
+    "options.error.invalid_mode": set(),
+    "options.error.invalid_local_actions": {"error"},
+    "options.error.save_failed": set(),
+    "options.abort.not_loaded": set(),
+    "options.abort.no_local_devices": set(),
+    "selector.local_mode.options.additive": set(),
+    "selector.local_mode.options.replacement": set(),
+    **{f"selector.local_trigger_status.options.{marker}": set() for marker in LOCAL_STATUS_MARKERS},
+}
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_local_actions_option_texts_exist_with_the_supplied_variables(language: str) -> None:
+    """Every text of the local actions editor exists and uses exactly the variables the flow supplies (MIR-15)."""
+    flat = _load(language)
+    missing = [key for key in LOCAL_OPTION_TEXTS if not flat.get(key)]
+    assert missing == []
+    wrong = {
+        key: _variables(flat[key])
+        for key, variables in LOCAL_OPTION_TEXTS.items()
+        if _variables(flat[key]) != variables
+    }
+    assert wrong == {}
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_option_keys_are_fixed_words_never_broker_text(language: str) -> None:
+    """Step ids and marker keys are fixed: no StateValue or label of a device ever becomes a translation key."""
+    raw = _raw(language)
+    assert set(raw["options"]["step"]) == OPTION_STEPS
+    assert set(raw["selector"]["local_trigger_status"]["options"]) == set(LOCAL_STATUS_MARKERS)
+    assert set(raw["selector"]["local_mode"]["options"]) == {"additive", "replacement"}
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_mute_and_removal_texts_say_what_they_do(language: str) -> None:
+    """D-14, D-15: the mute confirmation says nothing runs here and is not a removal; removal restores the owner."""
+    flat = _load(language)
+    mute = flat["options.step.local_actions_confirm_mute.description"]
+    remove = flat["options.step.local_actions_confirm_remove.description"]
+    phrases = {
+        "en": (
+            ("executes no actions on this instance", "neither approves nor rejects"),
+            ("runs only the owner actions",),
+        ),
+        "de": (
+            ("keine Aktionen mehr aus", "weder frei, noch lehnt es sie ab"),
+            ("wieder nur die Aktionen der Besitzerin",),
+        ),
+    }[language]
+    assert all(phrase in mute for phrase in phrases[0])
+    assert all(phrase in remove for phrase in phrases[1])

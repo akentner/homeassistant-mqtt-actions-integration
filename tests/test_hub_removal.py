@@ -33,7 +33,7 @@ from custom_components.mqtt_actions.const import (
     STORE_PUBLISHED,
     STORE_VERSION,
 )
-from custom_components.mqtt_actions.local_actions_store import LocalActionsStoreError
+from custom_components.mqtt_actions.local_actions_store import LocalActionsStore, LocalActionsStoreError
 from custom_components.mqtt_actions.topics import availability_topic, config_topic, discovery_topic, state_topic
 from tests.documents import document_payload, make_spec
 from tests.fake_broker import FakeBroker, FakeGateway
@@ -577,3 +577,47 @@ async def test_new_hub_never_loads_local_actions_left_by_an_earlier_hub(
         "a new hub must not load the local actions of an earlier, removed hub"
     )
     assert LOCAL_ACTIONS_STORE_KEY not in hass_storage
+
+
+def _local_store_bytes(hass_storage: dict[str, Any]) -> str:
+    """Return the stored local Store envelope as a canonical JSON string."""
+    return json.dumps(hass_storage[LOCAL_ACTIONS_STORE_KEY], sort_keys=True)
+
+
+async def test_new_hub_flow_never_removes_the_local_actions_of_an_existing_hub(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """T-11-45: a hub that appears between flow start and submit keeps its local Store; the flow aborts first."""
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    assert result["type"] is FlowResultType.FORM
+    make_hub_entry().add_to_hass(hass)
+    _seed_local_store(hass_storage)
+    before = _local_store_bytes(hass_storage)
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "single_instance_allowed"
+    assert LOCAL_ACTIONS_STORE_KEY in hass_storage, "a hub flow must never remove the local actions of an existing hub"
+    assert _local_store_bytes(hass_storage) == before
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
+async def test_new_hub_flow_shows_an_error_when_leftover_local_actions_cannot_be_removed(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any]
+) -> None:
+    """T-11-44, D-06: a failed removal creates no hub and shows the translated base error, so the user can retry."""
+    _seed_local_store(hass_storage)
+    before = _local_store_bytes(hass_storage)
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+
+    with patch.object(LocalActionsStore, "async_remove_records", side_effect=LocalActionsStoreError("disk")):
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"base": "local_actions_not_removed"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+    assert _local_store_bytes(hass_storage) == before

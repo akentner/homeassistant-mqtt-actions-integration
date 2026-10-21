@@ -280,6 +280,7 @@
         "description": "{trigger} ({state_value}) von {device} hat auf dieser Instanz eine lokale Anpassung.",
         "menu_options": {
           "local_actions_edit": "Modus und lokale Aktionen bearbeiten",
+          "local_actions_confirm_remove": "Lokale Anpassung entfernen",
           "local_actions_device": "Zurück zu den Auslösern"
         }
       },
@@ -298,6 +299,23 @@
               "mode": "Lokale Aktionen geben die Aktionen der Besitzerin nie frei: Diese behalten auf dieser Instanz ihre eigene Freigabe."
             }
           }
+        }
+      },
+      "local_actions_confirm_mute": {
+        "title": "Diesen Auslöser auf dieser Instanz stummschalten?",
+        "description": "Mit „Statt der Aktionen der Besitzerin“ und ohne lokale Aktionen führt {trigger} ({state_value}) von {device} auf dieser Instanz keine Aktionen mehr aus: weder die Aktionen der Besitzerin noch lokale Aktionen. Andere Instanzen sind nicht betroffen.\n\nDas Stummschalten gibt die Aktionen der Besitzerin weder frei, noch lehnt es sie ab: Ihre Freigabe auf dieser Instanz bleibt, wie sie ist. Stummschalten ist nicht dasselbe wie das Entfernen der lokalen Anpassung, nach dem der Auslöser wieder die Aktionen der Besitzerin ausführt.",
+        "menu_options": {
+          "local_actions_mute_confirmed": "Auslöser auf dieser Instanz stummschalten",
+          "local_actions_edit": "Zurück zum Bearbeiten",
+          "local_actions_device": "Diese Änderung verwerfen"
+        }
+      },
+      "local_actions_confirm_remove": {
+        "title": "Lokale Anpassung entfernen?",
+        "description": "Damit werden der Modus und die lokalen Aktionen von {trigger} ({state_value}) von {device} auf dieser Instanz gelöscht. Der Auslöser führt danach wieder nur die Aktionen der Besitzerin aus, und nur solange sie auf dieser Instanz freigegeben sind.\n\nSoll der Auslöser stattdessen still bleiben, bearbeite ihn und wähle „Statt der Aktionen der Besitzerin“ ohne Aktionen.",
+        "menu_options": {
+          "local_actions_remove_confirmed": "Lokale Anpassung entfernen",
+          "local_actions_device": "Behalten"
         }
       }
     },
@@ -459,7 +477,11 @@
     "local_trigger_status": {
       "options": {
         "additive": "zusätzlich zu den Aktionen der Besitzerin",
-        "replacement": "statt der Aktionen der Besitzerin"
+        "replacement": "statt der Aktionen der Besitzerin",
+        "muted": "lokal stummgeschaltet",
+        "orphan": "bei der Besitzerin nicht mehr vorhanden",
+        "kind_mismatch": "inaktiv, für einen anderen Gerätetyp gespeichert",
+        "no_mirror": "inaktiv, derzeit auf dieser Instanz nicht gespiegelt"
       }
     }
   },

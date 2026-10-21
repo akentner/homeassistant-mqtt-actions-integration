@@ -92,7 +92,7 @@ CONF_LOCAL_ACTIONS = "actions"
 # Translation keys of the mode selector and of the direct markers of a trigger label (D-16)
 LOCAL_MODE_TRANSLATION_KEY = "local_mode"
 LOCAL_STATUS_TRANSLATION_KEY = "local_trigger_status"
-LOCAL_STATUS_MARKERS: tuple[str, ...] = ("additive", "replacement")
+LOCAL_STATUS_MARKERS: tuple[str, ...] = ("additive", "replacement", "muted", "orphan", "kind_mismatch", "no_mirror")
 # Separator between the identifying part of a picker label and its markers
 LABEL_SEPARATOR = " — "
 
@@ -289,7 +289,12 @@ class HubOptionsFlow(OptionsFlow):
             return self.async_abort(reason="not_loaded")
         if self._local_device is None:
             return await self.async_step_local_actions()
-        rows = manager.local_action_triggers(self._local_device.device_id)
+        # Read again: the device may have gained or lost its mirror since it was chosen
+        device_id = self._local_device.device_id
+        self._local_device = next(
+            (device for device in manager.local_action_devices() if device.device_id == device_id), None
+        )
+        rows = manager.local_action_triggers(device_id) if self._local_device is not None else ()
         if not rows:
             return await self.async_step_local_actions()
         self._local_target = None
@@ -336,7 +341,7 @@ class HubOptionsFlow(OptionsFlow):
             return await self.async_step_local_actions_device()
         return self.async_show_menu(
             step_id="local_actions_trigger",
-            menu_options=["local_actions_edit", "local_actions_device"],
+            menu_options=["local_actions_edit", "local_actions_confirm_remove", "local_actions_device"],
             description_placeholders=self._target_placeholders(),
         )
 
@@ -356,7 +361,74 @@ class HubOptionsFlow(OptionsFlow):
             CONF_LOCAL_MODE: values.get(CONF_LOCAL_MODE, str(LocalActionMode.ADDITIVE)),
             CONF_LOCAL_ACTIONS: copy.deepcopy(values.get(CONF_LOCAL_ACTIONS) or []),
         }
+        if (
+            self._local_draft[CONF_LOCAL_MODE] == LocalActionMode.REPLACEMENT
+            and not self._local_draft[CONF_LOCAL_ACTIONS]
+        ):
+            # Instead of with no actions mutes the trigger here; that needs its own confirmation (D-15)
+            return await self.async_step_local_actions_confirm_mute()
         return await self._async_save_local(self._local_draft[CONF_LOCAL_MODE], self._local_draft[CONF_LOCAL_ACTIONS])
+
+    async def async_step_local_actions_confirm_mute(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002
+    ) -> ConfigFlowResult:
+        """
+        Ask before an empty replacement is saved: the trigger then runs no action at all on this instance (D-15).
+
+        This is not the removal: removing restores the owner actions, muting suppresses them here. Going back to the
+        editor keeps the draft; going back to the triggers drops it. Nothing is saved before the confirmation.
+        """
+        if self._local_target is None or self._local_draft is None:
+            return await self.async_step_local_actions_device()
+        return self.async_show_menu(
+            step_id="local_actions_confirm_mute",
+            menu_options=["local_actions_mute_confirmed", "local_actions_edit", "local_actions_device"],
+            description_placeholders=self._target_placeholders(),
+        )
+
+    async def async_step_local_actions_mute_confirmed(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002
+    ) -> ConfigFlowResult:
+        """Save the confirmed mute: a replacement without local actions."""
+        if self._local_target is None or self._local_draft is None:
+            return await self.async_step_local_actions_device()
+        return await self._async_save_local(str(LocalActionMode.REPLACEMENT), [])
+
+    async def async_step_local_actions_confirm_remove(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002
+    ) -> ConfigFlowResult:
+        """Ask before the local customization is removed; this restores the owner actions, subject to approval."""
+        if self._local_target is None or self._local_target.record is None:
+            return await self.async_step_local_actions_device()
+        return self.async_show_menu(
+            step_id="local_actions_confirm_remove",
+            menu_options=["local_actions_remove_confirmed", "local_actions_device"],
+            description_placeholders=self._target_placeholders(),
+        )
+
+    async def async_step_local_actions_remove_confirmed(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002
+    ) -> ConfigFlowResult:
+        """Remove the local customization through the Manager and return to the trigger selection."""
+        target = self._local_target
+        if target is None:
+            return await self.async_step_local_actions_device()
+        if (manager := self._local_manager()) is None:
+            return self.async_abort(reason="not_loaded")
+        try:
+            await manager.async_remove_local_action(target.identity)
+        except LocalActionError as err:
+            rows = manager.local_action_triggers(target.identity.device_id)
+            if not rows:
+                return await self.async_step_local_actions()
+            self._local_target = None
+            error = LOCAL_ERRORS.get(err.reason, LOCAL_ERRORS[LOCAL_ACTION_SAVE_FAILED])
+            return await self._async_show_trigger_picker(rows, {"base": error})
+        return await self.async_step_local_actions_device()
 
     async def _async_save_local(self, mode: str, actions: list[dict[str, Any]]) -> ConfigFlowResult:
         """Save the draft through the Manager; back to the trigger selection, or the editor with a base error."""
@@ -447,19 +519,38 @@ class HubOptionsFlow(OptionsFlow):
         return {marker: translations.get(prefix + marker, marker) for marker in LOCAL_STATUS_MARKERS}
 
     @staticmethod
-    def _device_label(device: LocalActionDevice, texts: Mapping[str, str]) -> str:  # noqa: ARG004
-        """Return the label of a device: its name, or its id while only records know it."""
-        return device.name or device.device_id
+    def _device_label(device: LocalActionDevice, texts: Mapping[str, str]) -> str:
+        """Return the label of a device: its name, or its id and a marker while only saved records know it."""
+        if device.mirrored:
+            return device.name or device.device_id
+        return LABEL_SEPARATOR.join((device.device_id, texts["no_mirror"]))
 
-    @staticmethod
-    def _trigger_label(row: LocalActionTrigger, texts: Mapping[str, str]) -> str:
-        """Return friendly name and StateValue of a trigger, followed by its direct mode marker (D-11, D-16)."""
+    def _trigger_label(self, row: LocalActionTrigger, texts: Mapping[str, str]) -> str:
+        """
+        Return friendly name and StateValue of a trigger, then its direct markers (D-11, D-12, D-16).
+
+        The first marker is the local mode: additional, instead of the owner actions, or muted for an empty
+        replacement. An inactive record adds why it is inactive: its option is gone from the owner, it was saved for
+        the other device kind, or the device is not mirrored right now. An inactive record never runs.
+        """
         name = row.label
-        if row.label.strip().lower() != row.state_value.strip().lower():
+        # A Switch trigger is named by its StateValue; showing it twice adds nothing
+        if row.label != row.state_value:
             name = f"{row.label} ({row.state_value})"
         markers: list[str] = []
         if row.record is not None:
-            markers.append(texts[str(row.record.mode)])
+            if row.record.mode is LocalActionMode.REPLACEMENT and not row.record.actions:
+                markers.append(texts["muted"])
+            else:
+                markers.append(texts[str(row.record.mode)])
+        if not row.present:
+            device = self._local_device
+            if device is None or not device.mirrored:
+                markers.append(texts["no_mirror"])
+            elif row.identity.kind != device.kind:
+                markers.append(texts["kind_mismatch"])
+            else:
+                markers.append(texts["orphan"])
         return LABEL_SEPARATOR.join((name, *markers))
 
 

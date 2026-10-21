@@ -280,6 +280,7 @@
         "description": "{trigger} ({state_value}) of {device} has a local customization on this instance.",
         "menu_options": {
           "local_actions_edit": "Edit the mode and the local actions",
+          "local_actions_confirm_remove": "Remove local customization",
           "local_actions_device": "Back to the triggers"
         }
       },
@@ -298,6 +299,23 @@
               "mode": "Local actions never approve the owner actions: the owner actions keep their own approval on this instance."
             }
           }
+        }
+      },
+      "local_actions_confirm_mute": {
+        "title": "Mute this trigger on this instance?",
+        "description": "With Instead of the owner actions and no local actions, {trigger} ({state_value}) of {device} executes no actions on this instance any more: neither the owner actions nor local actions. Other instances are not affected.\n\nMuting neither approves nor rejects the owner actions: their approval on this instance stays as it is. Muting is not the same as removing the local customization, after which the trigger runs the owner actions again.",
+        "menu_options": {
+          "local_actions_mute_confirmed": "Mute the trigger on this instance",
+          "local_actions_edit": "Back to the editor",
+          "local_actions_device": "Discard this change"
+        }
+      },
+      "local_actions_confirm_remove": {
+        "title": "Remove the local customization?",
+        "description": "This deletes the mode and the local actions of {trigger} ({state_value}) of {device} on this instance. The trigger then runs only the owner actions again, and only while they are approved on this instance.\n\nTo keep the trigger silent instead, edit it and choose Instead of the owner actions without actions.",
+        "menu_options": {
+          "local_actions_remove_confirmed": "Remove the local customization",
+          "local_actions_device": "Keep it"
         }
       }
     },
@@ -459,7 +477,11 @@
     "local_trigger_status": {
       "options": {
         "additive": "additional to the owner actions",
-        "replacement": "instead of the owner actions"
+        "replacement": "instead of the owner actions",
+        "muted": "locally muted",
+        "orphan": "no longer present on the owner",
+        "kind_mismatch": "inactive, saved for another device type",
+        "no_mirror": "inactive, not mirrored on this instance right now"
       }
     }
   },

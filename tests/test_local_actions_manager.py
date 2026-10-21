@@ -1421,3 +1421,50 @@ def test_unreadable_issue_text_explains_the_corrupt_copy_and_how_to_recover() ->
     assert "{" not in german, "de: no placeholder"
     assert "not applied" in english, "en: still says the local customizations are not applied"
     assert "refused" in english, "en: still says that editing is refused"
+
+
+# --- Plan 11-21 Task 1: rows this release cannot parse survive its saves (WR-03, D-07 extended, MIR-06) ---------------
+
+
+async def test_rows_this_release_cannot_parse_survive_a_local_edit(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-03, D-07, T-11-54, T-11-55: an edit keeps rows and keys a newer release wrote, and never runs them."""
+    local_off_calls = async_mock_service(hass, "test", "local_off")
+    spec = make_spec(on=OWNER_ON)
+    conditional_off = {**_additive_on(spec.device_id), "state_value": PAYLOAD_OFF, "label": "Off"}
+    conditional_off.update(mode="conditional", actions=LOCAL_OFF)
+    hass_storage[LOCAL_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 2,
+        "key": LOCAL_STORE_KEY,
+        "data": {
+            "records": [_additive_on(spec.device_id), copy.deepcopy(conditional_off), "not a row"],
+            "groups": [{"future": True}],
+        },
+    }
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    on = local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON)
+
+    await manager.async_set_local_action(on, LocalActionMode.REPLACEMENT, LOCAL_ON)
+
+    rows = _stored_rows(hass_storage)
+    assert rows is not None
+    assert conditional_off in rows, "an edit must not erase a row this release cannot parse"
+    replacement_on = {
+        "device_id": spec.device_id,
+        "kind": SUBENTRY_SWITCH,
+        "state_value": PAYLOAD_ON,
+        "label": PAYLOAD_ON,
+        "mode": "replacement",
+        "actions": LOCAL_ON,
+    }
+    assert rows == [replacement_on, conditional_off, "not a row"], "parsed records first, then the kept rows"
+    assert hass_storage[LOCAL_STORE_KEY]["data"]["groups"] == [{"future": True}], "an unknown key is kept"
+    assert manager.local_action_counts().records == 1, "a kept row is never counted as a record"
+    off_row = next(row for row in manager.local_action_triggers(spec.device_id) if row.state_value == PAYLOAD_OFF)
+    assert off_row.record is None, "a kept row never appears in the editor"
+
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    assert local_off_calls == [], "a kept row never runs"

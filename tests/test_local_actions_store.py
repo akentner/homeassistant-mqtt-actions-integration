@@ -530,3 +530,101 @@ async def test_instance_local_stores_see_only_their_own_records(hass: Any, hass_
 
     assert await _restarted(hass, owner_key) == (owner_record,)
     assert await _restarted(hass, follower_key) == (follower_record,)
+
+
+# --- Plan 11-21 Task 1: rows and keys this release cannot parse are kept (WR-03, D-07 extended, MIR-06) ---------------
+
+# Rows this release cannot parse, for example of a mode a newer minor release adds
+UNPARSEABLE = [_row(state_value="OFF", mode="conditional"), "not a row", {"device_id": DEVICE, "future": [1, {"a": 2}]}]
+EXTRA = {"groups": [{"future": True, "nested": {"level": [1]}}], "schema": "next"}
+
+
+def _seed_with_extras(hass_storage: dict[str, Any], rows: list[Any], extra: dict[str, Any]) -> None:
+    """Write rows plus unknown top-level keys as a v1 envelope."""
+    envelope = _envelope(rows)
+    envelope["data"].update(copy.deepcopy(extra))
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = envelope
+
+
+async def test_preserved_rows_and_unknown_keys_are_written_back_after_the_records(
+    hass: Any, hass_storage: dict[str, Any]
+) -> None:
+    """WR-03, T-11-54: every save writes the kept rows verbatim after the parsed records, and keeps unknown keys."""
+    first, second = _row(), _row(state_value="cozy", kind=SUBENTRY_SELECT, label="Cozy")
+    seeded = [UNPARSEABLE[0], first, UNPARSEABLE[1], second, UNPARSEABLE[2]]
+    _seed_with_extras(hass_storage, copy.deepcopy(seeded), EXTRA)
+    store = LocalActionsStore(hass)
+    loaded = await store.async_load_records()
+    assert [local_record_data(record) for record in loaded] == [first, second], "only parsed rows are records"
+
+    written: list[str] = []
+    for _ in range(2):
+        await store.async_save_records(store.records)
+        data = hass_storage[LOCAL_ACTIONS_STORE_KEY]["data"]
+        assert data == {**EXTRA, "records": [first, second, *UNPARSEABLE]}
+        assert json.dumps(data["records"][2:], sort_keys=True) == json.dumps(UNPARSEABLE, sort_keys=True)
+        written.append(_bytes(hass_storage, LOCAL_ACTIONS_STORE_KEY))
+    assert written[0] == written[1], "a second save writes the same bytes"
+    assert await _restarted(hass) == loaded, "the kept rows never become records after a restart"
+
+
+async def test_duplicate_identity_rows_are_not_preserved(hass: Any, hass_storage: dict[str, Any]) -> None:
+    """D-10: a later duplicate of a parsed identity is dropped, so removing the record never brings it back."""
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = _envelope([_row(label="first"), _row(state_value=" on ", label="second")])
+    store = LocalActionsStore(hass)
+    await store.async_load_records()
+
+    await store.async_save_records([])
+
+    assert hass_storage[LOCAL_ACTIONS_STORE_KEY]["data"] == {"records": []}
+
+
+async def test_remove_records_forgets_preserved_rows_and_keys(hass: Any, hass_storage: dict[str, Any]) -> None:
+    """D-08: removing the Store is the user's explicit choice; the kept rows and keys go with it."""
+    _seed_with_extras(hass_storage, [_row(), *copy.deepcopy(UNPARSEABLE)], EXTRA)
+    store = LocalActionsStore(hass)
+    await store.async_load_records()
+
+    await store.async_remove_records()
+    await store.async_save_records([_record()])
+
+    assert hass_storage[LOCAL_ACTIONS_STORE_KEY]["data"] == {"records": [_row()]}
+    assert store.preserved_device_ids == frozenset()
+
+
+async def test_preserved_device_ids_name_only_mapping_rows_with_a_device_id(
+    hass: Any, hass_storage: dict[str, Any]
+) -> None:
+    """Plan 11-22 reads the device ids of kept rows; only a non-blank string device id counts."""
+    rows = ["text", {"device_id": 7}, {"device_id": "  "}, {"device_id": "abc", "mode": "x"}, {"mode": "x"}]
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = _envelope([_row(device_id=OTHER_DEVICE), *rows])
+    store = LocalActionsStore(hass)
+    await store.async_load_records()
+
+    assert store.preserved_device_ids == frozenset({"abc"}), "a parsed record is not a kept row"
+
+
+def test_payload_functions_keep_preserved_rows_and_extra_keys_as_copies() -> None:
+    """T-11-54: the pure functions copy kept rows and keys in and out; an extra key never overrides the records."""
+    data = {"records": [_row(), *copy.deepcopy(UNPARSEABLE)], **copy.deepcopy(EXTRA)}
+
+    parsed = parse_local_actions_payload(data)
+    data["records"][1]["mode"] = "changed"
+    data["records"][3]["future"].append("changed")
+    data["groups"][0]["nested"]["level"].append("changed")
+
+    assert parsed.records == (_record(),)
+    assert parsed.preserved == tuple(UNPARSEABLE), "the kept rows are copies, in stored order"
+    assert parsed.extra == EXTRA, "the unknown keys are copies"
+    assert parsed.dropped == len(UNPARSEABLE)
+
+    preserved, extra = copy.deepcopy(parsed.preserved), copy.deepcopy(parsed.extra)
+    payload = local_actions_payload(parsed.records, preserved=preserved, extra=extra)
+    preserved[0]["mode"] = "changed"
+    extra["groups"][0]["nested"]["level"].append("changed")
+
+    assert payload == {**EXTRA, "records": [_row(), *UNPARSEABLE]}
+    assert list(payload) == [*EXTRA, "records"], "the unknown keys come first, then the records"
+
+    payload = local_actions_payload([_record()], preserved=(), extra={"records": ["override"], "other": 1})
+    assert payload == {"other": 1, "records": [_row()]}, "an extra key named records never overrides the records"

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.085" timestamp="2026-10-21T03:53:18.117977+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_local_actions_manager" name="test_local_failure_raises_an_independent_issue_naming_the_trigger_and_error" time="0.876"><failure message="AssertionError: a failed local run must raise the local failure issue&#10;assert None is not None">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='139628255011104'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...ea52', 'kind': 'switch', 'label': 'ON', ...}]}, 'key': 'mqtt_actions.local_actions', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7efdc12135e0&gt;
+
+    async def test_local_failure_raises_an_independent_issue_naming_the_trigger_and_error(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """D-18, T-11-23: a local failure raises its own escaped, bounded, non-fixable issue; the owner issue stays out."""
+        Flaky(hass, "on")
+        spec = make_spec(name="Lamp *x*", on=OWNER_ON)
+        manager = await _pending_mirror(hass, make_hub_entry, spec)
+        await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+    
+        await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    
+        issue = _local_issue(hass, spec.device_id)
+&gt;       assert issue is not None, "a failed local run must raise the local failure issue"
+E       AssertionError: a failed local run must raise the local failure issue
+E       assert None is not None
+
+tests/test_local_actions_manager.py:919: AssertionError</failure></testcase></testsuite></testsuites>

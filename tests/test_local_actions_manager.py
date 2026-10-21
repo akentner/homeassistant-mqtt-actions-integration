@@ -15,9 +15,11 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import async_fire_mqtt_message, async_mock_service
 
+from custom_components.mqtt_actions import const as const_module
 from custom_components.mqtt_actions import retrigger as retrigger_module
 from custom_components.mqtt_actions.const import (
     DOMAIN,
@@ -31,10 +33,13 @@ from custom_components.mqtt_actions.const import (
     SUBENTRY_SELECT,
     SUBENTRY_SWITCH,
 )
+from custom_components.mqtt_actions.document import escape_markdown
 from custom_components.mqtt_actions.local_actions import (
     LOCAL_SAFE_POLICY,
+    BranchOutcome,
     EffectivePolicy,
     LocalActionMode,
+    OutcomeStatus,
     local_trigger_identity,
 )
 from custom_components.mqtt_actions.local_actions_store import LocalActionsStore
@@ -851,3 +856,251 @@ def test_retrigger_acknowledgement_vocabulary_is_unchanged() -> None:
         "not_runnable",
         "offline",
     }
+
+
+# --- Plan 11-07 Task 2: one independent local failure issue per device (D-18, D-19) -----------------------------------
+
+# Literal on purpose: a RED run against code without the production constant fails on an assertion, not on an import
+LOCAL_ISSUE_PREFIX = "local_action_failed_"
+OWNER_ISSUE_PREFIX = "action_failed_"
+LOUD_ERROR = "local *boom* [x](y) _z_"
+
+
+class Flaky:
+    """`test.flaky` fails for the triggers named in `failing` (data `which`) and records every call."""
+
+    def __init__(self, hass: HomeAssistant, *failing: str) -> None:
+        self.failing = set(failing)
+        self.calls: list[str] = []
+        hass.services.async_register("test", "flaky", self._handle)
+
+    async def _handle(self, call: Any) -> None:
+        self.calls.append(call.data["which"])
+        if call.data["which"] in self.failing:
+            raise HomeAssistantError(LOUD_ERROR)
+
+
+def _flaky(which: str, **step: Any) -> list[dict[str, Any]]:
+    return [{"action": "test.flaky", "data": {"which": which}, **step}]
+
+
+def _local_issue(hass: HomeAssistant, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{LOCAL_ISSUE_PREFIX}{device_id}")
+
+
+def _owner_issue(hass: HomeAssistant, device_id: str) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{OWNER_ISSUE_PREFIX}{device_id}")
+
+
+def _named_trigger(hass: HomeAssistant, device_id: str) -> str | None:
+    """Return the trigger the local failure issue names, None without an issue."""
+    issue = _local_issue(hass, device_id)
+    return (
+        None if issue is None or issue.translation_placeholders is None else issue.translation_placeholders["trigger"]
+    )
+
+
+async def _set(manager: Manager, spec: DeviceSpec, value: str, mode: LocalActionMode, actions: Any) -> None:
+    await manager.async_set_local_action(local_trigger_identity(spec.device_id, spec.kind, value), mode, actions)
+
+
+async def test_local_failure_raises_an_independent_issue_naming_the_trigger_and_error(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-18, T-11-23: a local failure raises its own escaped, bounded, non-fixable issue; the owner issue stays out."""
+    Flaky(hass, "on")
+    spec = make_spec(name="Lamp *x*", on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+
+    issue = _local_issue(hass, spec.device_id)
+    assert issue is not None, "a failed local run must raise the local failure issue"
+    assert issue.is_fixable is False
+    assert issue.is_persistent is False, "dismissal and restart behave like the owner action_failed issue"
+    assert issue.severity == ir.IssueSeverity.ERROR
+    assert issue.translation_key == "local_action_failed"
+    placeholders = issue.translation_placeholders
+    assert placeholders is not None
+    assert set(placeholders) == {"device", "trigger", "time", "error"}
+    assert placeholders["device"] == escape_markdown("Lamp *x*")
+    assert placeholders["trigger"] == escape_markdown(spec.triggers[trigger_key(PAYLOAD_ON)].label)
+    assert placeholders["error"] == escape_markdown(LOUD_ERROR)
+    assert "test.flaky" not in repr(issue), "the issue never carries actions"
+    assert _owner_issue(hass, spec.device_id) is None, "the owner failure issue is never reused for a local failure"
+
+
+async def test_local_failure_issue_names_the_latest_failed_trigger_and_clears_only_on_its_success(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-18, D-19: the latest failed trigger is named; the success of a different trigger does not clear it."""
+    flaky = Flaky(hass, "on", "off")
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+    await _set(manager, spec, PAYLOAD_OFF, LocalActionMode.ADDITIVE, _flaky("off"))
+    on_label = escape_markdown(spec.triggers[trigger_key(PAYLOAD_ON)].label)
+    off_label = escape_markdown(spec.triggers[trigger_key(PAYLOAD_OFF)].label)
+
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _named_trigger(hass, spec.device_id) == on_label
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    assert _named_trigger(hass, spec.device_id) == off_label, "the issue names the latest failed local trigger"
+
+    flaky.failing.clear()
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert flaky.calls[-1] == "on"
+    assert _named_trigger(hass, spec.device_id) == off_label, "the success of a different trigger never clears"
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    assert _local_issue(hass, spec.device_id) is None, "a proven success of the named trigger clears the issue"
+
+
+async def test_local_failure_issue_survives_owner_success_continued_error_stop_mute_and_owner_change(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-19, 11-06 hand-off: nothing but the named trigger's proven success or its removal clears the local issue."""
+    flaky = Flaky(hass, "on")
+    owner_off = async_mock_service(hass, "test", "owner_off")
+    async_mock_service(hass, "test", "owner_on")
+    async_mock_service(hass, "test", "local_on")
+    spec = make_spec(on=OWNER_ON, off=[{"action": "test.owner_off"}])
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    assert await manager.async_approve(spec.device_id, manager.mirrors[spec.device_id].mirror.actions_hash)
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _local_issue(hass, spec.device_id) is not None
+
+    # An owner-only success of another trigger
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    assert len(owner_off) == 1
+    assert _local_issue(hass, spec.device_id) is not None, "an owner success never clears the local issue"
+
+    # The same trigger with a continued error and then a stop: neither is a proven local success
+    flaky.failing.clear()
+    flaky.failing.add("continued")
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, [*_flaky("continued", continue_on_error=True)])
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    assert _local_issue(hass, spec.device_id) is not None, "a continued local error is still a failure"
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, [*LOCAL_ON, {"stop": "done"}])
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    assert _local_issue(hass, spec.device_id) is not None, "a stopped run never proves a local success"
+
+    # A muted trigger runs nothing, so it proves nothing
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.REPLACEMENT, [])
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _local_issue(hass, spec.device_id) is not None, "muting is no recovery"
+
+    # An owner content change clears the owner's issues only
+    changed = make_spec(
+        device_id=spec.device_id, on=[{"action": "test.owner_other"}], off=[{"action": "test.owner_off"}]
+    )
+    await deliver_config(hass, spec.device_id, document_payload(changed, rev=2), retain=False)
+    assert manager.mirrors[spec.device_id].spec == changed
+    assert _local_issue(hass, spec.device_id) is not None, "an owner change keeps an unrelated local failure issue"
+
+
+async def test_local_failure_issue_clears_on_proven_success_after_an_edit_and_on_removal(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-19: an edit alone clears nothing; the next proven success does, and so does removing the customization."""
+    Flaky(hass, "on")
+    async_mock_service(hass, "test", "local_on")
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _local_issue(hass, spec.device_id) is not None
+
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, LOCAL_ON)
+    assert _local_issue(hass, spec.device_id) is not None, "saving a fix is not yet a success"
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _local_issue(hass, spec.device_id) is None
+
+    await _set(manager, spec, PAYLOAD_ON, LocalActionMode.ADDITIVE, _flaky("on"))
+    await _state(hass, spec.device_id, PAYLOAD_OFF, retain=False)
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert _local_issue(hass, spec.device_id) is not None
+    await _set(manager, spec, PAYLOAD_OFF, LocalActionMode.ADDITIVE, LOCAL_OFF)
+    await manager.async_remove_local_action(local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_OFF))
+    assert _local_issue(hass, spec.device_id) is not None, "removing another trigger's customization clears nothing"
+    await manager.async_remove_local_action(local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON))
+    assert _local_issue(hass, spec.device_id) is None, "removing the named customization clears the issue"
+
+
+async def test_local_failure_issue_survives_an_orphaned_option_until_its_record_is_removed(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-12, D-19: an option the owner removed leaves an orphan; its local issue stays until the record is removed."""
+    Flaky(hass, "cozy")
+    spec = make_spec(SUBENTRY_SELECT, options=[("cozy", "*Gemütlich*", []), ("bright", "Hell", [])])
+    entry = await setup_entry(hass, make_hub_entry())
+    await deliver_config(hass, spec.device_id, document_payload(spec))
+    await _state(hass, spec.device_id, "bright", retain=True)
+    manager = manager_of(entry)
+    await _set(manager, spec, "cozy", LocalActionMode.ADDITIVE, _flaky("cozy"))
+    await _state(hass, spec.device_id, "cozy", retain=False)
+    assert _named_trigger(hass, spec.device_id) == escape_markdown("*Gemütlich*")
+
+    reduced = make_spec(SUBENTRY_SELECT, device_id=spec.device_id, options=[("bright", "Hell", [])])
+    await deliver_config(hass, spec.device_id, document_payload(reduced, rev=2), retain=False)
+    assert [row.present for row in manager.local_action_triggers(spec.device_id) if row.state_value == "cozy"] == [
+        False
+    ], "premise: the record is an orphan now"
+    assert _local_issue(hass, spec.device_id) is not None, "an orphaned trigger never clears its issue"
+
+    await manager.async_remove_local_action(local_trigger_identity(spec.device_id, SUBENTRY_SELECT, "cozy"))
+    assert _local_issue(hass, spec.device_id) is None
+
+
+async def test_invalid_local_actions_at_build_raise_the_local_failure_issue(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-18: a stored local customization that no longer validates is shown in the local issue, not only logged."""
+    spec = make_spec(on=OWNER_ON)
+    _seed_local_store(hass_storage, [{**_additive_on(spec.device_id), "actions": [{"not_an_action": True}]}])
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+
+    issue = _local_issue(hass, spec.device_id)
+    assert issue is not None, "invalid local actions must raise the local failure issue"
+    assert issue.translation_placeholders is not None
+    assert issue.translation_placeholders["error"]
+    assert _owner_issue(hass, spec.device_id) is None
+
+    await manager.async_remove_local_action(local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON))
+    assert _local_issue(hass, spec.device_id) is None
+
+
+async def test_failure_outcome_of_a_removed_customization_raises_no_local_issue(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-19: a failure that arrives after its customization was removed would never clear, so it is not shown."""
+    spec = make_spec(on=OWNER_ON)
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+    identity = local_trigger_identity(spec.device_id, spec.kind, PAYLOAD_ON)
+
+    manager.async_report_local_outcome(
+        BranchOutcome(
+            spec.device_id,
+            trigger_key(PAYLOAD_ON),
+            spec.triggers[trigger_key(PAYLOAD_ON)].label,
+            OutcomeStatus.FAILURE,
+            "late failure",
+            1,
+            identity=identity,
+            device_name=spec.name,
+        )
+    )
+
+    assert _local_issue(hass, spec.device_id) is None
+
+
+def test_local_failure_issue_family_is_a_separate_device_issue_prefix() -> None:
+    """D-18: its own prefix, deleted with the device and the hub like every per-device issue family."""
+    prefix = getattr(const_module, "ISSUE_LOCAL_ACTION_FAILED_PREFIX", None)
+    assert prefix == LOCAL_ISSUE_PREFIX
+    assert prefix != const_module.ISSUE_ACTION_FAILED_PREFIX
+    assert prefix in const_module.ISSUE_DEVICE_PREFIXES

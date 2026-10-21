@@ -33,6 +33,7 @@ from custom_components.mqtt_actions.const import (
     CONF_INSTANCE_ID,
     CONF_INSTANCE_NAME,
     DOMAIN,
+    ISSUE_ACTION_FAILED_PREFIX,
     ISSUE_DENIED_CALL_PREFIX,
     MAX_ISSUE_ERROR_LENGTH,
     PAYLOAD_ON,
@@ -41,6 +42,7 @@ from custom_components.mqtt_actions.const import (
 from custom_components.mqtt_actions.local_actions import (
     LocalActionMode,
     build_effective_trigger_plans,
+    local_trigger_identity,
     make_local_record,
 )
 from custom_components.mqtt_actions.model import SWITCH_ON_KEY
@@ -969,3 +971,100 @@ async def test_outcome_local_error_before_a_cancel_stays_a_local_failure(hass: H
     assert "hold_cancelled" in probe.events, HINT
     assert _statuses(outcomes) == [LOCAL_FAILED], HINT
     assert outcomes[0].error == "LOCAL_FAILURE", HINT
+
+
+# --- owner and local failure issues stay apart (Plan 11-07 Task 2, D-18, D-19) ----------------------------------------
+
+
+def _owner_issue(hass: HomeAssistant, spec: DeviceSpec) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"{ISSUE_ACTION_FAILED_PREFIX}{spec.device_id}")
+
+
+async def test_local_only_failure_never_raises_the_owner_failure_issue(hass: HomeAssistant) -> None:
+    """D-18: an exception forwarded from the local branch of a pending mirror is a local failure, not an owner one."""
+    Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(
+        hass, [{"action": "probe.owner"}], [{"action": "probe.fail_local"}], approval="pending"
+    )
+
+    await _enqueue(hass, runner, spec)
+
+    assert _statuses(outcomes) == [LOCAL_FAILED]
+    assert _owner_issue(hass, spec) is None, "the owner failure issue must never carry a local failure"
+
+
+async def test_local_failure_beside_a_clean_owner_branch_never_raises_the_owner_issue(hass: HomeAssistant) -> None:
+    """D-18: the owner branch succeeded; only the local branch raised, so only a local outcome reports it."""
+    probe = Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(hass, [{"action": "probe.owner"}], [{"action": "probe.fail_local"}])
+
+    await _enqueue(hass, runner, spec)
+
+    assert "probe.owner" in probe.events
+    assert _statuses(outcomes) == [LOCAL_FAILED]
+    assert _owner_issue(hass, spec) is None
+
+
+async def test_owner_failure_beside_a_local_branch_still_raises_the_owner_issue(hass: HomeAssistant) -> None:
+    """The owner action_failed behavior is unchanged when its trigger also has a local branch."""
+    Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(hass, [{"action": "probe.fail"}], [{"action": "probe.local"}])
+
+    await _enqueue(hass, runner, spec)
+
+    issue = _owner_issue(hass, spec)
+    assert issue is not None
+    assert issue.translation_placeholders is not None
+    assert "OWNER\\_FAILURE" in issue.translation_placeholders["error"]
+    assert _statuses(outcomes) == [LOCAL_SUCCEEDED]
+
+
+async def test_local_only_success_never_clears_the_owner_failure_issue(hass: HomeAssistant) -> None:
+    """D-19: a run in which the owner branch took no part proves nothing about the owner actions."""
+    Probe(hass)
+    spec, runner, outcomes = await _outcome_runner(
+        hass, [{"action": "probe.owner"}], [{"action": "probe.local"}], approval="pending"
+    )
+    runner.report_failure(spec.device_id, spec.name, "setup", "an earlier owner failure", escape=True)
+
+    await _enqueue(hass, runner, spec)
+
+    assert _statuses(outcomes) == [LOCAL_SUCCEEDED]
+    assert _owner_issue(hass, spec) is not None, "a local-only run must not clear the owner failure issue"
+
+
+async def test_owner_run_with_a_local_branch_still_clears_the_owner_failure_issue(hass: HomeAssistant) -> None:
+    """The owner clear rule is unchanged for a run in which the owner branch took part."""
+    Probe(hass)
+    spec, runner, _outcomes = await _outcome_runner(hass, [{"action": "probe.owner"}], [{"action": "probe.local"}])
+    runner.report_failure(spec.device_id, spec.name, "setup", "an earlier owner failure", escape=True)
+
+    await _enqueue(hass, runner, spec)
+
+    assert _owner_issue(hass, spec) is None
+
+
+async def test_invalid_local_actions_at_build_are_a_local_failure_outcome(hass: HomeAssistant) -> None:
+    """D-18: local actions that no longer validate are reported as a bounded local failure of their trigger."""
+    spec = make_spec(on=[{"action": "probe.owner"}], off=[{"action": "probe.owner"}])
+    runner = _bare_runner(hass)
+    outcomes: list[Any] = []
+    runner.on_local_outcome = outcomes.append
+
+    await runner.async_build_effective(
+        spec, build_effective_trigger_plans(spec, "approved", [_additive_on(spec, [{"not_an_action": "x" * 5000}])])
+    )
+
+    assert _statuses(outcomes) == [LOCAL_FAILED]
+    outcome = outcomes[0]
+    assert (outcome.device_id, outcome.trigger_key, outcome.label) == (
+        spec.device_id,
+        SWITCH_ON_KEY,
+        spec.triggers[SWITCH_ON_KEY].label,
+    )
+    assert outcome.identity == local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON)
+    assert outcome.device_name == spec.name
+    assert outcome.error is not None
+    assert 0 < len(outcome.error) <= MAX_ISSUE_ERROR_LENGTH
+    assert _owner_issue(hass, spec) is None, "invalid local actions are no owner setup error"
+    assert runner.can_run(spec.device_id, SWITCH_ON_KEY), "the valid owner branch keeps running"

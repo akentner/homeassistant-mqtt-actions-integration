@@ -1378,7 +1378,10 @@ async def test_corrupt_copy_beside_a_missing_local_store_raises_the_unreadable_i
 
     assert _unreadable_issue(hass) is None, "the next readable start deletes the issue"
     await manager_of(entry).async_set_local_action(identity, LocalActionMode.REPLACEMENT, LOCAL_ON)
-    assert _stored_rows(hass_storage) == [_replacement_on(spec.device_id)], "an edit saves again"
+    rows = _stored_rows(hass_storage) or []
+    assert [(row["state_value"], row["mode"], row["actions"]) for row in rows] == [
+        (PAYLOAD_ON, "replacement", LOCAL_ON)
+    ], "an edit saves again"
 
 
 # --- Plan 11-15 Task 2: English and German text of the unreadable issue (G-02, D-06, MIR-15) --------------------------

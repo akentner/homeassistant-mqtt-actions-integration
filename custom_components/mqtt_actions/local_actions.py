@@ -15,6 +15,7 @@ from .const import (
     DEFAULT_BREAKER_MAX_RUNS,
     DEFAULT_BREAKER_WINDOW,
     LOCAL_ACTIONS_RECORDS,
+    LOCAL_ACTIONS_STORE_VERSION,
     MAX_ISSUE_ERROR_LENGTH,
     RUN_MODE_SERIAL,
     SERIAL_QUEUE_LIMIT,
@@ -172,28 +173,63 @@ class LocalActionsStoreVersionError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class ParsedLocalActions:
-    """The records of a loaded local-actions payload, and how many stored rows were dropped as malformed."""
+    """
+    The records of a loaded local-actions payload.
+
+    `dropped` counts the stored rows left out: malformed ones and later duplicates of an identity. `shape_valid` is
+    False when the payload is not a mapping with a record list at all, which loads no record.
+    """
 
     records: tuple[LocalActionRecord, ...]
     dropped: int
+    shape_valid: bool = True
+
+
+def copy_local_records(records: Iterable[LocalActionRecord]) -> tuple[LocalActionRecord, ...]:
+    """Return the records with their own deep copies of the actions, so no caller shares nested data with another."""
+    return tuple(dataclasses.replace(record, actions=record.copy_actions()) for record in records)
 
 
 def parse_local_actions_payload(data: Any) -> ParsedLocalActions:
-    """Return the valid records of a stored payload; every malformed row is dropped on its own."""
-    del data
-    return ParsedLocalActions((), 0)
+    """
+    Return the valid records of a stored payload, in stored order (D-12, T-11-09).
+
+    Every row is validated on its own, so one malformed row never removes a valid one. Records are not matched against
+    any device: orphan and kind-mismatched rows load like every other row. The first row of an identity wins, as in
+    `match_local_records`; later rows of the same identity are dropped.
+    """
+    rows = data.get(LOCAL_ACTIONS_RECORDS) if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return ParsedLocalActions((), 0, shape_valid=False)
+    records: list[LocalActionRecord] = []
+    seen: set[LocalActionIdentity] = set()
+    for row in rows:
+        try:
+            record = parse_local_record(row)
+        except LocalActionRecordInvalid:
+            continue
+        if record.identity not in seen:
+            seen.add(record.identity)
+            records.append(record)
+    return ParsedLocalActions(tuple(records), len(rows) - len(records))
 
 
 def local_actions_payload(records: Iterable[LocalActionRecord]) -> dict[str, Any]:
-    """Return the stored payload of the records, each row with its own copy of the actions."""
-    del records
-    return {LOCAL_ACTIONS_RECORDS: []}
+    """Return the stored payload of the records: raw JSON rows only, each with its own copy of the actions."""
+    return {LOCAL_ACTIONS_RECORDS: [local_record_data(record) for record in records]}
 
 
 def migrate_local_actions_payload(old_major_version: int, old_minor_version: int, old_data: Any) -> Any:
-    """Return a stored payload upgraded to the current version; raise LocalActionsStoreVersionError if unreadable."""
-    del old_major_version, old_minor_version
-    return old_data
+    """
+    Return a stored payload upgraded to the current version, as a copy; raise LocalActionsStoreVersionError.
+
+    Version 1 is the only major version, so the hook upgrades nothing yet: a minor-only difference keeps the rows,
+    which the parser then checks one by one. Any other major version is refused rather than reset (D-07).
+    """
+    if old_major_version != LOCAL_ACTIONS_STORE_VERSION:
+        msg = f"local actions Store version {old_major_version}.{old_minor_version} is not supported"
+        raise LocalActionsStoreVersionError(msg)
+    return copy.deepcopy(old_data)
 
 
 @dataclass(frozen=True, slots=True)

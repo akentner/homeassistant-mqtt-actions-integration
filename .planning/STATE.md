@@ -5,16 +5,16 @@ milestone_name: Local Actions on Mirrors
 current_phase: 11
 current_phase_name: Local Actions on Mirrors
 status: executing
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-10-20T23:45:01.431Z"
+stopped_at: Completed 11-03-PLAN.md
+last_updated: "2026-10-21T00:11:43.501Z"
 last_activity: 2026-10-21
 last_activity_desc: Phase 11 execution started
-state_head: 4d0bb5e00a9165cba21c9c3745ca1a0b872ff3f7
+state_head: f82c95d5ade03ccb7df45da9bd642b56934dbe4e
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 49
-  completed_plans: 37
+  completed_plans: 38
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-17)
 ## Current Position
 
 Phase: 11 (Local Actions on Mirrors) — EXECUTING
-Plan: 2 of 13
+Plan: 3 of 13
 Status: Ready to execute
 Last activity: 2026-10-21 — Phase 11 execution started
 
@@ -152,6 +152,7 @@ Progress: [███████░░░] 67%
 | Phase 10 P09 | 17 min | 2 tasks | 8 files |
 | Phase 10 P10 | 8min | 2 tasks | 6 files |
 | Phase 11 P01 | 15 min | 3 tasks | 6 files |
+| Phase 11 P03 | 17 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -330,6 +331,9 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-10: README and troubleshooting carry the same kept_duplicates paragraph (never deletes, disable instead of delete, dismissal comes back after a HA restart); troubleshooting adds that integration-disabled duplicates are not listed (D-03)
 - [Phase 11]: Phase 11 invariant tests seed the local Store under mqtt_actions.local_actions plus Instance.local_store_key; v1 record shape {device_id, kind, state_value, label, mode additive|replacement, actions} is the shape Plan 11-04 adopts
 - [Phase 11]: tests/test_local_invariants.py runs in the multi_instance tier (uses make_instance); the only expected-RED node is tests/test_local_actions_manager.py::test_pending_mirror_with_persisted_additive_record_gains_local_branch until Plan 11-05 Task 1
+- [Phase 11]: 11-03: async_build_effective is the mirror build entry; overlay-free mirrors delegate unchanged to the restricted build (or unload when unapproved); customized triggers run owner branch 0 and local branch 1 in one native parallel, guard on owner_path only
+- [Phase 11]: 11-03: local success needs no error under local_path, a proven run (current Script, latest generation, unchanged stop epoch, HA not stopping), no stop step and a reached non-false last local step; outcomes are delivered from finally because a cancelled dispatcher run raises CancelledError
+- [Phase 11]: 11-03: stored v1 local row {device_id, kind, state_value, label, mode, actions} is parse_local_record/local_record_data; identity device id + kind + strip/lower StateValue; LOCAL_SAFE_POLICY startup off, serial, 5/10 s, queue 10
 
 ### Pending Todos
 
@@ -365,8 +369,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-20T23:45:01.192Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-10-21T00:11:43.257Z
+Stopped at: Completed 11-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

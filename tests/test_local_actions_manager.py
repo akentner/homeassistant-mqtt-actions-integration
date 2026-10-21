@@ -10,6 +10,7 @@ but never changes an assertion. No marker or condition ever hides its failure.
 import asyncio
 import copy
 import functools
+import json
 import uuid
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
@@ -22,6 +23,7 @@ from pytest_homeassistant_custom_component.common import async_fire_mqtt_message
 from custom_components.mqtt_actions import const as const_module
 from custom_components.mqtt_actions import retrigger as retrigger_module
 from custom_components.mqtt_actions.const import (
+    CONF_DELETE_DEVICES_ON_REMOVE,
     DOMAIN,
     ISSUE_CIRCUIT_BREAKER_PREFIX,
     MODE_DISABLED,
@@ -1107,3 +1109,107 @@ def test_local_failure_issue_family_is_a_separate_device_issue_prefix() -> None:
     assert prefix == LOCAL_ISSUE_PREFIX
     assert prefix != const_module.ISSUE_ACTION_FAILED_PREFIX
     assert prefix in const_module.ISSUE_DEVICE_PREFIXES
+
+
+# --- Plan 11-15 Task 1: a refused local Store load is visible as one instance issue (G-02, D-05, T-11-09) -------------
+
+# Literal on purpose: a RED run against code without the production constant fails on an assertion, not on an import
+UNREADABLE_ISSUE_ID = "local_actions_unreadable"
+
+
+def _seed_newer_local_store(hass_storage: dict[str, Any], records: list[dict[str, Any]]) -> str:
+    """Write local records as a version 2 envelope this release refuses; return its serialized bytes."""
+    hass_storage[LOCAL_STORE_KEY] = {
+        "version": 2,
+        "minor_version": 1,
+        "key": LOCAL_STORE_KEY,
+        "data": {"records": records},
+    }
+    return _local_store_bytes(hass_storage)
+
+
+def _local_store_bytes(hass_storage: dict[str, Any]) -> str:
+    return json.dumps(hass_storage.get(LOCAL_STORE_KEY), sort_keys=True)
+
+
+def _replacement_on(device_id: str) -> dict[str, Any]:
+    """Return the stored row of a replacement record for switch ON."""
+    return {
+        "device_id": device_id,
+        "kind": SUBENTRY_SWITCH,
+        "state_value": PAYLOAD_ON,
+        "label": "On",
+        "mode": "replacement",
+        "actions": LOCAL_ON,
+    }
+
+
+def _unreadable_issue(hass: HomeAssistant) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, UNREADABLE_ISSUE_ID)
+
+
+async def test_unreadable_local_store_raises_an_instance_issue_and_applies_no_overlay(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """G-02, D-05, T-11-09: a refused local load raises one instance issue, keeps the file and applies no overlay."""
+    owner_calls = async_mock_service(hass, "test", "owner_on")
+    local_calls = async_mock_service(hass, "test", "local_on")
+    spec = make_spec(on=OWNER_ON)
+    before = _seed_newer_local_store(hass_storage, [_replacement_on(spec.device_id)])
+
+    manager = await _pending_mirror(hass, make_hub_entry, spec)
+
+    issue = _unreadable_issue(hass)
+    assert issue is not None, "a refused local Store load must raise the local_actions_unreadable issue"
+    assert issue.domain == DOMAIN
+    assert issue.is_fixable is False
+    assert issue.is_persistent is False, "every start decides again whether the local Store is readable"
+    assert issue.severity == ir.IssueSeverity.ERROR
+    assert issue.translation_key == UNREADABLE_ISSUE_ID
+    assert not issue.translation_placeholders, "the issue carries no placeholder and no record content"
+    assert _local_store_bytes(hass_storage) == before, "the start never rewrites the newer local Store"
+
+    assert await manager.async_approve(spec.device_id, manager.mirrors[spec.device_id].mirror.actions_hash)
+    await _state(hass, spec.device_id, PAYLOAD_ON, retain=False)
+    assert len(owner_calls) == 1, "the approved owner action runs on the trigger the unreadable record replaced"
+    assert local_calls == [], "no overlay of the unreadable Store applies"
+
+    identity = local_trigger_identity(spec.device_id, SUBENTRY_SWITCH, PAYLOAD_ON)
+    with pytest.raises(LocalActionError) as caught:
+        await manager.async_set_local_action(identity, LocalActionMode.REPLACEMENT, LOCAL_ON)
+    assert caught.value.reason == "save_failed"
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _local_store_bytes(hass_storage) == before, "a refused edit never overwrites the newer local Store"
+
+
+async def test_readable_local_store_deletes_the_unreadable_issue_at_the_next_start(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """G-02: the next start whose local load succeeds deletes the issue."""
+    spec = make_spec(on=OWNER_ON)
+    _seed_newer_local_store(hass_storage, [_replacement_on(spec.device_id)])
+    entry = await setup_entry(hass, make_hub_entry())
+    assert _unreadable_issue(hass) is not None, "premise: the refused load raised the issue"
+
+    _seed_local_store(hass_storage, [_replacement_on(spec.device_id)])
+    await restart_entry(hass, entry)
+
+    assert manager_of(entry).local_action_counts().records == 1, "premise: the readable local Store was loaded"
+    assert _unreadable_issue(hass) is None, "a successful local load deletes the unreadable issue"
+
+
+async def test_hub_removal_deletes_the_unreadable_local_store_issue(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """D-08: hub removal in both modes deletes the unreadable issue by its id, and the local file with it."""
+    spec = make_spec(on=OWNER_ON)
+    for mode, options in (("keep", {}), ("delete", {CONF_DELETE_DEVICES_ON_REMOVE: True})):
+        _seed_newer_local_store(hass_storage, [_replacement_on(spec.device_id)])
+        entry = await setup_entry(hass, make_hub_entry(options=options))
+        assert _unreadable_issue(hass) is not None, f"{mode}: premise: the refused load raised the issue"
+
+        assert await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+        assert _unreadable_issue(hass) is None, f"{mode}: hub removal deletes the unreadable issue"
+        assert LOCAL_STORE_KEY not in hass_storage, f"{mode}: hub removal deletes the local Store file (D-08)"

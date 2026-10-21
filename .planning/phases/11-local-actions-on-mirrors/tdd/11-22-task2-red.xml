@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.991" timestamp="2026-10-21T10:25:47.279704+02:00" hostname="lap-aleken-tux1"><testcase classname="tests.test_hub_removal" name="test_unloaded_hub_with_an_unreadable_local_store_says_cannot_be_read" time="0.873"><failure message="AssertionError: an unreadable local Store must never be counted as 0 devices&#10;assert 'settings' == 'settings_unreadable'&#10;  &#10;  - settings_unreadable&#10;  + settings">hass = &lt;HomeAssistant RUNNING&gt;, mqtt_mock = &lt;MagicMock id='140306939242752'&gt;
+hass_storage = {'http': {'data': {'pending': None, 'stable': {'cors_allowed_origins': ['https://cast.home-assistant.io'], 'created_at...s': {}, 'instance_mode': 'run', 'last_acted': {}, ...}, 'key': 'mqtt_actions.state', 'minor_version': 1, 'version': 1}}
+make_hub_entry = &lt;function make_hub_entry.&lt;locals&gt;._make at 0x7f9bc2e15d20&gt;
+
+    async def test_unloaded_hub_with_an_unreadable_local_store_says_cannot_be_read(
+        hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+    ) -&gt; None:
+        """WR-04, D-08: an unloaded hub that cannot read its local actions never names a count; a read error is unknown."""
+        before = _seed_newer_local_store(hass_storage)
+        entry = await _setup(hass, make_hub_entry())
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    
+        result = await open_hub_settings(hass, entry)
+    
+&gt;       assert result["step_id"] == "settings_unreadable", "an unreadable local Store must never be counted as 0 devices"
+E       AssertionError: an unreadable local Store must never be counted as 0 devices
+E       assert 'settings' == 'settings_unreadable'
+E         
+E         - settings_unreadable
+E         + settings
+
+tests/test_hub_removal.py:770: AssertionError</failure></testcase></testsuite></testsuites>

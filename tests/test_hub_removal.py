@@ -751,3 +751,91 @@ async def test_hub_removal_and_a_new_hub_delete_the_corrupt_copies_of_the_local_
     assert result["result"].state is ConfigEntryState.LOADED
     assert registry.async_get_issue(DOMAIN, UNREADABLE_ISSUE_ID) is None, "a new hub starts with a readable Store"
     assert not corrupt.exists(), "a new hub deletes the corrupt copy an earlier hub left behind (G-03)"
+
+
+# ------------------------------------- unreadable local actions of an unloaded hub, preserved rows (Plan 11-22, WR-04)
+
+
+async def test_unloaded_hub_with_an_unreadable_local_store_says_cannot_be_read(
+    hass: HomeAssistant, mqtt_mock: Any, hass_storage: dict[str, Any], make_hub_entry: Callable
+) -> None:
+    """WR-04, D-08: an unloaded hub that cannot read its local actions never names a count; a read error is unknown."""
+    before = _seed_newer_local_store(hass_storage)
+    entry = await _setup(hass, make_hub_entry())
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    result = await open_hub_settings(hass, entry)
+
+    assert result["step_id"] == "settings_unreadable", "an unreadable local Store must never be counted as 0 devices"
+    assert not result.get("description_placeholders")
+    assert _local_store_bytes(hass_storage) == before
+
+
+@pytest.mark.parametrize("shape", ["shape_invalid", "corrupt_copy"])
+async def test_unloaded_hub_counts_unknown_for_every_unreadable_store_shape(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    monkeypatch: pytest.MonkeyPatch,
+    hass_tmp_config_dir: str,
+    shape: str,
+) -> None:
+    """D-07, D-08: a payload without a record list and a corrupt copy beside a missing file are unknown, unchanged."""
+    # Before any Store exists, so a corrupt copy lives in a temporary configuration directory only
+    monkeypatch.setattr(hass.config, "config_dir", hass_tmp_config_dir)
+    corrupt: Path | None = None
+    if shape == "shape_invalid":
+        hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
+            "version": 1,
+            "minor_version": 1,
+            "key": LOCAL_ACTIONS_STORE_KEY,
+            "data": {"records": {"0": LOCAL_ROWS[0]}},
+        }
+    else:
+        corrupt = _seed_corrupt_local_copy(hass)
+    before = json.dumps(hass_storage.get(LOCAL_ACTIONS_STORE_KEY), sort_keys=True)
+    entry = await _setup(hass, make_hub_entry())
+    assert ir.async_get(hass).async_get_issue(DOMAIN, UNREADABLE_ISSUE_ID) is not None, "premise: the load was refused"
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    result = await open_hub_settings(hass, entry)
+
+    assert result["step_id"] == "settings_unreadable", shape
+    assert not result.get("description_placeholders")
+    # Opening the settings changes neither the Store entry nor the corrupt copy
+    assert json.dumps(hass_storage.get(LOCAL_ACTIONS_STORE_KEY), sort_keys=True) == before
+    if corrupt is not None:
+        assert corrupt.read_text(encoding="utf-8") == "{not json"
+
+
+@pytest.mark.parametrize("loaded", [True, False], ids=["loaded", "unloaded"])
+async def test_removal_count_includes_devices_of_preserved_rows(
+    hass: HomeAssistant,
+    mqtt_mock: Any,
+    hass_storage: dict[str, Any],
+    make_hub_entry: Callable,
+    *,
+    loaded: bool,
+) -> None:
+    """D-08, MIR-15: a device named only by a row this release cannot parse loses it on removal, so it counts too."""
+    rows = [_local_row(LOCAL_A, "switch", "ON"), _local_row(LOCAL_B, "switch", "ON", "conditional")]
+    hass_storage[LOCAL_ACTIONS_STORE_KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": LOCAL_ACTIONS_STORE_KEY,
+        "data": {"records": rows},
+    }
+    entry = await _setup(hass, make_hub_entry())
+    assert entry.runtime_data.local_action_counts().devices == 1, "premise: the conditional row is kept, not a record"
+    if not loaded:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    result = await open_hub_settings(hass, entry)
+
+    assert result["step_id"] == "settings"
+    assert result["description_placeholders"] == {"local_action_device_count": "2"}
+    assert hass_storage[LOCAL_ACTIONS_STORE_KEY]["data"]["records"] == rows

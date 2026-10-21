@@ -643,7 +643,7 @@ def test_readme_documents_every_local_actions_topic() -> None:
         "tombstone": ("tombstone", "kept", "inactive", "not mirrored", "apply again"),
         "transient prune": ("prune", "kept"),
         "adoption": ("adopt", "local_actions_discarded"),
-        "integration removal": ("removing the integration", "number of devices"),
+        "integration removal": ("removing the integration", "number of devices", "cannot be read"),
         "local failure": ("local_action_failed", "continue_on_error", "same trigger"),
         "diagnostics": ("diagnostics", "counts", "docs/diagnostics.md"),
         "never shared": ("never leave this instance", "hash", "export"),
